@@ -1,9 +1,9 @@
-"""
-KLASSCI Collège — Backend API
+"""KLASSCI Collège — Backend API.
 
 Point d'entrée de l'application FastAPI.
 À compléter selon l'issue #1 (feat/core-bootstrap).
 """
+
 from fastapi import FastAPI
 
 app = FastAPI(
