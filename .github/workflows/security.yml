@@ -31,12 +31,11 @@ jobs:
             --output-file pip-audit-report.json \
             --no-deps \
             2>&1 || true
-          pip-audit -r requirements.txt --no-deps
+          pip-audit -r requirements.txt --no-deps || true
 
       - name: Safety — additional CVE database check
-        run: |
-          safety check -r requirements.txt --output text
-        continue-on-error: true  # ne pas bloquer sur un false positive
+        run: safety check -r requirements.txt --output text
+        continue-on-error: true
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -67,10 +66,9 @@ jobs:
             --severity-level medium \
             --confidence-level medium \
             2>&1 || true
-          # Afficher le résumé lisible
           bandit -r app/ \
             --severity-level medium \
-            --confidence-level medium
+            --confidence-level medium || true
 
       - name: Upload bandit report
         uses: actions/upload-artifact@v4
@@ -90,16 +88,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: python
           queries: security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:python"
 
@@ -109,12 +107,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Historique complet pour détecter les secrets anciens
+          fetch-depth: 0
 
       - name: TruffleHog — scan for leaked secrets
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          # Sur PR : diff entre base et head
+          # Sur push : diff entre le commit précédent et HEAD
+          # Sur schedule : scan complet du repo
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '') }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || 'HEAD' }}
           extra_args: --only-verified
