@@ -1,7 +1,6 @@
 ---
 name: worktree-start
 description: Start work on a GitHub issue using a git worktree. Use when starting a new feature or fix from an issue number.
-allowed-tools: Bash(git *), Bash(gh *)
 ---
 
 # Démarrage worktree — KLASSCI Backend
@@ -54,11 +53,25 @@ Ouvre ce dossier dans ton éditeur ou navigue avec :
   cd ../worktree-<issue>-<slug>
 ```
 
+### Étape 5 — Proposer le serveur de développement
+
+Après création du worktree, proposer :
+
+> Veux-tu que je lance le serveur de développement dans le worktree ?
+> ```bash
+> cd ../worktree-<issue>-<slug>
+> uvicorn app.main:app --reload --port 8000
+> ```
+> Ou tu le lances toi-même ?
+
+Attendre la validation fonctionnelle avant de passer à la PR.
+
 ### Règles importantes
 
 - **Jamais travailler directement sur `develop` ou `main`**
 - Le worktree est un dossier séparé — chaque dev peut en avoir plusieurs en parallèle
 - Toujours partir de `origin/develop` (pas du local)
 - Branche naming : `feature/N-desc`, `fix/N-desc`, `hotfix/N-desc`, `chore/desc`
+- Une fois le travail terminé dans le worktree, invoquer `/worktree-finish`
 
 $ARGUMENTS

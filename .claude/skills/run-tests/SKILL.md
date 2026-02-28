@@ -2,7 +2,6 @@
 name: run-tests
 description: Run backend tests with coverage report. Use before creating a PR or when asked to run tests.
 disable-model-invocation: true
-allowed-tools: Bash(python -m pytest *), Bash(ruff *), Bash(mypy *)
 ---
 
 Run the full KLASSCI backend quality checks:
