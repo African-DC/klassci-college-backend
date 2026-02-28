@@ -1,7 +1,6 @@
 ---
 name: worktree-finish
 description: Finish work on a worktree — push branch, create PR to develop, clean up. Use when the feature/fix is complete.
-allowed-tools: Bash(git *), Bash(gh *)
 ---
 
 # Clôture worktree — KLASSCI Backend
@@ -79,9 +78,18 @@ git worktree prune
    Issue   : #<issue-number>
 
 ⏳ En attente de review.
-   Une fois mergée, tu peux nettoyer avec :
-   git worktree remove ../worktree-<issue>-<slug>
 ```
+
+### Étape 7 — Nettoyage (après merge uniquement)
+
+Une fois la PR mergée, proposer :
+
+> La PR est mergée. Veux-tu nettoyer le worktree ?
+> ```bash
+> # Depuis klassci-backend/ (pas depuis le worktree)
+> git worktree remove ../worktree-<issue>-<slug>
+> git worktree prune
+> ```
 
 ### Règles importantes
 
@@ -89,5 +97,6 @@ git worktree prune
 - Le titre du PR doit suivre : `type(scope): description`
 - `Closes #N` dans le body ferme l'issue automatiquement au merge
 - Ne pas squash les commits (merge commit pour conserver l'historique)
+- Toujours nettoyer le worktree **depuis le repo principal**, jamais depuis l'intérieur du worktree
 
 $ARGUMENTS

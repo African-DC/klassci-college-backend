@@ -2,7 +2,6 @@
 name: new-endpoint
 description: Scaffold a new FastAPI endpoint with router, schema, service, and repository following KLASSCI conventions. Use when asked to add a new API endpoint.
 argument-hint: "[resource-name] e.g. enrollments"
-allowed-tools: Read, Glob, Bash(python -m pytest *), Write, Edit
 ---
 
 Scaffold a complete new endpoint for the resource: $ARGUMENTS
