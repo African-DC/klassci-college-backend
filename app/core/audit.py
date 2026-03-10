@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import sqlalchemy.exc
 from sqlalchemy import JSON, BigInteger, DateTime, Enum, String, Text, func, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -81,6 +82,10 @@ async def audit_log(
         )
         await db.execute(stmt)
         await db.flush()
+    except (sqlalchemy.exc.InvalidRequestError, TypeError, AttributeError):
+        # Session corrompue ou erreur de programmation — propager au service
+        # afin d'éviter un commit sur une session dans un état indéfini.
+        raise
     except Exception:
         logger.exception(
             "Failed to write audit log: entity_type=%s entity_id=%s action=%s",
@@ -88,4 +93,5 @@ async def audit_log(
             entity_id,
             action,
         )
-        # Ne jamais faire échouer la requête principale à cause de l'audit
+        # Ne jamais faire échouer la requête principale à cause d'une erreur DB
+        # sur la table d'audit (ex : contrainte, timeout réseau).

@@ -1,5 +1,6 @@
 """Dépendances FastAPI partagées : session DB, utilisateur courant, permissions."""
 
+import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import current_tenant_id, get_db
 from app.core.exceptions import UnauthorizedError
 from app.core.security import decode_token
+
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -65,8 +68,13 @@ async def get_current_user(
     if token_tenant != request_tenant:
         raise UnauthorizedError("Token tenant mismatch")
 
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        raise UnauthorizedError("Invalid token claims")
+
     return TokenData(
-        user_id=int(payload["sub"]),
+        user_id=user_id,
         tenant_id=token_tenant,
         email=payload.get("email", ""),
     )
@@ -87,10 +95,13 @@ def require_permission(permission_slug: str) -> Depends:  # type: ignore[return]
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
+        logger.warning(
+            "require_permission('%s') not enforced — stub active (issue #3)",
+            permission_slug,
+        )
         # TODO(issue-3): vérifier la permission en base
         # has_perm = await check_user_permission(db, current_user.user_id, permission_slug)
         # if not has_perm:
         #     raise PermissionDeniedError(permission_slug)
-        pass
 
     return Depends(_check)

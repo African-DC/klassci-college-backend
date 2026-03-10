@@ -50,14 +50,17 @@ def test_invalid_token_raises() -> None:
 
 
 def test_expired_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Un token expiré lève jwt.ExpiredSignatureError."""
+    """Un token expiré lève jwt.ExpiredSignatureError.
+
+    Le delta négatif doit dépasser le leeway de 30 secondes configuré dans
+    decode_token, sinon PyJWT accepte encore le token.
+    """
     import app.core.security as sec_module
-    from datetime import datetime, timezone
 
     original_build = sec_module._build_token
 
     def expired_build(data: dict, expires_delta: timedelta) -> str:
-        return original_build(data, timedelta(seconds=-1))
+        return original_build(data, timedelta(minutes=-5))  # -5 min > leeway 30s
 
     monkeypatch.setattr(sec_module, "_build_token", expired_build)
     token = create_access_token(user_id=1, tenant_id="t", email="x@x.com")

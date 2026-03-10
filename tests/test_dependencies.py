@@ -74,3 +74,58 @@ async def test_get_current_user_refresh_token_rejected() -> None:
             await get_current_user(token=refresh)
     finally:
         current_tenant_id.reset(token_ctx)
+
+
+# ---------------------------------------------------------------------------
+# Claims manquants ou invalides → 401, pas 500
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_current_user_missing_sub_raises_401() -> None:
+    """Un token sans claim 'sub' doit lever UnauthorizedError, pas KeyError."""
+    from datetime import datetime, timedelta, timezone
+
+    import jwt as pyjwt
+
+    from app.core.config import settings
+
+    payload = {
+        "tenant_id": "lycee-x",
+        "email": "user@test.com",
+        "type": "access",
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+    }
+    token = pyjwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    token_ctx = current_tenant_id.set("lycee-x")
+    try:
+        with pytest.raises(UnauthorizedError, match="Invalid token claims"):
+            await get_current_user(token=token)
+    finally:
+        current_tenant_id.reset(token_ctx)
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_non_int_sub_raises_401() -> None:
+    """Un token avec sub non-entier doit lever UnauthorizedError, pas ValueError."""
+    from datetime import datetime, timedelta, timezone
+
+    import jwt as pyjwt
+
+    from app.core.config import settings
+
+    payload = {
+        "sub": "not-an-integer",
+        "tenant_id": "lycee-x",
+        "email": "user@test.com",
+        "type": "access",
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+    }
+    token = pyjwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    token_ctx = current_tenant_id.set("lycee-x")
+    try:
+        with pytest.raises(UnauthorizedError, match="Invalid token claims"):
+            await get_current_user(token=token)
+    finally:
+        current_tenant_id.reset(token_ctx)

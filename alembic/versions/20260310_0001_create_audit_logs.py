@@ -49,4 +49,3 @@ def downgrade() -> None:
     op.drop_index("idx_audit_logs_entity", table_name="audit_logs")
     op.drop_index("idx_audit_logs_user_id", table_name="audit_logs")
     op.drop_table("audit_logs")
-    op.execute("DROP TYPE IF EXISTS audit_action")
