@@ -1,5 +1,6 @@
 """Moteur SQLAlchemy async + gestion des sessions par tenant."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextvars import ContextVar
@@ -18,6 +19,7 @@ current_tenant_id: ContextVar[str] = ContextVar("current_tenant_id", default=set
 # Clé : tenant_id, valeur : (engine, session_factory)
 _ENGINE_REGISTRY: dict[str, tuple[AsyncEngine, async_sessionmaker[AsyncSession]]] = {}
 _MAX_ENGINES = 64
+_REGISTRY_LOCK = asyncio.Lock()
 
 
 class Base(DeclarativeBase):
@@ -31,34 +33,49 @@ async def _get_session_factory(tenant_id: str) -> async_sessionmaker[AsyncSessio
     Maintient un registre d'au plus _MAX_ENGINES engines actifs. Quand la
     limite est atteinte, l'engine le plus ancien (FIFO) est éjecté et
     dispose()d pour libérer proprement toutes ses connexions MySQL.
+
+    Le double-check locking évite les race conditions : deux coroutines
+    concurrent sur le même nouveau tenant ne créeront qu'un seul engine.
     """
+    # Fast path sans lock — O(1), aucune contention pour les tenants connus
     if tenant_id in _ENGINE_REGISTRY:
         return _ENGINE_REGISTRY[tenant_id][1]
 
-    if len(_ENGINE_REGISTRY) >= _MAX_ENGINES:
-        oldest_key, (old_engine, _) = next(iter(_ENGINE_REGISTRY.items()))
-        del _ENGINE_REGISTRY[oldest_key]
-        await old_engine.dispose()
-        logger.warning(
-            "Engine evicted for tenant '%s' (registry at capacity: %d)",
-            oldest_key,
-            _MAX_ENGINES,
-        )
+    async with _REGISTRY_LOCK:
+        # Double-check : une autre coroutine a peut-être créé l'engine
+        # pendant qu'on attendait le lock
+        if tenant_id in _ENGINE_REGISTRY:
+            return _ENGINE_REGISTRY[tenant_id][1]
 
-    engine = create_async_engine(
-        settings.DATABASE_URL.format(tenant=tenant_id),
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        pool_pre_ping=True,
-        echo=settings.DEBUG,
-    )
-    factory = async_sessionmaker(
-        engine,
-        expire_on_commit=False,
-        class_=AsyncSession,
-    )
-    _ENGINE_REGISTRY[tenant_id] = (engine, factory)
-    return factory
+        if len(_ENGINE_REGISTRY) >= _MAX_ENGINES:
+            oldest_key, (old_engine, _) = next(iter(_ENGINE_REGISTRY.items()))
+            del _ENGINE_REGISTRY[oldest_key]
+            try:
+                await old_engine.dispose()
+                logger.warning(
+                    "Engine evicted for tenant '%s' (registry at capacity: %d)",
+                    oldest_key,
+                    _MAX_ENGINES,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to dispose evicted engine for tenant '%s'", oldest_key
+                )
+
+        engine = create_async_engine(
+            settings.DATABASE_URL.format(tenant=tenant_id),
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_pre_ping=True,
+            echo=settings.DEBUG,
+        )
+        factory = async_sessionmaker(
+            engine,
+            expire_on_commit=False,
+            class_=AsyncSession,
+        )
+        _ENGINE_REGISTRY[tenant_id] = (engine, factory)
+        return factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

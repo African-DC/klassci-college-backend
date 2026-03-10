@@ -82,9 +82,23 @@ async def audit_log(
         )
         await db.execute(stmt)
         await db.flush()
-    except (sqlalchemy.exc.InvalidRequestError, TypeError, AttributeError):
-        # Session corrompue ou erreur de programmation — propager au service
-        # afin d'éviter un commit sur une session dans un état indéfini.
+    except sqlalchemy.exc.DBAPIError:
+        # Vraies erreurs DB (OperationalError, IntegrityError, etc.) — swallow.
+        # DBAPIError hérite de StatementError, il faut le traiter en premier.
+        logger.exception(
+            "Failed to write audit log: entity_type=%s entity_id=%s action=%s",
+            entity_type,
+            entity_id,
+            action,
+        )
+    except (
+        sqlalchemy.exc.InvalidRequestError,  # session corrompue / mauvais état
+        sqlalchemy.exc.StatementError,       # valeur Python non sérialisable, enum mal mappé
+        TypeError,
+        AttributeError,
+    ):
+        # Erreurs de programmation — propager au service afin d'éviter un
+        # commit sur une session dans un état indéfini.
         raise
     except Exception:
         logger.exception(

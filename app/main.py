@@ -19,6 +19,10 @@ app = FastAPI(
 )
 
 # --- Middleware (ordre : dernier ajouté = premier exécuté) ---
+# TenantMiddleware ajouté en 1er → s'exécute en dernier (inner layer)
+# CORSMiddleware ajouté en 2ème → s'exécute en premier (outer layer)
+# Ainsi les preflight CORS sont traités avant la résolution tenant.
+app.add_middleware(TenantMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -26,7 +30,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(TenantMiddleware)
 
 # --- Handlers d'exception ---
 register_exception_handlers(app)
