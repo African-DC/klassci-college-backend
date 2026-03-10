@@ -1,13 +1,12 @@
 """JWT + bcrypt — création, décodage de tokens et hachage de mots de passe."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
 import jwt
 
 from app.core.config import settings
-
 
 # ---------------------------------------------------------------------------
 # Passwords
@@ -29,7 +28,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def _build_token(data: dict[str, Any], expires_delta: timedelta) -> str:
     payload = data.copy()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload["iat"] = now
     payload["exp"] = now + expires_delta
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)

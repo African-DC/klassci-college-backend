@@ -1,12 +1,13 @@
 """Tests de get_current_user — tenant mismatch, token expiré, mauvais type."""
 
+from datetime import UTC
+
 import pytest
 
-from app.core.dependencies import TokenData, get_current_user
 from app.core.database import current_tenant_id
+from app.core.dependencies import TokenData, get_current_user
 from app.core.exceptions import UnauthorizedError
 from app.core.security import create_access_token, create_refresh_token
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -83,7 +84,7 @@ async def test_get_current_user_refresh_token_rejected() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_missing_sub_raises_401() -> None:
     """Un token sans claim 'sub' doit lever UnauthorizedError, pas KeyError."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     import jwt as pyjwt
 
@@ -93,8 +94,8 @@ async def test_get_current_user_missing_sub_raises_401() -> None:
         "tenant_id": "lycee-x",
         "email": "user@test.com",
         "type": "access",
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=15),
     }
     token = pyjwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     token_ctx = current_tenant_id.set("lycee-x")
@@ -108,7 +109,7 @@ async def test_get_current_user_missing_sub_raises_401() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_non_int_sub_raises_401() -> None:
     """Un token avec sub non-entier doit lever UnauthorizedError, pas ValueError."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     import jwt as pyjwt
 
@@ -119,8 +120,8 @@ async def test_get_current_user_non_int_sub_raises_401() -> None:
         "tenant_id": "lycee-x",
         "email": "user@test.com",
         "type": "access",
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=15),
     }
     token = pyjwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     token_ctx = current_tenant_id.set("lycee-x")

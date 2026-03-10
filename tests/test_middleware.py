@@ -11,7 +11,6 @@ from app.core.config import settings
 from app.core.database import current_tenant_id
 from app.core.middleware import TenantMiddleware, _extract_tenant
 
-
 # ---------------------------------------------------------------------------
 # _extract_tenant — hôtes locaux
 # ---------------------------------------------------------------------------

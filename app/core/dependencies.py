@@ -55,10 +55,10 @@ async def get_current_user(
     """
     try:
         payload = decode_token(token)
-    except jwt.ExpiredSignatureError:
-        raise UnauthorizedError("Token has expired")
-    except jwt.InvalidTokenError:
-        raise UnauthorizedError("Invalid token")
+    except jwt.ExpiredSignatureError as exc:
+        raise UnauthorizedError("Token has expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise UnauthorizedError("Invalid token") from exc
 
     if payload.get("type") != "access":
         raise UnauthorizedError("Invalid token type")
@@ -70,8 +70,8 @@ async def get_current_user(
 
     try:
         user_id = int(payload["sub"])
-    except (KeyError, ValueError, TypeError):
-        raise UnauthorizedError("Invalid token claims")
+    except (KeyError, ValueError, TypeError) as exc:
+        raise UnauthorizedError("Invalid token claims") from exc
 
     return TokenData(
         user_id=user_id,

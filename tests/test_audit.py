@@ -1,6 +1,6 @@
 """Tests de audit_log — résilience aux erreurs DB et re-raise des erreurs critiques."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy.exc
