@@ -5,7 +5,7 @@ aiomysql==0.3.0
 alembic==1.14.0
 pydantic==2.10.3
 pydantic-settings==2.7.0
-passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
 PyJWT==2.10.1
 cryptography==46.0.5
 redis==5.2.1
