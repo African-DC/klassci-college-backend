@@ -1,7 +1,7 @@
 """JWT + bcrypt — création, décodage de tokens et hachage de mots de passe."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import bcrypt
 import jwt
@@ -58,9 +58,12 @@ def decode_token(token: str) -> dict[str, Any]:
     Une tolérance de 30 secondes est accordée pour absorber les petits décalages
     d'horloge entre le serveur émetteur et le serveur validateur.
     """
-    return jwt.decode(
-        token,
-        settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM],
-        leeway=timedelta(seconds=30),
+    return cast(
+        dict[str, Any],
+        jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            leeway=timedelta(seconds=30),
+        ),
     )

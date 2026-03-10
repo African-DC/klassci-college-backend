@@ -3,6 +3,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from typing import Any
 
 import jwt
 from fastapi import Depends
@@ -87,7 +88,7 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 
 
-def require_permission(permission_slug: str) -> Depends:  # type: ignore[return]
+def require_permission(permission_slug: str) -> Any:
     """Retourne une dépendance FastAPI qui vérifie une permission en base.
 
     La vérification DB réelle sera implémentée en issue #3 (table permissions).
