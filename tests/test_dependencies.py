@@ -13,6 +13,7 @@ from app.core.security import create_access_token, create_refresh_token
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_token(tenant_id: str = "lycee-x") -> str:
     return create_access_token(user_id=1, tenant_id=tenant_id, email="user@test.com")
 
@@ -20,6 +21,7 @@ def _make_token(tenant_id: str = "lycee-x") -> str:
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_current_user_valid_token() -> None:
@@ -40,6 +42,7 @@ async def test_get_current_user_valid_token() -> None:
 # Tenant mismatch
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_get_current_user_tenant_mismatch_raises() -> None:
     token = _make_token("lycee-x")
@@ -54,6 +57,7 @@ async def test_get_current_user_tenant_mismatch_raises() -> None:
 # ---------------------------------------------------------------------------
 # Token invalide / expiré
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_current_user_invalid_token_raises() -> None:
@@ -80,6 +84,7 @@ async def test_get_current_user_refresh_token_rejected() -> None:
 # ---------------------------------------------------------------------------
 # Claims manquants ou invalides → 401, pas 500
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_get_current_user_missing_sub_raises_401() -> None:

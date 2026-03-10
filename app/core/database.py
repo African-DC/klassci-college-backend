@@ -18,7 +18,9 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # ContextVar qui stocke le tenant_id courant pour chaque requête
-current_tenant_id: ContextVar[str] = ContextVar("current_tenant_id", default=settings.LOCAL_TENANT_ID)
+current_tenant_id: ContextVar[str] = ContextVar(
+    "current_tenant_id", default=settings.LOCAL_TENANT_ID
+)
 
 # Registre des engines actifs — dict ordonné (Python 3.7+ : insertion order = FIFO éviction)
 # Clé : tenant_id, valeur : (engine, session_factory)
@@ -29,6 +31,7 @@ _REGISTRY_LOCK = asyncio.Lock()
 
 class Base(DeclarativeBase):
     """Base commune pour tous les modèles SQLAlchemy."""
+
     pass
 
 
@@ -63,9 +66,7 @@ async def _get_session_factory(tenant_id: str) -> async_sessionmaker[AsyncSessio
             try:
                 await old_engine.dispose()
             except Exception:
-                logger.exception(
-                    "Failed to dispose evicted engine for tenant '%s'", oldest_key
-                )
+                logger.exception("Failed to dispose evicted engine for tenant '%s'", oldest_key)
 
         engine = create_async_engine(
             settings.DATABASE_URL.format(tenant=tenant_id),

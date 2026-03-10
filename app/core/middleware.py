@@ -36,7 +36,9 @@ def _extract_tenant(host: str) -> str:
         slug = parts[0]
         if _TENANT_SLUG_RE.match(slug):
             return slug
-    logger.warning("Invalid or missing tenant slug in Host header: %s — falling back to local", host[:100])
+    logger.warning(
+        "Invalid or missing tenant slug in Host header: %s — falling back to local", host[:100]
+    )
     return settings.LOCAL_TENANT_ID
 
 

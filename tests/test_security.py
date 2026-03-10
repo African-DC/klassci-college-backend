@@ -17,6 +17,7 @@ from app.core.security import (
 # Passwords
 # ---------------------------------------------------------------------------
 
+
 def test_hash_and_verify_password() -> None:
     plain = "secret-password-123"
     hashed = hash_password(plain)
@@ -32,6 +33,7 @@ def test_wrong_password_fails() -> None:
 # ---------------------------------------------------------------------------
 # Access token
 # ---------------------------------------------------------------------------
+
 
 def test_create_and_decode_access_token() -> None:
     token = create_access_token(user_id=42, tenant_id="lycee-x", email="alice@example.com")
@@ -71,6 +73,7 @@ def test_expired_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 # Refresh token
 # ---------------------------------------------------------------------------
+
 
 def test_create_and_decode_refresh_token() -> None:
     token = create_refresh_token(user_id=7, tenant_id="lycee-y")

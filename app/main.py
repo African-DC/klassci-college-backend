@@ -39,6 +39,7 @@ register_exception_handlers(app)
 # Routes de base
 # ---------------------------------------------------------------------------
 
+
 @app.get("/health", tags=["system"])
 async def health_check() -> dict[str, str]:
     """Vérification de santé — utilisé par le CI et le load balancer."""

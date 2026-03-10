@@ -31,6 +31,7 @@ class TokenData:
 # Session DB tenant-scopée
 # ---------------------------------------------------------------------------
 
+
 async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
     """Alias explicite de get_db — session scopée sur le tenant courant.
 
@@ -44,6 +45,7 @@ async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 # Utilisateur courant
 # ---------------------------------------------------------------------------
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -83,6 +85,7 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 # Permissions dynamiques
 # ---------------------------------------------------------------------------
+
 
 def require_permission(permission_slug: str) -> Depends:  # type: ignore[return]
     """Retourne une dépendance FastAPI qui vérifie une permission en base.

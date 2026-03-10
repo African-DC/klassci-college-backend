@@ -12,6 +12,7 @@ from app.core.config import settings
 # Passwords
 # ---------------------------------------------------------------------------
 
+
 def hash_password(plain: str) -> str:
     """Retourne le hash bcrypt du mot de passe."""
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
@@ -25,6 +26,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ---------------------------------------------------------------------------
 # JWT
 # ---------------------------------------------------------------------------
+
 
 def _build_token(data: dict[str, Any], expires_delta: timedelta) -> str:
     payload = data.copy()

@@ -50,6 +50,7 @@ class BusinessValidationError(AppException):
 # Handlers FastAPI
 # ---------------------------------------------------------------------------
 
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Enregistre les handlers d'exception sur l'app FastAPI."""
 

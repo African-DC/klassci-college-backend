@@ -20,6 +20,7 @@ def _mock_db() -> AsyncMock:
 # Happy path
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_audit_log_happy_path() -> None:
     """audit_log s'exécute sans erreur sur une session saine."""
@@ -32,6 +33,7 @@ async def test_audit_log_happy_path() -> None:
 # ---------------------------------------------------------------------------
 # Résilience — erreurs DB swallowées
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_audit_log_swallows_db_operational_error() -> None:
@@ -55,6 +57,7 @@ async def test_audit_log_swallows_integrity_error() -> None:
 # ---------------------------------------------------------------------------
 # Erreurs critiques — re-raised
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_audit_log_reraises_invalid_request_error() -> None:

@@ -93,7 +93,7 @@ async def audit_log(
         )
     except (
         sqlalchemy.exc.InvalidRequestError,  # session corrompue / mauvais état
-        sqlalchemy.exc.StatementError,       # valeur Python non sérialisable, enum mal mappé
+        sqlalchemy.exc.StatementError,  # valeur Python non sérialisable, enum mal mappé
         TypeError,
         AttributeError,
     ):

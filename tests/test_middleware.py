@@ -15,6 +15,7 @@ from app.core.middleware import TenantMiddleware, _extract_tenant
 # _extract_tenant — hôtes locaux
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "0.0.0.0", "localhost:8000", ""])
 def test_local_hosts_return_local_tenant(host: str) -> None:
     assert _extract_tenant(host) == settings.LOCAL_TENANT_ID
@@ -23,6 +24,7 @@ def test_local_hosts_return_local_tenant(host: str) -> None:
 # ---------------------------------------------------------------------------
 # _extract_tenant — sous-domaines valides
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "host, expected",
@@ -40,6 +42,7 @@ def test_valid_subdomain_returns_slug(host: str, expected: str) -> None:
 # ---------------------------------------------------------------------------
 # _extract_tenant — slugs invalides rejetés vers LOCAL_TENANT_ID
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "host",
@@ -65,19 +68,20 @@ def test_invalid_slug_falls_back_to_local(host: str) -> None:
 # TenantMiddleware.__call__ — test ASGI via httpx
 # ---------------------------------------------------------------------------
 
+
 async def _tenant_echo(request: Request) -> PlainTextResponse:
     """Endpoint de test : retourne le tenant_id injecté par le middleware."""
     return PlainTextResponse(current_tenant_id.get())
 
 
-_test_app = TenantMiddleware(
-    Starlette(routes=[Route("/tenant", _tenant_echo)])
-)
+_test_app = TenantMiddleware(Starlette(routes=[Route("/tenant", _tenant_echo)]))
 
 
 @pytest.mark.asyncio
 async def test_middleware_sets_tenant_from_subdomain() -> None:
-    async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://lycee-x.klassci.com") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://lycee-x.klassci.com"
+    ) as client:
         response = await client.get("/tenant")
     assert response.status_code == 200
     assert response.text == "lycee-x"
@@ -85,7 +89,9 @@ async def test_middleware_sets_tenant_from_subdomain() -> None:
 
 @pytest.mark.asyncio
 async def test_middleware_local_host_uses_local_tenant() -> None:
-    async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://localhost") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://localhost"
+    ) as client:
         response = await client.get("/tenant")
     assert response.status_code == 200
     assert response.text == settings.LOCAL_TENANT_ID
@@ -93,7 +99,9 @@ async def test_middleware_local_host_uses_local_tenant() -> None:
 
 @pytest.mark.asyncio
 async def test_middleware_invalid_slug_falls_back_to_local() -> None:
-    async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://_bad.klassci.com") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://_bad.klassci.com"
+    ) as client:
         response = await client.get("/tenant")
     assert response.status_code == 200
     assert response.text == settings.LOCAL_TENANT_ID
