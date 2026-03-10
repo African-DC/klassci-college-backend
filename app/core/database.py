@@ -50,13 +50,13 @@ async def _get_session_factory(tenant_id: str) -> async_sessionmaker[AsyncSessio
         if len(_ENGINE_REGISTRY) >= _MAX_ENGINES:
             oldest_key, (old_engine, _) = next(iter(_ENGINE_REGISTRY.items()))
             del _ENGINE_REGISTRY[oldest_key]
+            logger.warning(
+                "Engine evicted for tenant '%s' (registry at capacity: %d)",
+                oldest_key,
+                _MAX_ENGINES,
+            )
             try:
                 await old_engine.dispose()
-                logger.warning(
-                    "Engine evicted for tenant '%s' (registry at capacity: %d)",
-                    oldest_key,
-                    _MAX_ENGINES,
-                )
             except Exception:
                 logger.exception(
                     "Failed to dispose evicted engine for tenant '%s'", oldest_key
