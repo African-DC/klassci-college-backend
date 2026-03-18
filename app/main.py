@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import TenantMiddleware
 from app.routers.auth import router as auth_router
+from app.routers.enrollments import router as enrollments_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -37,6 +38,7 @@ register_exception_handlers(app)
 
 # --- Routers ---
 app.include_router(auth_router)
+app.include_router(enrollments_router)
 
 
 # ---------------------------------------------------------------------------
