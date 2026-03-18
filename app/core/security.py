@@ -1,5 +1,6 @@
 """JWT + bcrypt — création, décodage de tokens et hachage de mots de passe."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -44,12 +45,17 @@ def create_access_token(user_id: int, tenant_id: str, email: str) -> str:
     )
 
 
-def create_refresh_token(user_id: int, tenant_id: str) -> str:
-    """Crée un JWT refresh token (durée : REFRESH_TOKEN_EXPIRE_DAYS)."""
-    return _build_token(
-        {"sub": str(user_id), "tenant_id": tenant_id, "type": "refresh"},
+def create_refresh_token(user_id: int, tenant_id: str) -> tuple[str, str]:
+    """Crée un JWT refresh token avec JTI unique pour la révocation.
+
+    Retourne (token, jti) — le jti doit être stocké dans Redis par l'appelant.
+    """
+    jti = str(uuid.uuid4())
+    token = _build_token(
+        {"sub": str(user_id), "tenant_id": tenant_id, "type": "refresh", "jti": jti},
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    return token, jti
 
 
 def decode_token(token: str) -> dict[str, Any]:

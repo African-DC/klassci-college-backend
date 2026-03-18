@@ -76,9 +76,11 @@ def test_expired_token_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_create_and_decode_refresh_token() -> None:
-    token = create_refresh_token(user_id=7, tenant_id="lycee-y")
+    token, jti = create_refresh_token(user_id=7, tenant_id="lycee-y")
     payload = decode_token(token)
 
     assert payload["sub"] == "7"
     assert payload["tenant_id"] == "lycee-y"
     assert payload["type"] == "refresh"
+    assert payload["jti"] == jti
+    assert len(jti) == 36  # UUID format

@@ -1,6 +1,7 @@
 """Tests de get_current_user — tenant mismatch, token expiré, mauvais type."""
 
 from datetime import UTC
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,10 +26,23 @@ def _make_token(tenant_id: str = "lycee-x") -> str:
 
 @pytest.mark.asyncio
 async def test_get_current_user_valid_token() -> None:
+    from app.models.user import User
+
     token = _make_token("lycee-x")
     token_ctx = current_tenant_id.set("lycee-x")
+
+    mock_user = MagicMock(spec=User)
+    mock_user.id = 1
+    mock_user.is_active = True
+    mock_db = AsyncMock()
+
     try:
-        result = await get_current_user(token=token)
+        with patch(
+            "app.repositories.user_repository.get_user_by_id",
+            new_callable=AsyncMock,
+            return_value=mock_user,
+        ):
+            result = await get_current_user(token=token, db=mock_db)
     finally:
         current_tenant_id.reset(token_ctx)
 
@@ -72,11 +86,11 @@ async def test_get_current_user_invalid_token_raises() -> None:
 @pytest.mark.asyncio
 async def test_get_current_user_refresh_token_rejected() -> None:
     """Un refresh token ne doit pas être accepté comme access token."""
-    refresh = create_refresh_token(user_id=1, tenant_id="lycee-x")
+    refresh, _ = create_refresh_token(user_id=1, tenant_id="lycee-x")
     token_ctx = current_tenant_id.set("lycee-x")
     try:
         with pytest.raises(UnauthorizedError, match="Invalid token type"):
-            await get_current_user(token=refresh)
+            await get_current_user(token=refresh, db=AsyncMock())
     finally:
         current_tenant_id.reset(token_ctx)
 
