@@ -3,14 +3,13 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# Import de tous les modèles pour que leurs tables soient connues de Base.metadata
+import app.models  # noqa: F401 — enregistre toutes les tables via __init__.py
+from alembic import context
 from app.core.config import settings
 from app.core.database import Base
-
-# Import de tous les modèles pour que leurs tables soient connues de Base.metadata
-import app.core.audit  # noqa: F401
 
 config = context.config
 if config.config_file_name:
