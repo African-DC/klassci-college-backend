@@ -17,7 +17,7 @@ def _parse_time(t: str) -> time:
     return time(int(h), int(m))
 
 
-@celery_app.task(bind=True, name="timetable.generate")  # type: ignore[untyped-decorator]
+@celery_app.task(bind=True, name="timetable.generate")  # type: ignore[misc]
 def generate_timetable_task(
     self: Any,
     tenant_id: str,

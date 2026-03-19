@@ -15,7 +15,7 @@ from app.core.database import _get_session_factory, current_tenant_id
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="grades.generate_bulletins")  # type: ignore[untyped-decorator]
+@celery_app.task(bind=True, name="grades.generate_bulletins")  # type: ignore[misc]
 def generate_bulletins_task(
     self: Any,
     tenant_id: str,
