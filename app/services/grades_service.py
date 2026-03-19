@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +20,7 @@ from app.schemas.grades import (
 logger = logging.getLogger(__name__)
 
 
-def _build_eval_response(ev: Evaluation, actor_user_id: int | None = None) -> dict:
+def _build_eval_response(ev: Evaluation, actor_user_id: int | None = None) -> dict[str, Any]:
     teacher_name = f"{ev.teacher.first_name} {ev.teacher.last_name}" if ev.teacher else ""
     total = len(ev.grades) if ev.grades is not None else 0
     graded = sum(1 for g in (ev.grades or []) if g.status == "entered")
@@ -49,7 +50,7 @@ async def list_evaluations(
     class_id: int | None = None,
     academic_year_id: int | None = None,
     trimester: int | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     evals = await repo.list_evaluations(
         db,
         class_id=class_id,
@@ -64,7 +65,7 @@ async def create_evaluation(
     data: EvaluationCreate,
     teacher_id: int,
     current_user_id: int,
-) -> dict:
+) -> dict[str, Any]:
     students = await repo.get_students_for_class(db, data.class_id, data.academic_year_id)
 
     eval_data = data.model_dump()
@@ -92,7 +93,7 @@ async def create_evaluation(
     return _build_eval_response(full_eval)
 
 
-async def get_grades(db: AsyncSession, eval_id: int) -> list[dict]:
+async def get_grades(db: AsyncSession, eval_id: int) -> list[dict[str, Any]]:
     evaluation = await repo.get_evaluation_by_id(db, eval_id)
     if not evaluation:
         raise NotFoundError("Evaluation", eval_id)
@@ -114,7 +115,7 @@ async def batch_update_grades(
     eval_id: int,
     payload: GradeBatchUpdate,
     current_user_id: int,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     evaluation = await repo.get_evaluation_by_id(db, eval_id)
     if not evaluation:
         raise NotFoundError("Evaluation", eval_id)
@@ -149,7 +150,7 @@ async def get_summary(
     class_id: int,
     trimester: int,
     academic_year_id: int,
-) -> dict:
+) -> dict[str, Any]:
     data = await repo.get_grades_summary(db, class_id, trimester, academic_year_id)
     return {
         "class_id": class_id,

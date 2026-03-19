@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,7 +70,7 @@ async def get_students_for_class(
 # ---------------------------------------------------------------------------
 
 
-def _eval_options():
+def _eval_options() -> list[Any]:
     return [
         selectinload(Evaluation.subject),
         selectinload(Evaluation.class_),
@@ -105,7 +106,7 @@ async def list_evaluations(
 async def create_evaluation(
     db: AsyncSession,
     *,
-    data: dict,
+    data: dict[str, Any],
     students: list[Student],
 ) -> Evaluation:
     """Crée l'évaluation et les Grade pending pour tous les élèves."""
@@ -145,7 +146,7 @@ async def get_grades_for_evaluation(db: AsyncSession, eval_id: int) -> list[Grad
 async def batch_update_grades(
     db: AsyncSession,
     eval_id: int,
-    entries: list[dict],
+    entries: list[dict[str, Any]],
 ) -> list[Grade]:
     """Met à jour les notes en batch — entries = [{student_id, value}, ...]."""
     for entry in entries:
@@ -176,7 +177,7 @@ async def get_grades_summary(
     class_id: int,
     trimester: int,
     academic_year_id: int,
-) -> dict:
+) -> dict[str, Any]:
     """Calcule les moyennes pondérées par coefficient pour chaque élève."""
     # Toutes les évaluations du trimestre pour cette classe
     evals = await list_evaluations(
@@ -210,6 +211,7 @@ async def get_grades_summary(
     subject_grades: dict[int, list[tuple[Decimal, int]]] = {}
     # student averages: {student_id: [(value, coeff)]}
     student_grades: dict[int, list[tuple[Decimal, int]]] = {}
+    student_summaries: list[dict[str, Any]] = []
 
     for g in grades:
         ev = eval_map[g.evaluation_id]
@@ -235,7 +237,6 @@ async def get_grades_summary(
     student_map = {s.id: s for s in students}
 
     # Calculer moyennes et ranks
-    student_summaries = []
     for sid, s in student_map.items():
         avg = weighted_avg(student_grades.get(sid, []))
         student_summaries.append(
@@ -248,13 +249,16 @@ async def get_grades_summary(
         )
 
     # Trier par moyenne décroissante pour les rangs
-    student_summaries.sort(key=lambda x: x["average"] or Decimal("0"), reverse=True)
+    student_summaries.sort(
+        key=lambda x: x["average"] if x["average"] is not None else Decimal("0"),
+        reverse=True,
+    )
     for rank, item in enumerate(student_summaries, start=1):
         item["rank"] = rank if item["average"] is not None else None
 
     # Moyennes par matière
     subject_set = {eval_map[g.evaluation_id].subject_id for g in grades}
-    subject_summaries = []
+    subject_summaries: list[dict[str, Any]] = []
     for eval_ in evals:
         sid = eval_.subject_id
         if sid not in subject_set:
@@ -268,12 +272,13 @@ async def get_grades_summary(
             }
         )
     # Dédupliquer
-    seen = set()
-    unique_subjects = []
-    for s in subject_summaries:
-        if s["subject_id"] not in seen:
-            seen.add(s["subject_id"])
-            unique_subjects.append(s)
+    seen: set[int] = set()
+    unique_subjects: list[dict[str, Any]] = []
+    for subj in subject_summaries:
+        subj_id = int(subj["subject_id"])
+        if subj_id not in seen:
+            seen.add(subj_id)
+            unique_subjects.append(subj)
 
     return {"students": student_summaries, "subjects": unique_subjects}
 

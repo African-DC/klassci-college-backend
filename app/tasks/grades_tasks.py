@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 import httpx
 
@@ -14,14 +15,14 @@ from app.core.database import _get_session_factory, current_tenant_id
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="grades.generate_bulletins")  # type: ignore[misc]
+@celery_app.task(bind=True, name="grades.generate_bulletins")  # type: ignore[untyped-decorator]
 def generate_bulletins_task(
-    self,
+    self: Any,
     tenant_id: str,
     class_id: int,
     trimester: int,
     academic_year_id: int,
-) -> dict:
+) -> dict[str, Any]:
     """Génère les bulletins PDF via Puppeteer et les stocke sur DO Spaces."""
     try:
         result = asyncio.run(
