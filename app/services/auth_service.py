@@ -39,8 +39,8 @@ async def login(
     email: str,
     password: str,
     ip_address: str | None = None,
-) -> TokenResponse:
-    """Authentifie l'utilisateur et retourne les tokens."""
+) -> tuple[TokenResponse, str]:
+    """Authentifie l'utilisateur. Retourne (TokenResponse, refresh_token)."""
     user = await get_user_by_email(db, email)
 
     if not user or not verify_password(password, user.hashed_password):
@@ -73,9 +73,8 @@ async def login(
 
     first_name, last_name = get_user_full_name(user)
 
-    return TokenResponse(
+    response = TokenResponse(
         access_token=access_token,
-        refresh_token=refresh_token,
         user=UserInToken(
             id=user.id,
             email=user.email,
@@ -84,14 +83,15 @@ async def login(
             last_name=last_name,
         ),
     )
+    return response, refresh_token
 
 
 async def refresh(
     db: AsyncSession,
     redis: aioredis.Redis,
     refresh_token: str,
-) -> RefreshResponse:
-    """Valide le refresh token, révoque l'ancien JTI et émet de nouveaux tokens."""
+) -> tuple[RefreshResponse, str]:
+    """Valide le refresh token, rotation. Retourne (RefreshResponse, new_refresh_token)."""
     try:
         payload = decode_token(refresh_token)
     except jwt.ExpiredSignatureError as exc:
@@ -101,6 +101,9 @@ async def refresh(
 
     if payload.get("type") != "refresh":
         raise UnauthorizedError("Token de rafraîchissement invalide ou expiré")
+
+    if payload.get("tenant_id") != current_tenant_id.get():
+        raise UnauthorizedError("Token tenant mismatch")
 
     jti = payload.get("jti", "")
     if not jti or not await redis.exists(_redis_key(jti)):
@@ -118,17 +121,12 @@ async def refresh(
     # Rotation : révoquer l'ancien JTI, émettre un nouveau
     await redis.delete(_redis_key(jti))
 
-    new_access = create_access_token(
-        user_id=user.id,
-        tenant_id=payload.get("tenant_id", ""),
-        email=user.email,
-    )
-    new_refresh, new_jti = create_refresh_token(
-        user_id=user.id, tenant_id=payload.get("tenant_id", "")
-    )
+    tenant = payload.get("tenant_id", "")
+    new_access = create_access_token(user_id=user.id, tenant_id=tenant, email=user.email)
+    new_refresh, new_jti = create_refresh_token(user_id=user.id, tenant_id=tenant)
     await redis.setex(_redis_key(new_jti), _REDIS_REFRESH_TTL, str(user.id))
 
-    return RefreshResponse(access_token=new_access, refresh_token=new_refresh)
+    return RefreshResponse(access_token=new_access), new_refresh
 
 
 async def logout(
@@ -141,6 +139,8 @@ async def logout(
     """Révoque le refresh token en supprimant son JTI de Redis."""
     try:
         payload = decode_token(refresh_token)
+        if payload.get("tenant_id") != current_tenant_id.get():
+            raise UnauthorizedError("Token tenant mismatch")
         jti = payload.get("jti", "")
         if jti:
             await redis.delete(_redis_key(jti))

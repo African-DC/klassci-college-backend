@@ -164,7 +164,9 @@ class Payment(Base, TimestampMixin):
         index=True,
     )
     reference: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    received_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    received_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     enrollment_fee: Mapped[EnrollmentFee] = relationship(back_populates="payments")

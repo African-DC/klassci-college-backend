@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,6 +29,9 @@ class Enrollment(Base, TimestampMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
     __tablename__ = "enrollments"
+    __table_args__ = (
+        UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     student_id: Mapped[int] = mapped_column(
@@ -46,7 +49,9 @@ class Enrollment(Base, TimestampMixin):
         default=EnrollmentStatus.PROSPECT,
         index=True,
     )
-    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     student: Mapped[Student] = relationship(back_populates="enrollments")
