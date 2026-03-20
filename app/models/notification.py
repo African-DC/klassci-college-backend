@@ -6,11 +6,11 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -43,10 +43,10 @@ class Notification(Base, TimestampMixin):
         BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     type: Mapped[str] = mapped_column(
-        Enum(NotificationType, name="notification_type"), nullable=False, index=True
+        ValueEnum(NotificationType, name="notification_type"), nullable=False, index=True
     )
     channel: Mapped[str] = mapped_column(
-        Enum(NotificationChannel, name="notification_channel"), nullable=False
+        ValueEnum(NotificationChannel, name="notification_channel"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
@@ -67,10 +67,10 @@ class NotificationTemplate(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     type: Mapped[str] = mapped_column(
-        Enum(NotificationType, name="notification_type"), nullable=False, index=True
+        ValueEnum(NotificationType, name="notification_type"), nullable=False, index=True
     )
     channel: Mapped[str] = mapped_column(
-        Enum(NotificationChannel, name="notification_channel"), nullable=False
+        ValueEnum(NotificationChannel, name="notification_channel"), nullable=False
     )
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)

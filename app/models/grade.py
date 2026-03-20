@@ -13,7 +13,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
     Numeric,
@@ -22,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class, Subject
@@ -57,7 +56,7 @@ class Evaluation(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(
-        Enum(EvaluationType, name="evaluation_type"), nullable=False, index=True
+        ValueEnum(EvaluationType, name="evaluation_type"), nullable=False, index=True
     )
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -101,7 +100,7 @@ class Grade(Base, TimestampMixin):
     # NULL tant que non saisie (status=pending)
     value: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
     status: Mapped[str] = mapped_column(
-        Enum(GradeStatus, name="grade_status"),
+        ValueEnum(GradeStatus, name="grade_status"),
         nullable=False,
         default=GradeStatus.PENDING,
         index=True,
@@ -129,7 +128,7 @@ class Bulletin(Base, TimestampMixin):
     trimester: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2 ou 3
     average: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
     rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    mention: Mapped[str | None] = mapped_column(Enum(Mention, name="mention"), nullable=True)
+    mention: Mapped[str | None] = mapped_column(ValueEnum(Mention, name="mention"), nullable=True)
     file_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -1,9 +1,17 @@
 """Mixin de base partagé par tous les modèles SQLAlchemy."""
 
+import enum
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
+
+
+def ValueEnum(enum_cls: type[enum.Enum], name: str, **kw: Any) -> SAEnum:
+    """Wrapper SQLAlchemy Enum qui mappe par .value (lowercase) et non .name (UPPERCASE)."""
+    return SAEnum(enum_cls, name=name, values_callable=lambda e: [x.value for x in e], **kw)
 
 
 class TimestampMixin:

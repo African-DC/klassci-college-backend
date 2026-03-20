@@ -6,11 +6,11 @@ import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class
@@ -127,7 +127,7 @@ class EnrollmentFee(Base, TimestampMixin):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(EnrollmentFeeStatus, name="enrollment_fee_status"),
+        ValueEnum(EnrollmentFeeStatus, name="enrollment_fee_status"),
         nullable=False,
         default=EnrollmentFeeStatus.PENDING,
         index=True,
@@ -156,9 +156,11 @@ class Payment(Base, TimestampMixin):
         index=True,
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
-    method: Mapped[str] = mapped_column(Enum(PaymentMethod, name="payment_method"), nullable=False)
+    method: Mapped[str] = mapped_column(
+        ValueEnum(PaymentMethod, name="payment_method"), nullable=False
+    )
     status: Mapped[str] = mapped_column(
-        Enum(PaymentStatus, name="payment_status"),
+        ValueEnum(PaymentStatus, name="payment_status"),
         nullable=False,
         default=PaymentStatus.PENDING,
         index=True,

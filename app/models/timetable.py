@@ -6,11 +6,11 @@ import enum
 from datetime import time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Enum, ForeignKey, Time
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class, Room, Subject
@@ -73,7 +73,7 @@ class TimetableSlot(Base, TimestampMixin):
         BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     day: Mapped[str] = mapped_column(
-        Enum(DayOfWeek, name="day_of_week"), nullable=False, index=True
+        ValueEnum(DayOfWeek, name="day_of_week"), nullable=False, index=True
     )
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
@@ -98,7 +98,7 @@ class TeacherAvailability(Base):
         nullable=False,
         index=True,
     )
-    day: Mapped[str] = mapped_column(Enum(DayOfWeek, name="day_of_week"), nullable=False)
+    day: Mapped[str] = mapped_column(ValueEnum(DayOfWeek, name="day_of_week"), nullable=False)
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

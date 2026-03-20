@@ -6,11 +6,11 @@ import enum
 from datetime import date, time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, Enum, ForeignKey, String, Time
+from sqlalchemy import BigInteger, Date, ForeignKey, String, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear
@@ -42,7 +42,7 @@ class AttendanceContext(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     entity_type: Mapped[str] = mapped_column(
-        Enum(AttendanceEntityType, name="attendance_entity_type"), nullable=False, index=True
+        ValueEnum(AttendanceEntityType, name="attendance_entity_type"), nullable=False, index=True
     )
     context_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, index=True
@@ -72,7 +72,7 @@ class AttendanceRecord(Base, TimestampMixin):
         BigInteger, ForeignKey("students.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(
-        Enum(AttendanceStatus, name="attendance_status"),
+        ValueEnum(AttendanceStatus, name="attendance_status"),
         nullable=False,
         default=AttendanceStatus.ABSENT,
         index=True,
@@ -80,7 +80,7 @@ class AttendanceRecord(Base, TimestampMixin):
     time_in: Mapped[time | None] = mapped_column(Time, nullable=True)
     time_out: Mapped[time | None] = mapped_column(Time, nullable=True)
     source: Mapped[str] = mapped_column(
-        Enum(AttendanceSource, name="attendance_source"),
+        ValueEnum(AttendanceSource, name="attendance_source"),
         nullable=False,
         default=AttendanceSource.MANUAL,
     )

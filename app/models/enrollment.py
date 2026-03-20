@@ -5,11 +5,11 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class
@@ -44,7 +44,7 @@ class Enrollment(Base, TimestampMixin):
         BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(
-        Enum(EnrollmentStatus, name="enrollment_status"),
+        ValueEnum(EnrollmentStatus, name="enrollment_status"),
         nullable=False,
         default=EnrollmentStatus.PROSPECT,
         index=True,

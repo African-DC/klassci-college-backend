@@ -11,7 +11,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -19,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.enrollment import Enrollment
@@ -56,7 +55,10 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(Enum(UserRoleEnum, name="user_role"), nullable=False)
+    role: Mapped[str] = mapped_column(
+        ValueEnum(UserRoleEnum, name="user_role"),
+        nullable=False,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
@@ -135,7 +137,7 @@ class Student(Base, TimestampMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    genre: Mapped[str | None] = mapped_column(Enum(Genre, name="genre"), nullable=True)
+    genre: Mapped[str | None] = mapped_column(ValueEnum(Genre, name="genre"), nullable=True)
     enrollment_number: Mapped[str | None] = mapped_column(
         String(50), nullable=True, unique=True, index=True
     )
@@ -189,7 +191,7 @@ class ParentStudent(Base):
         BigInteger, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True
     )
     relationship_type: Mapped[str] = mapped_column(
-        Enum(ParentRelationship, name="parent_relationship"),
+        ValueEnum(ParentRelationship, name="parent_relationship"),
         nullable=False,
         default=ParentRelationship.GUARDIAN,
     )
