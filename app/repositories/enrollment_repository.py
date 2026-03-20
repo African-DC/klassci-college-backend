@@ -17,6 +17,7 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
         .options(
             selectinload(Enrollment.academic_year),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
+            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
         )
     )
     result = await db.execute(stmt)
@@ -139,10 +140,10 @@ async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
 
 
 async def count_active_enrollments_for_class(db: AsyncSession, class_id: int) -> int:
-    """Compte les inscriptions valides dans une classe."""
+    """Compte les inscriptions non-terminées dans une classe (capacity guard)."""
     stmt = select(func.count()).select_from(Enrollment).where(
         Enrollment.class_id == class_id,
-        Enrollment.status == EnrollmentStatus.VALIDE,
+        Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
     )
     return (await db.execute(stmt)).scalar() or 0
 

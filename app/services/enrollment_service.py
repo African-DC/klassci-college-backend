@@ -104,7 +104,8 @@ async def create_enrollment(
     await db.commit()
 
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
-    assert refreshed is not None
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment.id)
     return _to_response(refreshed)
 
 
@@ -179,7 +180,8 @@ async def update_enrollment(
     await db.commit()
 
     refreshed = await repo.get_enrollment_by_id(db, enrollment_id)
-    assert refreshed is not None
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment_id)
     return _to_response(refreshed)
 
 

@@ -380,6 +380,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["class_id"], ["classes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["academic_year_id"], ["academic_years.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),
     )
     op.create_index("idx_enrollments_student_id", "enrollments", ["student_id"])
     op.create_index("idx_enrollments_class_id", "enrollments", ["class_id"])
