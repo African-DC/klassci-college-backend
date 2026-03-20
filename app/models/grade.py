@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -88,6 +89,7 @@ class Grade(Base, TimestampMixin):
     """Note d'un élève pour une évaluation."""
 
     __tablename__ = "grades"
+    __table_args__ = (CheckConstraint("value >= 0 AND value <= 20", name="ck_grade_value_range"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     evaluation_id: Mapped[int] = mapped_column(

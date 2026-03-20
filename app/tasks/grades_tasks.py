@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -13,6 +14,10 @@ from app.core.config import settings
 from app.core.database import _get_session_factory, current_tenant_id
 
 logger = logging.getLogger(__name__)
+
+_SAFE_URL_RE = re.compile(
+    r"^https://[\w\-]+\.digitaloceanspaces\.com/[\w\-/%.]+\.pdf$", re.IGNORECASE
+)
 
 
 @celery_app.task(bind=True, name="grades.generate_bulletins")  # type: ignore[misc]
@@ -41,7 +46,7 @@ def generate_bulletins_task(
             class_id,
             trimester,
         )
-        raise self.retry(exc=exc, countdown=10, max_retries=0) from exc
+        raise exc
 
 
 async def _generate_async(
@@ -101,7 +106,13 @@ async def _generate_async(
                     )
                     response.raise_for_status()
                     pdf_data = response.json()
-                    file_url = pdf_data.get("url", "")
+                    raw_url = pdf_data.get("url", "")
+                    # Valider l'URL pour éviter les URLs malicieuses du service Puppeteer
+                    file_url = raw_url if _SAFE_URL_RE.match(raw_url) else None
+                    if raw_url and not file_url:
+                        logger.warning(
+                            "Puppeteer returned invalid URL for student=%s: %r", student_id, raw_url
+                        )
                 except httpx.HTTPError as exc:
                     logger.warning("Puppeteer failed for student=%s: %s", student_id, exc)
                     file_url = None

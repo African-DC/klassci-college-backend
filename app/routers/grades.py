@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.celery_app import celery_app
 from app.core.dependencies import get_current_user, get_tenant_db, require_permission
+from app.repositories.user_repository import get_teacher_profile_id
 from app.schemas.grades import (
     BulletinGenerateRequest,
     BulletinGenerateResponse,
@@ -53,11 +54,13 @@ async def create_evaluation(
     current_user: Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
-    # Le teacher_id correspond au teacher_profile de l'utilisateur courant.
-    # En l'absence d'un mapping direct, on passe l'user_id comme teacher_id.
-    # (En production, utiliser teacher_profile.id via JOIN)
+    teacher_profile_id = await get_teacher_profile_id(db, current_user.user_id)
+    if teacher_profile_id is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail="Only teachers can create evaluations")
     return await service.create_evaluation(
-        db, data=data, teacher_id=current_user.user_id, current_user_id=current_user.user_id
+        db, data=data, teacher_id=teacher_profile_id, current_user_id=current_user.user_id
     )
 
 
