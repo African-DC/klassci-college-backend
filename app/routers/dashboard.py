@@ -2,16 +2,16 @@
 
 from datetime import date
 
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, Depends
-
-from app.core.dependencies import get_current_user, get_tenant_db
+from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
-from app.models.timetable import TimetableSlot, DayOfWeek
 from app.models.grade import Evaluation, Grade
+from app.models.timetable import DayOfWeek, TimetableSlot
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -24,64 +24,66 @@ _DAY_MAP = {
 }
 
 
-@router.get("/stats")
+class DashboardStatsResponse(BaseModel):
+    enrolled_students: int
+    pending_payments: int
+    courses_today: int
+    alerts: int
+
+
+@router.get("/stats", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(
-    _: object = Depends(get_current_user),
+    _: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
-) -> dict:
-    """Retourne les KPIs du dashboard admin."""
-    # 1. Élèves inscrits (status valide)
-    enrolled = (
-        await db.execute(
-            select(func.count())
-            .select_from(Enrollment)
-            .where(
-                Enrollment.status == EnrollmentStatus.VALIDE,
-            )
-        )
-    ).scalar() or 0
-
-    # 2. Paiements en attente
-    pending_payments = (
-        await db.execute(
-            select(func.count())
-            .select_from(EnrollmentFee)
-            .where(
-                EnrollmentFee.status == EnrollmentFeeStatus.PENDING,
-            )
-        )
-    ).scalar() or 0
-
-    # 3. Cours du jour
-    today_weekday = date.today().weekday()  # 0=Monday
+) -> DashboardStatsResponse:
+    """Retourne les KPIs du dashboard admin en un seul round-trip DB."""
+    today_weekday = date.today().weekday()
     day_enum = _DAY_MAP.get(today_weekday)
-    if day_enum is not None:
-        courses_today = (
-            await db.execute(
-                select(func.count())
-                .select_from(TimetableSlot)
-                .where(
-                    TimetableSlot.day == day_enum,
-                )
-            )
-        ).scalar() or 0
-    else:
-        courses_today = 0
 
-    # 4. Alertes (évaluations sans aucune note saisie)
-    alerts = (
+    # Subqueries — exécutées en un seul SELECT
+    enrolled_sq = (
+        select(func.count())
+        .select_from(Enrollment)
+        .where(Enrollment.status == EnrollmentStatus.VALIDE)
+        .correlate(None)
+        .scalar_subquery()
+    )
+    pending_sq = (
+        select(func.count())
+        .select_from(EnrollmentFee)
+        .where(EnrollmentFee.status == EnrollmentFeeStatus.PENDING)
+        .correlate(None)
+        .scalar_subquery()
+    )
+    courses_sq = (
+        select(func.count())
+        .select_from(TimetableSlot)
+        .where(TimetableSlot.day == day_enum if day_enum is not None else False)
+        .correlate(None)
+        .scalar_subquery()
+    )
+    alerts_sq = (
+        select(func.count())
+        .select_from(Evaluation)
+        .where(Evaluation.id.notin_(select(Grade.evaluation_id).distinct()))
+        .correlate(None)
+        .scalar_subquery()
+    )
+
+    row = (
         await db.execute(
-            select(func.count())
-            .select_from(Evaluation)
-            .where(
-                Evaluation.id.notin_(select(Grade.evaluation_id).distinct()),
+            select(
+                enrolled_sq.label("enrolled"),
+                pending_sq.label("pending"),
+                courses_sq.label("courses"),
+                alerts_sq.label("alerts"),
             )
         )
-    ).scalar() or 0
+    ).one()
 
-    return {
-        "enrolled_students": enrolled,
-        "pending_payments": pending_payments,
-        "courses_today": courses_today,
-        "alerts": alerts,
-    }
+    return DashboardStatsResponse(
+        enrolled_students=row.enrolled or 0,
+        pending_payments=row.pending or 0,
+        courses_today=row.courses or 0,
+        alerts=row.alerts or 0,
+    )
