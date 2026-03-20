@@ -139,6 +139,12 @@ async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
     return (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
 
 
+async def get_class_by_id_for_update(db: AsyncSession, class_id: int) -> Class | None:
+    """Retourne une classe avec verrou FOR UPDATE (capacity guard dans transaction)."""
+    stmt = select(Class).where(Class.id == class_id).with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 async def count_active_enrollments_for_class(db: AsyncSession, class_id: int) -> int:
     """Compte les inscriptions non-terminées dans une classe (capacity guard)."""
     stmt = select(func.count()).select_from(Enrollment).where(

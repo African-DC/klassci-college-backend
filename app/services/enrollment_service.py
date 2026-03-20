@@ -52,30 +52,30 @@ async def create_enrollment(
     created_by: int,
 ) -> EnrollmentResponse:
     """Crée une inscription et le frais associé si fee_variant_id fourni."""
-    # Valider que l'année scolaire existe
+    # Valider que l'année scolaire existe (hors transaction — lecture seule)
     academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
     if academic_year is None:
         raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
 
-    # Garde doublon : un élève ne peut avoir qu'une inscription active par année
-    existing = await repo.get_active_enrollment(db, data.student_id, data.academic_year_id)
-    if existing is not None:
-        raise BusinessValidationError(
-            f"Student {data.student_id} already has an active enrollment for this academic year"
-        )
-
-    # Garde capacité classe
-    class_ = await repo.get_class_by_id(db, data.class_id)
-    if class_ is None:
-        raise BusinessValidationError(f"Class {data.class_id} not found")
-    enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
-    if enrolled_count >= class_.max_students:
-        raise BusinessValidationError(
-            f"Class {data.class_id} is full ({class_.max_students} students max)"
-        )
-
-    # Tout dans une seule transaction : inscription + frais + audit
+    # Tout dans une seule transaction avec FOR UPDATE pour éviter les race conditions
     async with db.begin_nested():
+        # Garde capacité classe — FOR UPDATE verrouille la ligne pour éviter la race condition
+        class_ = await repo.get_class_by_id_for_update(db, data.class_id)
+        if class_ is None:
+            raise BusinessValidationError(f"Class {data.class_id} not found")
+        enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+        if enrolled_count >= class_.max_students:
+            raise BusinessValidationError(
+                f"Class {data.class_id} is full ({class_.max_students} students max)"
+            )
+
+        # Garde doublon dans la transaction
+        existing = await repo.get_active_enrollment(db, data.student_id, data.academic_year_id)
+        if existing is not None:
+            raise BusinessValidationError(
+                f"Student {data.student_id} already has an active enrollment for this academic year"
+            )
+
         enrollment = await repo.create_enrollment(
             db,
             student_id=data.student_id,
