@@ -13,8 +13,9 @@ select = [
     "UP",  # pyupgrade
 ]
 ignore = [
-    "B008",  # do not perform function calls in default arguments (FastAPI Depends)
-    "E501",  # line too long — ruff format handles this
+    "B008",   # do not perform function calls in default arguments (FastAPI Depends)
+    "E501",   # line too long — ruff format handles this
+    "UP042",  # StrEnum migration — SQLAlchemy Enum type requires str+Enum pattern
 ]
 
 [tool.ruff.lint.isort]
