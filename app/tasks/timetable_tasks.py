@@ -97,6 +97,7 @@ async def _generate_async(
                 day=s["day"],
                 start_time=_parse_time(s["start_time"]),
                 end_time=_parse_time(s["end_time"]),
+                room_id=room_id,
             )
             for s in slots_data
         ]

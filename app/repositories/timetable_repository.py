@@ -127,7 +127,8 @@ async def create_slot(
     return slot
 
 
-_UNSET: Any = object()  # sentinel pour distinguer "non fourni" vs "None explicite"
+UNSET: Any = object()  # sentinel pour distinguer "non fourni" vs "None explicite"
+_UNSET = UNSET  # backward-compat alias
 
 
 async def update_slot(
