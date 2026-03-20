@@ -48,6 +48,12 @@ async def update_last_login(db: AsyncSession, user_id: int) -> None:
     await db.commit()
 
 
+async def get_teacher_profile_id(db: AsyncSession, user_id: int) -> int | None:
+    """Retourne le teacher_profiles.id pour un user donné, ou None si non-enseignant."""
+    stmt = select(TeacherProfile.id).where(TeacherProfile.user_id == user_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 def get_user_full_name(user: User) -> tuple[str, str]:
     """Extrait (first_name, last_name) depuis le bon profil selon le rôle."""
     profile: StaffProfile | TeacherProfile | Student | Parent | None = None

@@ -29,6 +29,16 @@ class Settings(BaseSettings):
     # Tenant
     LOCAL_TENANT_ID: str = "local"  # tenant utilisé en dev local
 
+    # Puppeteer microservice (génération bulletins PDF)
+    PUPPETEER_URL: str = "http://localhost:3001"
+
+    # DigitalOcean Spaces (stockage bulletins PDF)
+    DO_SPACES_KEY: str | None = None
+    DO_SPACES_SECRET: str | None = None
+    DO_SPACES_REGION: str = "nyc3"
+    DO_SPACES_ENDPOINT: str = "https://nyc3.digitaloceanspaces.com"
+    DO_SPACES_BUCKET: str = "klassci-bulletins"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

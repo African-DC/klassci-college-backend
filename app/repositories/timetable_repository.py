@@ -15,7 +15,7 @@ from app.models.timetable import TeacherAvailability, Timetable, TimetableSlot
 # ---------------------------------------------------------------------------
 
 
-def _slot_load_options() -> list:
+def _slot_load_options() -> list[Any]:
     """Options selectinload communes pour charger les relations d'un slot."""
     return [
         selectinload(TimetableSlot.class_),
@@ -171,7 +171,7 @@ async def delete_slot(db: AsyncSession, slot: TimetableSlot) -> None:
 
 async def create_slots_bulk(
     db: AsyncSession,
-    slots_data: list[dict],
+    slots_data: list[dict[str, Any]],
     timetable_id: int,
 ) -> list[TimetableSlot]:
     """Crée plusieurs créneaux en lot (pour la génération OR-Tools)."""
@@ -283,7 +283,7 @@ async def delete_teacher_availability(db: AsyncSession, av: TeacherAvailability)
 async def get_unavailable_slot_indices(
     db: AsyncSession,
     teacher_id: int,
-    available_slots: list[dict],
+    available_slots: list[dict[str, Any]],
 ) -> set[int]:
     """Retourne les indices des créneaux où l'enseignant est indisponible.
 

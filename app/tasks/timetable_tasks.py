@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from datetime import time
+from typing import Any
 
 from app.core.celery_app import celery_app
 from app.core.database import _get_session_factory, current_tenant_id
@@ -18,14 +19,14 @@ def _parse_time(t: str) -> time:
 
 @celery_app.task(bind=True, name="timetable.generate")  # type: ignore[misc]
 def generate_timetable_task(
-    self,
+    self: Any,
     tenant_id: str,
     class_id: int,
     academic_year_id: int,
-    assignments_data: list[dict],
-    slots_data: list[dict],
+    assignments_data: list[dict[str, Any]],
+    slots_data: list[dict[str, Any]],
     room_id: int | None,
-) -> dict:
+) -> dict[str, Any]:
     """Génère un emploi du temps via OR-Tools et persiste les créneaux en DB.
 
     Retourne un dict compatible avec TaskStatusResponse.result (list of slot dicts).
@@ -51,10 +52,10 @@ async def _generate_async(
     tenant_id: str,
     class_id: int,
     academic_year_id: int,
-    assignments_data: list[dict],
-    slots_data: list[dict],
+    assignments_data: list[dict[str, Any]],
+    slots_data: list[dict[str, Any]],
     room_id: int | None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Corps async de la génération — crée les créneaux en DB."""
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import Assignment, GeneratorResult, SlotTemplate, solve
@@ -139,7 +140,7 @@ async def _generate_async(
         return slot_responses
 
 
-def _slot_to_dict(slot) -> dict:  # type: ignore[no-untyped-def]
+def _slot_to_dict(slot: Any) -> dict[str, Any]:
     """Convertit un TimetableSlot ORM en dict JSON-sérialisable."""
     teacher_name = f"{slot.teacher.first_name} {slot.teacher.last_name}" if slot.teacher else ""
     return {

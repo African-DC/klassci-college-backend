@@ -41,7 +41,7 @@ def _to_slot_response(slot: TimetableSlot) -> TimetableSlotResponse:
         subject_id=slot.subject_id,
         subject_name=slot.subject.name if slot.subject else "",
         academic_year_id=slot.academic_year_id,
-        day=slot.day if isinstance(slot.day, str) else slot.day.value,
+        day=slot.day,
         start_time=slot.start_time.strftime("%H:%M"),
         end_time=slot.end_time.strftime("%H:%M"),
         room=slot.room.name if slot.room else None,
@@ -53,7 +53,7 @@ def _to_availability_response(av: TeacherAvailability) -> TeacherAvailabilityRes
     return TeacherAvailabilityResponse(
         id=av.id,
         teacher_id=av.teacher_id,
-        day=av.day if isinstance(av.day, str) else av.day.value,
+        day=av.day,
         start_time=av.start_time.strftime("%H:%M"),
         end_time=av.end_time.strftime("%H:%M"),
         available=av.available,
@@ -163,11 +163,7 @@ async def update_slot(
         raise NotFoundError("TimetableSlot", slot_id)
 
     # Fusionner avec les valeurs existantes
-    new_day = (
-        data.day.value
-        if data.day is not None
-        else (slot.day if isinstance(slot.day, str) else slot.day.value)
-    )
+    new_day = data.day.value if data.day is not None else slot.day
     new_start = _parse_time(data.start_time) if data.start_time else slot.start_time
     new_end = _parse_time(data.end_time) if data.end_time else slot.end_time
     new_teacher_id = data.teacher_id if data.teacher_id is not None else slot.teacher_id
@@ -176,6 +172,7 @@ async def update_slot(
         raise BusinessValidationError("start_time must be before end_time")
 
     # Résoudre la salle
+    new_room_id: int | None
     if data.room is not None:
         if data.room == "":
             new_room_id = None
@@ -183,7 +180,7 @@ async def update_slot(
             room = await repo.get_room_by_name(db, data.room)
             if room is None:
                 raise BusinessValidationError(f"Room '{data.room}' not found")
-            new_room_id: int | None = room.id
+            new_room_id = room.id
     else:
         new_room_id = slot.room_id
 
@@ -198,7 +195,7 @@ async def update_slot(
         raise ConflictError(f"Class {slot.class_id} already has a class on {new_day}")
 
     old_values = {
-        "day": slot.day if isinstance(slot.day, str) else slot.day.value,
+        "day": slot.day,
         "start_time": slot.start_time.strftime("%H:%M"),
         "end_time": slot.end_time.strftime("%H:%M"),
         "teacher_id": slot.teacher_id,
