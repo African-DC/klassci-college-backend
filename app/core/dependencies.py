@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import current_tenant_id, get_db
-from app.core.exceptions import UnauthorizedError
+from app.core.exceptions import PermissionDeniedError, UnauthorizedError
 from app.core.security import decode_token
 
 logger = logging.getLogger(__name__)
@@ -50,12 +50,9 @@ async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> TokenData:
-    """Décode le JWT et retourne les données de l'utilisateur authentifié.
-
-    Vérifie que le tenant_id du token correspond au tenant de la requête.
-    La vérification DB complète (user actif, etc.) sera ajoutée en issue #3.
-    """
+    """Décode le JWT, vérifie le tenant et valide l'utilisateur en base."""
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError as exc:
@@ -76,6 +73,13 @@ async def get_current_user(
     except (KeyError, ValueError, TypeError) as exc:
         raise UnauthorizedError("Invalid token claims") from exc
 
+    # Vérification DB : utilisateur actif
+    from app.repositories.user_repository import get_user_by_id
+
+    user = await get_user_by_id(db, user_id)
+    if not user or not user.is_active:
+        raise UnauthorizedError("User not found or inactive")
+
     return TokenData(
         user_id=user_id,
         tenant_id=token_tenant,
@@ -89,23 +93,16 @@ async def get_current_user(
 
 
 def require_permission(permission_slug: str) -> Any:
-    """Retourne une dépendance FastAPI qui vérifie une permission en base.
-
-    La vérification DB réelle sera implémentée en issue #3 (table permissions).
-    Pour l'instant, tout utilisateur authentifié est autorisé (stub structurel).
-    """
+    """Retourne une dépendance FastAPI qui vérifie une permission en base."""
 
     async def _check(
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
-        logger.warning(
-            "require_permission('%s') not enforced — stub active (issue #3)",
-            permission_slug,
-        )
-        # TODO(issue-3): vérifier la permission en base
-        # has_perm = await check_user_permission(db, current_user.user_id, permission_slug)
-        # if not has_perm:
-        #     raise PermissionDeniedError(permission_slug)
+        from app.repositories.permission_repository import check_user_permission
+
+        has_perm = await check_user_permission(db, current_user.user_id, permission_slug)
+        if not has_perm:
+            raise PermissionDeniedError(permission_slug)
 
     return Depends(_check)

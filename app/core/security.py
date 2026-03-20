@@ -1,7 +1,8 @@
 """JWT + bcrypt — création, décodage de tokens et hachage de mots de passe."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 import bcrypt
 import jwt
@@ -44,12 +45,17 @@ def create_access_token(user_id: int, tenant_id: str, email: str) -> str:
     )
 
 
-def create_refresh_token(user_id: int, tenant_id: str) -> str:
-    """Crée un JWT refresh token (durée : REFRESH_TOKEN_EXPIRE_DAYS)."""
-    return _build_token(
-        {"sub": str(user_id), "tenant_id": tenant_id, "type": "refresh"},
+def create_refresh_token(user_id: int, tenant_id: str) -> tuple[str, str]:
+    """Crée un JWT refresh token avec JTI unique pour la révocation.
+
+    Retourne (token, jti) — le jti doit être stocké dans Redis par l'appelant.
+    """
+    jti = str(uuid.uuid4())
+    token = _build_token(
+        {"sub": str(user_id), "tenant_id": tenant_id, "type": "refresh", "jti": jti},
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    return token, jti
 
 
 def decode_token(token: str) -> dict[str, Any]:
@@ -58,12 +64,9 @@ def decode_token(token: str) -> dict[str, Any]:
     Une tolérance de 30 secondes est accordée pour absorber les petits décalages
     d'horloge entre le serveur émetteur et le serveur validateur.
     """
-    return cast(
-        dict[str, Any],
-        jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-            leeway=timedelta(seconds=30),
-        ),
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[settings.ALGORITHM],
+        leeway=timedelta(seconds=30),
     )
