@@ -29,7 +29,9 @@ class Enrollment(Base, TimestampMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
     __tablename__ = "enrollments"
-    __table_args__ = (UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),)
+    __table_args__ = (
+        UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     student_id: Mapped[int] = mapped_column(

@@ -147,9 +147,13 @@ async def get_class_by_id_for_update(db: AsyncSession, class_id: int) -> Class |
 
 async def count_active_enrollments_for_class(db: AsyncSession, class_id: int) -> int:
     """Compte les inscriptions non-terminées dans une classe (capacity guard)."""
-    stmt = select(func.count()).select_from(Enrollment).where(
-        Enrollment.class_id == class_id,
-        Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
+    stmt = (
+        select(func.count())
+        .select_from(Enrollment)
+        .where(
+            Enrollment.class_id == class_id,
+            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
+        )
     )
     return (await db.execute(stmt)).scalar() or 0
 
