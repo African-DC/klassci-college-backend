@@ -34,6 +34,7 @@ class SlotTemplate:
     day: str
     start_time: object  # datetime.time
     end_time: object  # datetime.time
+    room_id: int | None = None
 
 
 @dataclass
@@ -88,7 +89,14 @@ def solve(
         for s in range(n_s):
             model.add(sum(x[a, s] for a in teacher_assignments) <= 1)
 
-    # Contrainte 4 : indisponibilités enseignant
+    # Contrainte 4 : une salle ne peut accueillir qu'un cours par créneau
+    room_ids = {slots[s].room_id for s in range(n_s) if slots[s].room_id is not None}
+    for rid in room_ids:
+        room_slots = [s for s in range(n_s) if slots[s].room_id == rid]
+        for s in room_slots:
+            model.add(sum(x[a, s] for a in range(n_a)) <= 1)
+
+    # Contrainte 5 : indisponibilités enseignant
     for a, asg in enumerate(assignments):
         blocked = teacher_unavailabilities.get(asg.teacher_id, set())
         for s in blocked:

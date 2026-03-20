@@ -1,6 +1,7 @@
 """Repository emploi du temps — accès DB pour TimetableSlot et TeacherAvailability."""
 
 from datetime import time
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,6 +127,9 @@ async def create_slot(
     return slot
 
 
+_UNSET: Any = object()  # sentinel pour distinguer "non fourni" vs "None explicite"
+
+
 async def update_slot(
     db: AsyncSession,
     slot: TimetableSlot,
@@ -135,9 +139,13 @@ async def update_slot(
     day: str | None = None,
     start_time: time | None = None,
     end_time: time | None = None,
-    room_id: int | None = None,
+    room_id: Any = _UNSET,
 ) -> TimetableSlot:
-    """Met à jour les champs modifiables d'un créneau."""
+    """Met à jour les champs modifiables d'un créneau.
+
+    room_id utilise un sentinel pour distinguer "non fourni" (pas de modification)
+    de "None explicite" (suppression de la salle).
+    """
     if teacher_id is not None:
         slot.teacher_id = teacher_id
     if subject_id is not None:
@@ -148,8 +156,8 @@ async def update_slot(
         slot.start_time = start_time
     if end_time is not None:
         slot.end_time = end_time
-    # room_id peut être None pour retirer la salle
-    slot.room_id = room_id
+    if room_id is not _UNSET:
+        slot.room_id = room_id
     await db.flush()
     return slot
 

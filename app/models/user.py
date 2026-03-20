@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from app.models.permission import UserRole
 
 
-class UserRole_(str, enum.Enum):
+class UserRoleEnum(str, enum.Enum):
     """Rôle fonctionnel de l'utilisateur dans la plateforme."""
 
     ADMIN = "admin"
@@ -56,7 +56,7 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(Enum(UserRole_, name="user_role"), nullable=False)
+    role: Mapped[str] = mapped_column(Enum(UserRoleEnum, name="user_role"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

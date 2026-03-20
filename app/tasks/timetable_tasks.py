@@ -44,7 +44,7 @@ def generate_timetable_task(
         return {"slots": result}
     except Exception as exc:
         logger.exception("Timetable generation failed for tenant=%s class=%s", tenant_id, class_id)
-        raise self.retry(exc=exc, countdown=5, max_retries=0) from exc
+        raise exc
 
 
 async def _generate_async(

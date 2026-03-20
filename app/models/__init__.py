@@ -94,5 +94,5 @@ from app.models.user import (  # noqa: F401
     Student,
     TeacherProfile,
     User,
-    UserRole_,
+    UserRoleEnum,
 )
