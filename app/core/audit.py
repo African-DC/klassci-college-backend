@@ -15,6 +15,11 @@ from app.core.database import Base
 logger = logging.getLogger(__name__)
 
 
+def _sanitize(value: object) -> str:
+    """Sanitize a value for safe logging (prevent log injection)."""
+    return str(value).replace("\n", "\\n").replace("\r", "\\r")
+
+
 class AuditAction(str, enum.Enum):
     """Actions auditables — utilisé à la fois comme type Python et comme ENUM MySQL."""
 
@@ -87,9 +92,9 @@ async def audit_log(
         # DBAPIError hérite de StatementError, il faut le traiter en premier.
         logger.exception(
             "Failed to write audit log: entity_type=%s entity_id=%s action=%s",
-            entity_type,
-            entity_id,
-            action,
+            _sanitize(entity_type),
+            _sanitize(entity_id),
+            _sanitize(action),
         )
     except (
         sqlalchemy.exc.InvalidRequestError,  # session corrompue / mauvais état
@@ -103,9 +108,9 @@ async def audit_log(
     except Exception:
         logger.exception(
             "Failed to write audit log: entity_type=%s entity_id=%s action=%s",
-            entity_type,
-            entity_id,
-            action,
+            _sanitize(entity_type),
+            _sanitize(entity_id),
+            _sanitize(action),
         )
         # Ne jamais faire échouer la requête principale à cause d'une erreur DB
         # sur la table d'audit (ex : contrainte, timeout réseau).
