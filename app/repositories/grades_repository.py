@@ -209,7 +209,8 @@ async def get_grades_summary(
 
     # subject averages : {subject_id: [(value, coeff)]}
     subject_grades: dict[int, list[tuple[Decimal, int]]] = {}
-    # student averages: {student_id: [(value, coeff)]}
+    # student averages: {student_id: [(value, combined_coeff)]}
+    # combined_coeff = evaluation.coefficient × subject.coefficient
     student_grades: dict[int, list[tuple[Decimal, int]]] = {}
     student_summaries: list[dict[str, Any]] = []
 
@@ -217,10 +218,12 @@ async def get_grades_summary(
         ev = eval_map[g.evaluation_id]
         if g.value is None:
             continue
-        # Subject
+        subject_coeff = ev.subject.coefficient if ev.subject else 1
+        combined_coeff = ev.coefficient * subject_coeff
+        # Subject (class average uses eval.coefficient only — same subject)
         subject_grades.setdefault(ev.subject_id, []).append((g.value, ev.coefficient))
-        # Student
-        student_grades.setdefault(g.student_id, []).append((g.value, ev.coefficient))
+        # Student (weighted by combined coefficient)
+        student_grades.setdefault(g.student_id, []).append((g.value, combined_coeff))
 
     def weighted_avg(pairs: list[tuple[Decimal, int]]) -> Decimal | None:
         if not pairs:
@@ -253,8 +256,17 @@ async def get_grades_summary(
         key=lambda x: x["average"] if x["average"] is not None else Decimal("0"),
         reverse=True,
     )
-    for rank, item in enumerate(student_summaries, start=1):
-        item["rank"] = rank if item["average"] is not None else None
+    # Competition ranking (1, 1, 3): les ex-aequo partagent le même rang
+    rank = 1
+    for i, item in enumerate(student_summaries):
+        if item["average"] is None:
+            item["rank"] = None
+        else:
+            if i > 0 and item["average"] == student_summaries[i - 1]["average"]:
+                item["rank"] = student_summaries[i - 1]["rank"]
+            else:
+                item["rank"] = rank
+            rank = i + 2  # prochain rang = position (1-indexed) + 1
 
     # Moyennes par matière
     subject_set = {eval_map[g.evaluation_id].subject_id for g in grades}

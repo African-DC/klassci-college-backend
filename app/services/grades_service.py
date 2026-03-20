@@ -72,23 +72,23 @@ async def create_evaluation(
     eval_data["teacher_id"] = teacher_id
 
     evaluation = await repo.create_evaluation(db, data=eval_data, students=students)
-    await db.commit()
-    await db.refresh(evaluation)
-
-    # Recharger avec relations
-    full_eval = await repo.get_evaluation_by_id(db, evaluation.id)
-    if not full_eval:
-        raise NotFoundError("Evaluation", evaluation.id)
 
     await audit_log(
         db,
         user_id=current_user_id,
         entity_type="evaluation",
-        entity_id=full_eval.id,
+        entity_id=evaluation.id,
         action=AuditAction.CREATE,
         old_values=None,
         new_values=eval_data,
     )
+
+    await db.commit()
+
+    # Recharger avec relations
+    full_eval = await repo.get_evaluation_by_id(db, evaluation.id)
+    if not full_eval:
+        raise NotFoundError("Evaluation", evaluation.id)
 
     return _build_eval_response(full_eval)
 
@@ -121,8 +121,18 @@ async def batch_update_grades(
         raise NotFoundError("Evaluation", eval_id)
 
     entries = [{"student_id": e.student_id, "value": e.value} for e in payload.grades]
+
+    # Valider que tous les student_ids appartiennent bien à l'évaluation
+    valid_student_ids = {g.student_id for g in evaluation.grades} if evaluation.grades else set()
+    invalid_ids = [e["student_id"] for e in entries if e["student_id"] not in valid_student_ids]
+    if invalid_ids:
+        from app.core.exceptions import BusinessValidationError
+
+        raise BusinessValidationError(
+            f"Student IDs not enrolled in this evaluation: {invalid_ids}"
+        )
+
     grades = await repo.batch_update_grades(db, eval_id, entries)
-    await db.commit()
 
     await audit_log(
         db,
@@ -133,6 +143,8 @@ async def batch_update_grades(
         old_values=None,
         new_values={"grades": entries},
     )
+
+    await db.commit()
 
     return [
         {

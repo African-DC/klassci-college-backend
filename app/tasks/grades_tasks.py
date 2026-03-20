@@ -117,7 +117,7 @@ async def _generate_async(
                     logger.warning("Puppeteer failed for student=%s: %s", student_id, exc)
                     file_url = None
 
-                # Upsert bulletin en DB
+                # Upsert bulletin en DB et commit par élève
                 await repo.upsert_bulletin(
                     db,
                     student_id=student_id,
@@ -129,9 +129,9 @@ async def _generate_async(
                     mention=student_summary["mention"],
                     file_url=file_url,
                 )
+                await db.commit()
 
                 if file_url:
                     bulletin_urls.append(file_url)
 
-        await db.commit()
         return bulletin_urls
