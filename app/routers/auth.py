@@ -97,7 +97,13 @@ async def logout(
             user_id=current_user.user_id,
             ip_address=_client_ip(request),
         )
-    response.delete_cookie(key=_COOKIE_NAME)
+    response.delete_cookie(
+        key=_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.APP_ENV != "development",
+    )
 
 
 @router.get("/me", response_model=UserMeResponse)
