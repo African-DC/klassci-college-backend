@@ -379,7 +379,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["student_id"], ["students.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["class_id"], ["classes.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["academic_year_id"], ["academic_years.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["created_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("student_id", "academic_year_id", name="uq_enrollment_student_year"),
     )
     op.create_index("idx_enrollments_student_id", "enrollments", ["student_id"])
     op.create_index("idx_enrollments_class_id", "enrollments", ["class_id"])
@@ -521,6 +523,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["enrollment_fee_id"], ["enrollment_fees.id"], ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["received_by"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("idx_payments_enrollment_fee_id", "payments", ["enrollment_fee_id"])

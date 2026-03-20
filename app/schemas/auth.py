@@ -2,12 +2,12 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1)
 
 
 class UserInToken(BaseModel):
@@ -18,20 +18,16 @@ class UserInToken(BaseModel):
     last_name: str
 
 
+# Réponse body /login — refresh_token envoyé en cookie httpOnly, pas dans le body
 class TokenResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
     user: UserInToken
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
+# Réponse body /refresh
 class RefreshResponse(BaseModel):
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
     EnrollmentCreate,
@@ -16,6 +16,8 @@ from app.schemas.enrollment import (
 )
 
 logger = logging.getLogger(__name__)
+
+_VALID_STATUSES = {s.value for s in EnrollmentStatus}
 
 
 def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
@@ -50,12 +52,30 @@ async def create_enrollment(
     created_by: int,
 ) -> EnrollmentResponse:
     """Crée une inscription et le frais associé si fee_variant_id fourni."""
-    # Valider que l'année scolaire existe
+    # Valider que l'année scolaire existe (hors transaction — lecture seule)
     academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
     if academic_year is None:
         raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
 
+    # Tout dans une seule transaction avec FOR UPDATE pour éviter les race conditions
     async with db.begin_nested():
+        # Garde capacité classe — FOR UPDATE verrouille la ligne pour éviter la race condition
+        class_ = await repo.get_class_by_id_for_update(db, data.class_id)
+        if class_ is None:
+            raise BusinessValidationError(f"Class {data.class_id} not found")
+        enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+        if enrolled_count >= class_.max_students:
+            raise BusinessValidationError(
+                f"Class {data.class_id} is full ({class_.max_students} students max)"
+            )
+
+        # Garde doublon dans la transaction
+        existing = await repo.get_active_enrollment(db, data.student_id, data.academic_year_id)
+        if existing is not None:
+            raise BusinessValidationError(
+                f"Student {data.student_id} already has an active enrollment for this academic year"
+            )
+
         enrollment = await repo.create_enrollment(
             db,
             student_id=data.student_id,
@@ -72,22 +92,20 @@ async def create_enrollment(
                 fee_variant_id=data.fee_variant_id,
             )
 
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=enrollment.id,
+            new_values=data.model_dump(),
+        )
+
     await db.commit()
 
-    # Recharger avec les relations pour la réponse
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
-    assert refreshed is not None
-
-    await audit_log(
-        db,
-        entity_type="enrollment",
-        action=AuditAction.CREATE,
-        user_id=created_by,
-        entity_id=enrollment.id,
-        new_values=data.model_dump(),
-    )
-    await db.commit()
-
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment.id)
     return _to_response(refreshed)
 
 
@@ -101,6 +119,10 @@ async def list_enrollments(
     size: int = 20,
 ) -> EnrollmentListResponse:
     """Retourne une page d'inscriptions."""
+    # Valider le filtre status
+    if status is not None and status not in _VALID_STATUSES:
+        raise BusinessValidationError(f"Invalid status '{status}'. Valid: {_VALID_STATUSES}")
+
     enrollments, total = await repo.list_enrollments(
         db,
         class_id=class_id,
@@ -138,27 +160,28 @@ async def update_enrollment(
 
     old_values = {"status": enrollment.status, "notes": enrollment.notes}
 
-    await repo.update_enrollment(
-        db,
-        enrollment,
-        status=data.status,
-        notes=data.notes,
-    )
-    await db.commit()
+    async with db.begin_nested():
+        await repo.update_enrollment(
+            db,
+            enrollment,
+            status=data.status,
+            notes=data.notes,
+        )
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=enrollment_id,
+            old_values=old_values,
+            new_values=data.model_dump(exclude_none=True),
+        )
 
-    await audit_log(
-        db,
-        entity_type="enrollment",
-        action=AuditAction.UPDATE,
-        user_id=updated_by,
-        entity_id=enrollment_id,
-        old_values=old_values,
-        new_values=data.model_dump(exclude_none=True),
-    )
     await db.commit()
 
     refreshed = await repo.get_enrollment_by_id(db, enrollment_id)
-    assert refreshed is not None
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment_id)
     return _to_response(refreshed)
 
 
@@ -167,19 +190,26 @@ async def delete_enrollment(
     enrollment_id: int,
     deleted_by: int,
 ) -> None:
-    """Supprime une inscription ou lève 404."""
+    """Supprime une inscription ou lève 404. Bloque si statut valide avec paiements."""
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
 
-    await repo.delete_enrollment(db, enrollment)
-    await db.commit()
+    if enrollment.status == EnrollmentStatus.VALIDE and enrollment.enrollment_fees:
+        has_payments = any(ef.payments for ef in enrollment.enrollment_fees)
+        if has_payments:
+            raise BusinessValidationError(
+                "Cannot delete a validated enrollment with existing payments"
+            )
 
-    await audit_log(
-        db,
-        entity_type="enrollment",
-        action=AuditAction.DELETE,
-        user_id=deleted_by,
-        entity_id=enrollment_id,
-    )
+    async with db.begin_nested():
+        await repo.delete_enrollment(db, enrollment)
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.DELETE,
+            user_id=deleted_by,
+            entity_id=enrollment_id,
+        )
+
     await db.commit()

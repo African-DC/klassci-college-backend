@@ -4,8 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear
-from app.models.enrollment import Enrollment
+from app.models.academic import AcademicYear, Class
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
 
 
@@ -17,6 +17,7 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
         .options(
             selectinload(Enrollment.academic_year),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
+            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
         )
     )
     result = await db.execute(stmt)
@@ -118,6 +119,43 @@ async def delete_enrollment(db: AsyncSession, enrollment: Enrollment) -> None:
     """Supprime une inscription."""
     await db.delete(enrollment)
     await db.flush()
+
+
+async def get_active_enrollment(
+    db: AsyncSession, student_id: int, academic_year_id: int
+) -> Enrollment | None:
+    """Retourne une inscription active existante (pour détecter les doublons)."""
+    stmt = select(Enrollment).where(
+        Enrollment.student_id == student_id,
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.status != EnrollmentStatus.ANNULE,
+        Enrollment.status != EnrollmentStatus.REJETE,
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
+    """Retourne une classe par ID."""
+    return (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
+
+
+async def get_class_by_id_for_update(db: AsyncSession, class_id: int) -> Class | None:
+    """Retourne une classe avec verrou FOR UPDATE (capacity guard dans transaction)."""
+    stmt = select(Class).where(Class.id == class_id).with_for_update()
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def count_active_enrollments_for_class(db: AsyncSession, class_id: int) -> int:
+    """Compte les inscriptions non-terminées dans une classe (capacity guard)."""
+    stmt = (
+        select(func.count())
+        .select_from(Enrollment)
+        .where(
+            Enrollment.class_id == class_id,
+            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
+        )
+    )
+    return (await db.execute(stmt)).scalar() or 0
 
 
 async def get_academic_year_by_id(db: AsyncSession, academic_year_id: int) -> AcademicYear | None:
