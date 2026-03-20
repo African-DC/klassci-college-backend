@@ -46,7 +46,9 @@ class Enrollment(Base, TimestampMixin):
         default=EnrollmentStatus.PROSPECT,
         index=True,
     )
-    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     student: Mapped[Student] = relationship(back_populates="enrollments")
