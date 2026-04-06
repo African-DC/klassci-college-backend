@@ -19,6 +19,7 @@ from app.routers.notifications import router as notifications_router
 from app.routers.payments import router as payments_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.parent_portal import router as parent_portal_router
+from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
 
@@ -57,6 +58,7 @@ app.include_router(notifications_router)
 app.include_router(payments_router)
 app.include_router(student_portal_router)
 app.include_router(parent_portal_router)
+app.include_router(teacher_portal_router)
 app.include_router(timetable_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
