@@ -1,0 +1,131 @@
+"""Schémas Pydantic pour le portail parent."""
+
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+
+# ---------------------------------------------------------------------------
+# Children
+# ---------------------------------------------------------------------------
+
+
+class ChildEnrollmentInfo(BaseModel):
+    """Résumé de l'inscription active d'un enfant."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    enrollment_id: int
+    class_id: int
+    class_name: str
+    academic_year_name: str
+    status: str
+
+
+class ChildResponse(BaseModel):
+    """Enfant vu par le parent."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    birth_date: date | None
+    enrollment_number: str | None
+    relationship_type: str
+    enrollment: ChildEnrollmentInfo | None = None
+
+
+class ChildrenListResponse(BaseModel):
+    children: list[ChildResponse]
+
+
+# ---------------------------------------------------------------------------
+# Grades
+# ---------------------------------------------------------------------------
+
+
+class GradeDetail(BaseModel):
+    """Note d'un enfant pour une évaluation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    value: Decimal | None
+    status: str
+    evaluation_title: str
+    evaluation_type: str
+    evaluation_date: date
+    subject_name: str
+    coefficient: int
+    trimester: int
+
+
+class ChildGradesResponse(BaseModel):
+    student_id: int
+    grades: list[GradeDetail]
+
+
+# ---------------------------------------------------------------------------
+# Fees
+# ---------------------------------------------------------------------------
+
+
+class PaymentDetail(BaseModel):
+    """Détail d'un paiement."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount: Decimal
+    method: str
+    status: str
+    reference: str | None
+    created_at: datetime
+
+
+class FeeDetail(BaseModel):
+    """Frais d'inscription avec paiements."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount: Decimal
+    status: str
+    category_name: str
+    payments: list[PaymentDetail]
+
+
+class ChildFeesResponse(BaseModel):
+    student_id: int
+    enrollment_id: int | None
+    fees: list[FeeDetail]
+    total_due: Decimal
+    total_paid: Decimal
+
+
+# ---------------------------------------------------------------------------
+# Bulletins
+# ---------------------------------------------------------------------------
+
+
+class BulletinDetail(BaseModel):
+    """Bulletin trimestriel d'un enfant."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trimester: int
+    average: Decimal | None
+    rank: int | None
+    mention: str | None
+    class_name: str
+    academic_year_name: str
+    is_published: bool
+    generated_at: datetime | None
+
+
+class ChildBulletinsResponse(BaseModel):
+    student_id: int
+    bulletins: list[BulletinDetail]
