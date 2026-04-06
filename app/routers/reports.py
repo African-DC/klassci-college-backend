@@ -1,0 +1,64 @@
+"""Router reports — generation et consultation des bulletins scolaires."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.schemas.reports import (
+    BulletinGenerateRequest,
+    BulletinGenerateResponse,
+    BulletinListResponse,
+)
+from app.services import reports_service as service
+
+router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+@router.post(
+    "/bulletins/generate",
+    response_model=BulletinGenerateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_bulletins(
+    data: BulletinGenerateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("reports:generate"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Genere les bulletins pour une classe et un trimestre."""
+    return await service.generate_bulletins(
+        db,
+        class_id=data.class_id,
+        trimester=data.trimester,
+        academic_year_id=data.academic_year_id,
+        generated_by=current_user.user_id,
+    )
+
+
+@router.get(
+    "/bulletins/{class_id}/{trimester}",
+    response_model=BulletinListResponse,
+)
+async def list_bulletins(
+    class_id: int,
+    trimester: int,
+    academic_year_id: int = Query(...),
+    _: None = require_permission("reports:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Liste les bulletins generes pour une classe/trimestre."""
+    return await service.list_bulletins(db, class_id, trimester, academic_year_id)
+
+
+@router.get("/bulletins/{bulletin_id}/pdf")
+async def get_bulletin_pdf(
+    bulletin_id: int,
+    _: None = require_permission("reports:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Retourne l'URL du PDF d'un bulletin (placeholder)."""
+    return await service.get_bulletin_pdf(db, bulletin_id)

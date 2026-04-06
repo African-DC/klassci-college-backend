@@ -1,0 +1,73 @@
+"""Service portail enseignant — logique métier read-only."""
+
+import logging
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import NotFoundError
+from app.models.user import TeacherProfile
+from app.repositories import teacher_portal_repository as repo
+from app.schemas.teacher_portal import (
+    ClassAverageItem,
+    TeacherClassesListResponse,
+    TeacherClassResponse,
+    TeacherDashboardStats,
+    TeacherScheduleResponse,
+    TeacherScheduleSlot,
+)
+
+logger = logging.getLogger(__name__)
+
+
+async def _get_teacher_for_user(db: AsyncSession, user_id: int) -> TeacherProfile:
+    """Retourne le profil enseignant ou lève NotFoundError."""
+    teacher = await repo.get_teacher_by_user_id(db, user_id)
+    if teacher is None:
+        raise NotFoundError("TeacherProfile", user_id)
+    return teacher
+
+
+async def get_classes(db: AsyncSession, user_id: int) -> TeacherClassesListResponse:
+    """Retourne les classes assignées à l'enseignant via timetable_slots."""
+    teacher = await _get_teacher_for_user(db, user_id)
+    classes = await repo.get_teacher_classes(db, teacher.id)
+    items = [TeacherClassResponse(**c) for c in classes]
+    return TeacherClassesListResponse(items=items, total=len(items))
+
+
+async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleResponse:
+    """Retourne l'emploi du temps personnel de l'enseignant."""
+    teacher = await _get_teacher_for_user(db, user_id)
+    slots = await repo.get_teacher_schedule(db, teacher.id)
+    items = [
+        TeacherScheduleSlot(
+            id=slot.id,
+            day=slot.day,
+            start_time=slot.start_time,
+            end_time=slot.end_time,
+            subject_name=slot.subject.name,
+            class_name=slot.class_.name,
+            room_name=slot.room.name if slot.room else None,
+        )
+        for slot in slots
+    ]
+    return TeacherScheduleResponse(items=items, total=len(items))
+
+
+async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboardStats:
+    """Retourne les KPIs du dashboard enseignant."""
+    teacher = await _get_teacher_for_user(db, user_id)
+
+    total_classes = await repo.count_distinct_classes(db, teacher.id)
+    total_students = await repo.count_total_students(db, teacher.id)
+    upcoming_evaluations = await repo.count_upcoming_evaluations(db, teacher.id)
+    averages_raw = await repo.get_class_averages(db, teacher.id)
+
+    class_averages = [ClassAverageItem(**a) for a in averages_raw]
+
+    return TeacherDashboardStats(
+        total_classes=total_classes,
+        total_students=total_students,
+        upcoming_evaluations=upcoming_evaluations,
+        class_averages=class_averages,
+    )
