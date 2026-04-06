@@ -23,6 +23,7 @@ from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.reports import router as reports_router
 from app.routers.council import router as council_router
 from app.routers.dren_stats import router as dren_stats_router
+from app.routers.super_admin import router as super_admin_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
 
@@ -65,6 +66,7 @@ app.include_router(teacher_portal_router)
 app.include_router(reports_router)
 app.include_router(council_router)
 app.include_router(dren_stats_router)
+app.include_router(super_admin_router)
 app.include_router(timetable_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
