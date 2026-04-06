@@ -1,4 +1,4 @@
-"""Modèles de notes : Evaluation, Grade, Bulletin."""
+"""Modèles de notes : Evaluation, Grade, Bulletin, CouncilMinutes."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -136,3 +138,68 @@ class Bulletin(Base, TimestampMixin):
     student: Mapped[Student] = relationship()
     class_: Mapped[Class] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# Council Minutes (Procès-verbal conseil de classe)
+# ---------------------------------------------------------------------------
+
+
+class CouncilDecision(str, enum.Enum):
+    PASSAGE = "passage"
+    REPECHAGE = "repechage"
+    REDOUBLEMENT = "redoublement"
+    EXCLUSION = "exclusion"
+
+
+class CouncilMinutes(Base, TimestampMixin):
+    """Procès-verbal du conseil de classe."""
+
+    __tablename__ = "council_minutes"
+    __table_args__ = (
+        UniqueConstraint("class_id", "academic_year_id", "trimester", name="uq_council_class_year_trim"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    class_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("classes.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    academic_year_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    trimester: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2 ou 3
+    main_teacher_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    director_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    dren_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    class_: Mapped[Class] = relationship()
+    academic_year: Mapped[AcademicYear] = relationship()
+    decisions: Mapped[list[CouncilStudentDecision]] = relationship(
+        back_populates="council_minutes", cascade="all, delete-orphan"
+    )
+
+
+class CouncilStudentDecision(Base, TimestampMixin):
+    """Décision du conseil pour un élève."""
+
+    __tablename__ = "council_student_decisions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    council_minutes_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("council_minutes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    student_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("students.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    average: Mapped[Decimal | None] = mapped_column(Numeric(4, 2), nullable=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    absence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    auto_decision: Mapped[str] = mapped_column(String(50), nullable=False)
+    final_decision: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    council_minutes: Mapped[CouncilMinutes] = relationship(back_populates="decisions")
+    student: Mapped[Student] = relationship()
