@@ -1,4 +1,4 @@
-"""Modèles de notes : Evaluation, Grade, Bulletin."""
+"""Modèles de notes : Evaluation, Grade, Bulletin, SubjectAverage."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,6 +47,13 @@ class Mention(str, enum.Enum):
     ASSEZ_BIEN = "AB"  # >= 12
     PASSABLE = "P"  # >= 10
     MEDIOCRE = "M"  # < 10
+
+
+class CouncilDecision(str, enum.Enum):
+    PASSAGE = "passage"
+    REPECHAGE = "repechage"
+    REDOUBLEMENT = "redoublement"
+    EXCLUSION = "exclusion"
 
 
 class Evaluation(Base, TimestampMixin):
@@ -132,7 +140,36 @@ class Bulletin(Base, TimestampMixin):
     file_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    teacher_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    council_decision: Mapped[str | None] = mapped_column(
+        ValueEnum(CouncilDecision, name="council_decision"), nullable=True
+    )
 
     student: Mapped[Student] = relationship()
     class_: Mapped[Class] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()
+    subject_averages: Mapped[list[SubjectAverage]] = relationship(back_populates="bulletin")
+
+
+class SubjectAverage(Base, TimestampMixin):
+    """Moyenne par matière pour un bulletin trimestriel."""
+
+    __tablename__ = "subject_averages"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bulletin_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("bulletins.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    subject_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    student_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("students.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    trimester: Mapped[int] = mapped_column(Integer, nullable=False)
+    average: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
+    coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    bulletin: Mapped[Bulletin] = relationship(back_populates="subject_averages")
+    subject: Mapped[Subject] = relationship()
+    student: Mapped[Student] = relationship()
