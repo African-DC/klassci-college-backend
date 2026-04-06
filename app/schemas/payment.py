@@ -1,0 +1,51 @@
+"""Schémas Pydantic pour les paiements."""
+
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+class PaymentCreate(BaseModel):
+    enrollment_fee_id: int
+    amount: Decimal
+    method: str
+    reference: str | None = None
+    notes: str | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("amount must be positive")
+        return v
+
+    @field_validator("method")
+    @classmethod
+    def valid_method(cls, v: str) -> str:
+        allowed = {"cash", "mobile_money", "bank_transfer", "cheque"}
+        if v not in allowed:
+            raise ValueError(f"method must be one of {sorted(allowed)}")
+        return v
+
+
+class PaymentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    enrollment_fee_id: int
+    amount: Decimal
+    method: str
+    status: str
+    reference: str | None
+    received_by: int | None
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PaymentListResponse(BaseModel):
+    items: list[PaymentResponse]
+    total: int
+    page: int
+    size: int
