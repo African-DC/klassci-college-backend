@@ -13,6 +13,7 @@ from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.grades import router as grades_router
+from app.routers.council import router as council_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
 
@@ -48,6 +49,7 @@ app.include_router(grades_router)
 app.include_router(timetable_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
+app.include_router(council_router)
 
 
 # ---------------------------------------------------------------------------
