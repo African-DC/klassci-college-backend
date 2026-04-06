@@ -9,10 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import TenantMiddleware
+from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.grades import router as grades_router
+from app.routers.notifications import router as notifications_router
 from app.routers.payments import router as payments_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
@@ -42,10 +44,12 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # --- Routers ---
+app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(enrollments_router)
 app.include_router(grades_router)
+app.include_router(notifications_router)
 app.include_router(payments_router)
 app.include_router(timetable_router)
 app.include_router(teachers_router)
