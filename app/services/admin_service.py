@@ -84,7 +84,7 @@ async def create_student(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=student.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_student_by_id(db, student.id)
@@ -99,7 +99,7 @@ async def update_student(
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _student_to_response(student)
     async with db.begin_nested():
@@ -180,7 +180,7 @@ async def create_teacher(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=teacher.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_teacher_by_id(db, teacher.id)
@@ -195,7 +195,7 @@ async def update_teacher(
     teacher = await repo.get_teacher_by_id(db, teacher_id)
     if teacher is None:
         raise NotFoundError("Teacher", teacher_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _teacher_to_response(teacher)
     async with db.begin_nested():
@@ -276,7 +276,7 @@ async def create_staff(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=staff.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_staff_by_id(db, staff.id)
@@ -291,7 +291,7 @@ async def update_staff(
     staff = await repo.get_staff_by_id(db, staff_id)
     if staff is None:
         raise NotFoundError("Staff", staff_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _staff_to_response(staff)
     async with db.begin_nested():
@@ -375,7 +375,7 @@ async def create_class(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=cls.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_class_by_id(db, cls.id)
@@ -390,7 +390,7 @@ async def update_class(
     cls = await repo.get_class_by_id(db, class_id)
     if cls is None:
         raise NotFoundError("Class", class_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
     async with db.begin_nested():
@@ -471,7 +471,7 @@ async def create_subject(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=subject.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_subject_by_id(db, subject.id)
@@ -486,7 +486,7 @@ async def update_subject(
     subject = await repo.get_subject_by_id(db, subject_id)
     if subject is None:
         raise NotFoundError("Subject", subject_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _subject_to_response(subject)
     async with db.begin_nested():
@@ -581,7 +581,7 @@ async def update_academic_year(
     year = await repo.get_academic_year_by_id(db, year_id)
     if year is None:
         raise NotFoundError("AcademicYear", year_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _academic_year_to_response(year)
     async with db.begin_nested():
@@ -661,7 +661,7 @@ async def create_level(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=level.id,
-            new_values=data.model_dump(),
+            new_values=data.model_dump(mode="json"),
         )
     await db.commit()
     refreshed = await repo.get_level_by_id(db, level.id)
@@ -676,7 +676,7 @@ async def update_level(
     level = await repo.get_level_by_id(db, level_id)
     if level is None:
         raise NotFoundError("Level", level_id)
-    changes = data.model_dump(exclude_none=True)
+    changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _level_to_response(level)
     async with db.begin_nested():
