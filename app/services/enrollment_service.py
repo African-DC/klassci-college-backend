@@ -9,11 +9,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.models.academic import AcademicYear, Class
+from app.models.academic import AcademicYear, Class, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import FeeCategory, FeeVariant
 from app.models.user import Parent, ParentStudent, Student
 from app.repositories import enrollment_repository as repo
+from app.services.matricule_service import generate_enrollment_number
 from app.schemas.enrollment import (
     EnrollmentCreate,
     EnrollmentListResponse,
@@ -52,6 +53,9 @@ def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
         created_by=enrollment.created_by,
         created_at=enrollment.created_at,
         updated_at=enrollment.updated_at,
+        student_first_name=enrollment.student.first_name if enrollment.student else None,
+        student_last_name=enrollment.student.last_name if enrollment.student else None,
+        class_name=enrollment.class_.name if enrollment.class_ else None,
     )
 
 
@@ -284,6 +288,22 @@ async def create_enrollment_with_student(
         )
         db.add(student)
         await db.flush()
+
+        # Auto-generate enrollment number if pattern configured and none provided
+        if not data.enrollment_number:
+            settings_result = await db.execute(select(SchoolSettings).limit(1))
+            school = settings_result.scalar_one_or_none()
+            if school and school.enrollment_number_pattern:
+                enrollment_num = await generate_enrollment_number(
+                    db, school, class_data=class_,
+                )
+                student.enrollment_number = enrollment_num
+                await db.flush()
+            else:
+                raise BusinessValidationError(
+                    "Le matricule est obligatoire. "
+                    "Configurez un pattern automatique ou saisissez-le manuellement."
+                )
 
         # 2. Create parent if provided
         if data.parent:

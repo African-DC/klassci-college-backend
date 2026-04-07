@@ -16,6 +16,8 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
         .where(Enrollment.id == enrollment_id)
         .options(
             selectinload(Enrollment.academic_year),
+            selectinload(Enrollment.student),
+            selectinload(Enrollment.class_),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
         )
@@ -36,6 +38,8 @@ async def list_enrollments(
     """Retourne une page d'inscriptions avec le total."""
     base = select(Enrollment).options(
         selectinload(Enrollment.academic_year),
+        selectinload(Enrollment.student),
+        selectinload(Enrollment.class_),
         selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
     )
     if class_id is not None:

@@ -50,6 +50,9 @@ class EnrollmentResponse(BaseModel):
     created_by: int | None
     created_at: datetime
     updated_at: datetime
+    student_first_name: str | None = None
+    student_last_name: str | None = None
+    class_name: str | None = None
 
 
 class EnrollmentListResponse(BaseModel):
