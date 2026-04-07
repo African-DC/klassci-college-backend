@@ -51,6 +51,8 @@ from app.models.fee import (  # noqa: F401
 from app.models.grade import (  # noqa: F401
     Bulletin,
     CouncilDecision,
+    CouncilMinutes,
+    CouncilStudentDecision,
     Evaluation,
     EvaluationType,
     Grade,
