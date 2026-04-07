@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
@@ -59,6 +60,11 @@ async def get_bulletin_pdf(
     bulletin_id: int,
     _: None = require_permission("reports:read"),
     db: AsyncSession = Depends(get_tenant_db),
-) -> Any:
-    """Retourne l'URL du PDF d'un bulletin (placeholder)."""
-    return await service.get_bulletin_pdf(db, bulletin_id)
+) -> Response:
+    """Genere et retourne le PDF d'un bulletin."""
+    pdf_bytes = await service.get_bulletin_pdf(db, bulletin_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="bulletin_{bulletin_id}.pdf"'},
+    )
