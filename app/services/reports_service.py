@@ -9,8 +9,11 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.models.academic import SchoolSettings
 from app.models.grade import Bulletin, CouncilDecision, Mention, SubjectAverage
 from app.repositories import reports_repository as repo
 from app.schemas.reports import (
@@ -19,6 +22,7 @@ from app.schemas.reports import (
     BulletinResponse,
     SubjectAverageResponse,
 )
+from app.services.pdf_service import generate_bulletin_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -319,20 +323,58 @@ async def list_bulletins(
 
 
 # ---------------------------------------------------------------------------
-# Get bulletin PDF (placeholder)
+# Get bulletin PDF
 # ---------------------------------------------------------------------------
 
 
-async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> dict[str, Any]:
-    """Retourne l'URL du PDF d'un bulletin (placeholder)."""
+async def _get_school_settings(db: AsyncSession) -> dict[str, Any]:
+    """Fetch the singleton SchoolSettings row."""
+    stmt = select(SchoolSettings).limit(1)
+    result = await db.execute(stmt)
+    settings = result.scalar_one_or_none()
+    if settings is None:
+        return {"school_name": "Etablissement", "ministry_code": None}
+    return {
+        "school_name": settings.school_name,
+        "ministry_code": settings.ministry_code,
+        "address": settings.address,
+        "phone": settings.phone,
+    }
+
+
+async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
+    """Generate and return the PDF bytes of a bulletin."""
     bulletin = await repo.get_bulletin_by_id(db, bulletin_id)
     if bulletin is None:
         raise NotFoundError("Bulletin", bulletin_id)
 
-    # Placeholder: return existing file_url or a generated one
-    pdf_url = bulletin.file_url or f"/reports/bulletins/{bulletin_id}/download"
-    return {
-        "bulletin_id": bulletin_id,
-        "student_id": bulletin.student_id,
-        "pdf_url": pdf_url,
+    total_students = await repo.count_enrolled_students(
+        db, bulletin.class_id, bulletin.academic_year_id
+    )
+    school = await _get_school_settings(db)
+
+    subject_averages = [
+        {
+            "subject_name": sa.subject.name if sa.subject else "",
+            "average": sa.average,
+            "coefficient": sa.coefficient,
+        }
+        for sa in (bulletin.subject_averages or [])
+    ]
+
+    bulletin_data = {
+        "student_name": _student_full_name(bulletin.student) if bulletin.student else "",
+        "class_name": bulletin.class_.name if bulletin.class_ else "",
+        "trimester": bulletin.trimester,
+        "academic_year_name": bulletin.academic_year.name if bulletin.academic_year else "",
+        "average": bulletin.average,
+        "rank": bulletin.rank,
+        "total_students": total_students,
+        "mention": bulletin.mention,
+        "council_decision": bulletin.council_decision,
+        "teacher_comment": bulletin.teacher_comment,
+        "subject_averages": subject_averages,
+        "generated_at": bulletin.generated_at,
     }
+
+    return generate_bulletin_pdf(bulletin_data, school)
