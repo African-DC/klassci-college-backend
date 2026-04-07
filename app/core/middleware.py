@@ -31,6 +31,9 @@ def _extract_tenant(host: str) -> str:
     hostname = host.split(":")[0]
     if hostname in _LOCAL_HOSTS:
         return settings.LOCAL_TENANT_ID
+    # Detect numeric IP addresses (e.g., 16.58.132.68) — treat as local
+    if hostname.replace(".", "").isdigit():
+        return settings.LOCAL_TENANT_ID
     parts = hostname.split(".")
     if len(parts) >= 3:
         slug = parts[0]
