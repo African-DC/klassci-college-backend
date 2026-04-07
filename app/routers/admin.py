@@ -412,6 +412,31 @@ async def update_academic_year(
     )
 
 
+@router.get("/academic-years/current", response_model=AcademicYearResponse)
+async def get_current_academic_year(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AcademicYearResponse:
+    """Retourne l'annee academique courante (is_current=True) ou 404."""
+    return await admin_service.get_current_academic_year(db)
+
+
+@router.patch(
+    "/academic-years/{year_id}/set-current",
+    response_model=AcademicYearResponse,
+)
+async def set_current_academic_year(
+    year_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AcademicYearResponse:
+    """Definit une annee academique comme courante (desactive les autres)."""
+    return await admin_service.set_current_academic_year(
+        db, year_id, updated_by=current_user.user_id
+    )
+
+
 @router.delete("/academic-years/{year_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_academic_year(
     year_id: int,
