@@ -1,10 +1,11 @@
-"""Router inscriptions — CRUD /enrollments."""
+"""Router inscriptions — CRUD /enrollments + documents."""
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.schemas.enrollment import (
+    DocumentResponse,
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
@@ -127,3 +128,41 @@ async def delete_enrollment(
 ) -> None:
     """Supprime une inscription."""
     await enrollment_service.delete_enrollment(db, enrollment_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Documents
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{enrollment_id}/documents",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_document(
+    enrollment_id: int,
+    file: UploadFile,
+    doc_type: str = Query("autre", description="Type de document: bulletin, acte_naissance, etc."),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> DocumentResponse:
+    """Upload un document justificatif pour une inscription."""
+    return await enrollment_service.upload_document(
+        db,
+        enrollment_id=enrollment_id,
+        file=file,
+        doc_type=doc_type,
+        uploaded_by=current_user.user_id,
+    )
+
+
+@router.get("/{enrollment_id}/documents", response_model=list[DocumentResponse])
+async def list_documents(
+    enrollment_id: int,
+    _: None = require_permission("enrollments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[DocumentResponse]:
+    """Liste les documents d'une inscription."""
+    return await enrollment_service.list_documents(db, enrollment_id)
