@@ -1,18 +1,27 @@
 """Service inscriptions — logique métier CRUD + frais automatiques."""
 
 import logging
+from decimal import Decimal
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.fee import FeeCategory, FeeVariant
+from app.models.user import Parent, ParentStudent, Student
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
     EnrollmentUpdate,
+    EnrollmentWithStudentCreate,
+    FeeVariantResponse,
+    ReEnrollmentCreate,
 )
 
 logger = logging.getLogger(__name__)
@@ -213,3 +222,210 @@ async def delete_enrollment(
         )
 
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Current academic year helper
+# ---------------------------------------------------------------------------
+
+
+async def _get_current_academic_year(db: AsyncSession) -> AcademicYear:
+    """Retourne l'annee scolaire courante ou leve une erreur metier."""
+    stmt = select(AcademicYear).where(AcademicYear.is_current == True)  # noqa: E712
+    result = await db.execute(stmt)
+    year = result.scalar_one_or_none()
+    if not year:
+        raise BusinessValidationError(
+            "Aucune annee academique courante definie. "
+            "Veuillez configurer l'annee courante dans les parametres."
+        )
+    return year
+
+
+# ---------------------------------------------------------------------------
+# Composite enrollment: student + parent + enrollment in one transaction
+# ---------------------------------------------------------------------------
+
+
+async def create_enrollment_with_student(
+    db: AsyncSession,
+    data: EnrollmentWithStudentCreate,
+    created_by: int,
+) -> EnrollmentResponse:
+    """Cree un eleve, un parent optionnel, et une inscription en une transaction."""
+    # Resolve academic year
+    academic_year_id = data.academic_year_id
+    if academic_year_id is None:
+        current = await _get_current_academic_year(db)
+        academic_year_id = current.id
+    else:
+        ay = await repo.get_academic_year_by_id(db, academic_year_id)
+        if ay is None:
+            raise BusinessValidationError(f"AcademicYear {academic_year_id} not found")
+
+    async with db.begin_nested():
+        # Capacity guard
+        class_ = await repo.get_class_by_id_for_update(db, data.class_id)
+        if class_ is None:
+            raise BusinessValidationError(f"Class {data.class_id} not found")
+        enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+        if enrolled_count >= class_.max_students:
+            raise BusinessValidationError(
+                f"Class {data.class_id} is full ({class_.max_students} students max)"
+            )
+
+        # 1. Create student
+        student = Student(
+            first_name=data.first_name,
+            last_name=data.last_name,
+            birth_date=data.birth_date,
+            genre=data.genre,
+            enrollment_number=data.enrollment_number,
+        )
+        db.add(student)
+        await db.flush()
+
+        # 2. Create parent if provided
+        if data.parent:
+            parent = Parent(
+                first_name=data.parent.first_name,
+                last_name=data.parent.last_name,
+                phone=data.parent.phone,
+                email=data.parent.email,
+            )
+            db.add(parent)
+            await db.flush()
+            link = ParentStudent(
+                parent_id=parent.id,
+                student_id=student.id,
+                relationship_type=data.parent.relationship_type,
+            )
+            db.add(link)
+            await db.flush()
+
+        # 3. Create enrollment (reuses capacity check done above)
+        enrollment = await repo.create_enrollment(
+            db,
+            student_id=student.id,
+            class_id=data.class_id,
+            academic_year_id=academic_year_id,
+            created_by=created_by,
+            notes=data.notes,
+        )
+
+        # 4. Create enrollment fee if variant provided
+        if data.fee_variant_id is not None:
+            await repo.create_enrollment_fee(
+                db,
+                enrollment_id=enrollment.id,
+                fee_variant_id=data.fee_variant_id,
+            )
+
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=enrollment.id,
+            new_values={
+                "student_name": f"{data.first_name} {data.last_name}",
+                "with_student": True,
+                "class_id": data.class_id,
+                "academic_year_id": academic_year_id,
+            },
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment.id)
+    return _to_response(refreshed)
+
+
+async def re_enroll_student(
+    db: AsyncSession,
+    data: ReEnrollmentCreate,
+    created_by: int,
+) -> EnrollmentResponse:
+    """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
+    # Resolve academic year
+    academic_year_id = data.academic_year_id
+    if academic_year_id is None:
+        current = await _get_current_academic_year(db)
+        academic_year_id = current.id
+    else:
+        ay = await repo.get_academic_year_by_id(db, academic_year_id)
+        if ay is None:
+            raise BusinessValidationError(f"AcademicYear {academic_year_id} not found")
+
+    # Use existing create_enrollment logic (handles capacity + duplicate guard)
+    enrollment_data = EnrollmentCreate(
+        student_id=data.student_id,
+        class_id=data.class_id,
+        academic_year_id=academic_year_id,
+        fee_variant_id=data.fee_variant_id,
+        notes=data.notes,
+    )
+    return await create_enrollment(db, enrollment_data, created_by=created_by)
+
+
+# ---------------------------------------------------------------------------
+# Fee variant resolution by class
+# ---------------------------------------------------------------------------
+
+
+async def get_applicable_fee_variants(
+    db: AsyncSession,
+    class_id: int,
+) -> list[FeeVariantResponse]:
+    """Retourne les fee variants applicables pour une classe donnee.
+
+    Resout par class_id exact, par level_id, par series_id, ou globaux
+    (class_id/level_id/series_id tous NULL). Filtre par annee courante.
+    """
+    # Get class to find level_id and series_id
+    stmt = select(Class).where(Class.id == class_id)
+    result = await db.execute(stmt)
+    class_ = result.scalar_one_or_none()
+    if class_ is None:
+        raise BusinessValidationError(f"Class {class_id} not found")
+
+    # Build conditions: exact class, or matching level, or matching series, or global
+    conditions = [FeeVariant.class_id == class_id]
+    if class_.level_id:
+        conditions.append(FeeVariant.level_id == class_.level_id)
+    if class_.series_id:
+        conditions.append(FeeVariant.series_id == class_.series_id)
+    # Global variants (no class, level, or series specified)
+    conditions.append(
+        (FeeVariant.class_id.is_(None))
+        & (FeeVariant.level_id.is_(None))
+        & (FeeVariant.series_id.is_(None))
+    )
+
+    stmt = (
+        select(FeeVariant)
+        .options(selectinload(FeeVariant.category))
+        .where(
+            FeeVariant.academic_year_id == class_.academic_year_id,
+            or_(*conditions),
+        )
+        .order_by(FeeVariant.fee_category_id, FeeVariant.id)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    return [
+        FeeVariantResponse(
+            id=fv.id,
+            fee_category_id=fv.fee_category_id,
+            category_name=fv.category.name if fv.category else str(fv.fee_category_id),
+            class_id=fv.class_id,
+            level_id=fv.level_id,
+            series_id=fv.series_id,
+            academic_year_id=fv.academic_year_id,
+            amount=fv.amount,
+            description=fv.description,
+        )
+        for fv in rows
+    ]
