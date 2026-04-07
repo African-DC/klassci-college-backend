@@ -14,6 +14,7 @@ from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.enrollments import router as enrollments_router
+from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
 from app.routers.notifications import router as notifications_router
 from app.routers.payments import router as payments_router
@@ -57,6 +58,7 @@ app.include_router(attendance_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(enrollments_router)
+app.include_router(fees_router)
 app.include_router(grades_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)
