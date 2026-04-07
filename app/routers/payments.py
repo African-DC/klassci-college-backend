@@ -64,6 +64,23 @@ async def get_student_payments(
     return await payment_service.get_student_payments(db, enrollment_id)
 
 
+# NOTE: /{payment_id}/receipt MUST be defined BEFORE /{payment_id}
+# to avoid FastAPI matching "receipt" as part of a different route.
+@router.get("/{payment_id}/receipt")
+async def get_payment_receipt(
+    payment_id: int,
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Genere et retourne le recu de paiement en PDF."""
+    pdf_bytes = await payment_service.get_payment_receipt_pdf(db, payment_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="recu_{payment_id}.pdf"'},
+    )
+
+
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
     payment_id: int,

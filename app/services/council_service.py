@@ -3,10 +3,12 @@
 import logging
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.models.academic import SchoolSettings
 from app.repositories import council_repository as repo
 from app.schemas.council import (
     CouncilMinutesGenerateRequest,
@@ -15,6 +17,7 @@ from app.schemas.council import (
     CouncilStudentDecisionResponse,
     DecisionOverrideRequest,
 )
+from app.services.pdf_service import generate_council_minutes_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +122,6 @@ async def generate_council_minutes(
         )
 
         # Collect bulletin data for all students
-        student_data: list[dict] = []
         for student in students:
             bulletin = await repo.get_bulletin_for_student(
                 db, student.id, data.class_id, data.academic_year_id, data.trimester
@@ -185,8 +187,23 @@ async def get_council_minutes(
 
 
 # ---------------------------------------------------------------------------
-# PDF (placeholder)
+# PDF
 # ---------------------------------------------------------------------------
+
+
+async def _get_school_settings(db: AsyncSession) -> dict:
+    """Fetch the singleton SchoolSettings row."""
+    stmt = select(SchoolSettings).limit(1)
+    result = await db.execute(stmt)
+    settings = result.scalar_one_or_none()
+    if settings is None:
+        return {"school_name": "Etablissement", "ministry_code": None}
+    return {
+        "school_name": settings.school_name,
+        "ministry_code": settings.ministry_code,
+        "address": settings.address,
+        "phone": settings.phone,
+    }
 
 
 async def get_council_minutes_pdf(
@@ -194,20 +211,43 @@ async def get_council_minutes_pdf(
     class_id: int,
     trimester: int,
     academic_year_id: int,
-) -> CouncilMinutesPdfResponse:
-    """Retourne l'URL du PDF du PV (placeholder)."""
+) -> bytes:
+    """Generate and return the PDF bytes of the council minutes."""
     council = await repo.get_council_minutes(db, class_id, trimester, academic_year_id)
     if council is None:
         raise NotFoundError(
             "CouncilMinutes",
             f"class={class_id}/trimester={trimester}",
         )
-    # Placeholder — actual PDF generation will be implemented later
-    return CouncilMinutesPdfResponse(
-        pdf_url=f"/reports/council-minutes/{class_id}/{trimester}/pdf/download",
-        message="PDF generation not yet implemented — placeholder URL",
-    )
 
+    school = await _get_school_settings(db)
+
+    decisions = [
+        {
+            "student_name": _student_name(d.student) if d.student else "",
+            "average": d.average,
+            "rank": d.rank,
+            "absence_count": d.absence_count,
+            "auto_decision": d.auto_decision,
+            "final_decision": d.final_decision,
+            "override_reason": d.override_reason,
+        }
+        for d in (council.decisions or [])
+    ]
+
+    council_data = {
+        "class_name": council.class_.name if council.class_ else "",
+        "trimester": council.trimester,
+        "academic_year_name": council.academic_year.name if council.academic_year else "",
+        "main_teacher_name": council.main_teacher_name,
+        "director_name": council.director_name,
+        "dren_name": council.dren_name,
+        "notes": council.notes,
+        "generated_at": council.generated_at,
+        "decisions": decisions,
+    }
+
+    return generate_council_minutes_pdf(council_data, school)
 
 # ---------------------------------------------------------------------------
 # Override decision
