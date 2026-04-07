@@ -13,7 +13,7 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
-    from app.models.academic import AcademicYear, Class
+    from app.models.academic import AcademicYear, Class, Level, Series
     from app.models.enrollment import Enrollment, StudentOption
 
 
@@ -77,10 +77,18 @@ class FeeVariant(Base, TimestampMixin):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    level_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    series_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("series.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
 
     category: Mapped[FeeCategory] = relationship(back_populates="variants")
     class_: Mapped[Class | None] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()
+    level: Mapped[Level | None] = relationship()
+    series: Mapped[Series | None] = relationship()
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="fee_variant")
 
 
