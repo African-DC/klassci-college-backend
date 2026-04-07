@@ -332,3 +332,19 @@ class LevelListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+# ---------------------------------------------------------------------------
+# Enrollment Number Pattern
+# ---------------------------------------------------------------------------
+
+
+class EnrollmentPatternUpdate(BaseModel):
+    pattern: str
+    reset_counter: bool = False
+
+
+class EnrollmentPatternPreview(BaseModel):
+    pattern: str
+    preview: str
+    next_sequence: int

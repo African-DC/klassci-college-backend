@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.models.academic import AcademicYear
+from app.models.academic import AcademicYear, SchoolSettings
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -38,6 +38,7 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
+    EnrollmentPatternUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -762,3 +763,51 @@ async def delete_level(
             entity_id=level_id,
         )
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Enrollment Number Pattern
+# ---------------------------------------------------------------------------
+
+
+async def update_enrollment_pattern(
+    db: AsyncSession, data: EnrollmentPatternUpdate, *, updated_by: int
+) -> dict:
+    """Update the enrollment number auto-generation pattern in school settings."""
+    stmt = select(SchoolSettings).limit(1)
+    result = await db.execute(stmt)
+    school = result.scalar_one_or_none()
+    if school is None:
+        raise NotFoundError("SchoolSettings", 0)
+
+    old_pattern = school.enrollment_number_pattern
+    old_counter = school.enrollment_number_counter
+
+    async with db.begin_nested():
+        school.enrollment_number_pattern = data.pattern
+        if data.reset_counter:
+            school.enrollment_number_counter = 0
+        await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="school_settings",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=school.id,
+            old_values={
+                "enrollment_number_pattern": old_pattern,
+                "enrollment_number_counter": old_counter,
+            },
+            new_values={
+                "enrollment_number_pattern": data.pattern,
+                "enrollment_number_counter": 0 if data.reset_counter else old_counter,
+            },
+        )
+
+    await db.commit()
+    return {
+        "pattern": school.enrollment_number_pattern,
+        "counter": school.enrollment_number_counter,
+        "message": "Pattern updated successfully",
+    }
