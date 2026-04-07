@@ -9,6 +9,9 @@ from app.schemas.enrollment import (
     EnrollmentListResponse,
     EnrollmentResponse,
     EnrollmentUpdate,
+    EnrollmentWithStudentCreate,
+    FeeVariantResponse,
+    ReEnrollmentCreate,
 )
 from app.services import enrollment_service
 
@@ -45,6 +48,50 @@ async def create_enrollment(
 ) -> EnrollmentResponse:
     """Crée une nouvelle inscription."""
     return await enrollment_service.create_enrollment(db, data, created_by=current_user.user_id)
+
+
+@router.post(
+    "/with-student",
+    response_model=EnrollmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_enrollment_with_student(
+    data: EnrollmentWithStudentCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentResponse:
+    """Cree un eleve + parent optionnel + inscription en une seule operation."""
+    return await enrollment_service.create_enrollment_with_student(
+        db, data, created_by=current_user.user_id
+    )
+
+
+@router.post(
+    "/re-enroll",
+    response_model=EnrollmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def re_enroll_student(
+    data: ReEnrollmentCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentResponse:
+    """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
+    return await enrollment_service.re_enroll_student(
+        db, data, created_by=current_user.user_id
+    )
+
+
+@router.get("/fee-variants", response_model=list[FeeVariantResponse])
+async def get_applicable_fee_variants(
+    class_id: int = Query(..., description="ID de la classe pour la resolution des frais"),
+    _: None = require_permission("enrollments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[FeeVariantResponse]:
+    """Retourne les fee variants applicables pour une classe donnee."""
+    return await enrollment_service.get_applicable_fee_variants(db, class_id)
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)

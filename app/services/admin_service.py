@@ -2,10 +2,12 @@
 
 import logging
 
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.models.academic import AcademicYear
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -617,6 +619,54 @@ async def delete_academic_year(
             entity_id=year_id,
         )
     await db.commit()
+
+
+async def get_current_academic_year(db: AsyncSession) -> AcademicYearResponse:
+    """Retourne l'annee scolaire courante ou leve 404."""
+    stmt = select(AcademicYear).where(AcademicYear.is_current == True)  # noqa: E712
+    result = await db.execute(stmt)
+    year = result.scalar_one_or_none()
+    if year is None:
+        raise BusinessValidationError(
+            "Aucune annee academique courante definie. "
+            "Veuillez configurer l'annee courante dans les parametres."
+        )
+    return _academic_year_to_response(year)
+
+
+async def set_current_academic_year(
+    db: AsyncSession, year_id: int, *, updated_by: int
+) -> AcademicYearResponse:
+    """Definit une annee scolaire comme courante, desactive toutes les autres."""
+    year = await repo.get_academic_year_by_id(db, year_id)
+    if year is None:
+        raise NotFoundError("AcademicYear", year_id)
+
+    async with db.begin_nested():
+        # Reset all years to not current
+        stmt = update(AcademicYear).values(is_current=False)
+        await db.execute(stmt)
+        # Set this year as current
+        stmt = (
+            update(AcademicYear)
+            .where(AcademicYear.id == year_id)
+            .values(is_current=True)
+        )
+        await db.execute(stmt)
+        await audit_log(
+            db,
+            entity_type="academic_year",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=year_id,
+            new_values={"is_current": True},
+        )
+    await db.commit()
+
+    refreshed = await repo.get_academic_year_by_id(db, year_id)
+    if refreshed is None:
+        raise NotFoundError("AcademicYear", year_id)
+    return _academic_year_to_response(refreshed)
 
 
 # ---------------------------------------------------------------------------
