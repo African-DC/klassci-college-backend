@@ -62,6 +62,17 @@ class EnrollmentListResponse(BaseModel):
     size: int
 
 
+class DocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    enrollment_id: int
+    type: str
+    file_url: str
+    original_name: str | None
+    created_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Composite enrollment (student + parent + enrollment in one call)
 # ---------------------------------------------------------------------------
