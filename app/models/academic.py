@@ -172,3 +172,5 @@ class SchoolSettings(Base, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ministry_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    enrollment_number_pattern: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    enrollment_number_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

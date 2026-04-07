@@ -13,6 +13,8 @@ from app.schemas.admin import (
     ClassListResponse,
     ClassResponse,
     ClassUpdate,
+    EnrollmentPatternPreview,
+    EnrollmentPatternUpdate,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
@@ -35,6 +37,7 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.services import admin_service
+from app.services import matricule_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -508,3 +511,32 @@ async def delete_level(
 ) -> None:
     """Supprime un niveau."""
     await admin_service.delete_level(db, level_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Enrollment Number Pattern (Matricule)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings/matricule-preview", response_model=EnrollmentPatternPreview)
+async def preview_matricule(
+    pattern: str = Query(..., min_length=1, max_length=200),
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentPatternPreview:
+    """Preview what a matricule would look like with the given pattern."""
+    result = await matricule_service.preview_enrollment_number(db, pattern)
+    return EnrollmentPatternPreview(**result)
+
+
+@router.patch("/settings/enrollment-pattern")
+async def update_enrollment_pattern(
+    data: EnrollmentPatternUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Update the enrollment number auto-generation pattern."""
+    return await admin_service.update_enrollment_pattern(
+        db, data, updated_by=current_user.user_id
+    )
