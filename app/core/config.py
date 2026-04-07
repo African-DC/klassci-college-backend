@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     # Puppeteer microservice (génération bulletins PDF)
     PUPPETEER_URL: str = "http://localhost:3001"
 
+    # SMTP (email notifications)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "KLASSCI College"
+
+    # Twilio (SMS notifications)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+
     # DigitalOcean Spaces (stockage bulletins PDF)
     DO_SPACES_KEY: str | None = None
     DO_SPACES_SECRET: str | None = None
