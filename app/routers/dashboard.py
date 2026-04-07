@@ -44,7 +44,13 @@ async def get_dashboard_stats(
     enrolled_sq = (
         select(func.count())
         .select_from(Enrollment)
-        .where(Enrollment.status == EnrollmentStatus.VALIDE)
+        .where(
+            Enrollment.status.in_([
+                EnrollmentStatus.PROSPECT,
+                EnrollmentStatus.EN_VALIDATION,
+                EnrollmentStatus.VALIDE,
+            ])
+        )
         .correlate(None)
         .scalar_subquery()
     )
