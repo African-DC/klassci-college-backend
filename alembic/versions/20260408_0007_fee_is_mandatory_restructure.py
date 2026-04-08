@@ -38,9 +38,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_optional_fee_options_fee_category_id", "optional_fee_options", ["fee_category_id"])
 
-    # 3. Drop class_id FK and column from fee_variants
-    op.drop_constraint("fee_variants_ibfk_2", "fee_variants", type_="foreignkey")
-    op.drop_index("ix_fee_variants_class_id", "fee_variants")
+    # 3. Drop class_id index and column from fee_variants (no FK exists on class_id)
+    op.drop_index("class_id", "fee_variants")
     op.drop_column("fee_variants", "class_id")
 
     # 4. Make level_id NOT NULL on fee_variants (backfill NULLs first)
@@ -59,8 +58,7 @@ def downgrade() -> None:
     op.drop_constraint("uq_fee_variant_category_level_series_year", "fee_variants", type_="unique")
     op.alter_column("fee_variants", "level_id", existing_type=sa.BigInteger(), nullable=True)
     op.add_column("fee_variants", sa.Column("class_id", sa.BigInteger(), nullable=True))
-    op.create_index("ix_fee_variants_class_id", "fee_variants", ["class_id"])
-    op.create_foreign_key("fee_variants_ibfk_2", "fee_variants", "classes", ["class_id"], ["id"], ondelete="RESTRICT")
+    op.create_index("class_id", "fee_variants", ["class_id"])
     op.drop_index("ix_optional_fee_options_fee_category_id", "optional_fee_options")
     op.drop_constraint("fk_optional_fee_options_category", "optional_fee_options", type_="foreignkey")
     op.drop_column("optional_fee_options", "fee_category_id")
