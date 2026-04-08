@@ -6,7 +6,7 @@ import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Numeric, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -44,15 +44,21 @@ class EnrollmentFeeStatus(str, enum.Enum):
 
 
 class FeeCategory(Base, TimestampMixin):
-    """Catégorie de frais (ex : Inscription, Scolarité T1, Tenue scolaire)."""
+    """Catégorie de frais (ex : Inscription, Scolarité T1, Cantine, Transport).
+
+    is_mandatory=True  → frais obligatoires, montants via FeeVariant (par level+series)
+    is_mandatory=False → frais optionnels, options nommées via OptionalFeeOption
+    """
 
     __tablename__ = "fee_categories"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     variants: Mapped[list[FeeVariant]] = relationship(back_populates="category")
+    options: Mapped[list[OptionalFeeOption]] = relationship(back_populates="category")
 
 
 # ---------------------------------------------------------------------------
@@ -61,33 +67,35 @@ class FeeCategory(Base, TimestampMixin):
 
 
 class FeeVariant(Base, TimestampMixin):
-    """Montant d'une catégorie de frais pour une classe et une année scolaire."""
+    """Montant d'un frais OBLIGATOIRE pour un level + series + année scolaire."""
 
     __tablename__ = "fee_variants"
+    __table_args__ = (
+        UniqueConstraint(
+            "fee_category_id", "level_id", "series_id", "academic_year_id",
+            name="uq_fee_variant_category_level_series_year",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     fee_category_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
-    class_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("classes.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     academic_year_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    level_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=True, index=True
+    level_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     series_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("series.id", ondelete="RESTRICT"), nullable=True, index=True
     )
 
     category: Mapped[FeeCategory] = relationship(back_populates="variants")
-    class_: Mapped[Class | None] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()
-    level: Mapped[Level | None] = relationship()
+    level: Mapped[Level] = relationship()
     series: Mapped[Series | None] = relationship()
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="fee_variant")
 
@@ -98,11 +106,14 @@ class FeeVariant(Base, TimestampMixin):
 
 
 class OptionalFeeOption(Base, TimestampMixin):
-    """Option de frais facultatifs proposée aux élèves."""
+    """Option nommée d'un frais OPTIONNEL (ex: Menu complet, Arrêt Koumassi)."""
 
     __tablename__ = "optional_fee_options"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    fee_category_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     academic_year_id: Mapped[int] = mapped_column(
@@ -110,6 +121,7 @@ class OptionalFeeOption(Base, TimestampMixin):
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    category: Mapped[FeeCategory] = relationship(back_populates="options")
     academic_year: Mapped[AcademicYear] = relationship()
     student_options: Mapped[list[StudentOption]] = relationship(
         back_populates="optional_fee_option"

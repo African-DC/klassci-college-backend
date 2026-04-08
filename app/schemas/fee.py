@@ -14,11 +14,13 @@ from pydantic import BaseModel, ConfigDict, field_validator
 class FeeCategoryCreate(BaseModel):
     name: str
     description: str | None = None
+    is_mandatory: bool = True
 
 
 class FeeCategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    is_mandatory: bool | None = None
 
 
 class FeeCategoryResponse(BaseModel):
@@ -27,6 +29,7 @@ class FeeCategoryResponse(BaseModel):
     id: int
     name: str
     description: str | None
+    is_mandatory: bool
     created_at: datetime
     updated_at: datetime
 
@@ -45,8 +48,7 @@ class FeeCategoryListResponse(BaseModel):
 
 class FeeVariantCreate(BaseModel):
     fee_category_id: int
-    class_id: int | None = None
-    level_id: int | None = None
+    level_id: int
     series_id: int | None = None
     academic_year_id: int
     amount: Decimal
@@ -77,8 +79,7 @@ class FeeVariantResponse(BaseModel):
 
     id: int
     fee_category_id: int
-    class_id: int | None
-    level_id: int | None
+    level_id: int
     series_id: int | None
     academic_year_id: int
     amount: Decimal
