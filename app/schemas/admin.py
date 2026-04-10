@@ -348,3 +348,33 @@ class EnrollmentPatternPreview(BaseModel):
     pattern: str
     preview: str
     next_sequence: int
+
+
+# ---------------------------------------------------------------------------
+# School Settings
+# ---------------------------------------------------------------------------
+
+
+class SchoolSettingsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    school_name: str
+    address: str | None
+    phone: str | None
+    email: str | None
+    logo_url: str | None
+    ministry_code: str | None
+    enrollment_number_pattern: str | None
+    enrollment_number_counter: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SchoolInfoUpdate(BaseModel):
+    school_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    logo_url: str | None = None
+    ministry_code: str | None = None

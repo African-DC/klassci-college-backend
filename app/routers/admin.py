@@ -15,6 +15,8 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    SchoolInfoUpdate,
+    SchoolSettingsResponse,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
@@ -511,6 +513,33 @@ async def delete_level(
 ) -> None:
     """Supprime un niveau."""
     await admin_service.delete_level(db, level_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# School Settings
+# ---------------------------------------------------------------------------
+
+
+@router.get("/settings", response_model=SchoolSettingsResponse)
+async def get_settings(
+    _: None = require_permission("admin:academic-years:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Retourne les parametres de l'etablissement."""
+    school = await admin_service.get_school_settings(db)
+    return SchoolSettingsResponse.model_validate(school)
+
+
+@router.put("/settings/school-info", response_model=SchoolSettingsResponse)
+async def update_school_info(
+    data: SchoolInfoUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Met a jour les informations generales de l'etablissement."""
+    school = await admin_service.update_school_info(db, data, updated_by=current_user.user_id)
+    return SchoolSettingsResponse.model_validate(school)
 
 
 # ---------------------------------------------------------------------------

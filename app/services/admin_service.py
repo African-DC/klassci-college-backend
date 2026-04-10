@@ -770,6 +770,41 @@ async def delete_level(
 # ---------------------------------------------------------------------------
 
 
+async def get_school_settings(db: AsyncSession) -> SchoolSettings:
+    """Get the school settings singleton. Raises NotFoundError if not provisioned."""
+    stmt = select(SchoolSettings).limit(1)
+    result = await db.execute(stmt)
+    school = result.scalar_one_or_none()
+    if school is None:
+        raise NotFoundError("SchoolSettings", 0)
+    return school
+
+
+async def update_school_info(
+    db: AsyncSession, data: "SchoolInfoUpdate", *, updated_by: int
+) -> SchoolSettings:
+    """Update general school info fields (name, address, phone, email, logo, ministry_code)."""
+    school = await get_school_settings(db)
+    changes = data.model_dump(exclude_none=True)
+    if not changes:
+        return school
+    async with db.begin_nested():
+        for key, value in changes.items():
+            setattr(school, key, value)
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_settings",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=school.id,
+            new_values=changes,
+        )
+    await db.commit()
+    # Re-fetch to get updated timestamps
+    return await get_school_settings(db)
+
+
 async def update_enrollment_pattern(
     db: AsyncSession, data: EnrollmentPatternUpdate, *, updated_by: int
 ) -> dict:
