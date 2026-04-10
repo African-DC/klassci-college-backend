@@ -57,6 +57,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "admin:fee-variants:create", "name": "Create fee variants"},
     {"slug": "admin:fee-variants:update", "name": "Update fee variants"},
     {"slug": "admin:fee-variants:delete", "name": "Delete fee variants"},
+    {"slug": "admin:fee-options:read", "name": "View fee options"},
+    {"slug": "admin:fee-options:create", "name": "Create fee options"},
+    {"slug": "admin:fee-options:update", "name": "Update fee options"},
+    {"slug": "admin:fee-options:delete", "name": "Delete fee options"},
     # Academic (7)
     {"slug": "enrollments:read", "name": "View enrollments"},
     {"slug": "enrollments:create", "name": "Create enrollments"},

@@ -3,7 +3,7 @@
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.fee import FeeCategory, FeeVariant
+from app.models.fee import FeeCategory, FeeVariant, OptionalFeeOption
 
 
 # ---------------------------------------------------------------------------
@@ -108,4 +108,58 @@ async def update_fee_variant(
 
 async def delete_fee_variant(db: AsyncSession, variant: FeeVariant) -> None:
     await db.delete(variant)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# OptionalFeeOption
+# ---------------------------------------------------------------------------
+
+
+async def get_optional_fee_option_by_id(
+    db: AsyncSession, option_id: int
+) -> OptionalFeeOption | None:
+    stmt = select(OptionalFeeOption).where(OptionalFeeOption.id == option_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_optional_fee_options(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    category_id: int | None = None,
+    academic_year_id: int | None = None,
+) -> tuple[list[OptionalFeeOption], int]:
+    base = select(OptionalFeeOption)
+    if category_id is not None:
+        base = base.where(OptionalFeeOption.fee_category_id == category_id)
+    if academic_year_id is not None:
+        base = base.where(OptionalFeeOption.academic_year_id == academic_year_id)
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+    stmt = base.offset((page - 1) * size).limit(size).order_by(OptionalFeeOption.id.desc())
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows), total
+
+
+async def create_optional_fee_option(db: AsyncSession, **kwargs: object) -> OptionalFeeOption:
+    option = OptionalFeeOption(**kwargs)
+    db.add(option)
+    await db.flush()
+    return option
+
+
+async def update_optional_fee_option(
+    db: AsyncSession, option: OptionalFeeOption, **kwargs: object
+) -> OptionalFeeOption:
+    for key, value in kwargs.items():
+        if value is not None:
+            setattr(option, key, value)
+    await db.flush()
+    return option
+
+
+async def delete_optional_fee_option(db: AsyncSession, option: OptionalFeeOption) -> None:
+    await db.delete(option)
     await db.flush()

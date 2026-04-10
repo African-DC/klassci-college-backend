@@ -13,6 +13,10 @@ from app.schemas.fee import (
     FeeVariantListResponse,
     FeeVariantResponse,
     FeeVariantUpdate,
+    OptionalFeeOptionCreate,
+    OptionalFeeOptionListResponse,
+    OptionalFeeOptionResponse,
+    OptionalFeeOptionUpdate,
 )
 from app.services import fee_service
 
@@ -159,3 +163,73 @@ async def delete_fee_variant(
 ) -> None:
     """Supprime une variante de frais."""
     await fee_service.delete_fee_variant(db, variant_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Optional Fee Options
+# ---------------------------------------------------------------------------
+
+
+@router.get("/fee-options", response_model=OptionalFeeOptionListResponse)
+async def list_fee_options(
+    category_id: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(100, ge=1, le=200),
+    _: None = require_permission("admin:fee-options:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> OptionalFeeOptionListResponse:
+    """Liste paginee des options de frais optionnels avec filtres."""
+    return await fee_service.list_optional_fee_options(
+        db, page=page, size=size, category_id=category_id, academic_year_id=academic_year_id,
+    )
+
+
+@router.post(
+    "/fee-options",
+    response_model=OptionalFeeOptionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_fee_option(
+    data: OptionalFeeOptionCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:fee-options:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> OptionalFeeOptionResponse:
+    """Cree une nouvelle option de frais optionnel."""
+    return await fee_service.create_optional_fee_option(db, data, created_by=current_user.user_id)
+
+
+@router.get("/fee-options/{option_id}", response_model=OptionalFeeOptionResponse)
+async def get_fee_option(
+    option_id: int,
+    _: None = require_permission("admin:fee-options:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> OptionalFeeOptionResponse:
+    """Retourne une option de frais optionnel par ID."""
+    return await fee_service.get_optional_fee_option(db, option_id)
+
+
+@router.patch("/fee-options/{option_id}", response_model=OptionalFeeOptionResponse)
+async def update_fee_option(
+    option_id: int,
+    data: OptionalFeeOptionUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:fee-options:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> OptionalFeeOptionResponse:
+    """Met a jour une option de frais optionnel (patch partiel)."""
+    return await fee_service.update_optional_fee_option(
+        db, option_id, data, updated_by=current_user.user_id
+    )
+
+
+@router.delete("/fee-options/{option_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_fee_option(
+    option_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:fee-options:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime une option de frais optionnel."""
+    await fee_service.delete_optional_fee_option(db, option_id, deleted_by=current_user.user_id)
