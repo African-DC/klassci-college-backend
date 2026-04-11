@@ -77,6 +77,30 @@ async def create_session(
 
     await db.commit()
 
+    # After commit, notify absent students (best-effort)
+    try:
+        from sqlalchemy import select
+        from app.services import notification_dispatch_service as notif
+        from app.models.notification import NotificationType
+        from app.models.user import Student
+
+        for record in data.records:
+            if record.status == "absent" and record.student_id:
+                result = await db.execute(select(Student).where(Student.id == record.student_id))
+                student_obj = result.scalar_one_or_none()
+                if student_obj and student_obj.user_id:
+                    await notif.dispatch_notification(
+                        db,
+                        user_id=student_obj.user_id,
+                        notification_type=NotificationType.ABSENCE_RECORDED,
+                        context={
+                            "title": "Absence signalée",
+                            "body": f"Une absence a été enregistrée le {data.date}.",
+                        },
+                    )
+    except Exception:
+        logger.exception("Failed to dispatch absence notifications")
+
     refreshed = await repo.get_session_by_id(db, context.id)
     if refreshed is None:
         raise NotFoundError("AttendanceSession", context.id)

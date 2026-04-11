@@ -378,3 +378,59 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
     }
 
     return generate_bulletin_pdf(bulletin_data, school)
+
+
+# ---------------------------------------------------------------------------
+# Publish bulletins
+# ---------------------------------------------------------------------------
+
+
+async def publish_bulletins(
+    db: AsyncSession,
+    class_id: int,
+    trimester: int,
+    academic_year_id: int,
+    *,
+    published_by: int,
+) -> int:
+    """Set is_published=True for all bulletins of a class/trimester and notify parents."""
+    from sqlalchemy import update as sql_update
+
+    stmt = (
+        sql_update(Bulletin)
+        .where(
+            Bulletin.class_id == class_id,
+            Bulletin.trimester == trimester,
+            Bulletin.academic_year_id == academic_year_id,
+            Bulletin.is_published == False,
+        )
+        .values(is_published=True)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    count = result.rowcount
+
+    # Dispatch notifications to parents (background, best-effort)
+    if count > 0:
+        try:
+            from app.services import notification_dispatch_service as notif
+            from app.models.notification import NotificationType
+
+            bulletins = await repo.list_bulletins_for_class(db, class_id, trimester, academic_year_id)
+            for b in bulletins:
+                if b.student and b.student.user_id:
+                    await notif.dispatch_notification(
+                        db,
+                        user_id=b.student.user_id,
+                        notification_type=NotificationType.BULLETIN_PUBLISHED,
+                        context={
+                            "student_name": f"{b.student.first_name} {b.student.last_name}",
+                            "trimester": str(trimester),
+                            "title": "Bulletin publié",
+                            "body": f"Le bulletin du trimestre {trimester} est disponible.",
+                        },
+                    )
+        except Exception:
+            logger.exception("Failed to dispatch bulletin notifications")
+
+    return count

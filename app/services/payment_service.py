@@ -111,6 +111,28 @@ async def create_payment(
     refreshed = await repo.get_payment_by_id(db, payment.id)
     if refreshed is None:
         raise NotFoundError("Payment", payment.id)
+
+    # After commit, notify student of payment received (best-effort)
+    try:
+        from app.services import notification_dispatch_service as notif
+        from app.models.notification import NotificationType
+
+        if refreshed and refreshed.enrollment_fee and refreshed.enrollment_fee.enrollment:
+            enrollment = refreshed.enrollment_fee.enrollment
+            if enrollment.student and enrollment.student.user_id:
+                await notif.dispatch_notification(
+                    db,
+                    user_id=enrollment.student.user_id,
+                    notification_type=NotificationType.PAYMENT_RECEIVED,
+                    context={
+                        "title": "Paiement reçu",
+                        "body": f"Votre paiement de {data.amount} FCFA a été enregistré.",
+                        "amount": str(data.amount),
+                    },
+                )
+    except Exception:
+        logger.exception("Failed to dispatch payment notification")
+
     return _to_response(refreshed)
 
 

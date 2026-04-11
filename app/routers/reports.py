@@ -68,3 +68,17 @@ async def get_bulletin_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="bulletin_{bulletin_id}.pdf"'},
     )
+
+
+@router.post("/bulletins/publish")
+async def publish_bulletins(
+    class_id: int = Query(...),
+    trimester: int = Query(..., ge=1, le=3),
+    academic_year_id: int = Query(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("reports:generate"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Publie les bulletins d'une classe/trimestre (is_published=True)."""
+    count = await service.publish_bulletins(db, class_id, trimester, academic_year_id, published_by=current_user.user_id)
+    return {"published": count}
