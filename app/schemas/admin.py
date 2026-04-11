@@ -52,6 +52,7 @@ class StudentResponse(BaseModel):
     birth_date: date | None
     genre: str | None
     enrollment_number: str | None
+    photo_url: str | None = None
     user_id: int | None
     created_at: datetime
     updated_at: datetime

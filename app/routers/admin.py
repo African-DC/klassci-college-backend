@@ -1,6 +1,9 @@
 """Router admin — CRUD endpoints pour les entités de base."""
 
-from fastapi import APIRouter, Depends, Query, status
+import os
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
@@ -42,6 +45,8 @@ from app.services import admin_service
 from app.services import matricule_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+UPLOAD_DIR = "/tmp/klassci-uploads/photos"
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +110,46 @@ async def delete_student(
 ) -> None:
     """Supprime un eleve."""
     await admin_service.delete_student(db, student_id, deleted_by=current_user.user_id)
+
+
+@router.post("/students/{student_id}/photo")
+async def upload_student_photo(
+    student_id: int,
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload ou remplace la photo de profil d'un eleve."""
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    filename = f"{student_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    photo_url = f"/uploads/photos/{filename}"
+    student = await admin_service.update_student_photo(db, student_id, photo_url, updated_by=current_user.user_id)
+    return {"photo_url": student.photo_url}
+
+
+@router.delete("/students/{student_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student_photo(
+    student_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime la photo de profil d'un eleve."""
+    await admin_service.update_student_photo(db, student_id, None, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------

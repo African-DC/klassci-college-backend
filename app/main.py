@@ -3,8 +3,11 @@
 Point d'entrée de l'application FastAPI.
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
@@ -35,6 +38,11 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
 )
+
+# --- Static files (uploads) ---
+UPLOAD_DIR = "/tmp/klassci-uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- Middleware (ordre : dernier ajouté = premier exécuté) ---
 # TenantMiddleware ajouté en 1er → s'exécute en dernier (inner layer)

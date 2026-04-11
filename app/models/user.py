@@ -141,6 +141,7 @@ class Student(Base, TimestampMixin):
     enrollment_number: Mapped[str | None] = mapped_column(
         String(50), nullable=True, unique=True, index=True
     )
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")

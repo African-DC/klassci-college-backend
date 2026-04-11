@@ -11,7 +11,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
-from app.models.user import User, UserRoleEnum
+from app.models.user import Student, User, UserRoleEnum
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -159,6 +159,19 @@ async def delete_student(
             entity_id=student_id,
         )
     await db.commit()
+
+
+async def update_student_photo(
+    db: AsyncSession, student_id: int, photo_url: str | None, *, updated_by: int
+) -> Student:
+    """Update student photo_url."""
+    student = await repo.get_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+    student.photo_url = photo_url
+    await db.flush()
+    await db.commit()
+    return student
 
 
 # ---------------------------------------------------------------------------
