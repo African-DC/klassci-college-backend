@@ -33,6 +33,7 @@ router = APIRouter(tags=["grades"])
 @router.get("/evaluations", response_model=list[EvaluationResponse])
 async def list_evaluations(
     class_id: int | None = Query(None),
+    teacher_id: int | None = Query(None),
     academic_year_id: int | None = Query(None),
     trimester: int | None = Query(None),
     _: None = require_permission("grades:read"),
@@ -41,6 +42,7 @@ async def list_evaluations(
     return await service.list_evaluations(
         db,
         class_id=class_id,
+        teacher_id=teacher_id,
         academic_year_id=academic_year_id,
         trimester=trimester,
     )

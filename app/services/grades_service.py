@@ -48,12 +48,14 @@ async def list_evaluations(
     db: AsyncSession,
     *,
     class_id: int | None = None,
+    teacher_id: int | None = None,
     academic_year_id: int | None = None,
     trimester: int | None = None,
 ) -> list[dict[str, Any]]:
     evals = await repo.list_evaluations(
         db,
         class_id=class_id,
+        teacher_id=teacher_id,
         academic_year_id=academic_year_id,
         trimester=trimester,
     )

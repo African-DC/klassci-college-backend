@@ -89,12 +89,15 @@ async def list_evaluations(
     db: AsyncSession,
     *,
     class_id: int | None = None,
+    teacher_id: int | None = None,
     academic_year_id: int | None = None,
     trimester: int | None = None,
 ) -> list[Evaluation]:
     stmt = select(Evaluation).options(*_eval_options()).order_by(Evaluation.date.desc())
     if class_id is not None:
         stmt = stmt.where(Evaluation.class_id == class_id)
+    if teacher_id is not None:
+        stmt = stmt.where(Evaluation.teacher_id == teacher_id)
     if academic_year_id is not None:
         stmt = stmt.where(Evaluation.academic_year_id == academic_year_id)
     if trimester is not None:
