@@ -385,6 +385,67 @@ async def delete_teacher(
     await db.commit()
 
 
+async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
+    """Enriched teacher profile with user account and aggregated KPIs."""
+    from app.models.enrollment import Enrollment
+    from app.models.grade import Evaluation
+    from app.models.timetable import TimetableSlot
+    from app.models.user import TeacherProfile
+
+    # Get teacher with user
+    stmt = select(TeacherProfile).where(TeacherProfile.id == teacher_id).options(
+        selectinload(TeacherProfile.user)
+    )
+    teacher = (await db.execute(stmt)).scalar_one_or_none()
+    if teacher is None:
+        raise NotFoundError("Teacher", teacher_id)
+
+    result: dict = {
+        "id": teacher.id,
+        "user_id": teacher.user_id,
+        "first_name": teacher.first_name,
+        "last_name": teacher.last_name,
+        "speciality": teacher.speciality,
+        "phone": teacher.phone,
+        "created_at": teacher.created_at,
+        "updated_at": teacher.updated_at,
+    }
+
+    # User account info
+    if teacher.user:
+        result["user_email"] = teacher.user.email
+        result["user_is_active"] = teacher.user.is_active
+        result["user_last_login"] = teacher.user.last_login
+        result["user_created_at"] = teacher.user.created_at
+
+    # Count distinct classes (via timetable slots)
+    classes_stmt = select(
+        func.count(func.distinct(TimetableSlot.class_id))
+    ).where(TimetableSlot.teacher_id == teacher_id)
+
+    # Count distinct students in those classes (via enrollments)
+    students_stmt = select(
+        func.count(func.distinct(Enrollment.student_id))
+    ).join(
+        TimetableSlot, Enrollment.class_id == TimetableSlot.class_id
+    ).where(TimetableSlot.teacher_id == teacher_id)
+
+    # Count evaluations
+    evals_stmt = select(
+        func.count()
+    ).where(Evaluation.teacher_id == teacher_id)
+
+    classes_count = (await db.execute(classes_stmt)).scalar() or 0
+    students_count = (await db.execute(students_stmt)).scalar() or 0
+    evaluations_count = (await db.execute(evals_stmt)).scalar() or 0
+
+    result["classes_count"] = classes_count
+    result["students_count"] = students_count
+    result["evaluations_count"] = evaluations_count
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # StaffProfile
 # ---------------------------------------------------------------------------
@@ -479,6 +540,37 @@ async def delete_staff(
             entity_id=staff_id,
         )
     await db.commit()
+
+
+async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
+    """Enriched staff profile with user account info."""
+    from app.models.user import StaffProfile
+
+    stmt = select(StaffProfile).where(StaffProfile.id == staff_id).options(
+        selectinload(StaffProfile.user)
+    )
+    staff = (await db.execute(stmt)).scalar_one_or_none()
+    if staff is None:
+        raise NotFoundError("Staff", staff_id)
+
+    result: dict = {
+        "id": staff.id,
+        "user_id": staff.user_id,
+        "first_name": staff.first_name,
+        "last_name": staff.last_name,
+        "position": staff.position,
+        "phone": staff.phone,
+        "created_at": staff.created_at,
+        "updated_at": staff.updated_at,
+    }
+
+    if staff.user:
+        result["user_email"] = staff.user.email
+        result["user_is_active"] = staff.user.is_active
+        result["user_last_login"] = staff.user.last_login
+        result["user_created_at"] = staff.user.created_at
+
+    return result
 
 
 # ---------------------------------------------------------------------------

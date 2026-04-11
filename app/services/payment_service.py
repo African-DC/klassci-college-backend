@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,8 +21,21 @@ from app.models.fee import (
 )
 from app.models.user import User
 from app.repositories import payment_repository as repo
-from app.schemas.payment import PaymentCreate, PaymentListResponse, PaymentResponse
+from app.schemas.payment import PaymentCreate, PaymentListResponse, PaymentResponse, PaymentSummaryResponse
 from app.services.pdf_service import generate_receipt_pdf
+
+
+# ---------------------------------------------------------------------------
+# State machine for payment transitions
+# ---------------------------------------------------------------------------
+
+VALID_TRANSITIONS: dict[str, list[str]] = {
+    "pending": ["completed", "cancelled"],
+    "completed": ["refunded"],
+    "failed": [],
+    "refunded": [],
+    "cancelled": [],
+}
 
 logger = logging.getLogger(__name__)
 
@@ -258,3 +271,193 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
     }
 
     return generate_receipt_pdf(payment_data, school)
+
+
+# ---------------------------------------------------------------------------
+# Validate / Cancel / Summary
+# ---------------------------------------------------------------------------
+
+
+async def validate_payment(
+    db: AsyncSession,
+    payment_id: int,
+    *,
+    validated_by: int,
+) -> PaymentResponse:
+    """Transition un paiement de pending à completed."""
+    from fastapi import HTTPException
+
+    async with db.begin_nested():
+        # Lock payment row
+        stmt = select(Payment).where(Payment.id == payment_id).with_for_update()
+        result = await db.execute(stmt)
+        payment = result.scalar_one_or_none()
+        if payment is None:
+            raise NotFoundError("Payment", payment_id)
+
+        current = payment.status
+        if "completed" not in VALID_TRANSITIONS.get(current, []):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Transition invalide : impossible de passer de '{current}' à 'completed'",
+            )
+
+        payment.status = PaymentStatus.COMPLETED.value
+        await db.flush()
+
+        # Recalculate enrollment fee status
+        enrollment_fee = await repo.get_enrollment_fee_for_update(db, payment.enrollment_fee_id)
+        if enrollment_fee is not None:
+            total_paid = await repo.get_total_paid_for_enrollment_fee(db, payment.enrollment_fee_id)
+            if total_paid >= enrollment_fee.amount:
+                enrollment_fee.status = EnrollmentFeeStatus.PAID.value
+            elif total_paid > Decimal("0"):
+                enrollment_fee.status = EnrollmentFeeStatus.PARTIAL.value
+            else:
+                enrollment_fee.status = EnrollmentFeeStatus.PENDING.value
+            await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="payment",
+            action=AuditAction.UPDATE,
+            user_id=validated_by,
+            entity_id=payment.id,
+            old_values={"status": current},
+            new_values={"status": payment.status},
+        )
+
+    await db.commit()
+
+    # Notification best-effort
+    try:
+        from app.services import notification_dispatch_service as notif
+        from app.models.notification import NotificationType
+
+        refreshed = await repo.get_payment_by_id(db, payment.id)
+        if refreshed and refreshed.enrollment_fee and refreshed.enrollment_fee.enrollment:
+            enrollment = refreshed.enrollment_fee.enrollment
+            if enrollment.student and enrollment.student.user_id:
+                await notif.dispatch_notification(
+                    db,
+                    user_id=enrollment.student.user_id,
+                    notification_type=NotificationType.PAYMENT_RECEIVED,
+                    context={
+                        "title": "Paiement validé",
+                        "body": f"Votre paiement de {payment.amount} FCFA a été validé.",
+                        "amount": str(payment.amount),
+                    },
+                )
+    except Exception:
+        logger.exception("Failed to dispatch payment validation notification")
+
+    refreshed = await repo.get_payment_by_id(db, payment.id)
+    if refreshed is None:
+        raise NotFoundError("Payment", payment.id)
+    return _to_response(refreshed)
+
+
+async def cancel_payment(
+    db: AsyncSession,
+    payment_id: int,
+    *,
+    cancelled_by: int,
+) -> PaymentResponse:
+    """Transition un paiement de pending à cancelled."""
+    from fastapi import HTTPException
+
+    async with db.begin_nested():
+        stmt = select(Payment).where(Payment.id == payment_id).with_for_update()
+        result = await db.execute(stmt)
+        payment = result.scalar_one_or_none()
+        if payment is None:
+            raise NotFoundError("Payment", payment_id)
+
+        current = payment.status
+        if "cancelled" not in VALID_TRANSITIONS.get(current, []):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Transition invalide : impossible de passer de '{current}' à 'cancelled'",
+            )
+
+        payment.status = PaymentStatus.CANCELLED.value
+        await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="payment",
+            action=AuditAction.UPDATE,
+            user_id=cancelled_by,
+            entity_id=payment.id,
+            old_values={"status": current},
+            new_values={"status": payment.status},
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_payment_by_id(db, payment.id)
+    if refreshed is None:
+        raise NotFoundError("Payment", payment.id)
+    return _to_response(refreshed)
+
+
+async def get_payments_summary(
+    db: AsyncSession,
+    *,
+    academic_year_id: int | None = None,
+) -> PaymentSummaryResponse:
+    """Agrège les statistiques de paiement."""
+    from app.models.enrollment import Enrollment
+
+    # Total expected (sum of enrollment_fees amounts)
+    expected_stmt = select(
+        func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
+    )
+    if academic_year_id is not None:
+        expected_stmt = expected_stmt.join(
+            Enrollment, EnrollmentFee.enrollment_id == Enrollment.id
+        ).where(Enrollment.academic_year_id == academic_year_id)
+
+    expected_row = (await db.execute(expected_stmt)).one()
+    total_expected = float(expected_row.expected)
+
+    # Payment aggregates
+    pay_stmt = select(
+        func.count().label("payment_count"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.COMPLETED.value, Payment.amount), else_=0)),
+            0,
+        ).label("total_paid"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.PENDING.value, Payment.amount), else_=0)),
+            0,
+        ).label("total_pending"),
+        func.coalesce(
+            func.sum(case((Payment.status == PaymentStatus.CANCELLED.value, Payment.amount), else_=0)),
+            0,
+        ).label("total_cancelled"),
+    )
+    if academic_year_id is not None:
+        pay_stmt = (
+            pay_stmt
+            .join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
+            .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
+            .where(Enrollment.academic_year_id == academic_year_id)
+        )
+
+    pay_row = (await db.execute(pay_stmt)).one()
+
+    total_paid = float(pay_row.total_paid)
+    total_pending = float(pay_row.total_pending)
+    total_cancelled = float(pay_row.total_cancelled)
+    payment_count = pay_row.payment_count
+    completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
+
+    return PaymentSummaryResponse(
+        total_expected=total_expected,
+        total_paid=total_paid,
+        total_pending=total_pending,
+        total_cancelled=total_cancelled,
+        payment_count=payment_count,
+        completion_rate=completion_rate,
+    )

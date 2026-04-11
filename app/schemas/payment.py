@@ -49,3 +49,12 @@ class PaymentListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+class PaymentSummaryResponse(BaseModel):
+    total_expected: float
+    total_paid: float
+    total_pending: float
+    total_cancelled: float
+    payment_count: int
+    completion_rate: float

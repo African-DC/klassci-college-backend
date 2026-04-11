@@ -140,6 +140,31 @@ class TeacherResponse(BaseModel):
     updated_at: datetime
 
 
+class TeacherFullResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    # Basic teacher info
+    id: int
+    user_id: int
+    first_name: str
+    last_name: str
+    speciality: str | None
+    phone: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    # User account info
+    user_email: str | None = None
+    user_is_active: bool | None = None
+    user_last_login: datetime | None = None
+    user_created_at: datetime | None = None
+
+    # Aggregated KPIs
+    classes_count: int = 0
+    students_count: int = 0
+    evaluations_count: int = 0
+
+
 class TeacherListResponse(BaseModel):
     items: list[TeacherResponse]
     total: int
@@ -178,6 +203,26 @@ class StaffResponse(BaseModel):
     phone: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class StaffFullResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    # Basic staff info
+    id: int
+    user_id: int
+    first_name: str
+    last_name: str
+    position: str | None
+    phone: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    # User account info
+    user_email: str | None = None
+    user_is_active: bool | None = None
+    user_last_login: datetime | None = None
+    user_created_at: datetime | None = None
 
 
 class StaffListResponse(BaseModel):

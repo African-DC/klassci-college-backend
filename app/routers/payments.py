@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
-from app.schemas.payment import PaymentCreate, PaymentListResponse, PaymentResponse
+from app.schemas.payment import PaymentCreate, PaymentListResponse, PaymentResponse, PaymentSummaryResponse
 from app.services import payment_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
@@ -49,6 +49,18 @@ async def create_payment(
     return await payment_service.create_payment(db, data, received_by=current_user.user_id)
 
 
+# NOTE: /summary MUST be defined BEFORE /{payment_id}
+# to avoid FastAPI matching "summary" as a payment_id path param.
+@router.get("/summary", response_model=PaymentSummaryResponse)
+async def get_payments_summary(
+    academic_year_id: int | None = Query(None),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentSummaryResponse:
+    """Agrège les statistiques de paiement (total attendu, payé, en attente, annulé)."""
+    return await payment_service.get_payments_summary(db, academic_year_id=academic_year_id)
+
+
 # NOTE: /student/{enrollment_id} MUST be defined BEFORE /{payment_id}
 # to avoid FastAPI matching "student" as a payment_id path param.
 @router.get(
@@ -79,6 +91,28 @@ async def get_payment_receipt(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="recu_{payment_id}.pdf"'},
     )
+
+
+@router.post("/{payment_id}/validate", response_model=PaymentResponse)
+async def validate_payment(
+    payment_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("payments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentResponse:
+    """Valide un paiement (pending → completed)."""
+    return await payment_service.validate_payment(db, payment_id, validated_by=current_user.user_id)
+
+
+@router.post("/{payment_id}/cancel", response_model=PaymentResponse)
+async def cancel_payment(
+    payment_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("payments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentResponse:
+    """Annule un paiement (pending → cancelled)."""
+    return await payment_service.cancel_payment(db, payment_id, cancelled_by=current_user.user_id)
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

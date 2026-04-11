@@ -29,6 +29,7 @@ class PaymentStatus(str, enum.Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     REFUNDED = "refunded"
+    CANCELLED = "cancelled"
 
 
 class EnrollmentFeeStatus(str, enum.Enum):

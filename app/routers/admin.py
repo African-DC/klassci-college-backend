@@ -25,6 +25,7 @@ from app.schemas.admin import (
     LevelResponse,
     LevelUpdate,
     StaffCreate,
+    StaffFullResponse,
     StaffListResponse,
     StaffResponse,
     StaffUpdate,
@@ -38,6 +39,7 @@ from app.schemas.admin import (
     SubjectResponse,
     SubjectUpdate,
     TeacherCreate,
+    TeacherFullResponse,
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
@@ -191,6 +193,16 @@ async def create_teacher(
     return await admin_service.create_teacher(db, data, created_by=current_user.user_id)
 
 
+@router.get("/teachers/{teacher_id}/full", response_model=TeacherFullResponse)
+async def get_teacher_full(
+    teacher_id: int,
+    _: None = require_permission("admin:teachers:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Retourne le profil complet d'un enseignant avec KPIs."""
+    return await admin_service.get_teacher_full(db, teacher_id)
+
+
 @router.get("/teachers/{teacher_id}", response_model=TeacherResponse)
 async def get_teacher(
     teacher_id: int,
@@ -252,6 +264,16 @@ async def create_staff(
 ) -> StaffResponse:
     """Cree un nouveau membre du personnel."""
     return await admin_service.create_staff(db, data, created_by=current_user.user_id)
+
+
+@router.get("/staff/{staff_id}/full", response_model=StaffFullResponse)
+async def get_staff_full(
+    staff_id: int,
+    _: None = require_permission("admin:staff:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Retourne le profil complet d'un membre du personnel."""
+    return await admin_service.get_staff_full(db, staff_id)
 
 
 @router.get("/staff/{staff_id}", response_model=StaffResponse)
