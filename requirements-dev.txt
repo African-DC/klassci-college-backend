@@ -12,5 +12,5 @@ ruff==0.8.4
 
 # Type checking
 mypy==1.13.0
-types-passlib==1.7.7.20240819
+types-passlib==1.7.7.20260211
 sqlalchemy[mypy]==2.0.36
