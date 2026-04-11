@@ -1,9 +1,12 @@
 """Router portail enseignant — endpoints read-only /teacher."""
 
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     TeacherClassesListResponse,
     TeacherDashboardStats,
@@ -39,3 +42,19 @@ async def get_teacher_dashboard_stats(
 ) -> TeacherDashboardStats:
     """Retourne les KPIs du dashboard enseignant."""
     return await teacher_portal_service.get_dashboard_stats(db, current_user.user_id)
+
+
+@router.get("/classes/{class_id}/attendance", response_model=ClassAttendanceStats)
+async def get_class_attendance(
+    class_id: int,
+    academic_year_id: int | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ClassAttendanceStats:
+    """Stats de presence pour une classe assignee a l'enseignant connecte."""
+    return await teacher_portal_service.get_class_attendance(
+        db, current_user.user_id, class_id,
+        academic_year_id=academic_year_id, date_from=date_from, date_to=date_to,
+    )

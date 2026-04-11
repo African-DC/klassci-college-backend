@@ -1,12 +1,15 @@
 """Service portail enseignant — logique métier read-only."""
 
 import logging
+from datetime import date
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.user import TeacherProfile
 from app.repositories import teacher_portal_repository as repo
+from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     ClassAverageItem,
     TeacherClassesListResponse,
@@ -15,6 +18,7 @@ from app.schemas.teacher_portal import (
     TeacherScheduleResponse,
     TeacherScheduleSlot,
 )
+from app.services import attendance_service
 
 logger = logging.getLogger(__name__)
 
@@ -70,4 +74,25 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboar
         total_students=total_students,
         upcoming_evaluations=upcoming_evaluations,
         class_averages=class_averages,
+    )
+
+
+async def get_class_attendance(
+    db: AsyncSession,
+    user_id: int,
+    class_id: int,
+    *,
+    academic_year_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> ClassAttendanceStats:
+    """Stats de presence pour une classe, avec verification d'assignation."""
+    teacher = await _get_teacher_for_user(db, user_id)
+    # Verify the teacher is assigned to this class
+    classes = await repo.get_teacher_classes(db, teacher.id)
+    class_ids = {c["class_id"] for c in classes}
+    if class_id not in class_ids:
+        raise HTTPException(status_code=403, detail="Vous n'etes pas assigne a cette classe")
+    return await attendance_service.get_class_stats(
+        db, class_id, academic_year_id=academic_year_id, date_from=date_from, date_to=date_to,
     )

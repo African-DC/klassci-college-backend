@@ -1,9 +1,12 @@
 """Router portail eleve — endpoints read-only /student."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+from app.schemas.attendance import StudentAttendanceResponse
 from app.schemas.student_portal import (
     StudentBulletinsListResponse,
     StudentFeesResponse,
@@ -11,7 +14,7 @@ from app.schemas.student_portal import (
     StudentProfileResponse,
     StudentTimetableResponse,
 )
-from app.services import student_portal_service
+from app.services import attendance_service, student_portal_service
 
 router = APIRouter(prefix="/student", tags=["student-portal"])
 
@@ -54,6 +57,23 @@ async def get_bulletins(
 ) -> StudentBulletinsListResponse:
     """Bulletins publies de l'eleve."""
     return await student_portal_service.get_bulletins(db, current_user.user_id)
+
+
+@router.get("/attendance", response_model=StudentAttendanceResponse)
+async def get_attendance(
+    status_filter: str | None = Query(None, alias="status"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> StudentAttendanceResponse:
+    """Historique de presence de l'eleve connecte."""
+    student = await student_portal_service._get_student_for_user(db, current_user.user_id)
+    return await attendance_service.get_student_attendance(
+        db, student.id, status=status_filter, date_from=date_from, date_to=date_to, page=page, size=size,
+    )
 
 
 @router.get("/profile", response_model=StudentProfileResponse)
