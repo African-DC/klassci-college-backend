@@ -5,9 +5,13 @@ import logging
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException
+
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
+from app.models.user import User, UserRoleEnum
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -79,15 +83,32 @@ async def get_student(db: AsyncSession, student_id: int) -> StudentResponse:
 async def create_student(
     db: AsyncSession, data: StudentCreate, *, created_by: int
 ) -> StudentResponse:
+    # Check email uniqueness
+    existing = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
+
     async with db.begin_nested():
-        student = await repo.create_student(db, **data.model_dump())
+        # Create user account
+        user = User(
+            email=data.email,
+            hashed_password=hash_password(data.password),
+            role=UserRoleEnum.STUDENT,
+        )
+        db.add(user)
+        await db.flush()
+
+        # Create student profile linked to user
+        profile_data = data.model_dump(exclude={"email", "password"})
+        profile_data["user_id"] = user.id
+        student = await repo.create_student(db, **profile_data)
         await audit_log(
             db,
             entity_type="student",
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=student.id,
-            new_values=data.model_dump(mode="json"),
+            new_values={**data.model_dump(mode="json", exclude={"password"}), "user_id": user.id},
         )
     await db.commit()
     refreshed = await repo.get_student_by_id(db, student.id)
@@ -175,15 +196,32 @@ async def get_teacher(db: AsyncSession, teacher_id: int) -> TeacherResponse:
 async def create_teacher(
     db: AsyncSession, data: TeacherCreate, *, created_by: int
 ) -> TeacherResponse:
+    # Check email uniqueness
+    existing = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
+
     async with db.begin_nested():
-        teacher = await repo.create_teacher(db, **data.model_dump())
+        # Create user account
+        user = User(
+            email=data.email,
+            hashed_password=hash_password(data.password),
+            role=UserRoleEnum.TEACHER,
+        )
+        db.add(user)
+        await db.flush()
+
+        # Create teacher profile linked to user
+        profile_data = data.model_dump(exclude={"email", "password"})
+        profile_data["user_id"] = user.id
+        teacher = await repo.create_teacher(db, **profile_data)
         await audit_log(
             db,
             entity_type="teacher",
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=teacher.id,
-            new_values=data.model_dump(mode="json"),
+            new_values={**data.model_dump(mode="json", exclude={"password"}), "user_id": user.id},
         )
     await db.commit()
     refreshed = await repo.get_teacher_by_id(db, teacher.id)

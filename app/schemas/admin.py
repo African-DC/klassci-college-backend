@@ -13,10 +13,11 @@ from pydantic import BaseModel, ConfigDict, field_validator
 class StudentCreate(BaseModel):
     first_name: str
     last_name: str
+    email: str
+    password: str
     birth_date: date | None = None
     genre: str | None = None
     enrollment_number: str | None = None
-    user_id: int | None = None
 
     @field_validator("genre")
     @classmethod
@@ -71,9 +72,10 @@ class StudentListResponse(BaseModel):
 class TeacherCreate(BaseModel):
     first_name: str
     last_name: str
+    email: str
+    password: str
     speciality: str | None = None
     phone: str | None = None
-    user_id: int
 
 
 class TeacherUpdate(BaseModel):
