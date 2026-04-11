@@ -58,6 +58,47 @@ class StudentResponse(BaseModel):
     updated_at: datetime
 
 
+class StudentFullResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    # Basic student info
+    id: int
+    first_name: str
+    last_name: str
+    birth_date: date | None
+    genre: str | None
+    enrollment_number: str | None
+    photo_url: str | None = None
+    user_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+    # User account info (from User model)
+    user_email: str | None = None
+    user_is_active: bool | None = None
+    user_last_login: datetime | None = None
+    user_created_at: datetime | None = None
+
+    # Current enrollment summary
+    current_class_name: str | None = None
+    current_academic_year: str | None = None
+    current_enrollment_status: str | None = None
+    current_enrollment_id: int | None = None
+
+    # Aggregated KPIs
+    attendance_total: int = 0
+    attendance_present: int = 0
+    attendance_absent: int = 0
+    attendance_late: int = 0
+    attendance_rate: float = 0.0
+
+    # Financial summary
+    fees_expected: float = 0.0
+    fees_paid: float = 0.0
+    fees_remaining: float = 0.0
+    fees_rate: float = 0.0
+
+
 class StudentListResponse(BaseModel):
     items: list[StudentResponse]
     total: int

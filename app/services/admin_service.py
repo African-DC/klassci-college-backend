@@ -2,8 +2,9 @@
 
 import logging
 
-from sqlalchemy import select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException
 
@@ -159,6 +160,103 @@ async def delete_student(
             entity_id=student_id,
         )
     await db.commit()
+
+
+async def get_student_full(db: AsyncSession, student_id: int) -> dict:
+    """Enriched student profile with user, enrollment, attendance, fees data."""
+    from app.models.attendance import AttendanceRecord
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
+
+    # Get student with user
+    stmt = select(Student).where(Student.id == student_id).options(
+        selectinload(Student.user)
+    )
+    student = (await db.execute(stmt)).scalar_one_or_none()
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    result: dict = {
+        "id": student.id,
+        "first_name": student.first_name,
+        "last_name": student.last_name,
+        "birth_date": student.birth_date,
+        "genre": student.genre,
+        "enrollment_number": student.enrollment_number,
+        "photo_url": student.photo_url,
+        "user_id": student.user_id,
+        "created_at": student.created_at,
+        "updated_at": student.updated_at,
+    }
+
+    # User account info
+    if student.user:
+        result["user_email"] = student.user.email
+        result["user_is_active"] = student.user.is_active
+        result["user_last_login"] = student.user.last_login
+        result["user_created_at"] = student.user.created_at
+
+    # Current enrollment (most recent)
+    enroll_stmt = (
+        select(Enrollment)
+        .where(Enrollment.student_id == student_id)
+        .options(
+            selectinload(Enrollment.class_),
+            selectinload(Enrollment.academic_year),
+        )
+        .order_by(Enrollment.id.desc())
+        .limit(1)
+    )
+    enrollment = (await db.execute(enroll_stmt)).scalar_one_or_none()
+    if enrollment:
+        result["current_class_name"] = enrollment.class_.name if enrollment.class_ else None
+        result["current_academic_year"] = enrollment.academic_year.name if enrollment.academic_year else None
+        result["current_enrollment_status"] = enrollment.status
+        result["current_enrollment_id"] = enrollment.id
+
+    # Attendance stats
+    att_stmt = select(
+        func.count().label("total"),
+        func.sum(case((AttendanceRecord.status == "present", 1), else_=0)).label("present"),
+        func.sum(case((AttendanceRecord.status == "absent", 1), else_=0)).label("absent"),
+        func.sum(case((AttendanceRecord.status == "late", 1), else_=0)).label("late"),
+    ).where(AttendanceRecord.student_id == student_id)
+    att_row = (await db.execute(att_stmt)).one_or_none()
+    if att_row and att_row.total:
+        result["attendance_total"] = att_row.total
+        result["attendance_present"] = att_row.present or 0
+        result["attendance_absent"] = att_row.absent or 0
+        result["attendance_late"] = att_row.late or 0
+        result["attendance_rate"] = round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
+
+    # Financial summary
+    fees_stmt = (
+        select(
+            func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
+        )
+        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
+        .where(Enrollment.student_id == student_id)
+    )
+    fees_row = (await db.execute(fees_stmt)).one_or_none()
+    expected = float(fees_row.expected) if fees_row else 0.0
+
+    paid_stmt = (
+        select(
+            func.coalesce(func.sum(Payment.amount), 0).label("paid"),
+        )
+        .join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
+        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
+        .where(Enrollment.student_id == student_id, Payment.status == PaymentStatus.COMPLETED)
+    )
+    paid_row = (await db.execute(paid_stmt)).one_or_none()
+    paid = float(paid_row.paid) if paid_row else 0.0
+
+    result["fees_expected"] = expected
+    result["fees_paid"] = paid
+    result["fees_remaining"] = expected - paid
+    result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
+
+    return result
 
 
 async def update_student_photo(

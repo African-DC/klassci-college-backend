@@ -29,6 +29,7 @@ from app.schemas.admin import (
     StaffResponse,
     StaffUpdate,
     StudentCreate,
+    StudentFullResponse,
     StudentListResponse,
     StudentResponse,
     StudentUpdate,
@@ -75,6 +76,16 @@ async def create_student(
 ) -> StudentResponse:
     """Cree un nouvel eleve."""
     return await admin_service.create_student(db, data, created_by=current_user.user_id)
+
+
+@router.get("/students/{student_id}/full", response_model=StudentFullResponse)
+async def get_student_full(
+    student_id: int,
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Retourne le profil complet d'un eleve avec KPIs."""
+    return await admin_service.get_student_full(db, student_id)
 
 
 @router.get("/students/{student_id}", response_model=StudentResponse)
