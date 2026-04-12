@@ -47,6 +47,7 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.services import admin_service
+from app.services import enrollment_service
 from app.services import matricule_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -178,6 +179,31 @@ async def get_student_fees(
 ) -> StudentEnrollmentFeeListResponse:
     """Retourne les frais d'inscription d'un élève avec détails de paiement."""
     return await admin_service.get_student_enrollment_fees(db, student_id)
+
+
+# ---------------------------------------------------------------------------
+# Enrollment fees — regenerate
+# ---------------------------------------------------------------------------
+
+
+@router.post("/enrollments/{enrollment_id}/regenerate-fees")
+async def regenerate_enrollment_fees(
+    enrollment_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Régénère les frais obligatoires d'une inscription.
+
+    Supprime les frais sans paiements et recrée les frais obligatoires
+    correspondant à la classe actuelle.
+    """
+    async with db.begin_nested():
+        result = await enrollment_service.regenerate_enrollment_fees(
+            db, enrollment_id, regenerated_by=current_user.user_id
+        )
+    await db.commit()
+    return result
 
 
 # ---------------------------------------------------------------------------

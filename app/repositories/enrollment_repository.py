@@ -112,12 +112,15 @@ async def update_enrollment(
     *,
     status: str | None = None,
     notes: str | None = None,
+    class_id: int | None = None,
 ) -> Enrollment:
     """Met à jour les champs modifiables d'une inscription."""
     if status is not None:
         enrollment.status = status
     if notes is not None:
         enrollment.notes = notes
+    if class_id is not None:
+        enrollment.class_id = class_id
     await db.flush()
     return enrollment
 

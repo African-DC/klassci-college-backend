@@ -487,13 +487,15 @@ class UserAccountUpdate(BaseModel):
 class StudentEnrollmentFeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int  # enrollment_fee.id
+    id: int  # enrollment_fee.id ou student_option.id
     enrollment_id: int
     category_name: str
     amount: float  # total dû
     paid: float  # somme des paiements complétés
     remaining: float
     status: str  # pending/partial/paid/waived
+    is_optional: bool = False  # True pour les options facultatives
+    option_name: str | None = None  # nom de l'option si facultatif
 
 
 class StudentEnrollmentFeeListResponse(BaseModel):

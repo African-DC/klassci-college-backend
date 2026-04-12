@@ -10,8 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.academic import AcademicYear, Class, SchoolSettings
-from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant
+from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
+from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption
 from app.models.user import Parent, ParentStudent, Student
 from app.repositories import enrollment_repository as repo
 from app.services.matricule_service import generate_enrollment_number
@@ -172,20 +172,38 @@ async def update_enrollment(
     data: EnrollmentUpdate,
     updated_by: int,
 ) -> EnrollmentResponse:
-    """Met à jour une inscription (patch partiel)."""
+    """Met à jour une inscription (patch partiel). Si class_id change, régénère les frais."""
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
 
-    old_values = {"status": enrollment.status, "notes": enrollment.notes}
+    old_values = {"status": enrollment.status, "notes": enrollment.notes, "class_id": enrollment.class_id}
+    class_changed = data.class_id is not None and data.class_id != enrollment.class_id
 
     async with db.begin_nested():
+        # Si changement de classe, vérifier existence et capacité
+        if class_changed:
+            new_class = await repo.get_class_by_id_for_update(db, data.class_id)
+            if new_class is None:
+                raise BusinessValidationError(f"Class {data.class_id} not found")
+            enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+            if enrolled_count >= new_class.max_students:
+                raise BusinessValidationError(
+                    f"Class {data.class_id} is full ({new_class.max_students} students max)"
+                )
+
         await repo.update_enrollment(
             db,
             enrollment,
             status=data.status,
             notes=data.notes,
+            class_id=data.class_id,
         )
+
+        # Régénérer les frais obligatoires si la classe a changé
+        if class_changed:
+            await regenerate_enrollment_fees(db, enrollment_id, regenerated_by=updated_by)
+
         await audit_log(
             db,
             entity_type="enrollment",
@@ -472,6 +490,150 @@ async def _create_mandatory_enrollment_fees(
             db.add(fee)
 
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Regenerate enrollment fees
+# ---------------------------------------------------------------------------
+
+
+async def regenerate_enrollment_fees(
+    db: AsyncSession,
+    enrollment_id: int,
+    regenerated_by: int,
+) -> dict:
+    """Régénère les frais obligatoires d'une inscription.
+
+    1. Supprime les EnrollmentFee sans paiements (safe to replace)
+    2. Conserve ceux avec paiements (données financières intouchables)
+    3. Re-crée les frais obligatoires manquants (idempotent)
+    """
+    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
+    if enrollment is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+
+    deleted_count = 0
+    kept_count = 0
+
+    for ef in list(enrollment.enrollment_fees):
+        if ef.payments:
+            kept_count += 1
+        else:
+            await db.delete(ef)
+            deleted_count += 1
+
+    await db.flush()
+
+    # Re-créer les frais obligatoires manquants
+    await _create_mandatory_enrollment_fees(db, enrollment_id, enrollment.class_id)
+
+    await audit_log(
+        db,
+        entity_type="enrollment",
+        action=AuditAction.UPDATE,
+        user_id=regenerated_by,
+        entity_id=enrollment_id,
+        new_values={
+            "action": "regenerate_fees",
+            "deleted": deleted_count,
+            "kept_with_payments": kept_count,
+        },
+    )
+
+    return {"deleted": deleted_count, "kept": kept_count}
+
+
+# ---------------------------------------------------------------------------
+# Optional fee subscriptions
+# ---------------------------------------------------------------------------
+
+
+async def subscribe_optional_fee(
+    db: AsyncSession,
+    enrollment_id: int,
+    optional_fee_option_id: int,
+    created_by: int,
+) -> dict:
+    """Souscrit un élève à une option de frais facultatif.
+
+    Crée un StudentOption. Idempotent : si déjà souscrit, retourne l'existant.
+    """
+    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
+    if enrollment is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+
+    # Vérifier que l'option existe et appartient à la même année scolaire
+    stmt = select(OptionalFeeOption).where(OptionalFeeOption.id == optional_fee_option_id)
+    option = (await db.execute(stmt)).scalar_one_or_none()
+    if option is None:
+        raise NotFoundError("OptionalFeeOption", optional_fee_option_id)
+
+    if option.academic_year_id != enrollment.academic_year_id:
+        raise BusinessValidationError(
+            "L'option de frais n'appartient pas à la même année scolaire que l'inscription"
+        )
+
+    # Vérifier si déjà souscrit (idempotent)
+    existing_stmt = select(StudentOption).where(
+        StudentOption.enrollment_id == enrollment_id,
+        StudentOption.optional_fee_option_id == optional_fee_option_id,
+    )
+    existing = (await db.execute(existing_stmt)).scalar_one_or_none()
+    if existing is not None:
+        return {"id": existing.id, "already_subscribed": True}
+
+    student_option = StudentOption(
+        enrollment_id=enrollment_id,
+        optional_fee_option_id=optional_fee_option_id,
+        quantity=1,
+    )
+    db.add(student_option)
+    await db.flush()
+
+    await audit_log(
+        db,
+        entity_type="student_option",
+        action=AuditAction.CREATE,
+        user_id=created_by,
+        entity_id=student_option.id,
+        new_values={
+            "enrollment_id": enrollment_id,
+            "optional_fee_option_id": optional_fee_option_id,
+        },
+    )
+
+    return {"id": student_option.id, "already_subscribed": False}
+
+
+async def unsubscribe_optional_fee(
+    db: AsyncSession,
+    enrollment_id: int,
+    option_id: int,
+    deleted_by: int,
+) -> None:
+    """Désinscrit un élève d'une option de frais facultatif.
+
+    Supprime le StudentOption correspondant.
+    """
+    stmt = select(StudentOption).where(
+        StudentOption.enrollment_id == enrollment_id,
+        StudentOption.optional_fee_option_id == option_id,
+    )
+    student_option = (await db.execute(stmt)).scalar_one_or_none()
+    if student_option is None:
+        raise NotFoundError("StudentOption", option_id)
+
+    option_id_for_audit = student_option.id
+    await db.delete(student_option)
+    await db.flush()
+
+    await audit_log(
+        db,
+        entity_type="student_option",
+        action=AuditAction.DELETE,
+        user_id=deleted_by,
+        entity_id=option_id_for_audit,
+    )
 
 
 # ---------------------------------------------------------------------------

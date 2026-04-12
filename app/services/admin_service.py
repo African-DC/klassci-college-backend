@@ -1100,14 +1100,19 @@ async def get_student_enrollment_fees(
     db: AsyncSession,
     student_id: int,
 ) -> StudentEnrollmentFeeListResponse:
-    """Retourne les frais d'inscription d'un élève avec détails de paiement."""
-    from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, FeeVariant, FeeCategory, Payment, PaymentStatus
+    """Retourne les frais d'inscription d'un élève avec détails de paiement.
+
+    Inclut les frais obligatoires (EnrollmentFee) ET les options facultatives
+    souscrites (StudentOption).
+    """
+    from app.models.enrollment import Enrollment, StudentOption
+    from app.models.fee import EnrollmentFee, FeeVariant, FeeCategory, OptionalFeeOption, Payment, PaymentStatus
 
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
 
+    # 1. Frais obligatoires (EnrollmentFee)
     stmt = (
         select(EnrollmentFee)
         .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
@@ -1143,6 +1148,39 @@ async def get_student_enrollment_fees(
                 paid=paid,
                 remaining=remaining,
                 status=ef.status,
+                is_optional=False,
+            )
+        )
+
+    # 2. Options facultatives souscrites (StudentOption)
+    opt_stmt = (
+        select(StudentOption)
+        .join(Enrollment, StudentOption.enrollment_id == Enrollment.id)
+        .where(Enrollment.student_id == student_id)
+        .options(
+            selectinload(StudentOption.optional_fee_option).selectinload(OptionalFeeOption.category),
+        )
+        .order_by(StudentOption.enrollment_id, StudentOption.id)
+    )
+    opt_rows = (await db.execute(opt_stmt)).scalars().all()
+
+    for so in opt_rows:
+        option = so.optional_fee_option
+        category_name = option.category.name if option and option.category else "Inconnu"
+        option_name = option.name if option else "Inconnu"
+        amount = float(option.amount * so.quantity) if option else 0.0
+
+        items.append(
+            StudentEnrollmentFeeResponse(
+                id=so.id,
+                enrollment_id=so.enrollment_id,
+                category_name=category_name,
+                amount=amount,
+                paid=0.0,  # Optional fees don't use EnrollmentFee/Payment
+                remaining=amount,
+                status="pending",
+                is_optional=True,
+                option_name=option_name,
             )
         )
 

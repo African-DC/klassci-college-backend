@@ -24,6 +24,7 @@ class EnrollmentCreate(BaseModel):
 class EnrollmentUpdate(BaseModel):
     status: str | None = None
     notes: str | None = None
+    class_id: int | None = None
 
     @field_validator("status")
     @classmethod
@@ -33,6 +34,24 @@ class EnrollmentUpdate(BaseModel):
         allowed = {"prospect", "en_validation", "valide", "rejete", "annule"}
         if v not in allowed:
             raise ValueError(f"status must be one of {sorted(allowed)}")
+        return v
+
+    @field_validator("class_id")
+    @classmethod
+    def positive_class_id(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("class_id must be a positive integer")
+        return v
+
+
+class SubscribeOptionRequest(BaseModel):
+    optional_fee_option_id: int
+
+    @field_validator("optional_fee_option_id")
+    @classmethod
+    def positive_option_id(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("optional_fee_option_id must be a positive integer")
         return v
 
 
