@@ -40,7 +40,11 @@ class AuditLog(Base):
     entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     action: Mapped[str] = mapped_column(
-        Enum(AuditAction, name="audit_action"),
+        Enum(
+            AuditAction,
+            name="audit_action",
+            values_callable=lambda e: [member.value for member in e],
+        ),
         nullable=False,
     )
     old_values: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
