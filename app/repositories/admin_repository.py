@@ -1,6 +1,6 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
-from sqlalchemy import delete as sa_delete, func, select
+from sqlalchemy import and_, delete as sa_delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,10 +28,12 @@ async def list_students(
 ) -> tuple[list[Student], int]:
     base = select(Student)
     if search:
-        pattern = f"%{search}%"
-        base = base.where(
-            Student.first_name.ilike(pattern) | Student.last_name.ilike(pattern)
-        )
+        words = search.strip().split()
+        for word in words:
+            pattern = f"%{word}%"
+            base = base.where(
+                or_(Student.first_name.ilike(pattern), Student.last_name.ilike(pattern))
+            )
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(Student.id.desc())
@@ -80,11 +82,12 @@ async def list_teachers(
 ) -> tuple[list[TeacherProfile], int]:
     base = select(TeacherProfile)
     if search:
-        pattern = f"%{search}%"
-        base = base.where(
-            TeacherProfile.first_name.ilike(pattern)
-            | TeacherProfile.last_name.ilike(pattern)
-        )
+        words = search.strip().split()
+        for word in words:
+            pattern = f"%{word}%"
+            base = base.where(
+                or_(TeacherProfile.first_name.ilike(pattern), TeacherProfile.last_name.ilike(pattern))
+            )
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(TeacherProfile.id.desc())
@@ -133,11 +136,12 @@ async def list_staff(
 ) -> tuple[list[StaffProfile], int]:
     base = select(StaffProfile)
     if search:
-        pattern = f"%{search}%"
-        base = base.where(
-            StaffProfile.first_name.ilike(pattern)
-            | StaffProfile.last_name.ilike(pattern)
-        )
+        words = search.strip().split()
+        for word in words:
+            pattern = f"%{word}%"
+            base = base.where(
+                or_(StaffProfile.first_name.ilike(pattern), StaffProfile.last_name.ilike(pattern))
+            )
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(StaffProfile.id.desc())

@@ -1,6 +1,6 @@
 """Repository inscriptions — accès DB pour Enrollment et EnrollmentFee."""
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -54,10 +54,13 @@ async def list_enrollments(
     if academic_year_id is not None:
         base = base.where(Enrollment.academic_year_id == academic_year_id)
     if search:
-        pattern = f"%{search}%"
-        base = base.join(Student, Enrollment.student_id == Student.id).where(
-            Student.first_name.ilike(pattern) | Student.last_name.ilike(pattern)
-        )
+        words = search.strip().split()
+        base = base.join(Student, Enrollment.student_id == Student.id)
+        for word in words:
+            pattern = f"%{word}%"
+            base = base.where(
+                or_(Student.first_name.ilike(pattern), Student.last_name.ilike(pattern))
+            )
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
