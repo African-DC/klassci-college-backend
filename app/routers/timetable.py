@@ -61,6 +61,21 @@ async def generate_timetable(
     return timetable_service.trigger_generate(current_user.tenant_id, data)
 
 
+@router.post(
+    "/auto-generate",
+    response_model=GenerateTimetableResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def auto_generate_timetable(
+    class_id: int = Query(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("timetable:generate"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> GenerateTimetableResponse:
+    """Génération automatique simplifiée — résout matières/profs depuis la DB."""
+    return await timetable_service.auto_generate(db, current_user.tenant_id, class_id)
+
+
 # ---------------------------------------------------------------------------
 # GET /timetable/tasks/{task_id}
 # ---------------------------------------------------------------------------

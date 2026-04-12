@@ -259,6 +259,86 @@ async def delete_slot(
 # ---------------------------------------------------------------------------
 
 
+async def auto_generate(
+    db: AsyncSession,
+    tenant_id: str,
+    class_id: int,
+) -> GenerateTimetableResponse:
+    """Génération automatique simplifiée — résout tout depuis la DB.
+
+    1. Récupère la classe (level_id, series_id, room_id, academic_year_id)
+    2. Récupère les matières du niveau (avec teacher_id)
+    3. Construit les assignments et available_slots
+    4. Lance la tâche Celery
+    """
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.models.academic import Class, Subject
+
+    # 1. Get class
+    cls = (await db.execute(
+        select(Class).where(Class.id == class_id)
+    )).scalar_one_or_none()
+    if cls is None:
+        raise NotFoundError("Class", class_id)
+
+    # 2. Get subjects for this level (with teacher assigned)
+    subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
+    if cls.series_id:
+        # Include subjects for this specific series AND subjects without series
+        from sqlalchemy import or_
+        subjects_stmt = subjects_stmt.where(
+            or_(Subject.series_id == cls.series_id, Subject.series_id.is_(None))
+        )
+    subjects = list((await db.execute(subjects_stmt)).scalars().all())
+
+    if not subjects:
+        raise BusinessValidationError(
+            "Aucune matière assignée à ce niveau. Assignez des matières dans le Kanban d'abord."
+        )
+
+    # Filter subjects that have a teacher assigned
+    subjects_with_teacher = [s for s in subjects if s.teacher_id]
+    if not subjects_with_teacher:
+        raise BusinessValidationError(
+            "Aucune matière n'a d'enseignant assigné. Assignez des enseignants aux matières d'abord."
+        )
+
+    # 3. Build assignments
+    from app.schemas.timetable import AssignmentInput, TimeSlotInput
+    assignments = [
+        AssignmentInput(
+            teacher_id=s.teacher_id,
+            subject_id=s.id,
+            hours_per_week=s.hours_per_week,
+        )
+        for s in subjects_with_teacher
+    ]
+
+    # 4. Default available slots: Mon-Sat, 07:00-17:00, 1h each
+    from app.models.timetable import DayOfWeek
+    days = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY]
+    available_slots = []
+    for day in days:
+        for hour in range(7, 17):
+            available_slots.append(TimeSlotInput(
+                day=day,
+                start_time=f"{hour:02d}:00",
+                end_time=f"{hour + 1:02d}:00",
+            ))
+
+    # 5. Build request and trigger
+    request = GenerateTimetableRequest(
+        class_id=class_id,
+        academic_year_id=cls.academic_year_id,
+        assignments=assignments,
+        available_slots=available_slots,
+        room_id=cls.room_id,
+    )
+    return trigger_generate(tenant_id, request)
+
+
 def trigger_generate(
     tenant_id: str,
     request: GenerateTimetableRequest,
