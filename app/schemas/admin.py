@@ -599,6 +599,7 @@ class RoomCreate(BaseModel):
     name: str
     capacity: int | None = None
     room_type: str = "classroom"
+    class_id: int | None = None
 
     @field_validator("room_type")
     @classmethod
@@ -619,6 +620,7 @@ class RoomUpdate(BaseModel):
     name: str | None = None
     capacity: int | None = None
     room_type: str | None = None
+    class_id: int | None = None
 
     @field_validator("room_type")
     @classmethod
@@ -643,6 +645,7 @@ class RoomResponse(BaseModel):
     capacity: int | None
     room_type: str
     class_name: str | None = None
+    class_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -652,3 +655,8 @@ class RoomListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+class RoomBatchCreateResponse(BaseModel):
+    created: int
+    rooms: list[RoomResponse]

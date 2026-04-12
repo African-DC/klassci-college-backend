@@ -54,6 +54,7 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
+    RoomBatchCreateResponse,
     RoomCreate,
     RoomListResponse,
     RoomResponse,
@@ -891,6 +892,18 @@ async def create_room(
 ) -> RoomResponse:
     """Cree une nouvelle salle."""
     return await admin_service.create_room(db, data, created_by=current_user.user_id)
+
+
+@router.post("/rooms/batch", response_model=RoomBatchCreateResponse)
+async def batch_create_rooms(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:rooms:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoomBatchCreateResponse:
+    """Crée automatiquement une salle pour chaque classe sans salle."""
+    return await admin_service.batch_create_rooms_for_classes(
+        db, created_by=current_user.user_id,
+    )
 
 
 @router.get("/rooms/{room_id}", response_model=RoomResponse)

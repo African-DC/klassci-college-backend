@@ -55,6 +55,7 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
     EnrollmentPatternUpdate,
+    RoomBatchCreateResponse,
     RoomCreate,
     RoomListResponse,
     RoomResponse,
@@ -1536,9 +1537,10 @@ async def list_permissions(db: AsyncSession) -> list[PermissionResponse]:
 
 def _room_to_response(room: object) -> RoomResponse:
     r = RoomResponse.model_validate(room)
-    # Attach the first class name if room has a class assigned
+    # Attach the first class name and id if room has a class assigned
     if hasattr(room, "classes") and room.classes:  # type: ignore[union-attr]
         r.class_name = room.classes[0].name  # type: ignore[union-attr]
+        r.class_id = room.classes[0].id  # type: ignore[union-attr]
     return r
 
 
@@ -1574,6 +1576,13 @@ async def create_room(
     room = await repo.create_room(
         db, name=data.name, capacity=data.capacity, room_type=data.room_type,
     )
+    # Link room to class if class_id provided + sync capacity
+    if data.class_id:
+        cls = await repo.get_class_by_id(db, data.class_id)
+        if cls:
+            await repo.update_class(db, cls, room_id=room.id)
+            if data.capacity is None and cls.max_students:
+                await repo.update_room(db, room, capacity=cls.max_students)
     await audit_log(
         db,
         entity_type="room",
@@ -1583,7 +1592,7 @@ async def create_room(
         new_values=data.model_dump(),
     )
     await db.commit()
-    await db.refresh(room)
+    await db.refresh(room, ["classes"])
     return _room_to_response(room)
 
 
@@ -1594,21 +1603,32 @@ async def update_room(
     if not room:
         raise NotFoundError("Room", room_id)
     updates = data.model_dump(exclude_unset=True)
-    if not updates:
-        return _room_to_response(room)
-    old_values = {k: getattr(room, k) for k in updates}
-    room = await repo.update_room(db, room, **updates)
-    await audit_log(
-        db,
-        entity_type="room",
-        action=AuditAction.UPDATE,
-        user_id=updated_by,
-        entity_id=room_id,
-        old_values=old_values,
-        new_values=updates,
-    )
+    # Handle class_id separately (it's on the Class model, not Room)
+    class_id = updates.pop("class_id", None)
+    if class_id is not None:
+        # Unlink old class if any
+        if room.classes:
+            for old_cls in room.classes:
+                await repo.update_class(db, old_cls, room_id=None)
+        # Link new class
+        if class_id:
+            cls = await repo.get_class_by_id(db, class_id)
+            if cls:
+                await repo.update_class(db, cls, room_id=room.id)
+    if updates:
+        old_values = {k: getattr(room, k) for k in updates}
+        room = await repo.update_room(db, room, **updates)
+        await audit_log(
+            db,
+            entity_type="room",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=room_id,
+            old_values=old_values,
+            new_values=updates,
+        )
     await db.commit()
-    await db.refresh(room)
+    await db.refresh(room, ["classes"])
     return _room_to_response(room)
 
 
@@ -1627,3 +1647,49 @@ async def delete_room(
         entity_id=room_id,
     )
     await db.commit()
+
+
+async def batch_create_rooms_for_classes(
+    db: AsyncSession, *, created_by: int | None = None
+) -> RoomBatchCreateResponse:
+    """Crée une salle pour chaque classe qui n'en a pas encore."""
+    from app.models.academic import Class as ClassModel, Room as RoomModel
+
+    # Get all classes without a room
+    stmt = select(ClassModel).where(ClassModel.room_id.is_(None))
+    classes_without_room = list((await db.execute(stmt)).scalars().all())
+
+    # Get existing room names to avoid duplicates
+    existing_names_stmt = select(RoomModel.name)
+    existing_names = set((await db.execute(existing_names_stmt)).scalars().all())
+
+    for cls in classes_without_room:
+        room_name = f"Salle {cls.name}"
+        if room_name in existing_names:
+            room_name = f"Salle {cls.name} ({cls.id})"
+        existing_names.add(room_name)
+
+        room = await repo.create_room(
+            db,
+            name=room_name,
+            capacity=cls.max_students,
+            room_type="classroom",
+        )
+        await repo.update_class(db, cls, room_id=room.id)
+        await audit_log(
+            db,
+            entity_type="room",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=room.id,
+            new_values={"name": room_name, "class_id": cls.id, "batch": True},
+        )
+
+    await db.commit()
+
+    # Re-fetch rooms for response
+    rooms_final, _ = await repo.list_rooms(db, page=1, size=100)
+    return RoomBatchCreateResponse(
+        created=len(classes_without_room),
+        rooms=[_room_to_response(r) for r in rooms_final],
+    )
