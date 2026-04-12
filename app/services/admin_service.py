@@ -27,6 +27,15 @@ from app.schemas.admin import (
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
+    PermissionResponse,
+    RoleCreate,
+    RoleListResponse,
+    RoleResponse,
+    RoleUpdate,
+    SeriesCreate,
+    SeriesListResponse,
+    SeriesResponse,
+    SeriesUpdate,
     StaffCreate,
     StaffListResponse,
     StaffResponse,
@@ -1239,3 +1248,231 @@ async def update_user_account(
         "email": user.email,
         "is_active": user.is_active,
     }
+
+
+# ---------------------------------------------------------------------------
+# Series
+# ---------------------------------------------------------------------------
+
+
+def _series_to_response(s: object) -> SeriesResponse:
+    level_name = None
+    if hasattr(s, "level") and s.level is not None:
+        level_name = s.level.name
+    return SeriesResponse(
+        id=s.id,
+        level_id=s.level_id,
+        name=s.name,
+        level_name=level_name,
+    )
+
+
+async def list_series(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    level_id: int | None = None,
+) -> SeriesListResponse:
+    items, total = await repo.list_series(db, page=page, size=size, level_id=level_id)
+    return SeriesListResponse(
+        items=[_series_to_response(s) for s in items],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+async def get_series(db: AsyncSession, series_id: int) -> SeriesResponse:
+    series = await repo.get_series_by_id(db, series_id)
+    if series is None:
+        raise NotFoundError("Series", series_id)
+    return _series_to_response(series)
+
+
+async def create_series(
+    db: AsyncSession, data: SeriesCreate, *, created_by: int
+) -> SeriesResponse:
+    async with db.begin_nested():
+        series = await repo.create_series(db, **data.model_dump())
+        await audit_log(
+            db,
+            entity_type="series",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=series.id,
+            new_values=data.model_dump(mode="json"),
+        )
+    await db.commit()
+    refreshed = await repo.get_series_by_id(db, series.id)
+    if refreshed is None:
+        raise NotFoundError("Series", series.id)
+    return _series_to_response(refreshed)
+
+
+async def update_series(
+    db: AsyncSession, series_id: int, data: SeriesUpdate, *, updated_by: int
+) -> SeriesResponse:
+    series = await repo.get_series_by_id(db, series_id)
+    if series is None:
+        raise NotFoundError("Series", series_id)
+    changes = data.model_dump(exclude_none=True, mode="json")
+    if not changes:
+        return _series_to_response(series)
+    async with db.begin_nested():
+        await repo.update_series(db, series, **changes)
+        await audit_log(
+            db,
+            entity_type="series",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=series_id,
+            new_values=changes,
+        )
+    await db.commit()
+    refreshed = await repo.get_series_by_id(db, series_id)
+    if refreshed is None:
+        raise NotFoundError("Series", series_id)
+    return _series_to_response(refreshed)
+
+
+async def delete_series(
+    db: AsyncSession, series_id: int, *, deleted_by: int
+) -> None:
+    series = await repo.get_series_by_id(db, series_id)
+    if series is None:
+        raise NotFoundError("Series", series_id)
+    async with db.begin_nested():
+        await repo.delete_series(db, series)
+        await audit_log(
+            db,
+            entity_type="series",
+            action=AuditAction.DELETE,
+            user_id=deleted_by,
+            entity_id=series_id,
+        )
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Role
+# ---------------------------------------------------------------------------
+
+
+def _role_to_response(r: object) -> RoleResponse:
+    permissions = []
+    if hasattr(r, "permissions"):
+        for rp in r.permissions:
+            if hasattr(rp, "permission") and rp.permission is not None:
+                permissions.append(PermissionResponse.model_validate(rp.permission))
+    return RoleResponse(
+        id=r.id,
+        name=r.name,
+        description=r.description,
+        permissions=permissions,
+    )
+
+
+async def list_roles(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+) -> RoleListResponse:
+    items, total = await repo.list_roles(db, page=page, size=size)
+    return RoleListResponse(
+        items=[_role_to_response(r) for r in items],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+async def get_role(db: AsyncSession, role_id: int) -> RoleResponse:
+    role = await repo.get_role_by_id(db, role_id)
+    if role is None:
+        raise NotFoundError("Role", role_id)
+    return _role_to_response(role)
+
+
+async def create_role(
+    db: AsyncSession, data: RoleCreate, *, created_by: int
+) -> RoleResponse:
+    async with db.begin_nested():
+        role = await repo.create_role(db, name=data.name, description=data.description)
+        if data.permission_ids:
+            await repo.set_role_permissions(db, role.id, data.permission_ids)
+        await audit_log(
+            db,
+            entity_type="role",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=role.id,
+            new_values=data.model_dump(mode="json"),
+        )
+    await db.commit()
+    refreshed = await repo.get_role_by_id(db, role.id)
+    if refreshed is None:
+        raise NotFoundError("Role", role.id)
+    return _role_to_response(refreshed)
+
+
+async def update_role(
+    db: AsyncSession, role_id: int, data: RoleUpdate, *, updated_by: int
+) -> RoleResponse:
+    role = await repo.get_role_by_id(db, role_id)
+    if role is None:
+        raise NotFoundError("Role", role_id)
+
+    field_changes = data.model_dump(exclude={"permission_ids"}, exclude_none=True, mode="json")
+    has_perm_change = data.permission_ids is not None
+
+    if not field_changes and not has_perm_change:
+        return _role_to_response(role)
+
+    async with db.begin_nested():
+        if field_changes:
+            await repo.update_role(db, role, **field_changes)
+        if has_perm_change:
+            await repo.set_role_permissions(db, role_id, data.permission_ids)
+        await audit_log(
+            db,
+            entity_type="role",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=role_id,
+            new_values=data.model_dump(exclude_none=True, mode="json"),
+        )
+    await db.commit()
+    refreshed = await repo.get_role_by_id(db, role_id)
+    if refreshed is None:
+        raise NotFoundError("Role", role_id)
+    return _role_to_response(refreshed)
+
+
+async def delete_role(
+    db: AsyncSession, role_id: int, *, deleted_by: int
+) -> None:
+    role = await repo.get_role_by_id(db, role_id)
+    if role is None:
+        raise NotFoundError("Role", role_id)
+    async with db.begin_nested():
+        await repo.delete_role(db, role)
+        await audit_log(
+            db,
+            entity_type="role",
+            action=AuditAction.DELETE,
+            user_id=deleted_by,
+            entity_id=role_id,
+        )
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Permission
+# ---------------------------------------------------------------------------
+
+
+async def list_permissions(db: AsyncSession) -> list[PermissionResponse]:
+    items = await repo.list_permissions(db)
+    return [PermissionResponse.model_validate(p) for p in items]

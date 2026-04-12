@@ -509,3 +509,76 @@ class SchoolInfoUpdate(BaseModel):
     email: str | None = None
     logo_url: str | None = None
     ministry_code: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Series
+# ---------------------------------------------------------------------------
+
+
+class SeriesCreate(BaseModel):
+    name: str
+    level_id: int
+
+
+class SeriesUpdate(BaseModel):
+    name: str | None = None
+    level_id: int | None = None
+
+
+class SeriesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    level_id: int
+    name: str
+    level_name: str | None = None
+
+
+class SeriesListResponse(BaseModel):
+    items: list[SeriesResponse]
+    total: int
+    page: int
+    size: int
+
+
+# ---------------------------------------------------------------------------
+# Role & Permission
+# ---------------------------------------------------------------------------
+
+
+class PermissionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    slug: str
+    name: str
+    description: str | None = None
+
+
+class RoleCreate(BaseModel):
+    name: str
+    description: str | None = None
+    permission_ids: list[int] = []
+
+
+class RoleUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    permission_ids: list[int] | None = None
+
+
+class RoleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    description: str | None = None
+    permissions: list[PermissionResponse] = []
+
+
+class RoleListResponse(BaseModel):
+    items: list[RoleResponse]
+    total: int
+    page: int
+    size: int

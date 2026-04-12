@@ -1,9 +1,11 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear, Class, Level, Subject
+from app.models.academic import AcademicYear, Class, Level, Series, Subject
+from app.models.permission import Permission, Role, RolePermission
 from app.models.user import StaffProfile, Student, TeacherProfile
 
 
@@ -354,3 +356,122 @@ async def update_level(db: AsyncSession, level: Level, **kwargs: object) -> Leve
 async def delete_level(db: AsyncSession, level: Level) -> None:
     await db.delete(level)
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Series
+# ---------------------------------------------------------------------------
+
+
+async def get_series_by_id(db: AsyncSession, series_id: int) -> Series | None:
+    stmt = select(Series).options(selectinload(Series.level)).where(Series.id == series_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_series(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    level_id: int | None = None,
+) -> tuple[list[Series], int]:
+    base = select(Series)
+    if level_id is not None:
+        base = base.where(Series.level_id == level_id)
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+    stmt = base.options(selectinload(Series.level)).offset((page - 1) * size).limit(size).order_by(Series.id.desc())
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows), total
+
+
+async def create_series(db: AsyncSession, **kwargs: object) -> Series:
+    series = Series(**kwargs)
+    db.add(series)
+    await db.flush()
+    return series
+
+
+async def update_series(db: AsyncSession, series: Series, **kwargs: object) -> Series:
+    for key, value in kwargs.items():
+        if value is not None:
+            setattr(series, key, value)
+    await db.flush()
+    return series
+
+
+async def delete_series(db: AsyncSession, series: Series) -> None:
+    await db.delete(series)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Role
+# ---------------------------------------------------------------------------
+
+
+async def get_role_by_id(db: AsyncSession, role_id: int) -> Role | None:
+    stmt = (
+        select(Role)
+        .options(selectinload(Role.permissions).selectinload(RolePermission.permission))
+        .where(Role.id == role_id)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_roles(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+) -> tuple[list[Role], int]:
+    base = select(Role)
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+    stmt = (
+        base.options(selectinload(Role.permissions).selectinload(RolePermission.permission))
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Role.id.asc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows), total
+
+
+async def create_role(db: AsyncSession, name: str, description: str | None = None) -> Role:
+    role = Role(name=name, description=description)
+    db.add(role)
+    await db.flush()
+    return role
+
+
+async def update_role(db: AsyncSession, role: Role, **kwargs: object) -> Role:
+    for key, value in kwargs.items():
+        if value is not None:
+            setattr(role, key, value)
+    await db.flush()
+    return role
+
+
+async def set_role_permissions(db: AsyncSession, role_id: int, permission_ids: list[int]) -> None:
+    """Replace all permissions for a role."""
+    await db.execute(sa_delete(RolePermission).where(RolePermission.role_id == role_id))
+    for pid in permission_ids:
+        db.add(RolePermission(role_id=role_id, permission_id=pid))
+    await db.flush()
+
+
+async def delete_role(db: AsyncSession, role: Role) -> None:
+    await db.delete(role)
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Permission
+# ---------------------------------------------------------------------------
+
+
+async def list_permissions(db: AsyncSession) -> list[Permission]:
+    stmt = select(Permission).order_by(Permission.slug.asc())
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows)

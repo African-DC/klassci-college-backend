@@ -18,8 +18,17 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    PermissionResponse,
+    RoleCreate,
+    RoleListResponse,
+    RoleResponse,
+    RoleUpdate,
     SchoolInfoUpdate,
     SchoolSettingsResponse,
+    SeriesCreate,
+    SeriesListResponse,
+    SeriesResponse,
+    SeriesUpdate,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
@@ -707,3 +716,142 @@ async def update_enrollment_pattern(
     return await admin_service.update_enrollment_pattern(
         db, data, updated_by=current_user.user_id
     )
+
+
+# ---------------------------------------------------------------------------
+# Series
+# ---------------------------------------------------------------------------
+
+
+@router.get("/series", response_model=SeriesListResponse)
+async def list_series(
+    level_id: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    _: None = require_permission("admin:series:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SeriesListResponse:
+    """Liste paginée des séries avec filtre par niveau."""
+    return await admin_service.list_series(db, page=page, size=size, level_id=level_id)
+
+
+@router.post("/series", response_model=SeriesResponse, status_code=status.HTTP_201_CREATED)
+async def create_series(
+    data: SeriesCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:series:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SeriesResponse:
+    """Crée une nouvelle série."""
+    return await admin_service.create_series(db, data, created_by=current_user.user_id)
+
+
+@router.get("/series/{series_id}", response_model=SeriesResponse)
+async def get_series(
+    series_id: int,
+    _: None = require_permission("admin:series:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SeriesResponse:
+    """Retourne une série par ID."""
+    return await admin_service.get_series(db, series_id)
+
+
+@router.patch("/series/{series_id}", response_model=SeriesResponse)
+async def update_series(
+    series_id: int,
+    data: SeriesUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:series:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SeriesResponse:
+    """Met à jour une série (patch partiel)."""
+    return await admin_service.update_series(
+        db, series_id, data, updated_by=current_user.user_id
+    )
+
+
+@router.delete("/series/{series_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_series(
+    series_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:series:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime une série."""
+    await admin_service.delete_series(db, series_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Roles
+# ---------------------------------------------------------------------------
+
+
+@router.get("/roles", response_model=RoleListResponse)
+async def list_roles(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    _: None = require_permission("admin:roles:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoleListResponse:
+    """Liste paginée des rôles avec leurs permissions."""
+    return await admin_service.list_roles(db, page=page, size=size)
+
+
+@router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+async def create_role(
+    data: RoleCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:roles:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoleResponse:
+    """Crée un nouveau rôle avec des permissions."""
+    return await admin_service.create_role(db, data, created_by=current_user.user_id)
+
+
+@router.get("/roles/{role_id}", response_model=RoleResponse)
+async def get_role(
+    role_id: int,
+    _: None = require_permission("admin:roles:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoleResponse:
+    """Retourne un rôle par ID avec ses permissions."""
+    return await admin_service.get_role(db, role_id)
+
+
+@router.patch("/roles/{role_id}", response_model=RoleResponse)
+async def update_role(
+    role_id: int,
+    data: RoleUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:roles:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoleResponse:
+    """Met à jour un rôle et ses permissions (patch partiel)."""
+    return await admin_service.update_role(
+        db, role_id, data, updated_by=current_user.user_id
+    )
+
+
+@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_role(
+    role_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:roles:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime un rôle."""
+    await admin_service.delete_role(db, role_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Permissions
+# ---------------------------------------------------------------------------
+
+
+@router.get("/permissions", response_model=list[PermissionResponse])
+async def list_permissions(
+    _: None = require_permission("admin:roles:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[PermissionResponse]:
+    """Liste toutes les permissions disponibles (pour l'UI d'attribution des rôles)."""
+    return await admin_service.list_permissions(db)
