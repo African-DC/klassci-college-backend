@@ -30,6 +30,7 @@ async def list_enrollments(
     db: AsyncSession,
     *,
     class_id: int | None = None,
+    student_id: int | None = None,
     status: str | None = None,
     academic_year_id: int | None = None,
     page: int = 1,
@@ -44,6 +45,8 @@ async def list_enrollments(
     )
     if class_id is not None:
         base = base.where(Enrollment.class_id == class_id)
+    if student_id is not None:
+        base = base.where(Enrollment.student_id == student_id)
     if status is not None:
         base = base.where(Enrollment.status == status)
     if academic_year_id is not None:

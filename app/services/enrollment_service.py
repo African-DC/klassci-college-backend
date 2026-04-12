@@ -130,6 +130,7 @@ async def list_enrollments(
     db: AsyncSession,
     *,
     class_id: int | None = None,
+    student_id: int | None = None,
     status: str | None = None,
     academic_year_id: int | None = None,
     page: int = 1,
@@ -143,6 +144,7 @@ async def list_enrollments(
     enrollments, total = await repo.list_enrollments(
         db,
         class_id=class_id,
+        student_id=student_id,
         status=status,
         academic_year_id=academic_year_id,
         page=page,

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 @router.get("", response_model=EnrollmentListResponse)
 async def list_enrollments(
     class_id: int | None = Query(None),
+    student_id: int | None = Query(None),
     status: str | None = Query(None),
     academic_year_id: int | None = Query(None),
     page: int = Query(1, ge=1),
@@ -33,6 +34,7 @@ async def list_enrollments(
     return await enrollment_service.list_enrollments(
         db,
         class_id=class_id,
+        student_id=student_id,
         status=status,
         academic_year_id=academic_year_id,
         page=page,
