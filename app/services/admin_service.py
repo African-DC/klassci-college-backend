@@ -32,6 +32,8 @@ from app.schemas.admin import (
     StaffResponse,
     StaffUpdate,
     StudentCreate,
+    StudentEnrollmentFeeListResponse,
+    StudentEnrollmentFeeResponse,
     StudentListResponse,
     StudentResponse,
     StudentUpdate,
@@ -1087,3 +1089,61 @@ async def update_enrollment_pattern(
         "counter": school.enrollment_number_counter,
         "message": "Pattern updated successfully",
     }
+
+
+# ---------------------------------------------------------------------------
+# Student Enrollment Fees
+# ---------------------------------------------------------------------------
+
+
+async def get_student_enrollment_fees(
+    db: AsyncSession,
+    student_id: int,
+) -> StudentEnrollmentFeeListResponse:
+    """Retourne les frais d'inscription d'un élève avec détails de paiement."""
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee, FeeVariant, FeeCategory, Payment, PaymentStatus
+
+    student = await repo.get_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    stmt = (
+        select(EnrollmentFee)
+        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
+        .where(Enrollment.student_id == student_id)
+        .options(
+            selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
+            selectinload(EnrollmentFee.payments),
+        )
+        .order_by(EnrollmentFee.enrollment_id, EnrollmentFee.id)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    items: list[StudentEnrollmentFeeResponse] = []
+    for ef in rows:
+        category_name = (
+            ef.fee_variant.category.name
+            if ef.fee_variant and ef.fee_variant.category
+            else "Inconnu"
+        )
+        paid = sum(
+            float(p.amount) for p in ef.payments
+            if p.status == PaymentStatus.COMPLETED
+        )
+        amount = float(ef.amount)
+        remaining = max(0.0, amount - paid)
+
+        items.append(
+            StudentEnrollmentFeeResponse(
+                id=ef.id,
+                enrollment_id=ef.enrollment_id,
+                category_name=category_name,
+                amount=amount,
+                paid=paid,
+                remaining=remaining,
+                status=ef.status,
+            )
+        )
+
+    return StudentEnrollmentFeeListResponse(items=items)

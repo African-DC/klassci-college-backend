@@ -154,7 +154,6 @@ class FeeVariantResponse(BaseModel):
     id: int
     fee_category_id: int
     category_name: str
-    class_id: int | None
     level_id: int | None
     series_id: int | None
     academic_year_id: int

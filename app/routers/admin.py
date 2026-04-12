@@ -30,6 +30,7 @@ from app.schemas.admin import (
     StaffResponse,
     StaffUpdate,
     StudentCreate,
+    StudentEnrollmentFeeListResponse,
     StudentFullResponse,
     StudentListResponse,
     StudentResponse,
@@ -163,6 +164,19 @@ async def delete_student_photo(
 ) -> None:
     """Supprime la photo de profil d'un eleve."""
     await admin_service.update_student_photo(db, student_id, None, updated_by=current_user.user_id)
+
+
+@router.get(
+    "/students/{student_id}/fees",
+    response_model=StudentEnrollmentFeeListResponse,
+)
+async def get_student_fees(
+    student_id: int,
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> StudentEnrollmentFeeListResponse:
+    """Retourne les frais d'inscription d'un élève avec détails de paiement."""
+    return await admin_service.get_student_enrollment_fees(db, student_id)
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.academic import AcademicYear, Class, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.fee import FeeCategory, FeeVariant
+from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant
 from app.models.user import Parent, ParentStudent, Student
 from app.repositories import enrollment_repository as repo
 from app.services.matricule_service import generate_enrollment_number
@@ -98,12 +98,16 @@ async def create_enrollment(
             notes=data.notes,
         )
 
+        # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat)
         if data.fee_variant_id is not None:
             await repo.create_enrollment_fee(
                 db,
                 enrollment_id=enrollment.id,
                 fee_variant_id=data.fee_variant_id,
             )
+
+        # Auto-créer les enrollment_fees pour tous les frais obligatoires
+        await _create_mandatory_enrollment_fees(db, enrollment.id, data.class_id)
 
         await audit_log(
             db,
@@ -333,13 +337,16 @@ async def create_enrollment_with_student(
             notes=data.notes,
         )
 
-        # 4. Create enrollment fee if variant provided
+        # 4. Create enrollment fee if variant provided (rétrocompat)
         if data.fee_variant_id is not None:
             await repo.create_enrollment_fee(
                 db,
                 enrollment_id=enrollment.id,
                 fee_variant_id=data.fee_variant_id,
             )
+
+        # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
+        await _create_mandatory_enrollment_fees(db, enrollment.id, data.class_id)
 
         await audit_log(
             db,
@@ -391,6 +398,81 @@ async def re_enroll_student(
 
 
 # ---------------------------------------------------------------------------
+# Mandatory fee variants helper
+# ---------------------------------------------------------------------------
+
+
+async def _get_mandatory_fee_variants(
+    db: AsyncSession,
+    class_id: int,
+) -> list[FeeVariant]:
+    """Retourne les FeeVariants obligatoires applicables à une classe.
+
+    Résout par level_id + series_id + academic_year_id de la classe,
+    filtrés aux catégories is_mandatory=True.
+    """
+    stmt = select(Class).where(Class.id == class_id)
+    result = await db.execute(stmt)
+    class_ = result.scalar_one_or_none()
+    if class_ is None:
+        raise BusinessValidationError(f"Class {class_id} not found")
+
+    if class_.series_id:
+        series_condition = or_(
+            FeeVariant.series_id == class_.series_id,
+            FeeVariant.series_id.is_(None),
+        )
+    else:
+        series_condition = FeeVariant.series_id.is_(None)
+
+    stmt = (
+        select(FeeVariant)
+        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
+        .where(
+            FeeVariant.academic_year_id == class_.academic_year_id,
+            FeeVariant.level_id == class_.level_id,
+            series_condition,
+            FeeCategory.is_mandatory == True,  # noqa: E712
+        )
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows)
+
+
+async def _create_mandatory_enrollment_fees(
+    db: AsyncSession,
+    enrollment_id: int,
+    class_id: int,
+) -> None:
+    """Crée les EnrollmentFee pour tous les frais obligatoires d'une classe.
+
+    Idempotent : ne crée pas de doublons si un enrollment_fee existe déjà
+    pour un fee_variant donné.
+    """
+    variants = await _get_mandatory_fee_variants(db, class_id)
+    if not variants:
+        return
+
+    # Récupérer les fee_variant_ids déjà liés à cette inscription
+    existing_stmt = (
+        select(EnrollmentFee.fee_variant_id)
+        .where(EnrollmentFee.enrollment_id == enrollment_id)
+    )
+    existing_ids = set((await db.execute(existing_stmt)).scalars().all())
+
+    for variant in variants:
+        if variant.id not in existing_ids:
+            fee = EnrollmentFee(
+                enrollment_id=enrollment_id,
+                fee_variant_id=variant.id,
+                amount=variant.amount,
+            )
+            db.add(fee)
+
+    await db.flush()
+
+
+# ---------------------------------------------------------------------------
 # Fee variant resolution by class
 # ---------------------------------------------------------------------------
 
@@ -399,37 +481,35 @@ async def get_applicable_fee_variants(
     db: AsyncSession,
     class_id: int,
 ) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnee.
+    """Retourne les fee variants applicables pour une classe donnée.
 
-    Resout par class_id exact, par level_id, par series_id, ou globaux
-    (class_id/level_id/series_id tous NULL). Filtre par annee courante.
+    Résout par level_id + series_id + academic_year_id de la classe.
+    Si la classe a une series_id, on prend les variants avec cette série
+    OU ceux sans série (globaux pour le niveau). Sinon, uniquement series_id IS NULL.
     """
-    # Get class to find level_id and series_id
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
     class_ = result.scalar_one_or_none()
     if class_ is None:
         raise BusinessValidationError(f"Class {class_id} not found")
 
-    # Build conditions: exact class, or matching level, or matching series, or global
-    conditions = [FeeVariant.class_id == class_id]
-    if class_.level_id:
-        conditions.append(FeeVariant.level_id == class_.level_id)
+    # Variants matching this level + academic year
+    # series_id: exact match OR NULL (applicable à tout le niveau)
     if class_.series_id:
-        conditions.append(FeeVariant.series_id == class_.series_id)
-    # Global variants (no class, level, or series specified)
-    conditions.append(
-        (FeeVariant.class_id.is_(None))
-        & (FeeVariant.level_id.is_(None))
-        & (FeeVariant.series_id.is_(None))
-    )
+        series_condition = or_(
+            FeeVariant.series_id == class_.series_id,
+            FeeVariant.series_id.is_(None),
+        )
+    else:
+        series_condition = FeeVariant.series_id.is_(None)
 
     stmt = (
         select(FeeVariant)
         .options(selectinload(FeeVariant.category))
         .where(
             FeeVariant.academic_year_id == class_.academic_year_id,
-            or_(*conditions),
+            FeeVariant.level_id == class_.level_id,
+            series_condition,
         )
         .order_by(FeeVariant.fee_category_id, FeeVariant.id)
     )
@@ -440,7 +520,6 @@ async def get_applicable_fee_variants(
             id=fv.id,
             fee_category_id=fv.fee_category_id,
             category_name=fv.category.name if fv.category else str(fv.fee_category_id),
-            class_id=fv.class_id,
             level_id=fv.level_id,
             series_id=fv.series_id,
             academic_year_id=fv.academic_year_id,

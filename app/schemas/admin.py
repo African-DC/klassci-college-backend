@@ -460,6 +460,27 @@ class SchoolSettingsResponse(BaseModel):
     updated_at: datetime
 
 
+# ---------------------------------------------------------------------------
+# Student Enrollment Fees (for payment modal)
+# ---------------------------------------------------------------------------
+
+
+class StudentEnrollmentFeeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int  # enrollment_fee.id
+    enrollment_id: int
+    category_name: str
+    amount: float  # total dû
+    paid: float  # somme des paiements complétés
+    remaining: float
+    status: str  # pending/partial/paid/waived
+
+
+class StudentEnrollmentFeeListResponse(BaseModel):
+    items: list[StudentEnrollmentFeeResponse]
+
+
 class SchoolInfoUpdate(BaseModel):
     school_name: str | None = None
     address: str | None = None
