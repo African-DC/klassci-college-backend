@@ -747,6 +747,10 @@ def _subject_to_response(s: object) -> SubjectResponse:
         r.level_name = s.level.name  # type: ignore[union-attr]
     if hasattr(s, "series") and s.series:  # type: ignore[union-attr]
         r.series_name = s.series.name  # type: ignore[union-attr]
+    if hasattr(s, "teacher") and s.teacher:  # type: ignore[union-attr]
+        t = s.teacher  # type: ignore[union-attr]
+        r.teacher_name = f"{t.first_name} {t.last_name}"
+        r.teacher_id = t.id
     return r
 
 
@@ -870,6 +874,7 @@ async def duplicate_subject(
         color=source.color,
         level_id=data.level_id,
         series_id=data.series_id,
+        teacher_id=data.teacher_id,
     )
     await audit_log(
         db,

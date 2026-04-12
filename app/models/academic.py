@@ -23,6 +23,7 @@ from app.models.base import TimestampMixin
 if TYPE_CHECKING:
     from app.models.enrollment import Enrollment
     from app.models.timetable import TimetableSlot
+    from app.models.user import TeacherProfile
 
 
 # ---------------------------------------------------------------------------
@@ -155,9 +156,13 @@ class Subject(Base, TimestampMixin):
     coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     hours_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    teacher_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teacher_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     level: Mapped[Level | None] = relationship(foreign_keys=[level_id])
     series: Mapped[Series | None] = relationship(foreign_keys=[series_id])
+    teacher: Mapped["TeacherProfile | None"] = relationship(foreign_keys=[teacher_id])
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="subject")
 
 
