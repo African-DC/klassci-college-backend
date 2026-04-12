@@ -40,6 +40,7 @@ def _to_slot_response(slot: TimetableSlot) -> TimetableSlotResponse:
         teacher_name=teacher_name,
         subject_id=slot.subject_id,
         subject_name=slot.subject.name if slot.subject else "",
+        subject_color=slot.subject.color if slot.subject else None,
         academic_year_id=slot.academic_year_id,
         day=slot.day,
         start_time=slot.start_time.strftime("%H:%M"),

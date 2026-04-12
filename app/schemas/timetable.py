@@ -37,6 +37,7 @@ class TimetableSlotResponse(BaseModel):
     teacher_name: str
     subject_id: int
     subject_name: str
+    subject_color: str | None = None
     academic_year_id: int
     day: str
     start_time: str
