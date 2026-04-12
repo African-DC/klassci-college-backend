@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
 from app.models.permission import Permission, Role, RolePermission
 from app.models.user import StaffProfile, Student, TeacherProfile
+from app.utils.fuzzy_search import fuzzy_filter_by_name
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +38,20 @@ async def list_students(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(Student.id.desc())
-    rows = (await db.execute(stmt)).scalars().all()
-    return list(rows), total
+    rows = list((await db.execute(stmt)).scalars().all())
+
+    # Fuzzy fallback: if ILIKE found nothing but search was provided
+    if search and total == 0:
+        all_stmt = select(Student).order_by(Student.id.desc())
+        all_rows = list((await db.execute(all_stmt)).scalars().all())
+        fuzzy_results = fuzzy_filter_by_name(
+            all_rows, search,
+            name_getter=lambda s: f"{s.first_name} {s.last_name} {s.enrollment_number or ''}",
+            limit=size,
+        )
+        return fuzzy_results, len(fuzzy_results)
+
+    return rows, total
 
 
 async def create_student(db: AsyncSession, **kwargs: object) -> Student:
@@ -91,8 +104,19 @@ async def list_teachers(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(TeacherProfile.id.desc())
-    rows = (await db.execute(stmt)).scalars().all()
-    return list(rows), total
+    rows = list((await db.execute(stmt)).scalars().all())
+
+    if search and total == 0:
+        all_stmt = select(TeacherProfile).order_by(TeacherProfile.id.desc())
+        all_rows = list((await db.execute(all_stmt)).scalars().all())
+        fuzzy_results = fuzzy_filter_by_name(
+            all_rows, search,
+            name_getter=lambda t: f"{t.first_name} {t.last_name}",
+            limit=size,
+        )
+        return fuzzy_results, len(fuzzy_results)
+
+    return rows, total
 
 
 async def create_teacher(db: AsyncSession, **kwargs: object) -> TeacherProfile:
@@ -145,7 +169,17 @@ async def list_staff(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = base.offset((page - 1) * size).limit(size).order_by(StaffProfile.id.desc())
-    rows = (await db.execute(stmt)).scalars().all()
+    rows = list((await db.execute(stmt)).scalars().all())
+
+    if search and total == 0:
+        all_stmt = select(StaffProfile).order_by(StaffProfile.id.desc())
+        all_rows = list((await db.execute(all_stmt)).scalars().all())
+        fuzzy_results = fuzzy_filter_by_name(
+            all_rows, search,
+            name_getter=lambda s: f"{s.first_name} {s.last_name}",
+            limit=size,
+        )
+        return fuzzy_results, len(fuzzy_results)
     return list(rows), total
 
 
