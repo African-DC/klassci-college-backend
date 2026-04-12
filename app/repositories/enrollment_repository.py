@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
-from app.models.student import Student
+from app.models.user import Student
 
 
 async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
