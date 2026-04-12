@@ -351,6 +351,8 @@ class SubjectDuplicateRequest(BaseModel):
     subject_id: int
     level_id: int
     series_id: int | None = None
+    coefficient: int | None = None
+    hours_per_week: int | None = None
 
 
 class SubjectListResponse(BaseModel):

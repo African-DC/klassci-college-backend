@@ -865,8 +865,8 @@ async def duplicate_subject(
     new_subject = await repo.create_subject(
         db,
         name=source.name,
-        coefficient=source.coefficient,
-        hours_per_week=source.hours_per_week,
+        coefficient=data.coefficient or source.coefficient,
+        hours_per_week=data.hours_per_week or source.hours_per_week,
         color=source.color,
         level_id=data.level_id,
         series_id=data.series_id,
