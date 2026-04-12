@@ -1604,13 +1604,14 @@ async def update_room(
         raise NotFoundError("Room", room_id)
     updates = data.model_dump(exclude_unset=True)
     # Handle class_id separately (it's on the Class model, not Room)
+    has_class_id = "class_id" in updates
     class_id = updates.pop("class_id", None)
-    if class_id is not None:
-        # Unlink old class if any
+    if has_class_id:
+        # Unlink old class(es) first
         if room.classes:
             for old_cls in room.classes:
                 await repo.update_class(db, old_cls, room_id=None)
-        # Link new class
+        # Link new class if provided
         if class_id:
             cls = await repo.get_class_by_id(db, class_id)
             if cls:
