@@ -305,6 +305,7 @@ class SubjectCreate(BaseModel):
     series_id: int | None = None
     coefficient: int = 1
     hours_per_week: int = 2
+    color: str | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -320,6 +321,7 @@ class SubjectUpdate(BaseModel):
     series_id: int | None = None
     coefficient: int | None = None
     hours_per_week: int | None = None
+    color: str | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -338,10 +340,17 @@ class SubjectResponse(BaseModel):
     series_id: int | None
     coefficient: int
     hours_per_week: int
+    color: str | None = None
     level_name: str | None = None
     series_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class SubjectDuplicateRequest(BaseModel):
+    subject_id: int
+    level_id: int
+    series_id: int | None = None
 
 
 class SubjectListResponse(BaseModel):

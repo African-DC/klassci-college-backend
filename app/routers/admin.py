@@ -46,6 +46,7 @@ from app.schemas.admin import (
     StudentResponse,
     StudentUpdate,
     SubjectCreate,
+    SubjectDuplicateRequest,
     SubjectListResponse,
     SubjectResponse,
     SubjectUpdate,
@@ -479,6 +480,17 @@ async def create_subject(
 ) -> SubjectResponse:
     """Cree une nouvelle matiere."""
     return await admin_service.create_subject(db, data, created_by=current_user.user_id)
+
+
+@router.post("/subjects/duplicate", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
+async def duplicate_subject(
+    data: SubjectDuplicateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:subjects:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SubjectResponse:
+    """Duplique une matière dans un autre niveau/série."""
+    return await admin_service.duplicate_subject(db, data, created_by=current_user.user_id)
 
 
 @router.get("/subjects/{subject_id}", response_model=SubjectResponse)

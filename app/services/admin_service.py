@@ -47,6 +47,7 @@ from app.schemas.admin import (
     StudentResponse,
     StudentUpdate,
     SubjectCreate,
+    SubjectDuplicateRequest,
     SubjectListResponse,
     SubjectResponse,
     SubjectUpdate,
@@ -835,6 +836,52 @@ async def delete_subject(
             entity_id=subject_id,
         )
     await db.commit()
+
+
+async def duplicate_subject(
+    db: AsyncSession, data: SubjectDuplicateRequest, *, created_by: int
+) -> SubjectResponse:
+    """Clone une matière dans un autre niveau/série."""
+    source = await repo.get_subject_by_id(db, data.subject_id)
+    if source is None:
+        raise NotFoundError("Subject", data.subject_id)
+
+    # Check for duplicate (same name in same level+series)
+    existing, _ = await repo.list_subjects(db, page=1, size=1, level_id=data.level_id)
+    for s in existing:
+        if s.name == source.name and s.series_id == data.series_id:
+            raise BusinessValidationError(
+                f"La matière '{source.name}' existe déjà dans ce niveau/série"
+            )
+
+    # Fetch all to check properly (the above only checks page 1)
+    all_subjects, _ = await repo.list_subjects(db, page=1, size=100, level_id=data.level_id)
+    for s in all_subjects:
+        if s.name == source.name and s.series_id == data.series_id:
+            raise BusinessValidationError(
+                f"La matière '{source.name}' existe déjà dans ce niveau/série"
+            )
+
+    new_subject = await repo.create_subject(
+        db,
+        name=source.name,
+        coefficient=source.coefficient,
+        hours_per_week=source.hours_per_week,
+        color=source.color,
+        level_id=data.level_id,
+        series_id=data.series_id,
+    )
+    await audit_log(
+        db,
+        entity_type="subject",
+        action=AuditAction.CREATE,
+        user_id=created_by,
+        entity_id=new_subject.id,
+        new_values={"duplicated_from": data.subject_id, "level_id": data.level_id},
+    )
+    await db.commit()
+    await db.refresh(new_subject, ["level", "series"])
+    return _subject_to_response(new_subject)
 
 
 # ---------------------------------------------------------------------------

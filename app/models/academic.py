@@ -154,6 +154,7 @@ class Subject(Base, TimestampMixin):
     )
     coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     hours_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    color: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     level: Mapped[Level | None] = relationship(foreign_keys=[level_id])
     series: Mapped[Series | None] = relationship(foreign_keys=[series_id])
