@@ -589,8 +589,52 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def _class_to_response(c: object) -> ClassResponse:
-    return ClassResponse.model_validate(c)
+def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
+    level_name = None
+    series_name = None
+    academic_year_name = None
+    if hasattr(c, "level") and c.level is not None:
+        level_name = c.level.name
+    if hasattr(c, "series") and c.series is not None:
+        series_name = c.series.name
+    if hasattr(c, "academic_year") and c.academic_year is not None:
+        academic_year_name = c.academic_year.name
+    return ClassResponse(
+        id=c.id,
+        name=c.name,
+        level_id=c.level_id,
+        series_id=c.series_id,
+        academic_year_id=c.academic_year_id,
+        room_id=c.room_id,
+        max_students=c.max_students,
+        level_name=level_name,
+        series_name=series_name,
+        academic_year_name=academic_year_name,
+        enrolled_count=enrolled_count,
+        created_at=c.created_at,
+        updated_at=c.updated_at,
+    )
+
+
+async def _get_enrolled_counts(
+    db: AsyncSession, class_ids: list[int]
+) -> dict[int, int]:
+    """Retourne le nombre d'inscriptions actives par classe."""
+    if not class_ids:
+        return {}
+    from app.models.enrollment import Enrollment
+
+    active_statuses = ("prospect", "en_validation", "valide")
+    stmt = (
+        select(Enrollment.class_id, func.count(Enrollment.id))
+        .where(
+            Enrollment.class_id.in_(class_ids),
+            Enrollment.status.in_(active_statuses),
+        )
+        .group_by(Enrollment.class_id)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {row[0]: row[1] for row in rows}
 
 
 async def list_classes(
@@ -604,8 +648,9 @@ async def list_classes(
     classes, total = await repo.list_classes(
         db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id
     )
+    counts = await _get_enrolled_counts(db, [c.id for c in classes])
     return ClassListResponse(
-        items=[_class_to_response(c) for c in classes],
+        items=[_class_to_response(c, enrolled_count=counts.get(c.id, 0)) for c in classes],
         total=total,
         page=page,
         size=size,
@@ -616,7 +661,8 @@ async def get_class(db: AsyncSession, class_id: int) -> ClassResponse:
     cls = await repo.get_class_by_id(db, class_id)
     if cls is None:
         raise NotFoundError("Class", class_id)
-    return _class_to_response(cls)
+    counts = await _get_enrolled_counts(db, [cls.id])
+    return _class_to_response(cls, enrolled_count=counts.get(cls.id, 0))
 
 
 async def create_class(

@@ -279,6 +279,10 @@ class ClassResponse(BaseModel):
     academic_year_id: int
     room_id: int | None
     max_students: int
+    level_name: str | None = None
+    series_name: str | None = None
+    academic_year_name: str | None = None
+    enrolled_count: int = 0
     created_at: datetime
     updated_at: datetime
 

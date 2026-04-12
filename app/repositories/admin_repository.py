@@ -173,7 +173,15 @@ async def delete_staff(db: AsyncSession, staff: StaffProfile) -> None:
 
 
 async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
-    stmt = select(Class).where(Class.id == class_id)
+    stmt = (
+        select(Class)
+        .options(
+            selectinload(Class.level),
+            selectinload(Class.series),
+            selectinload(Class.academic_year),
+        )
+        .where(Class.id == class_id)
+    )
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
@@ -192,7 +200,16 @@ async def list_classes(
         base = base.where(Class.academic_year_id == academic_year_id)
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
-    stmt = base.offset((page - 1) * size).limit(size).order_by(Class.id.desc())
+    stmt = (
+        base.options(
+            selectinload(Class.level),
+            selectinload(Class.series),
+            selectinload(Class.academic_year),
+        )
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Class.id.desc())
+    )
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total
 
