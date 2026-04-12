@@ -292,13 +292,25 @@ async def list_subjects(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
+    search: str | None = None,
 ) -> tuple[list[Subject], int]:
     base = select(Subject)
     if level_id is not None:
         base = base.where(Subject.level_id == level_id)
+    if search:
+        pattern = f"%{search}%"
+        base = base.where(Subject.name.ilike(pattern))
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
-    stmt = base.offset((page - 1) * size).limit(size).order_by(Subject.id.desc())
+    stmt = (
+        base.options(
+            selectinload(Subject.level),
+            selectinload(Subject.series),
+        )
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Subject.name.asc())
+    )
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total
 

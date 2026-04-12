@@ -155,6 +155,8 @@ class Subject(Base, TimestampMixin):
     coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     hours_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
 
+    level: Mapped[Level | None] = relationship(foreign_keys=[level_id])
+    series: Mapped[Series | None] = relationship(foreign_keys=[series_id])
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="subject")
 
 

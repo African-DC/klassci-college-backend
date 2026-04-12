@@ -460,13 +460,14 @@ async def delete_class(
 @router.get("/subjects", response_model=SubjectListResponse)
 async def list_subjects(
     level_id: int | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("admin:subjects:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SubjectListResponse:
     """Liste paginee des matieres."""
-    return await admin_service.list_subjects(db, page=page, size=size, level_id=level_id)
+    return await admin_service.list_subjects(db, page=page, size=size, level_id=level_id, search=search)
 
 
 @router.post("/subjects", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)

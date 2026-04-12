@@ -338,6 +338,8 @@ class SubjectResponse(BaseModel):
     series_id: int | None
     coefficient: int
     hours_per_week: int
+    level_name: str | None = None
+    series_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

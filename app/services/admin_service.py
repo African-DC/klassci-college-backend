@@ -741,7 +741,12 @@ async def delete_class(
 
 
 def _subject_to_response(s: object) -> SubjectResponse:
-    return SubjectResponse.model_validate(s)
+    r = SubjectResponse.model_validate(s)
+    if hasattr(s, "level") and s.level:  # type: ignore[union-attr]
+        r.level_name = s.level.name  # type: ignore[union-attr]
+    if hasattr(s, "series") and s.series:  # type: ignore[union-attr]
+        r.series_name = s.series.name  # type: ignore[union-attr]
+    return r
 
 
 async def list_subjects(
@@ -750,8 +755,9 @@ async def list_subjects(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
+    search: str | None = None,
 ) -> SubjectListResponse:
-    subjects, total = await repo.list_subjects(db, page=page, size=size, level_id=level_id)
+    subjects, total = await repo.list_subjects(db, page=page, size=size, level_id=level_id, search=search)
     return SubjectListResponse(
         items=[_subject_to_response(s) for s in subjects],
         total=total,
