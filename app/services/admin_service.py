@@ -880,8 +880,9 @@ async def duplicate_subject(
         new_values={"duplicated_from": data.subject_id, "level_id": data.level_id},
     )
     await db.commit()
-    await db.refresh(new_subject, ["level", "series"])
-    return _subject_to_response(new_subject)
+    # Re-fetch with relationships loaded
+    loaded = await repo.get_subject_by_id(db, new_subject.id)
+    return _subject_to_response(loaded)
 
 
 # ---------------------------------------------------------------------------

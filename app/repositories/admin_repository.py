@@ -282,7 +282,11 @@ async def delete_class(db: AsyncSession, cls: Class) -> None:
 
 
 async def get_subject_by_id(db: AsyncSession, subject_id: int) -> Subject | None:
-    stmt = select(Subject).where(Subject.id == subject_id)
+    stmt = (
+        select(Subject)
+        .options(selectinload(Subject.level), selectinload(Subject.series))
+        .where(Subject.id == subject_id)
+    )
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
