@@ -32,6 +32,7 @@ from app.schemas.admin import (
     StudentCreate,
     StudentEnrollmentFeeListResponse,
     StudentFullResponse,
+    UserAccountUpdate,
     StudentListResponse,
     StudentResponse,
     StudentUpdate,
@@ -177,6 +178,25 @@ async def get_student_fees(
 ) -> StudentEnrollmentFeeListResponse:
     """Retourne les frais d'inscription d'un élève avec détails de paiement."""
     return await admin_service.get_student_enrollment_fees(db, student_id)
+
+
+# ---------------------------------------------------------------------------
+# User account management
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/users/{user_id}")
+async def update_user_account(
+    user_id: int,
+    data: UserAccountUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Met à jour l'email et/ou le mot de passe d'un compte utilisateur."""
+    return await admin_service.update_user_account(
+        db, user_id, email=data.email, password=data.password, updated_by=current_user.user_id
+    )
 
 
 # ---------------------------------------------------------------------------

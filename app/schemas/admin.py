@@ -465,6 +465,25 @@ class SchoolSettingsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class UserAccountUpdate(BaseModel):
+    email: str | None = None
+    password: str | None = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        if v is not None and "@" not in v:
+            raise ValueError("Email invalide")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
+        return v
+
+
 class StudentEnrollmentFeeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

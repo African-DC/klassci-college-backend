@@ -1147,3 +1147,57 @@ async def get_student_enrollment_fees(
         )
 
     return StudentEnrollmentFeeListResponse(items=items)
+
+
+# ---------------------------------------------------------------------------
+# User account update
+# ---------------------------------------------------------------------------
+
+
+async def update_user_account(
+    db: AsyncSession,
+    user_id: int,
+    *,
+    email: str | None = None,
+    password: str | None = None,
+    updated_by: int,
+) -> dict:
+    """Met à jour l'email et/ou le mot de passe d'un compte utilisateur."""
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise NotFoundError("User", user_id)
+
+    old_values = {"email": user.email}
+
+    if email is not None:
+        # Vérifier unicité
+        dup_stmt = select(User.id).where(User.email == email, User.id != user_id)
+        dup = (await db.execute(dup_stmt)).scalar_one_or_none()
+        if dup is not None:
+            raise BusinessValidationError(f"L'email {email} est déjà utilisé par un autre compte")
+        user.email = email
+
+    if password is not None:
+        user.hashed_password = hash_password(password)
+
+    user.is_active = True
+
+    await audit_log(
+        db,
+        entity_type="user",
+        action=AuditAction.UPDATE,
+        user_id=updated_by,
+        entity_id=user_id,
+        old_values=old_values,
+        new_values={"email": email} if email else {},
+    )
+
+    await db.commit()
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "is_active": user.is_active,
+    }
