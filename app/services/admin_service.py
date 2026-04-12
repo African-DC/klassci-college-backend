@@ -55,6 +55,10 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
     EnrollmentPatternUpdate,
+    RoomCreate,
+    RoomListResponse,
+    RoomResponse,
+    RoomUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -644,9 +648,10 @@ async def list_classes(
     size: int = 20,
     level_id: int | None = None,
     academic_year_id: int | None = None,
+    search: str | None = None,
 ) -> ClassListResponse:
     classes, total = await repo.list_classes(
-        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id
+        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id, search=search
     )
     counts = await _get_enrolled_counts(db, [c.id for c in classes])
     return ClassListResponse(
@@ -1522,3 +1527,103 @@ async def delete_role(
 async def list_permissions(db: AsyncSession) -> list[PermissionResponse]:
     items = await repo.list_permissions(db)
     return [PermissionResponse.model_validate(p) for p in items]
+
+
+# ---------------------------------------------------------------------------
+# Room
+# ---------------------------------------------------------------------------
+
+
+def _room_to_response(room: object) -> RoomResponse:
+    r = RoomResponse.model_validate(room)
+    # Attach the first class name if room has a class assigned
+    if hasattr(room, "classes") and room.classes:  # type: ignore[union-attr]
+        r.class_name = room.classes[0].name  # type: ignore[union-attr]
+    return r
+
+
+async def list_rooms(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    room_type: str | None = None,
+    search: str | None = None,
+) -> RoomListResponse:
+    rooms, total = await repo.list_rooms(
+        db, page=page, size=size, room_type=room_type, search=search,
+    )
+    return RoomListResponse(
+        items=[_room_to_response(r) for r in rooms],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+async def get_room(db: AsyncSession, room_id: int) -> RoomResponse:
+    room = await repo.get_room_by_id(db, room_id)
+    if not room:
+        raise NotFoundError("Room", room_id)
+    return _room_to_response(room)
+
+
+async def create_room(
+    db: AsyncSession, data: RoomCreate, *, created_by: int | None = None
+) -> RoomResponse:
+    room = await repo.create_room(
+        db, name=data.name, capacity=data.capacity, room_type=data.room_type,
+    )
+    await audit_log(
+        db,
+        entity_type="room",
+        action=AuditAction.CREATE,
+        user_id=created_by,
+        entity_id=room.id,
+        new_values=data.model_dump(),
+    )
+    await db.commit()
+    await db.refresh(room)
+    return _room_to_response(room)
+
+
+async def update_room(
+    db: AsyncSession, room_id: int, data: RoomUpdate, *, updated_by: int | None = None
+) -> RoomResponse:
+    room = await repo.get_room_by_id(db, room_id)
+    if not room:
+        raise NotFoundError("Room", room_id)
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        return _room_to_response(room)
+    old_values = {k: getattr(room, k) for k in updates}
+    room = await repo.update_room(db, room, **updates)
+    await audit_log(
+        db,
+        entity_type="room",
+        action=AuditAction.UPDATE,
+        user_id=updated_by,
+        entity_id=room_id,
+        old_values=old_values,
+        new_values=updates,
+    )
+    await db.commit()
+    await db.refresh(room)
+    return _room_to_response(room)
+
+
+async def delete_room(
+    db: AsyncSession, room_id: int, *, deleted_by: int | None = None
+) -> None:
+    room = await repo.get_room_by_id(db, room_id)
+    if not room:
+        raise NotFoundError("Room", room_id)
+    await repo.delete_room(db, room)
+    await audit_log(
+        db,
+        entity_type="room",
+        action=AuditAction.DELETE,
+        user_id=deleted_by,
+        entity_id=room_id,
+    )
+    await db.commit()

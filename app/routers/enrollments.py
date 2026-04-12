@@ -26,6 +26,7 @@ async def list_enrollments(
     student_id: int | None = Query(None),
     status: str | None = Query(None),
     academic_year_id: int | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("enrollments:read"),
@@ -38,6 +39,7 @@ async def list_enrollments(
         student_id=student_id,
         status=status,
         academic_year_id=academic_year_id,
+        search=search,
         page=page,
         size=size,
     )

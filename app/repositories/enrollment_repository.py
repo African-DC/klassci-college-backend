@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
+from app.models.student import Student
 
 
 async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
@@ -33,6 +34,7 @@ async def list_enrollments(
     student_id: int | None = None,
     status: str | None = None,
     academic_year_id: int | None = None,
+    search: str | None = None,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[Enrollment], int]:
@@ -51,6 +53,11 @@ async def list_enrollments(
         base = base.where(Enrollment.status == status)
     if academic_year_id is not None:
         base = base.where(Enrollment.academic_year_id == academic_year_id)
+    if search:
+        pattern = f"%{search}%"
+        base = base.join(Student, Enrollment.student_id == Student.id).where(
+            Student.first_name.ilike(pattern) | Student.last_name.ilike(pattern)
+        )
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0

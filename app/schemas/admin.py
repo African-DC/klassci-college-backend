@@ -586,3 +586,69 @@ class RoleListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+# ---------------------------------------------------------------------------
+# Room
+# ---------------------------------------------------------------------------
+
+VALID_ROOM_TYPES = {"classroom", "laboratory", "computer_room", "library", "other"}
+
+
+class RoomCreate(BaseModel):
+    name: str
+    capacity: int | None = None
+    room_type: str = "classroom"
+
+    @field_validator("room_type")
+    @classmethod
+    def valid_room_type(cls, v: str) -> str:
+        if v not in VALID_ROOM_TYPES:
+            raise ValueError(f"room_type must be one of {VALID_ROOM_TYPES}")
+        return v
+
+    @field_validator("capacity")
+    @classmethod
+    def positive_capacity(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("capacity must be positive")
+        return v
+
+
+class RoomUpdate(BaseModel):
+    name: str | None = None
+    capacity: int | None = None
+    room_type: str | None = None
+
+    @field_validator("room_type")
+    @classmethod
+    def valid_room_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_ROOM_TYPES:
+            raise ValueError(f"room_type must be one of {VALID_ROOM_TYPES}")
+        return v
+
+    @field_validator("capacity")
+    @classmethod
+    def positive_capacity(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError("capacity must be positive")
+        return v
+
+
+class RoomResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    capacity: int | None
+    room_type: str
+    class_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoomListResponse(BaseModel):
+    items: list[RoomResponse]
+    total: int
+    page: int
+    size: int

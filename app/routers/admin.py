@@ -54,6 +54,10 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
+    RoomCreate,
+    RoomListResponse,
+    RoomResponse,
+    RoomUpdate,
 )
 from app.services import admin_service
 from app.services import enrollment_service
@@ -389,6 +393,7 @@ async def delete_staff(
 async def list_classes(
     level_id: int | None = Query(None),
     academic_year_id: int | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("admin:classes:read"),
@@ -396,7 +401,7 @@ async def list_classes(
 ) -> ClassListResponse:
     """Liste paginee des classes avec filtres."""
     return await admin_service.list_classes(
-        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id
+        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id, search=search
     )
 
 
@@ -855,3 +860,69 @@ async def list_permissions(
 ) -> list[PermissionResponse]:
     """Liste toutes les permissions disponibles (pour l'UI d'attribution des rôles)."""
     return await admin_service.list_permissions(db)
+
+
+# ---------------------------------------------------------------------------
+# Rooms
+# ---------------------------------------------------------------------------
+
+
+@router.get("/rooms", response_model=RoomListResponse)
+async def list_rooms(
+    room_type: str | None = Query(None),
+    search: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    _: None = require_permission("admin:rooms:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoomListResponse:
+    """Liste paginee des salles avec filtres."""
+    return await admin_service.list_rooms(
+        db, page=page, size=size, room_type=room_type, search=search,
+    )
+
+
+@router.post("/rooms", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
+async def create_room(
+    data: RoomCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:rooms:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoomResponse:
+    """Cree une nouvelle salle."""
+    return await admin_service.create_room(db, data, created_by=current_user.user_id)
+
+
+@router.get("/rooms/{room_id}", response_model=RoomResponse)
+async def get_room(
+    room_id: int,
+    _: None = require_permission("admin:rooms:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoomResponse:
+    """Retourne une salle par ID."""
+    return await admin_service.get_room(db, room_id)
+
+
+@router.patch("/rooms/{room_id}", response_model=RoomResponse)
+async def update_room(
+    room_id: int,
+    data: RoomUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:rooms:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> RoomResponse:
+    """Met a jour une salle."""
+    return await admin_service.update_room(
+        db, room_id, data, updated_by=current_user.user_id,
+    )
+
+
+@router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_room(
+    room_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:rooms:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime une salle."""
+    await admin_service.delete_room(db, room_id, deleted_by=current_user.user_id)

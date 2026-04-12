@@ -4,7 +4,7 @@ from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear, Class, Level, Series, Subject
+from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
 from app.models.permission import Permission, Role, RolePermission
 from app.models.user import StaffProfile, Student, TeacherProfile
 
@@ -192,12 +192,16 @@ async def list_classes(
     size: int = 20,
     level_id: int | None = None,
     academic_year_id: int | None = None,
+    search: str | None = None,
 ) -> tuple[list[Class], int]:
     base = select(Class)
     if level_id is not None:
         base = base.where(Class.level_id == level_id)
     if academic_year_id is not None:
         base = base.where(Class.academic_year_id == academic_year_id)
+    if search:
+        pattern = f"%{search}%"
+        base = base.where(Class.name.ilike(pattern))
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = (
@@ -492,3 +496,63 @@ async def list_permissions(db: AsyncSession) -> list[Permission]:
     stmt = select(Permission).order_by(Permission.slug.asc())
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows)
+
+
+# ---------------------------------------------------------------------------
+# Room
+# ---------------------------------------------------------------------------
+
+
+async def get_room_by_id(db: AsyncSession, room_id: int) -> Room | None:
+    stmt = (
+        select(Room)
+        .options(selectinload(Room.classes))
+        .where(Room.id == room_id)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_rooms(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    room_type: str | None = None,
+    search: str | None = None,
+) -> tuple[list[Room], int]:
+    base = select(Room)
+    if room_type is not None:
+        base = base.where(Room.room_type == room_type)
+    if search:
+        pattern = f"%{search}%"
+        base = base.where(Room.name.ilike(pattern))
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+    stmt = (
+        base.options(selectinload(Room.classes))
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Room.name.asc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows), total
+
+
+async def create_room(db: AsyncSession, **kwargs: object) -> Room:
+    room = Room(**kwargs)
+    db.add(room)
+    await db.flush()
+    return room
+
+
+async def update_room(db: AsyncSession, room: Room, **kwargs: object) -> Room:
+    for key, value in kwargs.items():
+        if value is not None:
+            setattr(room, key, value)
+    await db.flush()
+    return room
+
+
+async def delete_room(db: AsyncSession, room: Room) -> None:
+    await db.delete(room)
+    await db.flush()

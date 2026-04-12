@@ -133,6 +133,7 @@ async def list_enrollments(
     student_id: int | None = None,
     status: str | None = None,
     academic_year_id: int | None = None,
+    search: str | None = None,
     page: int = 1,
     size: int = 20,
 ) -> EnrollmentListResponse:
@@ -147,6 +148,7 @@ async def list_enrollments(
         student_id=student_id,
         status=status,
         academic_year_id=academic_year_id,
+        search=search,
         page=page,
         size=size,
     )

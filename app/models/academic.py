@@ -83,7 +83,7 @@ class Series(Base):
 # ---------------------------------------------------------------------------
 
 
-class Room(Base):
+class Room(Base, TimestampMixin):
     """Salle de classe ou laboratoire."""
 
     __tablename__ = "rooms"
@@ -91,6 +91,9 @@ class Room(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    room_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="classroom"
+    )
 
     classes: Mapped[list[Class]] = relationship(back_populates="room")
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="room")
