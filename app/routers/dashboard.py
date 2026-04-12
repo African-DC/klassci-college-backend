@@ -205,63 +205,52 @@ async def get_recent_activity(
 ) -> ActivityResponse:
     """Retourne les 10 dernières entrées du journal d'audit pour le widget activité."""
 
-    # Sous-requêtes pour résoudre le nom de l'utilisateur depuis les profils
-    staff_name = (
-        select(func.concat(StaffProfile.first_name, " ", StaffProfile.last_name))
-        .where(StaffProfile.user_id == AuditLog.user_id)
-        .correlate(AuditLog)
-        .scalar_subquery()
-    )
-    teacher_name = (
-        select(func.concat(TeacherProfile.first_name, " ", TeacherProfile.last_name))
-        .where(TeacherProfile.user_id == AuditLog.user_id)
-        .correlate(AuditLog)
-        .scalar_subquery()
-    )
-    student_name = (
-        select(func.concat(Student.first_name, " ", Student.last_name))
-        .where(Student.user_id == AuditLog.user_id)
-        .correlate(AuditLog)
-        .scalar_subquery()
-    )
-    user_email = (
-        select(User.email)
-        .where(User.id == AuditLog.user_id)
-        .correlate(AuditLog)
-        .scalar_subquery()
-    )
-
-    resolved_name = func.coalesce(staff_name, teacher_name, student_name, user_email)
-
+    # Simple query — résolution du nom en Python pour éviter les sous-requêtes corrélées
     stmt = (
-        select(
-            AuditLog.id,
-            AuditLog.entity_type,
-            AuditLog.action,
-            AuditLog.entity_id,
-            AuditLog.user_id,
-            resolved_name.label("user_name"),
-            AuditLog.created_at,
-        )
+        select(AuditLog)
         .order_by(AuditLog.created_at.desc())
         .limit(10)
     )
-
     result = await db.execute(stmt)
-    rows = result.all()
+    logs = result.scalars().all()
+
+    # Résoudre les noms utilisateurs en batch
+    user_ids = {log.user_id for log in logs if log.user_id}
+    user_names: dict[int, str] = {}
+    if user_ids:
+        # Chercher dans les profils
+        for Model in (StaffProfile, TeacherProfile, Student):
+            found = (await db.execute(
+                select(Model.user_id, Model.first_name, Model.last_name)
+                .where(Model.user_id.in_(user_ids))
+            )).all()
+            for row in found:
+                if row.user_id not in user_names:
+                    user_names[row.user_id] = f"{row.first_name} {row.last_name}"
+        # Fallback email
+        missing = user_ids - set(user_names.keys())
+        if missing:
+            found = (await db.execute(
+                select(User.id, User.email).where(User.id.in_(missing))
+            )).all()
+            for row in found:
+                user_names[row.id] = row.email or f"Utilisateur #{row.id}"
 
     items = [
         ActivityItem(
-            id=row.id,
-            entity_type=row.entity_type,
-            action=row.action,
-            entity_id=row.entity_id,
-            user_id=row.user_id,
-            user_name=row.user_name,
-            description=_build_description(row.entity_type, row.action),
-            created_at=row.created_at,
+            id=log.id,
+            entity_type=log.entity_type,
+            action=log.action if isinstance(log.action, str) else log.action.value,
+            entity_id=log.entity_id,
+            user_id=log.user_id,
+            user_name=user_names.get(log.user_id) if log.user_id else None,
+            description=_build_description(
+                log.entity_type,
+                log.action if isinstance(log.action, str) else log.action.value,
+            ),
+            created_at=log.created_at,
         )
-        for row in rows
+        for log in logs
     ]
 
     return ActivityResponse(items=items)
