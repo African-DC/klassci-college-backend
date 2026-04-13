@@ -3,7 +3,7 @@
 from datetime import time
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -304,28 +304,115 @@ async def get_unavailable_slot_indices(
     teacher_id: int,
     available_slots: list[dict[str, Any]],
 ) -> set[int]:
-    """Retourne les indices des créneaux où l'enseignant est indisponible.
+    """Retourne les indices des creneaux ou l'enseignant est indisponible.
 
-    Un créneau est considéré indisponible si une TeacherAvailability
-    avec available=False le couvre (même jour + chevauchement horaire).
+    Un creneau est considere indisponible si AUCUNE TeacherAvailability
+    avec available=True ne le couvre. Si le prof n'a declare aucune dispo,
+    on suppose qu'il est disponible partout (pas de blocage).
     """
+    # Check if teacher has ANY availability declarations
+    count_stmt = select(func.count()).select_from(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+    )
+    total_declarations = (await db.execute(count_stmt)).scalar() or 0
+
+    if total_declarations == 0:
+        # No declarations = teacher available everywhere
+        return set()
+
+    # Load available entries (available=True means teacher CAN work)
     stmt = select(TeacherAvailability).where(
         TeacherAvailability.teacher_id == teacher_id,
-        TeacherAvailability.available.is_(False),
+        TeacherAvailability.available.is_(True),
     )
-    unavailabilities = list((await db.execute(stmt)).scalars().all())
+    availabilities = list((await db.execute(stmt)).scalars().all())
 
+    # Slots NOT covered by any available entry are blocked
     blocked: set[int] = set()
     for idx, slot in enumerate(available_slots):
         slot_day = slot["day"]
         slot_start = slot["start_time"]
         slot_end = slot["end_time"]
-        for unavail in unavailabilities:
+        is_available = False
+        for avail in availabilities:
             if (
-                unavail.day == slot_day
-                and unavail.start_time < slot_end
-                and unavail.end_time > slot_start
+                avail.day == slot_day
+                and avail.start_time <= slot_start
+                and avail.end_time >= slot_end
+            ):
+                is_available = True
+                break
+        if not is_available:
+            blocked.add(idx)
+    return blocked
+
+
+async def get_preferred_slot_indices(
+    db: AsyncSession,
+    teacher_id: int,
+    available_slots: list,
+) -> set[int]:
+    """Retourne les indices des creneaux preferes par l'enseignant."""
+    stmt = select(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+        TeacherAvailability.preferred.is_(True),
+    )
+    preferred = list((await db.execute(stmt)).scalars().all())
+
+    indices: set[int] = set()
+    for idx, slot in enumerate(available_slots):
+        slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
+        slot_start = slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
+        slot_end = slot.end_time if hasattr(slot, "end_time") else slot["end_time"]
+        for pref in preferred:
+            if (
+                pref.day == slot_day
+                and pref.start_time <= slot_start
+                and pref.end_time >= slot_end
+            ):
+                indices.add(idx)
+                break
+    return indices
+
+
+async def get_cross_class_blocked_slots(
+    db: AsyncSession,
+    teacher_id: int,
+    exclude_class_id: int,
+    available_slots: list,
+) -> set[int]:
+    """Retourne les indices des creneaux ou le prof est deja occupe dans une AUTRE classe."""
+    stmt = select(TimetableSlot).where(
+        TimetableSlot.teacher_id == teacher_id,
+        TimetableSlot.class_id != exclude_class_id,
+    )
+    existing = list((await db.execute(stmt)).scalars().all())
+
+    blocked: set[int] = set()
+    for idx, slot in enumerate(available_slots):
+        slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
+        slot_start = slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
+        slot_end = slot.end_time if hasattr(slot, "end_time") else slot["end_time"]
+        for ex in existing:
+            ex_day = ex.day if isinstance(ex.day, str) else ex.day
+            if (
+                ex_day == slot_day
+                and ex.start_time < slot_end
+                and ex.end_time > slot_start
             ):
                 blocked.add(idx)
                 break
     return blocked
+
+
+async def list_manual_slots_for_class(
+    db: AsyncSession,
+    class_id: int,
+) -> list[TimetableSlot]:
+    """Retourne les creneaux manuels (timetable_id IS NULL) d'une classe."""
+    stmt = (
+        select(TimetableSlot)
+        .where(TimetableSlot.class_id == class_id, TimetableSlot.timetable_id.is_(None))
+        .options(*_slot_load_options())
+    )
+    return list((await db.execute(stmt)).scalars().all())

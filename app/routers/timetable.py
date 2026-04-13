@@ -62,6 +62,16 @@ async def generate_timetable(
     return timetable_service.trigger_generate(current_user.tenant_id, data)
 
 
+@router.get("/diagnostic")
+async def get_generation_diagnostic(
+    class_id: int = Query(...),
+    _: None = require_permission("timetable:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Diagnostic pre-generation : verifie les prerequis."""
+    return await timetable_service.diagnostic_for_class(db, class_id)
+
+
 @router.post(
     "/auto-generate",
     response_model=GenerateTimetableResponse,
@@ -73,7 +83,7 @@ async def auto_generate_timetable(
     _: None = require_permission("timetable:generate"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> GenerateTimetableResponse:
-    """Génération automatique simplifiée — résout matières/profs depuis la DB."""
+    """Generation automatique intelligente — preserve les slots manuels."""
     return await timetable_service.auto_generate(db, current_user.tenant_id, class_id)
 
 

@@ -4,6 +4,7 @@ import logging
 from datetime import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
@@ -261,20 +262,101 @@ async def delete_slot(
 # ---------------------------------------------------------------------------
 
 
+async def diagnostic_for_class(
+    db: AsyncSession,
+    class_id: int,
+) -> dict:
+    """Diagnostic pre-generation : verifie les prerequis avant de generer.
+
+    Retourne un dict avec :
+    - ready: bool
+    - subjects_without_teacher: list of {id, name, hours_per_week}
+    - subjects_with_teacher: list of {id, name, hours_per_week, teacher_name}
+    - total_hours_required: int
+    - total_slots_available: int
+    - manual_slots_count: int
+    """
+    from sqlalchemy import select, or_, func
+    from app.models.academic import Class, Subject
+
+    cls = (await db.execute(
+        select(Class).where(Class.id == class_id)
+    )).scalar_one_or_none()
+    if cls is None:
+        raise NotFoundError("Class", class_id)
+
+    # Get subjects for this level
+    subjects_stmt = (
+        select(Subject)
+        .where(Subject.level_id == cls.level_id)
+        .options(selectinload(Subject.teacher))
+    )
+    if cls.series_id:
+        subjects_stmt = subjects_stmt.where(
+            or_(Subject.series_id == cls.series_id, Subject.series_id.is_(None))
+        )
+    subjects = list((await db.execute(subjects_stmt)).scalars().all())
+
+    without_teacher = []
+    with_teacher = []
+    total_hours = 0
+
+    for s in subjects:
+        total_hours += s.hours_per_week
+        if s.teacher_id and s.teacher:
+            with_teacher.append({
+                "id": s.id,
+                "name": s.name,
+                "hours_per_week": s.hours_per_week,
+                "teacher_id": s.teacher_id,
+                "teacher_name": f"{s.teacher.first_name} {s.teacher.last_name}",
+            })
+        else:
+            without_teacher.append({
+                "id": s.id,
+                "name": s.name,
+                "hours_per_week": s.hours_per_week,
+            })
+
+    # Count manual slots for this class
+    manual_count_stmt = (
+        select(func.count())
+        .select_from(TimetableSlot)
+        .where(TimetableSlot.class_id == class_id, TimetableSlot.timetable_id.is_(None))
+    )
+    manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
+
+    # 6 days * 10 hours = 60 slots available
+    total_slots = 6 * 10
+
+    return {
+        "ready": len(without_teacher) == 0 and len(subjects) > 0,
+        "class_id": class_id,
+        "class_name": cls.name,
+        "subjects_without_teacher": without_teacher,
+        "subjects_with_teacher": with_teacher,
+        "total_hours_required": total_hours,
+        "total_slots_available": total_slots,
+        "manual_slots_count": manual_count,
+    }
+
+
 async def auto_generate(
     db: AsyncSession,
     tenant_id: str,
     class_id: int,
 ) -> GenerateTimetableResponse:
-    """Génération automatique simplifiée — résout tout depuis la DB.
+    """Generation automatique intelligente.
 
-    1. Récupère la classe (level_id, series_id, room_id, academic_year_id)
-    2. Récupère les matières du niveau (avec teacher_id)
-    3. Construit les assignments et available_slots
-    4. Lance la tâche Celery
+    1. Recupere la classe et ses matieres
+    2. Verifie que TOUTES les matieres ont un enseignant
+    3. Charge les slots manuels existants (timetable_id IS NULL) comme contraintes fixes
+    4. Charge les conflits inter-classes (profs + salles deja occupes)
+    5. Charge les creneaux preferes des enseignants
+    6. Supprime seulement les slots auto-generes (timetable_id IS NOT NULL)
+    7. Lance le solveur OR-Tools avec toutes les contraintes
     """
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select, or_, delete
     from app.models.academic import Class, Subject
 
     # 1. Get class
@@ -284,11 +366,9 @@ async def auto_generate(
     if cls is None:
         raise NotFoundError("Class", class_id)
 
-    # 2. Get subjects for this level (with teacher assigned)
+    # 2. Get subjects for this level
     subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
     if cls.series_id:
-        # Include subjects for this specific series AND subjects without series
-        from sqlalchemy import or_
         subjects_stmt = subjects_stmt.where(
             or_(Subject.series_id == cls.series_id, Subject.series_id.is_(None))
         )
@@ -296,25 +376,26 @@ async def auto_generate(
 
     if not subjects:
         raise BusinessValidationError(
-            "Aucune matière assignée à ce niveau. Assignez des matières dans le Kanban d'abord."
+            "Aucune matiere assignee a ce niveau. Assignez des matieres dans le Kanban d'abord."
         )
 
-    # Filter subjects that have a teacher assigned
-    subjects_with_teacher = [s for s in subjects if s.teacher_id]
-    if not subjects_with_teacher:
+    # Check ALL subjects have teachers
+    without_teacher = [s for s in subjects if not s.teacher_id]
+    if without_teacher:
+        names = ", ".join(s.name for s in without_teacher)
         raise BusinessValidationError(
-            "Aucune matière n'a d'enseignant assigné. Assignez des enseignants aux matières d'abord."
+            f"Matieres sans enseignant : {names}. Utilisez le diagnostic pour les assigner."
         )
 
     # 3. Build assignments
     from app.schemas.timetable import AssignmentInput, TimeSlotInput
-    assignments = [
+    assignments_input = [
         AssignmentInput(
             teacher_id=s.teacher_id,
             subject_id=s.id,
             hours_per_week=s.hours_per_week,
         )
-        for s in subjects_with_teacher
+        for s in subjects
     ]
 
     # 4. Default available slots: Mon-Sat, 07:00-17:00, 1h each
@@ -330,23 +411,83 @@ async def auto_generate(
                 end_time=f"{hour + 1:02d}:00",
             ))
 
-    # 5. Build request and trigger
+    # 5. Delete only auto-generated slots (keep manual ones)
+    del_stmt = delete(TimetableSlot).where(
+        TimetableSlot.class_id == class_id,
+        TimetableSlot.timetable_id.is_not(None),
+    )
+    await db.execute(del_stmt)
+    await db.flush()
+
+    # 6. Load manual slots as fixed assignments for the solver
+    # These will be passed to the Celery task
+    manual_slots = await repo.list_manual_slots_for_class(db, class_id)
+    manual_fixed_data = []
+    for ms in manual_slots:
+        # Find which assignment index this manual slot maps to
+        for idx, ai in enumerate(assignments_input):
+            if ai.subject_id == ms.subject_id and ai.teacher_id == ms.teacher_id:
+                # Find which slot index this maps to
+                day_val = ms.day if isinstance(ms.day, str) else ms.day
+                start_str = ms.start_time.strftime("%H:%M")
+                for sidx, sl in enumerate(available_slots):
+                    if sl.day.value == day_val and sl.start_time == start_str:
+                        manual_fixed_data.append({"assignment_idx": idx, "slot_idx": sidx})
+                        break
+                break
+
+    # 7. Load cross-class conflicts for each teacher
+    teacher_ids = {s.teacher_id for s in subjects}
+    cross_class_blocked: dict[int, set[int]] = {}
+    for tid in teacher_ids:
+        blocked = await repo.get_cross_class_blocked_slots(
+            db, tid, class_id, available_slots,
+        )
+        if blocked:
+            cross_class_blocked[tid] = blocked
+
+    # 8. Load preferred slots for each teacher
+    preferred_data: dict[int, list[int]] = {}
+    for tid in teacher_ids:
+        pref_indices = await repo.get_preferred_slot_indices(db, tid, available_slots)
+        if pref_indices:
+            preferred_data[tid] = list(pref_indices)
+
+    await db.commit()
+
+    # 9. Build request and trigger
     request = GenerateTimetableRequest(
         class_id=class_id,
         academic_year_id=cls.academic_year_id,
-        assignments=assignments,
+        assignments=assignments_input,
         available_slots=available_slots,
         room_id=cls.room_id,
     )
-    return trigger_generate(tenant_id, request)
+    return trigger_generate(
+        tenant_id, request,
+        manual_fixed=manual_fixed_data,
+        cross_class_blocked=cross_class_blocked,
+        preferred_slots=preferred_data,
+    )
 
 
 def trigger_generate(
     tenant_id: str,
     request: GenerateTimetableRequest,
+    manual_fixed: list[dict] | None = None,
+    cross_class_blocked: dict[int, set[int]] | None = None,
+    preferred_slots: dict[int, list[int]] | None = None,
 ) -> GenerateTimetableResponse:
-    """Dispatche la génération OR-Tools comme tâche Celery."""
+    """Dispatche la generation OR-Tools comme tache Celery."""
     from app.tasks.timetable_tasks import generate_timetable_task
+
+    # Serialize sets to lists for JSON
+    serialized_blocked = {
+        str(k): list(v) for k, v in (cross_class_blocked or {}).items()
+    }
+    serialized_preferred = {
+        str(k): v for k, v in (preferred_slots or {}).items()
+    }
 
     task = generate_timetable_task.delay(
         tenant_id,
@@ -355,6 +496,9 @@ def trigger_generate(
         [a.model_dump() for a in request.assignments],
         [s.model_dump() for s in request.available_slots],
         request.room_id,
+        manual_fixed or [],
+        serialized_blocked,
+        serialized_preferred,
     )
     return GenerateTimetableResponse(task_id=str(task.id))
 
@@ -371,7 +515,7 @@ def get_task_status(task_id: str) -> TaskStatusResponse:
         "PENDING": "pending",
         "STARTED": "running",
         "RETRY": "running",
-        "SUCCESS": "success",
+        "SUCCESS": "completed",
         "FAILURE": "failed",
     }
     status = state_map.get(result.state, "pending")

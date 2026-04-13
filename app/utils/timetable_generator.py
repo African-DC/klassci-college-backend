@@ -9,6 +9,11 @@ Contraintes dures :
 - Une classe ne peut avoir qu'un seul cours par créneau
 - Chaque assignation obtient exactement `hours_per_week` créneaux
 - Les indisponibilités enseignant sont respectées
+- Les créneaux manuels existants sont préservés (fixed assignments)
+- Conflits inter-classes : profs et salles déjà occupés ailleurs
+
+Contraintes souples :
+- Préférer les créneaux marqués "preferred" par les enseignants
 """
 
 from dataclasses import dataclass, field
@@ -16,11 +21,12 @@ from dataclasses import dataclass, field
 from ortools.sat.python import cp_model
 
 MAX_SOLVER_SECONDS = 30.0
+PREFERRED_BONUS = 10  # Weight for preferred slot soft constraint
 
 
 @dataclass
 class Assignment:
-    """Assignation prof–matière pour une classe."""
+    """Assignation prof-matière pour une classe."""
 
     teacher_id: int
     subject_id: int
@@ -38,6 +44,14 @@ class SlotTemplate:
 
 
 @dataclass
+class FixedAssignment:
+    """Créneau manuel existant — doit être conservé tel quel."""
+
+    assignment_idx: int
+    slot_idx: int
+
+
+@dataclass
 class GeneratorResult:
     """Résultat du solveur."""
 
@@ -50,16 +64,20 @@ def solve(
     assignments: list[Assignment],
     slots: list[SlotTemplate],
     teacher_unavailabilities: dict[int, set[int]],
+    fixed_assignments: list[FixedAssignment] | None = None,
+    preferred_slots: dict[int, set[int]] | None = None,
 ) -> GeneratorResult:
     """Lance le solveur CP-SAT.
 
     Args:
-        assignments: liste d'assignations prof–matière–heures
+        assignments: liste d'assignations prof-matière-heures
         slots: créneaux horaires disponibles pour la semaine
-        teacher_unavailabilities: teacher_id → set d'indices de slots bloqués
+        teacher_unavailabilities: teacher_id -> set d'indices de slots bloques
+        fixed_assignments: créneaux manuels existants a conserver (hard fix)
+        preferred_slots: teacher_id -> set d'indices de slots preferes (soft)
 
     Returns:
-        GeneratorResult avec feasible=True et la liste des paires si solution trouvée.
+        GeneratorResult avec feasible=True et la liste des paires si solution trouvee.
     """
     if not assignments or not slots:
         return GeneratorResult(feasible=False)
@@ -74,36 +92,61 @@ def solve(
         for s in range(n_s):
             x[a, s] = model.new_bool_var(f"x_{a}_{s}")
 
-    # Contrainte 1 : chaque assignation obtient exactement hours_per_week créneaux
+    # ----- Hard constraints -----
+
+    # Count manual hours already fixed per assignment
+    fixed_hours: dict[int, int] = {}
+    if fixed_assignments:
+        for fa in fixed_assignments:
+            fixed_hours[fa.assignment_idx] = fixed_hours.get(fa.assignment_idx, 0) + 1
+            # Fix this variable to 1
+            model.add(x[fa.assignment_idx, fa.slot_idx] == 1)
+
+    # C1: each assignment gets exactly hours_per_week slots (including fixed ones)
     for a, asg in enumerate(assignments):
         model.add(sum(x[a, s] for s in range(n_s)) == asg.hours_per_week)
 
-    # Contrainte 2 : la classe a au plus 1 cours par créneau
+    # C2: class has at most 1 course per slot
     for s in range(n_s):
         model.add(sum(x[a, s] for a in range(n_a)) <= 1)
 
-    # Contrainte 3 : un enseignant a au plus 1 cours par créneau
+    # C3: teacher has at most 1 course per slot
     teacher_ids = {asg.teacher_id for asg in assignments}
     for tid in teacher_ids:
-        teacher_assignments = [a for a, asg in enumerate(assignments) if asg.teacher_id == tid]
+        teacher_asgs = [a for a, asg in enumerate(assignments) if asg.teacher_id == tid]
         for s in range(n_s):
-            model.add(sum(x[a, s] for a in teacher_assignments) <= 1)
+            model.add(sum(x[a, s] for a in teacher_asgs) <= 1)
 
-    # Contrainte 4 : une salle ne peut accueillir qu'un cours par créneau
+    # C4: room has at most 1 course per slot
     room_ids = {slots[s].room_id for s in range(n_s) if slots[s].room_id is not None}
     for rid in room_ids:
         room_slots = [s for s in range(n_s) if slots[s].room_id == rid]
         for s in room_slots:
             model.add(sum(x[a, s] for a in range(n_a)) <= 1)
 
-    # Contrainte 5 : indisponibilités enseignant
+    # C5: teacher unavailabilities (includes cross-class conflicts)
     for a, asg in enumerate(assignments):
         blocked = teacher_unavailabilities.get(asg.teacher_id, set())
         for s in blocked:
             if s < n_s:
                 model.add(x[a, s] == 0)
 
-    # Résolution
+    # ----- Soft constraints (objective) -----
+    objective_terms: list[cp_model.LinearExpr] = []
+
+    if preferred_slots:
+        for a, asg in enumerate(assignments):
+            pref = preferred_slots.get(asg.teacher_id, set())
+            if pref:
+                for s in range(n_s):
+                    if s in pref:
+                        # Reward: negative cost for preferred slots
+                        objective_terms.append(-PREFERRED_BONUS * x[a, s])
+
+    if objective_terms:
+        model.minimize(sum(objective_terms))
+
+    # Solve
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
     status = solver.solve(model)
