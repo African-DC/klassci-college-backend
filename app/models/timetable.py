@@ -102,5 +102,6 @@ class TeacherAvailability(Base):
     start_time: Mapped[time] = mapped_column(Time, nullable=False)
     end_time: Mapped[time] = mapped_column(Time, nullable=False)
     available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    preferred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     teacher: Mapped[TeacherProfile] = relationship()

@@ -10,6 +10,7 @@ from app.schemas.timetable import (
     TaskStatusResponse,
     TeacherAvailabilityCreate,
     TeacherAvailabilityResponse,
+    TeacherAvailabilityUpdate,
     TimetableSlotCreate,
     TimetableSlotResponse,
     TimetableSlotUpdate,
@@ -179,6 +180,20 @@ async def create_teacher_availability(
 
 
 availability_router = APIRouter(prefix="/teacher-availabilities", tags=["timetable"])
+
+
+@availability_router.patch(
+    "/{av_id}",
+    response_model=TeacherAvailabilityResponse,
+)
+async def update_teacher_availability(
+    av_id: int,
+    data: TeacherAvailabilityUpdate,
+    _: None = require_permission("timetable:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> TeacherAvailabilityResponse:
+    """Met à jour une disponibilité enseignant (available/preferred)."""
+    return await timetable_service.update_teacher_availability(db, av_id, data)
 
 
 @availability_router.delete("/{av_id}", status_code=status.HTTP_204_NO_CONTENT)

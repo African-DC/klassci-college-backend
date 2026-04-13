@@ -15,6 +15,7 @@ from app.schemas.timetable import (
     TaskStatusResponse,
     TeacherAvailabilityCreate,
     TeacherAvailabilityResponse,
+    TeacherAvailabilityUpdate,
     TimetableSlotCreate,
     TimetableSlotResponse,
     TimetableSlotUpdate,
@@ -58,6 +59,7 @@ def _to_availability_response(av: TeacherAvailability) -> TeacherAvailabilityRes
         start_time=av.start_time.strftime("%H:%M"),
         end_time=av.end_time.strftime("%H:%M"),
         available=av.available,
+        preferred=av.preferred,
     )
 
 
@@ -413,6 +415,23 @@ async def create_teacher_availability(
         start_time=start,
         end_time=end,
         available=data.available,
+        preferred=data.preferred,
+    )
+    await db.commit()
+    return _to_availability_response(av)
+
+
+async def update_teacher_availability(
+    db: AsyncSession,
+    av_id: int,
+    data: TeacherAvailabilityUpdate,
+) -> TeacherAvailabilityResponse:
+    """Met à jour une disponibilité enseignant (available/preferred)."""
+    av = await repo.get_teacher_availability_by_id(db, av_id)
+    if av is None:
+        raise NotFoundError("TeacherAvailability", av_id)
+    av = await repo.update_teacher_availability(
+        db, av, available=data.available, preferred=data.preferred,
     )
     await db.commit()
     return _to_availability_response(av)

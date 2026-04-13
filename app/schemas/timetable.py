@@ -55,6 +55,12 @@ class TeacherAvailabilityCreate(BaseModel):
     start_time: str  # "HH:MM"
     end_time: str  # "HH:MM"
     available: bool = True
+    preferred: bool = False
+
+
+class TeacherAvailabilityUpdate(BaseModel):
+    available: bool | None = None
+    preferred: bool | None = None
 
 
 class TeacherAvailabilityResponse(BaseModel):
@@ -64,6 +70,7 @@ class TeacherAvailabilityResponse(BaseModel):
     start_time: str
     end_time: str
     available: bool
+    preferred: bool
 
 
 # ---------------------------------------------------------------------------

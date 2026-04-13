@@ -260,6 +260,7 @@ async def create_teacher_availability(
     start_time: time,
     end_time: time,
     available: bool,
+    preferred: bool = False,
 ) -> TeacherAvailability:
     """Crée une entrée de disponibilité enseignant."""
     av = TeacherAvailability(
@@ -268,7 +269,25 @@ async def create_teacher_availability(
         start_time=start_time,
         end_time=end_time,
         available=available,
+        preferred=preferred,
     )
+    db.add(av)
+    await db.flush()
+    return av
+
+
+async def update_teacher_availability(
+    db: AsyncSession,
+    av: TeacherAvailability,
+    *,
+    available: bool | None = None,
+    preferred: bool | None = None,
+) -> TeacherAvailability:
+    """Met à jour les champs d'une disponibilité enseignant."""
+    if available is not None:
+        av.available = available
+    if preferred is not None:
+        av.preferred = preferred
     db.add(av)
     await db.flush()
     return av
