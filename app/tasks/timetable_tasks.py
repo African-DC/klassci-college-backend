@@ -5,8 +5,11 @@ import logging
 from datetime import time
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 from app.core.celery_app import celery_app
-from app.core.database import _get_session_factory, current_tenant_id
+from app.core.config import settings
+from app.core.database import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +72,11 @@ async def _generate_async(
     )
 
     current_tenant_id.set(tenant_id)
-    factory = await _get_session_factory(tenant_id)
+
+    # Create a fresh engine for this Celery task (avoids event loop conflicts)
+    db_url = settings.DATABASE_URL.format(tenant=tenant_id)
+    engine = create_async_engine(db_url, echo=False)
+    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async with factory() as db:
         # Load teacher unavailabilities from DB
@@ -176,6 +183,9 @@ async def _generate_async(
         manual_slots = await repo.list_manual_slots_for_class(db, class_id)
         for ms in manual_slots:
             slot_responses.append(_slot_to_dict(ms))
+
+        # Cleanup engine
+        await engine.dispose()
 
         return slot_responses
 
