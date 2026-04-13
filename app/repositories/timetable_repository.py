@@ -362,8 +362,8 @@ async def get_preferred_slot_indices(
     indices: set[int] = set()
     for idx, slot in enumerate(available_slots):
         slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
-        slot_end = slot.end_time if hasattr(slot, "end_time") else slot["end_time"]
+        slot_start = _to_time(slot.start_time if hasattr(slot, "start_time") else slot["start_time"])
+        slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
         for pref in preferred:
             if (
                 pref.day == slot_day
@@ -373,6 +373,16 @@ async def get_preferred_slot_indices(
                 indices.add(idx)
                 break
     return indices
+
+
+def _to_time(v: Any) -> time:
+    """Convertit une str 'HH:MM' ou un datetime.time en time."""
+    if isinstance(v, time):
+        return v
+    if isinstance(v, str):
+        h, m = v.split(":")
+        return time(int(h), int(m))
+    return v
 
 
 async def get_cross_class_blocked_slots(
@@ -391,8 +401,8 @@ async def get_cross_class_blocked_slots(
     blocked: set[int] = set()
     for idx, slot in enumerate(available_slots):
         slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
-        slot_end = slot.end_time if hasattr(slot, "end_time") else slot["end_time"]
+        slot_start = _to_time(slot.start_time if hasattr(slot, "start_time") else slot["start_time"])
+        slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
         for ex in existing:
             ex_day = ex.day if isinstance(ex.day, str) else ex.day
             if (
