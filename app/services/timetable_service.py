@@ -326,8 +326,11 @@ async def diagnostic_for_class(
     )
     manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
 
-    # 6 days * 10 hours = 60 slots available
-    total_slots = 6 * 10
+    # Calculate total slots from settings
+    slot_duration, start_h, end_h = await _get_timetable_settings(db)
+    minutes_per_day = (end_h - start_h) * 60
+    slots_per_day = minutes_per_day // slot_duration
+    total_slots = 6 * slots_per_day
 
     return {
         "ready": len(without_teacher) == 0 and len(subjects) > 0,
@@ -341,32 +344,52 @@ async def diagnostic_for_class(
     }
 
 
+async def _get_timetable_settings(db: AsyncSession) -> tuple[int, int, int]:
+    """Retourne (slot_duration_minutes, day_start_hour, day_end_hour) depuis SchoolSettings."""
+    from sqlalchemy import select
+    from app.models.academic import SchoolSettings
+    stmt = select(SchoolSettings).limit(1)
+    settings = (await db.execute(stmt)).scalar_one_or_none()
+    if settings is None:
+        return 60, 7, 17  # defaults
+    return (
+        settings.slot_duration_minutes or 60,
+        settings.day_start_hour or 7,
+        settings.day_end_hour or 17,
+    )
+
+
 async def auto_generate(
     db: AsyncSession,
     tenant_id: str,
     class_id: int,
 ) -> GenerateTimetableResponse:
-    """Generation automatique intelligente.
+    """Generation automatique intelligente avec granularite configurable.
 
-    1. Recupere la classe et ses matieres
-    2. Verifie que TOUTES les matieres ont un enseignant
-    3. Charge les slots manuels existants (timetable_id IS NULL) comme contraintes fixes
-    4. Charge les conflits inter-classes (profs + salles deja occupes)
-    5. Charge les creneaux preferes des enseignants
-    6. Supprime seulement les slots auto-generes (timetable_id IS NOT NULL)
-    7. Lance le solveur OR-Tools avec toutes les contraintes
+    1. Lit les parametres de l'etablissement (duree bloc, heures debut/fin)
+    2. Recupere la classe et ses matieres
+    3. Verifie que TOUTES les matieres ont un enseignant
+    4. Construit la grille de blocs dynamique
+    5. Charge les slots manuels comme blocs fixes
+    6. Charge les conflits inter-classes et preferences
+    7. Supprime seulement les slots auto-generes
+    8. Lance le solveur
     """
     from sqlalchemy import select, or_, delete
     from app.models.academic import Class, Subject
+    from app.models.timetable import DayOfWeek
 
-    # 1. Get class
+    # 1. Settings
+    slot_duration, day_start, day_end = await _get_timetable_settings(db)
+
+    # 2. Get class
     cls = (await db.execute(
         select(Class).where(Class.id == class_id)
     )).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
 
-    # 2. Get subjects for this level
+    # 3. Get subjects for this level
     subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
     if cls.series_id:
         subjects_stmt = subjects_stmt.where(
@@ -379,7 +402,6 @@ async def auto_generate(
             "Aucune matiere assignee a ce niveau. Assignez des matieres dans le Kanban d'abord."
         )
 
-    # Check ALL subjects have teachers
     without_teacher = [s for s in subjects if not s.teacher_id]
     if without_teacher:
         names = ", ".join(s.name for s in without_teacher)
@@ -387,31 +409,19 @@ async def auto_generate(
             f"Matieres sans enseignant : {names}. Utilisez le diagnostic pour les assigner."
         )
 
-    # 3. Build assignments
-    from app.schemas.timetable import AssignmentInput, TimeSlotInput
-    assignments_input = [
-        AssignmentInput(
-            teacher_id=s.teacher_id,
-            subject_id=s.id,
-            hours_per_week=s.hours_per_week,
-        )
+    # 4. Build assignments data for Celery
+    assignments_data = [
+        {"teacher_id": s.teacher_id, "subject_id": s.id, "hours_per_week": s.hours_per_week}
         for s in subjects
     ]
 
-    # 4. Default available slots: Mon-Sat, 07:00-17:00, 1h each
-    from app.models.timetable import DayOfWeek
-    days = [DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY]
-    available_slots = []
-    for day in days:
-        for hour in range(7, 17):
-            available_slots.append(TimeSlotInput(
-                day=day,
-                start_time=f"{hour:02d}:00",
-                end_time=f"{hour + 1:02d}:00",
-            ))
+    # 5. Day names (English)
+    day_names = [d.value for d in [
+        DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+        DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY,
+    ]]
 
-    # 5. Delete only auto-generated slots (keep manual ones)
+    # 6. Delete only auto-generated slots
     del_stmt = delete(TimetableSlot).where(
         TimetableSlot.class_id == class_id,
         TimetableSlot.timetable_id.is_not(None),
@@ -419,86 +429,86 @@ async def auto_generate(
     await db.execute(del_stmt)
     await db.flush()
 
-    # 6. Load manual slots as fixed assignments for the solver
-    # These will be passed to the Celery task
+    # 7. Load manual slots — convert to block indices
+    from app.utils.timetable_generator import build_blocks
+    grid_blocks = build_blocks(day_names, day_start, day_end, slot_duration)
+
     manual_slots = await repo.list_manual_slots_for_class(db, class_id)
     manual_fixed_data = []
     for ms in manual_slots:
-        # Find which assignment index this manual slot maps to
-        for idx, ai in enumerate(assignments_input):
-            if ai.subject_id == ms.subject_id and ai.teacher_id == ms.teacher_id:
-                # Find which slot index this maps to
-                day_val = ms.day if isinstance(ms.day, str) else ms.day
-                start_str = ms.start_time.strftime("%H:%M")
-                for sidx, sl in enumerate(available_slots):
-                    if sl.day.value == day_val and sl.start_time == start_str:
-                        manual_fixed_data.append({"assignment_idx": idx, "slot_idx": sidx})
-                        break
+        ms_day = ms.day if isinstance(ms.day, str) else ms.day
+        ms_start_min = ms.start_time.hour * 60 + ms.start_time.minute
+        ms_end_min = ms.end_time.hour * 60 + ms.end_time.minute
+
+        # Find assignment index
+        asg_idx = None
+        for idx, ad in enumerate(assignments_data):
+            if ad["subject_id"] == ms.subject_id and ad["teacher_id"] == ms.teacher_id:
+                asg_idx = idx
                 break
+        if asg_idx is None:
+            continue
 
-    # 7. Load cross-class conflicts for each teacher
+        # Find all blocks that this manual slot covers
+        for blk in grid_blocks:
+            if blk.day == ms_day and blk.start_minutes >= ms_start_min and blk.end_minutes <= ms_end_min:
+                manual_fixed_data.append({"assignment_idx": asg_idx, "block_idx": blk.index})
+
+    # 8. Cross-class conflicts — convert to block indices
     teacher_ids = {s.teacher_id for s in subjects}
-    cross_class_blocked: dict[int, set[int]] = {}
+    cross_class_blocked: dict[int, list[int]] = {}
     for tid in teacher_ids:
-        blocked = await repo.get_cross_class_blocked_slots(
-            db, tid, class_id, available_slots,
+        blocked_indices = await repo.get_cross_class_blocked_block_indices(
+            db, tid, class_id, grid_blocks,
         )
-        if blocked:
-            cross_class_blocked[tid] = blocked
+        if blocked_indices:
+            cross_class_blocked[tid] = list(blocked_indices)
 
-    # 8. Load preferred slots for each teacher
+    # 9. Preferred blocks
     preferred_data: dict[int, list[int]] = {}
     for tid in teacher_ids:
-        pref_indices = await repo.get_preferred_slot_indices(db, tid, available_slots)
-        if pref_indices:
-            preferred_data[tid] = list(pref_indices)
+        pref = await repo.get_preferred_block_indices(db, tid, grid_blocks)
+        if pref:
+            preferred_data[tid] = list(pref)
 
     await db.commit()
 
-    # 9. Build request and trigger
-    request = GenerateTimetableRequest(
-        class_id=class_id,
-        academic_year_id=cls.academic_year_id,
-        assignments=assignments_input,
-        available_slots=available_slots,
-        room_id=cls.room_id,
+    # 10. Trigger Celery task
+    from app.tasks.timetable_tasks import generate_timetable_task
+    task = generate_timetable_task.delay(
+        tenant_id,
+        class_id,
+        cls.academic_year_id,
+        assignments_data,
+        day_names,
+        day_start,
+        day_end,
+        slot_duration,
+        cls.room_id,
+        manual_fixed_data,
+        {str(k): v for k, v in cross_class_blocked.items()},
+        {str(k): v for k, v in preferred_data.items()},
     )
-    return trigger_generate(
-        tenant_id, request,
-        manual_fixed=manual_fixed_data,
-        cross_class_blocked=cross_class_blocked,
-        preferred_slots=preferred_data,
-    )
+    return GenerateTimetableResponse(task_id=str(task.id))
 
 
 def trigger_generate(
     tenant_id: str,
     request: GenerateTimetableRequest,
-    manual_fixed: list[dict] | None = None,
-    cross_class_blocked: dict[int, set[int]] | None = None,
-    preferred_slots: dict[int, list[int]] | None = None,
 ) -> GenerateTimetableResponse:
-    """Dispatche la generation OR-Tools comme tache Celery."""
+    """Dispatche la generation OR-Tools comme tache Celery (legacy endpoint)."""
     from app.tasks.timetable_tasks import generate_timetable_task
-
-    # Serialize sets to lists for JSON
-    serialized_blocked = {
-        str(k): list(v) for k, v in (cross_class_blocked or {}).items()
-    }
-    serialized_preferred = {
-        str(k): v for k, v in (preferred_slots or {}).items()
-    }
 
     task = generate_timetable_task.delay(
         tenant_id,
         request.class_id,
         request.academic_year_id,
-        [a.model_dump() for a in request.assignments],
-        [s.model_dump() for s in request.available_slots],
+        [{"teacher_id": a.teacher_id, "subject_id": a.subject_id, "hours_per_week": a.hours_per_week}
+         for a in request.assignments],
+        ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        7, 17, 60,  # defaults
         request.room_id,
-        manual_fixed or [],
-        serialized_blocked,
-        serialized_preferred,
+        [], {}, {},
     )
     return GenerateTimetableResponse(task_id=str(task.id))
 

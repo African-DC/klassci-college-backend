@@ -426,3 +426,89 @@ async def list_manual_slots_for_class(
         .options(*_slot_load_options())
     )
     return list((await db.execute(stmt)).scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Block-based operations (for variable-duration solver)
+# ---------------------------------------------------------------------------
+
+
+async def get_unavailable_block_indices(
+    db: AsyncSession,
+    teacher_id: int,
+    blocks: list,
+) -> set[int]:
+    """Retourne les indices de blocs ou le prof est indisponible."""
+    count_stmt = select(func.count()).select_from(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+    if total == 0:
+        return set()
+
+    stmt = select(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+        TeacherAvailability.available.is_(True),
+    )
+    availabilities = list((await db.execute(stmt)).scalars().all())
+
+    blocked: set[int] = set()
+    for blk in blocks:
+        blk_start = time(blk.start_minutes // 60, blk.start_minutes % 60)
+        blk_end = time(blk.end_minutes // 60, blk.end_minutes % 60)
+        is_available = False
+        for avail in availabilities:
+            if avail.day == blk.day and avail.start_time <= blk_start and avail.end_time >= blk_end:
+                is_available = True
+                break
+        if not is_available:
+            blocked.add(blk.index)
+    return blocked
+
+
+async def get_preferred_block_indices(
+    db: AsyncSession,
+    teacher_id: int,
+    blocks: list,
+) -> set[int]:
+    """Retourne les indices de blocs preferes par le prof."""
+    stmt = select(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+        TeacherAvailability.preferred.is_(True),
+    )
+    preferred = list((await db.execute(stmt)).scalars().all())
+
+    indices: set[int] = set()
+    for blk in blocks:
+        blk_start = time(blk.start_minutes // 60, blk.start_minutes % 60)
+        blk_end = time(blk.end_minutes // 60, blk.end_minutes % 60)
+        for pref in preferred:
+            if pref.day == blk.day and pref.start_time <= blk_start and pref.end_time >= blk_end:
+                indices.add(blk.index)
+                break
+    return indices
+
+
+async def get_cross_class_blocked_block_indices(
+    db: AsyncSession,
+    teacher_id: int,
+    exclude_class_id: int,
+    blocks: list,
+) -> set[int]:
+    """Retourne les indices de blocs ou le prof est occupe dans une autre classe."""
+    stmt = select(TimetableSlot).where(
+        TimetableSlot.teacher_id == teacher_id,
+        TimetableSlot.class_id != exclude_class_id,
+    )
+    existing = list((await db.execute(stmt)).scalars().all())
+
+    blocked: set[int] = set()
+    for blk in blocks:
+        blk_start = time(blk.start_minutes // 60, blk.start_minutes % 60)
+        blk_end = time(blk.end_minutes // 60, blk.end_minutes % 60)
+        for ex in existing:
+            ex_day = ex.day if isinstance(ex.day, str) else ex.day
+            if ex_day == blk.day and ex.start_time < blk_end and ex.end_time > blk_start:
+                blocked.add(blk.index)
+                break
+    return blocked

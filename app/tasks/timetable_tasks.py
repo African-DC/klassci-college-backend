@@ -14,12 +14,6 @@ from app.core.database import current_tenant_id
 logger = logging.getLogger(__name__)
 
 
-def _parse_time(t: str) -> time:
-    """Convertit "HH:MM" en datetime.time."""
-    h, m = t.split(":")
-    return time(int(h), int(m))
-
-
 @celery_app.task(bind=True, name="timetable.generate")  # type: ignore[misc]
 def generate_timetable_task(
     self: Any,
@@ -27,11 +21,14 @@ def generate_timetable_task(
     class_id: int,
     academic_year_id: int,
     assignments_data: list[dict[str, Any]],
-    slots_data: list[dict[str, Any]],
+    day_names: list[str],
+    day_start_hour: int,
+    day_end_hour: int,
+    slot_duration_minutes: int,
     room_id: int | None,
     manual_fixed: list[dict[str, int]] | None = None,
     cross_class_blocked: dict[str, list[int]] | None = None,
-    preferred_slots: dict[str, list[int]] | None = None,
+    preferred_blocks: dict[str, list[int]] | None = None,
 ) -> dict[str, Any]:
     """Genere un emploi du temps via OR-Tools et persiste les creneaux en DB."""
     try:
@@ -41,11 +38,14 @@ def generate_timetable_task(
                 class_id=class_id,
                 academic_year_id=academic_year_id,
                 assignments_data=assignments_data,
-                slots_data=slots_data,
+                day_names=day_names,
+                day_start_hour=day_start_hour,
+                day_end_hour=day_end_hour,
+                slot_duration_minutes=slot_duration_minutes,
                 room_id=room_id,
                 manual_fixed=manual_fixed or [],
                 cross_class_blocked=cross_class_blocked or {},
-                preferred_slots=preferred_slots or {},
+                preferred_blocks=preferred_blocks or {},
             )
         )
         return {"slots": result}
@@ -59,51 +59,31 @@ async def _generate_async(
     class_id: int,
     academic_year_id: int,
     assignments_data: list[dict[str, Any]],
-    slots_data: list[dict[str, Any]],
+    day_names: list[str],
+    day_start_hour: int,
+    day_end_hour: int,
+    slot_duration_minutes: int,
     room_id: int | None,
     manual_fixed: list[dict[str, int]],
     cross_class_blocked: dict[str, list[int]],
-    preferred_slots: dict[str, list[int]],
+    preferred_blocks: dict[str, list[int]],
 ) -> list[dict[str, Any]]:
-    """Corps async de la generation — cree les creneaux en DB."""
+    """Corps async de la generation — solveur + persistence."""
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import (
-        Assignment, FixedAssignment, GeneratorResult, SlotTemplate, solve,
+        Assignment, FixedBlock, build_blocks, solve,
     )
 
     current_tenant_id.set(tenant_id)
-
-    # Create a fresh engine for this Celery task (avoids event loop conflicts)
     db_url = settings.DATABASE_URL.format(tenant=tenant_id)
     engine = create_async_engine(db_url, echo=False)
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async with factory() as db:
-        # Load teacher unavailabilities from DB
-        teacher_unavailabilities: dict[int, set[int]] = {}
-        unique_teachers = {a["teacher_id"] for a in assignments_data}
+        # Build the block grid
+        grid_blocks = build_blocks(day_names, day_start_hour, day_end_hour, slot_duration_minutes)
 
-        parsed_slots = [
-            {
-                "day": s["day"],
-                "start_time": _parse_time(s["start_time"]),
-                "end_time": _parse_time(s["end_time"]),
-            }
-            for s in slots_data
-        ]
-
-        for tid in unique_teachers:
-            blocked = await repo.get_unavailable_slot_indices(db, tid, parsed_slots)
-            if blocked:
-                teacher_unavailabilities[tid] = blocked
-
-        # Merge cross-class conflicts into unavailabilities
-        for tid_str, indices in cross_class_blocked.items():
-            tid = int(tid_str)
-            existing = teacher_unavailabilities.get(tid, set())
-            teacher_unavailabilities[tid] = existing | set(indices)
-
-        # Build solver objects
+        # Build assignments
         assignments = [
             Assignment(
                 teacher_id=a["teacher_id"],
@@ -112,33 +92,42 @@ async def _generate_async(
             )
             for a in assignments_data
         ]
-        slot_templates = [
-            SlotTemplate(
-                day=s["day"],
-                start_time=_parse_time(s["start_time"]),
-                end_time=_parse_time(s["end_time"]),
-                room_id=room_id,
-            )
-            for s in slots_data
-        ]
 
-        # Build fixed assignments
+        # Load teacher unavailabilities from DB
+        teacher_unavailabilities: dict[int, set[int]] = {}
+        unique_teachers = {a["teacher_id"] for a in assignments_data}
+
+        for tid in unique_teachers:
+            blocked = await repo.get_unavailable_block_indices(db, tid, grid_blocks)
+            if blocked:
+                teacher_unavailabilities[tid] = blocked
+
+        # Merge cross-class conflicts
+        for tid_str, indices in cross_class_blocked.items():
+            tid = int(tid_str)
+            existing = teacher_unavailabilities.get(tid, set())
+            teacher_unavailabilities[tid] = existing | set(indices)
+
+        # Build fixed blocks
         fixed = [
-            FixedAssignment(assignment_idx=f["assignment_idx"], slot_idx=f["slot_idx"])
+            FixedBlock(assignment_idx=f["assignment_idx"], block_idx=f["block_idx"])
             for f in manual_fixed
         ]
 
-        # Build preferred slots (convert str keys back to int)
+        # Build preferred blocks
         pref: dict[int, set[int]] = {
             int(tid_str): set(indices)
-            for tid_str, indices in preferred_slots.items()
+            for tid_str, indices in preferred_blocks.items()
         }
 
         # Solve
-        gen_result: GeneratorResult = solve(
-            assignments, slot_templates, teacher_unavailabilities,
-            fixed_assignments=fixed if fixed else None,
-            preferred_slots=pref if pref else None,
+        gen_result = solve(
+            assignments=assignments,
+            blocks=grid_blocks,
+            slot_duration_minutes=slot_duration_minutes,
+            teacher_unavailabilities=teacher_unavailabilities,
+            fixed_blocks=fixed if fixed else None,
+            preferred_blocks=pref if pref else None,
         )
         if not gen_result.feasible:
             raise ValueError("OR-Tools: aucun emploi du temps faisable avec les contraintes donnees")
@@ -148,45 +137,56 @@ async def _generate_async(
             db, class_id=class_id, academic_year_id=academic_year_id
         )
 
-        # Filter out fixed assignments (manual slots already exist in DB)
-        fixed_set = {(f["assignment_idx"], f["slot_idx"]) for f in manual_fixed}
-        new_pairs = [
-            (a_idx, s_idx) for a_idx, s_idx in gen_result.assignments
-            if (a_idx, s_idx) not in fixed_set
-        ]
+        # Filter out merged slots that correspond to manual fixed blocks
+        # (manual slots already exist in DB, don't duplicate)
+        manual_block_set = {(f["assignment_idx"], f["block_idx"]) for f in manual_fixed}
 
-        # Persist only new slots
+        # Determine which merged slots are new vs manual
+        # A merged slot is "manual" if ALL its constituent blocks are in the fixed set
+        new_merged = []
+        for ms in gen_result.merged_slots:
+            # Check if this merged slot overlaps with manual blocks
+            ms_start_min = ms.start_time.hour * 60 + ms.start_time.minute
+            ms_end_min = ms.end_time.hour * 60 + ms.end_time.minute
+            is_manual = False
+            for blk in grid_blocks:
+                if (blk.day == ms.day and blk.start_minutes >= ms_start_min
+                        and blk.end_minutes <= ms_end_min):
+                    if (ms.assignment_idx, blk.index) in manual_block_set:
+                        is_manual = True
+                        break
+            if not is_manual:
+                new_merged.append(ms)
+
+        # Persist new merged slots
         slots_to_create = [
             {
                 "class_id": class_id,
-                "teacher_id": assignments[a_idx].teacher_id,
-                "subject_id": assignments[a_idx].subject_id,
+                "teacher_id": assignments[ms.assignment_idx].teacher_id,
+                "subject_id": assignments[ms.assignment_idx].subject_id,
                 "academic_year_id": academic_year_id,
-                "day": slot_templates[s_idx].day,
-                "start_time": slot_templates[s_idx].start_time,
-                "end_time": slot_templates[s_idx].end_time,
+                "day": ms.day,
+                "start_time": ms.start_time,
+                "end_time": ms.end_time,
                 "room_id": room_id,
             }
-            for a_idx, s_idx in new_pairs
+            for ms in new_merged
         ]
         created_slots = await repo.create_slots_bulk(db, slots_to_create, timetable.id)
         await db.commit()
 
-        # Build response
+        # Build response (include both new and manual slots)
         slot_responses = []
         for slot in created_slots:
             refreshed = await repo.get_slot_by_id(db, slot.id)
             if refreshed:
                 slot_responses.append(_slot_to_dict(refreshed))
 
-        # Also include manual slots in the response
         manual_slots = await repo.list_manual_slots_for_class(db, class_id)
         for ms in manual_slots:
             slot_responses.append(_slot_to_dict(ms))
 
-        # Cleanup engine
         await engine.dispose()
-
         return slot_responses
 
 
@@ -203,7 +203,7 @@ def _slot_to_dict(slot: Any) -> dict[str, Any]:
         "subject_name": slot.subject.name if slot.subject else "",
         "subject_color": getattr(slot.subject, "color", None) if slot.subject else None,
         "academic_year_id": slot.academic_year_id,
-        "day": slot.day if isinstance(slot.day, str) else slot.day.value,
+        "day": slot.day if isinstance(slot.day, str) else slot.day,
         "start_time": slot.start_time.strftime("%H:%M"),
         "end_time": slot.end_time.strftime("%H:%M"),
         "room": slot.room.name if slot.room else None,

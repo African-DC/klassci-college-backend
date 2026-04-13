@@ -185,3 +185,7 @@ class SchoolSettings(Base, TimestampMixin):
     ministry_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     enrollment_number_pattern: Mapped[str | None] = mapped_column(String(200), nullable=True)
     enrollment_number_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Timetable generation settings
+    slot_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
+    day_start_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
+    day_end_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=17, server_default="17")
