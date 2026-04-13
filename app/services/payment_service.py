@@ -246,14 +246,14 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
     if enrollment_fee and enrollment_fee.fee_variant and enrollment_fee.fee_variant.category:
         fee_description = enrollment_fee.fee_variant.category.name
 
-    # Received by name
+    # Received by name — User model has email only (no first/last name)
     received_by_name = ""
     if payment.received_by:
         user_stmt = select(User).where(User.id == payment.received_by)
         user_result = await db.execute(user_stmt)
         user = user_result.scalar_one_or_none()
         if user:
-            received_by_name = f"{user.first_name} {user.last_name}"
+            received_by_name = user.email.split("@")[0]
 
     school = await _get_school_settings(db)
 
