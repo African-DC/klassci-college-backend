@@ -40,9 +40,41 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
 logger = logging.getLogger(__name__)
 
 
-def _to_response(payment: object) -> PaymentResponse:
-    """Convertit un Payment ORM en PaymentResponse."""
-    return PaymentResponse.model_validate(payment)
+def _to_response(payment: Payment) -> PaymentResponse:
+    """Convertit un Payment ORM en PaymentResponse avec champs enrichis."""
+    student_name = None
+    student_photo_url = None
+    fee_name = None
+
+    ef = getattr(payment, "enrollment_fee", None)
+    if ef is not None:
+        enrollment = getattr(ef, "enrollment", None)
+        if enrollment is not None:
+            student = getattr(enrollment, "student", None)
+            if student is not None:
+                student_name = f"{student.first_name} {student.last_name}"
+                student_photo_url = getattr(student, "photo_url", None)
+        fv = getattr(ef, "fee_variant", None)
+        if fv is not None:
+            cat = getattr(fv, "category", None)
+            if cat is not None:
+                fee_name = cat.name
+
+    return PaymentResponse(
+        id=payment.id,
+        enrollment_fee_id=payment.enrollment_fee_id,
+        amount=payment.amount,
+        method=payment.method,
+        status=payment.status,
+        reference=payment.reference,
+        received_by=payment.received_by,
+        notes=payment.notes,
+        created_at=payment.created_at,
+        updated_at=payment.updated_at,
+        student_name=student_name,
+        student_photo_url=student_photo_url,
+        fee_name=fee_name,
+    )
 
 
 async def create_payment(

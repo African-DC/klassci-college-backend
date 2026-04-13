@@ -30,8 +30,6 @@ class PaymentCreate(BaseModel):
 
 
 class PaymentResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
     enrollment_fee_id: int
     amount: Decimal
@@ -42,6 +40,10 @@ class PaymentResponse(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    # Enriched from joins
+    student_name: str | None = None
+    student_photo_url: str | None = None
+    fee_name: str | None = None
 
 
 class PaymentListResponse(BaseModel):

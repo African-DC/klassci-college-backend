@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.fee import EnrollmentFee, Payment, PaymentStatus
+from app.models.enrollment import Enrollment
+from app.models.fee import EnrollmentFee, FeeVariant, Payment, PaymentStatus
 
 
 async def get_payment_by_id(db: AsyncSession, payment_id: int) -> Payment | None:
@@ -33,7 +34,14 @@ async def list_payments(
     size: int = 20,
 ) -> tuple[list[Payment], int]:
     """Retourne une page de paiements avec le total."""
-    base = select(Payment).options(selectinload(Payment.enrollment_fee))
+    base = select(Payment).options(
+        selectinload(Payment.enrollment_fee)
+        .selectinload(EnrollmentFee.enrollment)
+        .selectinload(Enrollment.student),
+        selectinload(Payment.enrollment_fee)
+        .selectinload(EnrollmentFee.fee_variant)
+        .selectinload(FeeVariant.category),
+    )
 
     if status is not None:
         base = base.where(Payment.status == status)
