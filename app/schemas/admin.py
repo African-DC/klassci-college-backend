@@ -239,6 +239,60 @@ class StaffListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Parent
+# ---------------------------------------------------------------------------
+
+
+class ParentCreate(BaseModel):
+    first_name: str
+    last_name: str
+    phone: str | None = None
+    email: str | None = None
+    password: str | None = None
+    relationship_type: str = "guardian"
+
+    @field_validator("relationship_type")
+    @classmethod
+    def valid_relationship(cls, v: str) -> str:
+        if v not in {"father", "mother", "guardian", "other"}:
+            raise ValueError("relationship_type must be father, mother, guardian, or other")
+        return v
+
+
+class ParentUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    phone: str | None = None
+    email: str | None = None
+
+
+class ParentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int | None = None
+    first_name: str
+    last_name: str
+    phone: str | None = None
+    email: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ParentFullResponse(ParentResponse):
+    user_email: str | None = None
+    user_is_active: bool | None = None
+    children: list[dict] = []
+
+
+class ParentListResponse(BaseModel):
+    items: list[ParentResponse]
+    total: int
+    page: int
+    size: int
+
+
+# ---------------------------------------------------------------------------
 # Class
 # ---------------------------------------------------------------------------
 

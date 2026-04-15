@@ -18,6 +18,11 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    ParentCreate,
+    ParentFullResponse,
+    ParentListResponse,
+    ParentResponse,
+    ParentUpdate,
     PermissionResponse,
     RoleCreate,
     RoleListResponse,
@@ -1032,3 +1037,115 @@ async def delete_room(
 ) -> None:
     """Supprime une salle."""
     await admin_service.delete_room(db, room_id, deleted_by=current_user.user_id)
+
+
+# ---------------------------------------------------------------------------
+# Parents
+# ---------------------------------------------------------------------------
+
+
+@router.get("/parents", response_model=ParentListResponse)
+async def list_parents(
+    search: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    _: None = require_permission("admin:parents:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ParentListResponse:
+    """Liste paginée des parents avec recherche optionnelle."""
+    return await admin_service.list_parents(db, page=page, size=size, search=search)
+
+
+@router.post("/parents", response_model=ParentResponse, status_code=status.HTTP_201_CREATED)
+async def create_parent(
+    data: ParentCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ParentResponse:
+    """Crée un nouveau parent (avec compte utilisateur optionnel)."""
+    return await admin_service.create_parent(db, data, created_by=current_user.user_id)
+
+
+@router.get("/parents/{parent_id}/full", response_model=ParentFullResponse)
+async def get_parent_full(
+    parent_id: int,
+    _: None = require_permission("admin:parents:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Retourne le profil complet d'un parent avec ses enfants."""
+    return await admin_service.get_parent_full(db, parent_id)
+
+
+@router.get("/parents/{parent_id}", response_model=ParentResponse)
+async def get_parent(
+    parent_id: int,
+    _: None = require_permission("admin:parents:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ParentResponse:
+    """Retourne un parent par ID."""
+    return await admin_service.get_parent(db, parent_id)
+
+
+@router.patch("/parents/{parent_id}", response_model=ParentResponse)
+async def update_parent(
+    parent_id: int,
+    data: ParentUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ParentResponse:
+    """Met à jour un parent (patch partiel)."""
+    return await admin_service.update_parent(
+        db, parent_id, data, updated_by=current_user.user_id
+    )
+
+
+@router.delete("/parents/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_parent(
+    parent_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime un parent."""
+    await admin_service.delete_parent(db, parent_id, deleted_by=current_user.user_id)
+
+
+@router.post("/parents/{parent_id}/link/{student_id}", status_code=status.HTTP_201_CREATED)
+async def link_parent_to_student(
+    parent_id: int,
+    student_id: int,
+    relationship_type: str = Query("guardian"),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Lie un parent à un élève."""
+    return await admin_service.link_parent_to_student(
+        db, parent_id, student_id, relationship_type, linked_by=current_user.user_id
+    )
+
+
+@router.delete("/parents/{parent_id}/link/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_parent_from_student(
+    parent_id: int,
+    student_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime le lien entre un parent et un élève."""
+    await admin_service.unlink_parent_from_student(
+        db, parent_id, student_id, unlinked_by=current_user.user_id
+    )
+
+
+@router.get("/students/{student_id}/parents")
+async def get_student_parents(
+    student_id: int,
+    _: None = require_permission("admin:parents:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[dict]:
+    """Liste les parents liés à un élève."""
+    return await admin_service.get_student_parents(db, student_id)

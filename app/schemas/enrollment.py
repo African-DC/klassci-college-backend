@@ -102,6 +102,7 @@ class ParentInput(BaseModel):
     last_name: str
     phone: str | None = None
     email: str | None = None
+    password: str | None = None  # If email+password provided, creates a User account
     relationship_type: str = "guardian"
 
     @field_validator("relationship_type")

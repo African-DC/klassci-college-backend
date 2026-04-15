@@ -83,6 +83,11 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "reports:read", "name": "View reports"},
     {"slug": "reports:generate", "name": "Generate reports"},
     {"slug": "reports:override", "name": "Override council decisions"},
+    # Parents (4)
+    {"slug": "admin:parents:read", "name": "View parents"},
+    {"slug": "admin:parents:create", "name": "Create parents"},
+    {"slug": "admin:parents:update", "name": "Update parents"},
+    {"slug": "admin:parents:delete", "name": "Delete parents"},
     # Super Admin (1)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
 ]
@@ -137,6 +142,14 @@ ROLE_DEFINITIONS: dict[str, dict] = {
             "enrollments:read",
             "reports:read",
         ],
+    },
+    "student": {
+        "description": "Élève — accès portail élève uniquement",
+        "permissions": [],
+    },
+    "parent": {
+        "description": "Parent / Tuteur — accès portail parent uniquement",
+        "permissions": [],
     },
 }
 # Note: student and parent roles have NO permissions (portal is user-scoped via JWT)

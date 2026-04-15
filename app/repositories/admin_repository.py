@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
 from app.models.permission import Permission, Role, RolePermission
-from app.models.user import StaffProfile, Student, TeacherProfile
+from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
 
@@ -203,6 +203,85 @@ async def update_staff(
 async def delete_staff(db: AsyncSession, staff: StaffProfile) -> None:
     await db.delete(staff)
     await db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Parent
+# ---------------------------------------------------------------------------
+
+
+async def get_parent_by_id(db: AsyncSession, parent_id: int) -> Parent | None:
+    stmt = select(Parent).where(Parent.id == parent_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def list_parents(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    search: str | None = None,
+) -> tuple[list[Parent], int]:
+    base = select(Parent)
+    if search:
+        words = search.strip().split()
+        for word in words:
+            pattern = f"%{word}%"
+            base = base.where(
+                or_(Parent.first_name.ilike(pattern), Parent.last_name.ilike(pattern))
+            )
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+    stmt = base.offset((page - 1) * size).limit(size).order_by(Parent.id.desc())
+    rows = list((await db.execute(stmt)).scalars().all())
+
+    if search and total == 0:
+        all_stmt = select(Parent).order_by(Parent.id.desc())
+        all_rows = list((await db.execute(all_stmt)).scalars().all())
+        fuzzy_results = fuzzy_filter_by_name(
+            all_rows, search,
+            name_getter=lambda p: f"{p.first_name} {p.last_name}",
+            limit=size,
+        )
+        return fuzzy_results, len(fuzzy_results)
+
+    return rows, total
+
+
+async def create_parent(db: AsyncSession, **kwargs: object) -> Parent:
+    parent = Parent(**kwargs)
+    db.add(parent)
+    await db.flush()
+    return parent
+
+
+async def update_parent(
+    db: AsyncSession, parent: Parent, **kwargs: object
+) -> Parent:
+    for key, value in kwargs.items():
+        if value is not None:
+            setattr(parent, key, value)
+    await db.flush()
+    return parent
+
+
+async def delete_parent(db: AsyncSession, parent: Parent) -> None:
+    await db.delete(parent)
+    await db.flush()
+
+
+async def get_student_parents(
+    db: AsyncSession, student_id: int
+) -> list[tuple[Parent, str]]:
+    """Return list of (Parent, relationship_type) for a student."""
+    stmt = (
+        select(Parent, ParentStudent.relationship_type)
+        .join(ParentStudent, Parent.id == ParentStudent.parent_id)
+        .where(ParentStudent.student_id == student_id)
+        .order_by(Parent.id.asc())
+    )
+    rows = (await db.execute(stmt)).all()
+    return [(row[0], row[1]) for row in rows]
 
 
 # ---------------------------------------------------------------------------

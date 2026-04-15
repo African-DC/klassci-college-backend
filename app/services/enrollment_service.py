@@ -9,10 +9,11 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.security import hash_password
 from app.models.academic import AcademicYear, Class, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
 from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption
-from app.models.user import Parent, ParentStudent, Student
+from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
 from app.services.matricule_service import generate_enrollment_number
 from app.schemas.enrollment import (
@@ -333,11 +334,41 @@ async def create_enrollment_with_student(
 
         # 2. Create parent if provided
         if data.parent:
+            parent_user_id = None
+
+            # If email + password provided, create a User account for the parent
+            if data.parent.email and data.parent.password:
+                existing_user = (
+                    await db.execute(select(User).where(User.email == data.parent.email))
+                ).scalar_one_or_none()
+                if existing_user:
+                    raise BusinessValidationError(
+                        f"L'email parent {data.parent.email} est déjà utilisé"
+                    )
+                parent_user = User(
+                    email=data.parent.email,
+                    hashed_password=hash_password(data.parent.password),
+                    role=UserRoleEnum.PARENT,
+                )
+                db.add(parent_user)
+                await db.flush()
+                parent_user_id = parent_user.id
+
+                # Assign parent role via user_roles table
+                from app.models.permission import Role, UserRole as UserRoleModel
+
+                role_stmt = select(Role).where(Role.name == "parent")
+                role = (await db.execute(role_stmt)).scalar_one_or_none()
+                if role:
+                    db.add(UserRoleModel(user_id=parent_user.id, role_id=role.id))
+                    await db.flush()
+
             parent = Parent(
                 first_name=data.parent.first_name,
                 last_name=data.parent.last_name,
                 phone=data.parent.phone,
                 email=data.parent.email,
+                user_id=parent_user_id,
             )
             db.add(parent)
             await db.flush()

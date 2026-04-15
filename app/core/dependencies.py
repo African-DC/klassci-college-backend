@@ -106,3 +106,36 @@ def require_permission(permission_slug: str) -> Any:
             raise PermissionDeniedError(permission_slug)
 
     return Depends(_check)
+
+
+def require_role(*role_names: str) -> Any:
+    """Retourne une dépendance FastAPI qui vérifie que l'utilisateur a un des rôles donnés."""
+
+    async def _check(
+        current_user: TokenData = Depends(get_current_user),
+        db: AsyncSession = Depends(get_tenant_db),
+    ) -> None:
+        from sqlalchemy import select
+
+        from app.models.permission import Role, UserRole
+        from app.models.user import User
+
+        # Check the User.role enum field (fast path)
+        user = await db.get(User, current_user.user_id)
+        if user and user.role and user.role.value in role_names:
+            return
+
+        # Fallback: check user_roles table
+        stmt = (
+            select(Role.name)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(UserRole.user_id == current_user.user_id, Role.name.in_(role_names))
+            .limit(1)
+        )
+        row = (await db.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            raise PermissionDeniedError(
+                f"Rôle requis : {', '.join(role_names)}"
+            )
+
+    return Depends(_check)

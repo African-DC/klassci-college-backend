@@ -12,7 +12,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
-from app.models.user import Student, StaffProfile, TeacherProfile, User, UserRoleEnum
+from app.models.user import Parent, ParentStudent, Student, StaffProfile, TeacherProfile, User, UserRoleEnum
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -27,6 +27,11 @@ from app.schemas.admin import (
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
+    ParentCreate,
+    ParentFullResponse,
+    ParentListResponse,
+    ParentResponse,
+    ParentUpdate,
     PermissionResponse,
     RoleCreate,
     RoleListResponse,
@@ -637,6 +642,285 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
         result["user_created_at"] = staff.user.created_at
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Parent
+# ---------------------------------------------------------------------------
+
+
+def _parent_to_response(p: object) -> ParentResponse:
+    return ParentResponse.model_validate(p)
+
+
+async def list_parents(
+    db: AsyncSession,
+    *,
+    page: int = 1,
+    size: int = 20,
+    search: str | None = None,
+) -> ParentListResponse:
+    parents, total = await repo.list_parents(db, page=page, size=size, search=search)
+    return ParentListResponse(
+        items=[_parent_to_response(p) for p in parents],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+async def get_parent(db: AsyncSession, parent_id: int) -> ParentResponse:
+    parent = await repo.get_parent_by_id(db, parent_id)
+    if parent is None:
+        raise NotFoundError("Parent", parent_id)
+    return _parent_to_response(parent)
+
+
+async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
+    """Enriched parent profile with user account and children list."""
+    stmt = select(Parent).where(Parent.id == parent_id).options(
+        selectinload(Parent.user),
+        selectinload(Parent.children).selectinload(ParentStudent.student),
+    )
+    parent = (await db.execute(stmt)).scalar_one_or_none()
+    if parent is None:
+        raise NotFoundError("Parent", parent_id)
+
+    result: dict = {
+        "id": parent.id,
+        "user_id": parent.user_id,
+        "first_name": parent.first_name,
+        "last_name": parent.last_name,
+        "phone": parent.phone,
+        "email": parent.email,
+        "created_at": parent.created_at,
+        "updated_at": parent.updated_at,
+    }
+
+    if parent.user:
+        result["user_email"] = parent.user.email
+        result["user_is_active"] = parent.user.is_active
+
+    children = []
+    for link in parent.children:
+        s = link.student
+        children.append({
+            "student_id": s.id,
+            "student_name": f"{s.first_name} {s.last_name}",
+            "relationship_type": link.relationship_type,
+        })
+    result["children"] = children
+
+    return result
+
+
+async def create_parent(
+    db: AsyncSession, data: ParentCreate, *, created_by: int
+) -> ParentResponse:
+    async with db.begin_nested():
+        user_id = None
+
+        # If email + password provided, create a User account
+        if data.email and data.password:
+            existing = (
+                await db.execute(select(User).where(User.email == data.email))
+            ).scalar_one_or_none()
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"L'email {data.email} est déjà utilisé",
+                )
+
+            user = User(
+                email=data.email,
+                hashed_password=hash_password(data.password),
+                role=UserRoleEnum.PARENT,
+            )
+            db.add(user)
+            await db.flush()
+            user_id = user.id
+
+            # Assign parent role via user_roles table
+            from app.models.permission import Role, UserRole as UserRoleModel
+
+            role_stmt = select(Role).where(Role.name == "parent")
+            role = (await db.execute(role_stmt)).scalar_one_or_none()
+            if role:
+                db.add(UserRoleModel(user_id=user.id, role_id=role.id))
+                await db.flush()
+
+        parent = await repo.create_parent(
+            db,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            phone=data.phone,
+            email=data.email,
+            user_id=user_id,
+        )
+        await audit_log(
+            db,
+            entity_type="parent",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=parent.id,
+            new_values={
+                **data.model_dump(mode="json", exclude={"password"}),
+                "user_id": user_id,
+            },
+        )
+    await db.commit()
+    refreshed = await repo.get_parent_by_id(db, parent.id)
+    if refreshed is None:
+        raise NotFoundError("Parent", parent.id)
+    return _parent_to_response(refreshed)
+
+
+async def update_parent(
+    db: AsyncSession, parent_id: int, data: ParentUpdate, *, updated_by: int
+) -> ParentResponse:
+    parent = await repo.get_parent_by_id(db, parent_id)
+    if parent is None:
+        raise NotFoundError("Parent", parent_id)
+    changes = data.model_dump(exclude_none=True, mode="json")
+    if not changes:
+        return _parent_to_response(parent)
+    async with db.begin_nested():
+        await repo.update_parent(db, parent, **changes)
+        await audit_log(
+            db,
+            entity_type="parent",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=parent_id,
+            new_values=changes,
+        )
+    await db.commit()
+    refreshed = await repo.get_parent_by_id(db, parent_id)
+    if refreshed is None:
+        raise NotFoundError("Parent", parent_id)
+    return _parent_to_response(refreshed)
+
+
+async def delete_parent(
+    db: AsyncSession, parent_id: int, *, deleted_by: int
+) -> None:
+    parent = await repo.get_parent_by_id(db, parent_id)
+    if parent is None:
+        raise NotFoundError("Parent", parent_id)
+    async with db.begin_nested():
+        await repo.delete_parent(db, parent)
+        await audit_log(
+            db,
+            entity_type="parent",
+            action=AuditAction.DELETE,
+            user_id=deleted_by,
+            entity_id=parent_id,
+        )
+    await db.commit()
+
+
+async def link_parent_to_student(
+    db: AsyncSession,
+    parent_id: int,
+    student_id: int,
+    relationship_type: str = "guardian",
+    *,
+    linked_by: int,
+) -> dict:
+    """Create a ParentStudent link."""
+    parent = await repo.get_parent_by_id(db, parent_id)
+    if parent is None:
+        raise NotFoundError("Parent", parent_id)
+    student = await repo.get_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    # Check if link already exists
+    existing = (
+        await db.execute(
+            select(ParentStudent).where(
+                ParentStudent.parent_id == parent_id,
+                ParentStudent.student_id == student_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail="Ce parent est déjà lié à cet élève")
+
+    async with db.begin_nested():
+        link = ParentStudent(
+            parent_id=parent_id,
+            student_id=student_id,
+            relationship_type=relationship_type,
+        )
+        db.add(link)
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="parent_student",
+            action=AuditAction.CREATE,
+            user_id=linked_by,
+            entity_id=parent_id,
+            new_values={
+                "parent_id": parent_id,
+                "student_id": student_id,
+                "relationship_type": relationship_type,
+            },
+        )
+    await db.commit()
+    return {"parent_id": parent_id, "student_id": student_id, "relationship_type": relationship_type}
+
+
+async def unlink_parent_from_student(
+    db: AsyncSession,
+    parent_id: int,
+    student_id: int,
+    *,
+    unlinked_by: int,
+) -> None:
+    """Remove a ParentStudent link."""
+    link = (
+        await db.execute(
+            select(ParentStudent).where(
+                ParentStudent.parent_id == parent_id,
+                ParentStudent.student_id == student_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise NotFoundError("ParentStudent link", parent_id)
+
+    async with db.begin_nested():
+        await db.delete(link)
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="parent_student",
+            action=AuditAction.DELETE,
+            user_id=unlinked_by,
+            entity_id=parent_id,
+            new_values={
+                "parent_id": parent_id,
+                "student_id": student_id,
+            },
+        )
+    await db.commit()
+
+
+async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
+    """List parents linked to a student."""
+    student = await repo.get_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    rows = await repo.get_student_parents(db, student_id)
+    return [
+        {
+            **_parent_to_response(parent).model_dump(mode="json"),
+            "relationship_type": rel_type,
+        }
+        for parent, rel_type in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
