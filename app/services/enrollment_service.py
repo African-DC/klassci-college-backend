@@ -3,7 +3,7 @@
 import logging
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -680,9 +680,9 @@ async def get_applicable_fee_variants(
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnée.
 
-    Résout par level_id + series_id + academic_year_id de la classe.
-    Si la classe a une series_id, on prend les variants avec cette série
-    OU ceux sans série (globaux pour le niveau). Sinon, uniquement series_id IS NULL.
+    Frais obligatoires : filtrés par level_id + series_id + academic_year_id.
+    Frais optionnels : level_id NULL (globaux) OU matching level — les frais
+    optionnels comme la cantine sont un prix fixe, pas lié au niveau.
     """
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
@@ -690,8 +690,7 @@ async def get_applicable_fee_variants(
     if class_ is None:
         raise BusinessValidationError(f"Class {class_id} not found")
 
-    # Variants matching this level + academic year
-    # series_id: exact match OR NULL (applicable à tout le niveau)
+    # Series condition: exact match OR NULL (applicable à tout le niveau)
     if class_.series_id:
         series_condition = or_(
             FeeVariant.series_id == class_.series_id,
@@ -700,15 +699,35 @@ async def get_applicable_fee_variants(
     else:
         series_condition = FeeVariant.series_id.is_(None)
 
+    # Level condition: exact match for mandatory, OR NULL for optional (global fees)
+    level_condition = or_(
+        FeeVariant.level_id == class_.level_id,
+        FeeVariant.level_id.is_(None),
+    )
+
     stmt = (
         select(FeeVariant)
+        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
         .options(selectinload(FeeVariant.category))
         .where(
-            FeeVariant.academic_year_id == class_.academic_year_id,
-            FeeVariant.level_id == class_.level_id,
-            series_condition,
+            or_(
+                # Mandatory: must match academic_year + level + series
+                and_(
+                    FeeCategory.is_mandatory == True,
+                    FeeVariant.academic_year_id == class_.academic_year_id,
+                    FeeVariant.level_id == class_.level_id,
+                    series_condition,
+                ),
+                # Optional: match academic_year, level NULL (global) or matching
+                and_(
+                    FeeCategory.is_mandatory == False,
+                    FeeVariant.academic_year_id == class_.academic_year_id,
+                    level_condition,
+                    series_condition,
+                ),
+            )
         )
-        .order_by(FeeVariant.fee_category_id, FeeVariant.id)
+        .order_by(FeeCategory.is_mandatory.desc(), FeeVariant.fee_category_id, FeeVariant.id)
     )
     rows = (await db.execute(stmt)).scalars().all()
 

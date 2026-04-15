@@ -87,8 +87,8 @@ class FeeVariant(Base, TimestampMixin):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    level_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=False, index=True
+    level_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     series_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("series.id", ondelete="RESTRICT"), nullable=True, index=True
@@ -96,7 +96,7 @@ class FeeVariant(Base, TimestampMixin):
 
     category: Mapped[FeeCategory] = relationship(back_populates="variants")
     academic_year: Mapped[AcademicYear] = relationship()
-    level: Mapped[Level] = relationship()
+    level: Mapped[Level | None] = relationship()
     series: Mapped[Series | None] = relationship()
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="fee_variant")
 
