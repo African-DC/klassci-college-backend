@@ -568,12 +568,13 @@ def generate_timetable_pdf(
                 teacher = _esc(s.get("teacher_name", ""))
                 room = _esc(s.get("room", ""))
                 time_str = f'{s["start_time"]}-{s["end_time"]}'
+                room_div = f'<div style="color:#888;">{room}</div>' if room else ""
                 return (
                     f'<td rowspan="{span}" style="background:{bg}; vertical-align:top; padding:4px; '
                     f'border:1px solid #ccc; font-size:8px; line-height:1.3;">'
                     f'<div style="font-weight:bold; font-size:9px; color:{_PRIMARY};">{subject}</div>'
                     f'<div style="color:#555;">{teacher}</div>'
-                    f'{f"<div style=\\"color:#888;\\">{room}</div>" if room else ""}'
+                    f'{room_div}'
                     f'<div style="color:#999; font-size:7px;">{time_str}</div>'
                     f'</td>'
                 )
