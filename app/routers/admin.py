@@ -313,6 +313,46 @@ async def delete_teacher(
     await admin_service.delete_teacher(db, teacher_id, deleted_by=current_user.user_id)
 
 
+@router.post("/teachers/{teacher_id}/photo")
+async def upload_teacher_photo(
+    teacher_id: int,
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:teachers:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload ou remplace la photo de profil d'un enseignant."""
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    filename = f"teacher_{teacher_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    photo_url = f"/uploads/photos/{filename}"
+    teacher = await admin_service.update_teacher_photo(db, teacher_id, photo_url, updated_by=current_user.user_id)
+    return {"photo_url": teacher.photo_url}
+
+
+@router.delete("/teachers/{teacher_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_teacher_photo(
+    teacher_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:teachers:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime la photo de profil d'un enseignant."""
+    await admin_service.update_teacher_photo(db, teacher_id, None, updated_by=current_user.user_id)
+
+
 # ---------------------------------------------------------------------------
 # Staff
 # ---------------------------------------------------------------------------
@@ -384,6 +424,46 @@ async def delete_staff(
 ) -> None:
     """Supprime un membre du personnel."""
     await admin_service.delete_staff(db, staff_id, deleted_by=current_user.user_id)
+
+
+@router.post("/staff/{staff_id}/photo")
+async def upload_staff_photo(
+    staff_id: int,
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:staff:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload ou remplace la photo de profil d'un membre du personnel."""
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
+    filename = f"staff_{staff_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    photo_url = f"/uploads/photos/{filename}"
+    staff = await admin_service.update_staff_photo(db, staff_id, photo_url, updated_by=current_user.user_id)
+    return {"photo_url": staff.photo_url}
+
+
+@router.delete("/staff/{staff_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staff_photo(
+    staff_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:staff:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime la photo de profil d'un membre du personnel."""
+    await admin_service.update_staff_photo(db, staff_id, None, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------

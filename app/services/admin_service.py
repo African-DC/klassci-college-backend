@@ -12,7 +12,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
-from app.models.user import Student, User, UserRoleEnum
+from app.models.user import Student, StaffProfile, TeacherProfile, User, UserRoleEnum
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -294,6 +294,32 @@ async def update_student_photo(
 # ---------------------------------------------------------------------------
 
 
+async def update_teacher_photo(
+    db: AsyncSession, teacher_id: int, photo_url: str | None, *, updated_by: int
+) -> TeacherProfile:
+    """Update teacher photo_url."""
+    teacher = await repo.get_teacher_by_id(db, teacher_id)
+    if teacher is None:
+        raise NotFoundError("Teacher", teacher_id)
+    teacher.photo_url = photo_url
+    await db.flush()
+    await db.commit()
+    return teacher
+
+
+async def update_staff_photo(
+    db: AsyncSession, staff_id: int, photo_url: str | None, *, updated_by: int
+) -> StaffProfile:
+    """Update staff photo_url."""
+    staff = await repo.get_staff_by_id(db, staff_id)
+    if staff is None:
+        raise NotFoundError("Staff", staff_id)
+    staff.photo_url = photo_url
+    await db.flush()
+    await db.commit()
+    return staff
+
+
 def _teacher_to_response(t: object) -> TeacherResponse:
     return TeacherResponse.model_validate(t)
 
@@ -459,6 +485,29 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     result["classes_count"] = classes_count
     result["students_count"] = students_count
     result["evaluations_count"] = evaluations_count
+
+    # Hours per week (sum of subject hours_per_week via SubjectInstance)
+    from app.models.academic import SubjectInstance
+    hours_stmt = select(
+        func.coalesce(func.sum(SubjectInstance.hours_per_week), 0)
+    ).where(SubjectInstance.teacher_id == teacher_id)
+    result["hours_per_week"] = float((await db.execute(hours_stmt)).scalar() or 0)
+
+    # Availability rate
+    from app.models.timetable import TeacherAvailability
+    total_avail_stmt = select(func.count()).select_from(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id
+    )
+    available_stmt = select(func.count()).select_from(TeacherAvailability).where(
+        TeacherAvailability.teacher_id == teacher_id,
+        TeacherAvailability.available == True,
+    )
+    total_avail = (await db.execute(total_avail_stmt)).scalar() or 0
+    available_count = (await db.execute(available_stmt)).scalar() or 0
+    result["availability_rate"] = round((available_count / total_avail * 100) if total_avail > 0 else 0, 1)
+
+    # Include photo_url
+    result["photo_url"] = teacher.photo_url
 
     return result
 

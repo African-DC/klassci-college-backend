@@ -95,6 +95,7 @@ class StaffProfile(Base, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     position: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
@@ -116,6 +117,7 @@ class TeacherProfile(Base, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     speciality: Mapped[str | None] = mapped_column(String(150), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="teacher_profile")
 

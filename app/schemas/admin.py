@@ -136,6 +136,7 @@ class TeacherResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -150,6 +151,7 @@ class TeacherFullResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -163,6 +165,8 @@ class TeacherFullResponse(BaseModel):
     classes_count: int = 0
     students_count: int = 0
     evaluations_count: int = 0
+    hours_per_week: float = 0
+    availability_rate: float = 0
 
 
 class TeacherListResponse(BaseModel):
@@ -201,6 +205,7 @@ class StaffResponse(BaseModel):
     last_name: str
     position: str | None
     phone: str | None
+    photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -215,6 +220,7 @@ class StaffFullResponse(BaseModel):
     last_name: str
     position: str | None
     phone: str | None
+    photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
