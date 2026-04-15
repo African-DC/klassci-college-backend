@@ -18,6 +18,8 @@ from app.schemas.parent_portal import (
     ChildGradesResponse,
     ChildrenListResponse,
     ChildResponse,
+    ChildTimetableResponse,
+    ChildTimetableSlot,
     FeeDetail,
     GradeDetail,
     PaymentDetail,
@@ -208,3 +210,38 @@ async def get_child_bulletins(
     ]
 
     return ChildBulletinsResponse(student_id=student_id, bulletins=bulletin_details)
+
+
+async def get_child_timetable(
+    db: AsyncSession, user_id: int, student_id: int
+) -> ChildTimetableResponse:
+    """Retourne l'emploi du temps de la classe d'un enfant."""
+    parent = await _get_parent_for_user(db, user_id)
+    await _verify_child_access(db, parent.id, student_id)
+
+    enrollment = await repo.get_student_active_enrollment(db, student_id)
+    if enrollment is None:
+        raise NotFoundError("Active enrollment not found for student", student_id)
+
+    from app.repositories import student_portal_repository as student_repo
+    slots = await student_repo.get_timetable_slots_for_class(db, enrollment.class_id)
+
+    slot_responses = [
+        ChildTimetableSlot(
+            id=s.id,
+            day=s.day,
+            start_time=s.start_time.strftime("%H:%M") if hasattr(s.start_time, "strftime") else str(s.start_time),
+            end_time=s.end_time.strftime("%H:%M") if hasattr(s.end_time, "strftime") else str(s.end_time),
+            subject_name=s.subject.name if s.subject else "",
+            teacher_name=f"{s.teacher.first_name} {s.teacher.last_name}" if s.teacher else "",
+            room_name=s.room.name if s.room else None,
+        )
+        for s in slots
+    ]
+
+    class_name = enrollment.class_.name if enrollment.class_ else f"Classe #{enrollment.class_id}"
+    return ChildTimetableResponse(
+        student_id=student_id,
+        class_name=class_name,
+        slots=slot_responses,
+    )

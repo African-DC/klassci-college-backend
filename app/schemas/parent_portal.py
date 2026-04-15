@@ -129,3 +129,26 @@ class BulletinDetail(BaseModel):
 class ChildBulletinsResponse(BaseModel):
     student_id: int
     bulletins: list[BulletinDetail]
+
+
+# ---------------------------------------------------------------------------
+# Timetable
+# ---------------------------------------------------------------------------
+
+
+class ChildTimetableSlot(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    day: str
+    start_time: str
+    end_time: str
+    subject_name: str
+    teacher_name: str
+    room_name: str | None
+
+
+class ChildTimetableResponse(BaseModel):
+    student_id: int
+    class_name: str
+    slots: list[ChildTimetableSlot]

@@ -8,6 +8,7 @@ from app.schemas.parent_portal import (
     ChildFeesResponse,
     ChildGradesResponse,
     ChildrenListResponse,
+    ChildTimetableResponse,
 )
 from app.services import parent_portal_service
 
@@ -56,3 +57,13 @@ async def get_child_bulletins(
 ) -> ChildBulletinsResponse:
     """Retourne les bulletins publiés d'un enfant du parent connecté."""
     return await parent_portal_service.get_child_bulletins(db, current_user.user_id, student_id)
+
+
+@router.get("/children/{student_id}/timetable", response_model=ChildTimetableResponse)
+async def get_child_timetable(
+    student_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ChildTimetableResponse:
+    """Retourne l'emploi du temps de la classe d'un enfant du parent connecté."""
+    return await parent_portal_service.get_child_timetable(db, current_user.user_id, student_id)
