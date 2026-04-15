@@ -178,6 +178,7 @@ class FeeVariantResponse(BaseModel):
     id: int
     fee_category_id: int
     category_name: str
+    is_mandatory: bool = True
     level_id: int | None
     series_id: int | None
     academic_year_id: int

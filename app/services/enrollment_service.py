@@ -717,6 +717,7 @@ async def get_applicable_fee_variants(
             id=fv.id,
             fee_category_id=fv.fee_category_id,
             category_name=fv.category.name if fv.category else str(fv.fee_category_id),
+            is_mandatory=fv.category.is_mandatory if fv.category else True,
             level_id=fv.level_id,
             series_id=fv.series_id,
             academic_year_id=fv.academic_year_id,
