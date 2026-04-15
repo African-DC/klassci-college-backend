@@ -572,6 +572,11 @@ class SchoolSettingsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class UserAccountCreate(BaseModel):
+    email: str
+    password: str
+
+
 class UserAccountUpdate(BaseModel):
     email: str | None = None
     password: str | None = None

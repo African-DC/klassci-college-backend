@@ -47,6 +47,7 @@ from app.schemas.admin import (
     StudentCreate,
     StudentEnrollmentFeeListResponse,
     StudentFullResponse,
+    UserAccountCreate,
     UserAccountUpdate,
     StudentListResponse,
     StudentResponse,
@@ -187,6 +188,21 @@ async def delete_student_photo(
 ) -> None:
     """Supprime la photo de profil d'un eleve."""
     await admin_service.update_student_photo(db, student_id, None, updated_by=current_user.user_id)
+
+
+@router.post("/students/{student_id}/account")
+async def create_student_account(
+    student_id: int,
+    data: UserAccountCreate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Cree un compte utilisateur pour un eleve existant sans compte."""
+    result = await admin_service.create_student_user_account(
+        db, student_id, data.email, data.password, created_by=current_user.user_id
+    )
+    return result
 
 
 @router.get(

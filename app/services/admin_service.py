@@ -281,6 +281,50 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     return result
 
 
+async def create_student_user_account(
+    db: AsyncSession, student_id: int, email: str, password: str, *, created_by: int
+) -> dict:
+    """Create a User account for an existing student without one."""
+    student = await repo.get_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+    if student.user_id is not None:
+        raise HTTPException(status_code=400, detail="Cet élève a déjà un compte utilisateur")
+
+    existing = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"L'email {email} est déjà utilisé")
+
+    async with db.begin_nested():
+        user = User(
+            email=email,
+            hashed_password=hash_password(password),
+            role=UserRoleEnum.STUDENT,
+        )
+        db.add(user)
+        await db.flush()
+
+        student.user_id = user.id
+        await db.flush()
+
+        from app.models.permission import Role, UserRole as UserRoleModel
+        role = (await db.execute(select(Role).where(Role.name == "student"))).scalar_one_or_none()
+        if role:
+            db.add(UserRoleModel(user_id=user.id, role_id=role.id))
+            await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="student",
+            action=AuditAction.UPDATE,
+            user_id=created_by,
+            entity_id=student_id,
+            new_values={"user_id": user.id, "email": email},
+        )
+    await db.commit()
+    return {"user_id": user.id, "email": email}
+
+
 async def update_student_photo(
     db: AsyncSession, student_id: int, photo_url: str | None, *, updated_by: int
 ) -> Student:
