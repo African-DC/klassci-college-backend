@@ -1,6 +1,7 @@
 """Router emploi du temps — CRUD /timetable + génération OR-Tools."""
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
@@ -85,6 +86,27 @@ async def auto_generate_timetable(
 ) -> GenerateTimetableResponse:
     """Generation automatique intelligente — preserve les slots manuels."""
     return await timetable_service.auto_generate(db, current_user.tenant_id, class_id)
+
+
+# ---------------------------------------------------------------------------
+# GET /timetable/export-pdf
+# ---------------------------------------------------------------------------
+
+
+@router.get("/export-pdf")
+async def export_timetable_pdf(
+    class_id: int = Query(...),
+    week_offset: int = Query(0),
+    _: None = require_permission("timetable:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Export emploi du temps en PDF (A4 paysage)."""
+    pdf_bytes = await timetable_service.export_timetable_pdf(db, class_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=emploi-du-temps-classe-{class_id}.pdf"},
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -539,6 +539,64 @@ def get_task_status(task_id: str) -> TaskStatusResponse:
 
 
 # ---------------------------------------------------------------------------
+# Timetable PDF export
+# ---------------------------------------------------------------------------
+
+
+async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
+    """Generate a PDF of the timetable for a class."""
+    from sqlalchemy import select
+    from app.models.academic import Class, AcademicYear, SchoolSettings
+    from app.services.pdf_service import generate_timetable_pdf
+
+    # Get class info
+    cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
+    if cls is None:
+        raise NotFoundError("Class", class_id)
+
+    # Get current academic year
+    ay = (await db.execute(
+        select(AcademicYear).where(AcademicYear.is_current == True)
+    )).scalar_one_or_none()
+    academic_year_name = ay.name if ay else ""
+
+    # Get school settings
+    settings = (await db.execute(select(SchoolSettings))).scalar_one_or_none()
+    school_settings = {
+        "school_name": settings.school_name if settings else "Etablissement",
+        "ministry_code": settings.ministry_code if settings else None,
+    }
+    day_start = settings.day_start_hour if settings else 7
+    day_end = settings.day_end_hour if settings else 18
+
+    # Get all slots for this class
+    slots_raw = await repo.list_slots(db, class_id=class_id)
+    slots_data = []
+    for s in slots_raw:
+        start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
+        end_t = s.end_time if isinstance(s.end_time, str) else s.end_time.strftime("%H:%M")
+        slots_data.append({
+            "day": s.day,
+            "start_time": start_t,
+            "end_time": end_t,
+            "subject_name": s.subject.name if s.subject else "",
+            "teacher_name": f"{s.teacher.last_name} {s.teacher.first_name}" if s.teacher else "",
+            "room": s.room.name if s.room else None,
+            "subject_color": s.subject.color if s.subject and hasattr(s.subject, "color") else None,
+        })
+
+    class_name = cls.name
+    return generate_timetable_pdf(
+        slots=slots_data,
+        class_name=class_name,
+        academic_year=academic_year_name,
+        school_settings=school_settings,
+        day_start=day_start,
+        day_end=day_end,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Teacher availability
 # ---------------------------------------------------------------------------
 

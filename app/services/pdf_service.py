@@ -484,3 +484,171 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     """
 
     return HTML(string=html).write_pdf()
+
+
+# ---------------------------------------------------------------------------
+# Timetable PDF
+# ---------------------------------------------------------------------------
+
+# KLASSCI brand colors
+_PRIMARY = "#0F3F8C"
+_ACCENT = "#F58220"
+
+# Day order for the grid
+_DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+_DAYS_FR = {
+    "monday": "Lundi",
+    "tuesday": "Mardi",
+    "wednesday": "Mercredi",
+    "thursday": "Jeudi",
+    "friday": "Vendredi",
+    "saturday": "Samedi",
+}
+
+# Palette for subjects (cycled)
+_SLOT_COLORS = [
+    "#E8F0FE", "#FEF3E2", "#E8F5E9", "#FDE8E8", "#EDE7F6",
+    "#FFF8E1", "#E0F7FA", "#FCE4EC", "#F3E5F5", "#E8EAF6",
+]
+
+
+def generate_timetable_pdf(
+    slots: list[dict[str, Any]],
+    class_name: str,
+    academic_year: str,
+    school_settings: dict[str, Any],
+    day_start: int = 7,
+    day_end: int = 18,
+) -> bytes:
+    """Generate a landscape A4 timetable PDF.
+
+    slots: list of dicts with day, start_time, end_time, subject_name,
+           teacher_name, room, subject_color
+    """
+    school_name = school_settings.get("school_name", "Etablissement")
+    ministry_code = school_settings.get("ministry_code")
+
+    # Build hours list
+    hours = list(range(day_start, day_end))
+
+    # Assign colors to subjects
+    subject_colors: dict[str, str] = {}
+    color_idx = 0
+    for s in slots:
+        sname = s.get("subject_name", "")
+        if sname and sname not in subject_colors:
+            subject_colors[sname] = s.get("subject_color") or _SLOT_COLORS[color_idx % len(_SLOT_COLORS)]
+            color_idx += 1
+
+    # Organize slots by day
+    slots_by_day: dict[str, list[dict[str, Any]]] = {d: [] for d in _DAYS_ORDER}
+    for s in slots:
+        day = s.get("day", "").lower()
+        if day in slots_by_day:
+            slots_by_day[day].append(s)
+
+    # Sort each day by start_time
+    for day in _DAYS_ORDER:
+        slots_by_day[day].sort(key=lambda x: x.get("start_time", "00:00"))
+
+    # Build table cells
+    def _time_to_float(t: str) -> float:
+        parts = t.split(":")
+        return int(parts[0]) + int(parts[1]) / 60
+
+    def _cell_for_hour(day_slots: list[dict[str, Any]], hour: int) -> str:
+        """Return HTML for a cell at the given hour. Handle multi-hour spans."""
+        for s in day_slots:
+            start = _time_to_float(s["start_time"])
+            end = _time_to_float(s["end_time"])
+            if abs(start - hour) < 0.01:
+                span = max(1, round(end - start))
+                bg = subject_colors.get(s.get("subject_name", ""), "#f0f0f0")
+                subject = _esc(s.get("subject_name", ""))
+                teacher = _esc(s.get("teacher_name", ""))
+                room = _esc(s.get("room", ""))
+                time_str = f'{s["start_time"]}-{s["end_time"]}'
+                return (
+                    f'<td rowspan="{span}" style="background:{bg}; vertical-align:top; padding:4px; '
+                    f'border:1px solid #ccc; font-size:8px; line-height:1.3;">'
+                    f'<div style="font-weight:bold; font-size:9px; color:{_PRIMARY};">{subject}</div>'
+                    f'<div style="color:#555;">{teacher}</div>'
+                    f'{f"<div style=\\"color:#888;\\">{room}</div>" if room else ""}'
+                    f'<div style="color:#999; font-size:7px;">{time_str}</div>'
+                    f'</td>'
+                )
+            elif start < hour < end:
+                return ""
+        return '<td style="border:1px solid #eee;"></td>'
+
+    # Build rows
+    table_rows = ""
+    for hour in hours:
+        cells = ""
+        for day in _DAYS_ORDER:
+            cell = _cell_for_hour(slots_by_day[day], hour)
+            cells += cell
+        table_rows += f"""
+        <tr>
+            <td style="background:#f8f9fa; font-weight:bold; text-align:center; font-size:9px;
+                        border:1px solid #ddd; width:50px; color:{_PRIMARY};">
+                {hour:02d}:00
+            </td>
+            {cells}
+        </tr>
+        """
+
+    # Day headers
+    day_headers = "".join(
+        f'<th style="background:{_PRIMARY}; color:white; text-align:center; padding:6px; '
+        f'font-size:10px; border:1px solid {_PRIMARY};">{_DAYS_FR.get(d, d)}</th>'
+        for d in _DAYS_ORDER
+    )
+
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    timetable_style = f"""
+    <style>
+        @page {{ size: A4 landscape; margin: 10mm; }}
+        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10px; color: #222; margin: 0; }}
+        .header {{ text-align: center; margin-bottom: 8px; }}
+        .school-name {{ font-size: 14px; font-weight: bold; color: {_PRIMARY}; }}
+        .class-info {{ font-size: 12px; color: {_ACCENT}; font-weight: bold; margin: 4px 0; }}
+        .sub-info {{ font-size: 9px; color: #666; }}
+        table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+        .footer {{ text-align: center; font-size: 8px; color: #999; margin-top: 8px; }}
+    </style>
+    """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head><meta charset="UTF-8">{timetable_style}</head>
+    <body>
+        <div class="header">
+            {_school_header_html(school_name, ministry_code)}
+            <div class="class-info">EMPLOI DU TEMPS &mdash; {_esc(class_name)}</div>
+            <div class="sub-info">Annee scolaire : {_esc(academic_year)}</div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="background:{_PRIMARY}; color:white; text-align:center; padding:6px;
+                                font-size:10px; border:1px solid {_PRIMARY}; width:50px;">Heure</th>
+                    {day_headers}
+                </tr>
+            </thead>
+            <tbody>
+                {table_rows}
+            </tbody>
+        </table>
+
+        <div class="footer">
+            Imprime le {now_str} &mdash; KLASSCI College
+        </div>
+    </body>
+    </html>
+    """
+
+    return HTML(string=html).write_pdf()
