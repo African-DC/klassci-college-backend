@@ -835,7 +835,7 @@ async def link_parent_to_student(
     if student is None:
         raise NotFoundError("Student", student_id)
 
-    # Check if link already exists
+    # Check if link already exists — update relationship_type if so
     existing = (
         await db.execute(
             select(ParentStudent).where(
@@ -844,8 +844,23 @@ async def link_parent_to_student(
             )
         )
     ).scalar_one_or_none()
+
     if existing:
-        raise HTTPException(status_code=400, detail="Ce parent est déjà lié à cet élève")
+        old_type = existing.relationship_type
+        existing.relationship_type = relationship_type
+        async with db.begin_nested():
+            await db.flush()
+            await audit_log(
+                db,
+                entity_type="parent_student",
+                action=AuditAction.UPDATE,
+                user_id=linked_by,
+                entity_id=parent_id,
+                old_values={"relationship_type": old_type},
+                new_values={"relationship_type": relationship_type},
+            )
+        await db.commit()
+        return {"parent_id": parent_id, "student_id": student_id, "relationship_type": relationship_type}
 
     async with db.begin_nested():
         link = ParentStudent(

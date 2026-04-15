@@ -144,6 +144,8 @@ class Student(Base, TimestampMixin):
         String(50), nullable=True, unique=True, index=True
     )
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")
@@ -176,6 +178,8 @@ class Parent(Base, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="parent_profile")
     children: Mapped[list[ParentStudent]] = relationship(back_populates="parent")

@@ -102,6 +102,8 @@ class ParentInput(BaseModel):
     last_name: str
     phone: str | None = None
     email: str | None = None
+    city: str | None = None
+    commune: str | None = None
     password: str | None = None  # If email+password provided, creates a User account
     relationship_type: str = "guardian"
 
@@ -123,6 +125,8 @@ class EnrollmentWithStudentCreate(BaseModel):
     birth_date: date | None = None
     genre: str | None = None
     enrollment_number: str | None = None
+    city: str | None = None
+    commune: str | None = None
     # Optional parent
     parent: ParentInput | None = None
     # Enrollment info

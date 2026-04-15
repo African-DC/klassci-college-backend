@@ -20,6 +20,7 @@ from app.schemas.admin import (
     EnrollmentPatternUpdate,
     ParentCreate,
     ParentFullResponse,
+    ParentLinkBody,
     ParentListResponse,
     ParentResponse,
     ParentUpdate,
@@ -1116,14 +1117,14 @@ async def delete_parent(
 async def link_parent_to_student(
     parent_id: int,
     student_id: int,
-    relationship_type: str = Query("guardian"),
+    body: ParentLinkBody,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:parents:update"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
-    """Lie un parent à un élève."""
+    """Lie un parent à un élève. Met à jour le type de relation si le lien existe déjà."""
     return await admin_service.link_parent_to_student(
-        db, parent_id, student_id, relationship_type, linked_by=current_user.user_id
+        db, parent_id, student_id, body.relationship_type, linked_by=current_user.user_id
     )
 
 

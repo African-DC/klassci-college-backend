@@ -18,6 +18,8 @@ class StudentCreate(BaseModel):
     birth_date: date | None = None
     genre: str | None = None
     enrollment_number: str | None = None
+    city: str | None = None
+    commune: str | None = None
 
     @field_validator("genre")
     @classmethod
@@ -34,6 +36,8 @@ class StudentUpdate(BaseModel):
     genre: str | None = None
     enrollment_number: str | None = None
     user_id: int | None = None
+    city: str | None = None
+    commune: str | None = None
 
     @field_validator("genre")
     @classmethod
@@ -53,6 +57,8 @@ class StudentResponse(BaseModel):
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
+    city: str | None = None
+    commune: str | None = None
     user_id: int | None
     created_at: datetime
     updated_at: datetime
@@ -69,6 +75,8 @@ class StudentFullResponse(BaseModel):
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
+    city: str | None = None
+    commune: str | None = None
     user_id: int | None
     created_at: datetime
     updated_at: datetime
@@ -248,6 +256,8 @@ class ParentCreate(BaseModel):
     last_name: str
     phone: str | None = None
     email: str | None = None
+    city: str | None = None
+    commune: str | None = None
     password: str | None = None
     relationship_type: str = "guardian"
 
@@ -264,6 +274,8 @@ class ParentUpdate(BaseModel):
     last_name: str | None = None
     phone: str | None = None
     email: str | None = None
+    city: str | None = None
+    commune: str | None = None
 
 
 class ParentResponse(BaseModel):
@@ -275,8 +287,21 @@ class ParentResponse(BaseModel):
     last_name: str
     phone: str | None = None
     email: str | None = None
+    city: str | None = None
+    commune: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ParentLinkBody(BaseModel):
+    relationship_type: str = "guardian"
+
+    @field_validator("relationship_type")
+    @classmethod
+    def valid_relationship(cls, v: str) -> str:
+        if v not in {"father", "mother", "guardian", "other"}:
+            raise ValueError("relationship_type must be father, mother, guardian, or other")
+        return v
 
 
 class ParentFullResponse(ParentResponse):
