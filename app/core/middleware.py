@@ -1,4 +1,13 @@
-"""TenantMiddleware — résout le tenant depuis le sous-domaine de la requête.
+"""TenantMiddleware — résout le tenant via JWT, header X-Tenant-Slug, ou subdomain.
+
+Architecture single-domain (depuis 2026-04-26) :
+
+    https://college.klassci.com/...   ← un seul domaine pour tous les tenants
+    Authorization: Bearer <jwt>        ← contient le claim tenant_id
+    X-Tenant-Slug: lycee-x             ← pour les requêtes sans JWT (login)
+
+Rétrocompat : si pas de JWT ni de header, fallback sur subdomain extraction
+(pour les déploiements multi-subdomain encore en place).
 
 Inclut une **host allowlist** qui rejette les requêtes avec un Host header
 non conforme. Critique pour la sécurité multi-tenant : avec AUTH_TRUST_HOST=true
@@ -9,6 +18,7 @@ cookies d'auth s'il n'y a pas de validation explicite.
 import logging
 import re
 
+import jwt
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -25,7 +35,12 @@ _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", ""}
 # Slug valide : lettres minuscules, chiffres, tirets — 2 à 63 chars (RFC 1123)
 _TENANT_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
 
-# Compilé une fois au démarrage depuis settings.ALLOWED_HOST_PATTERN
+# Hosts single-domain accepté en production (root + subdomains rétrocompat)
+_PROD_HOST_RE = re.compile(
+    r"^(college\.klassci\.com|[a-z0-9][a-z0-9\-]{0,61}\.college\.klassci\.com)$"
+)
+
+# Pattern legacy depuis settings (rétrocompat)
 _ALLOWED_HOST_RE = re.compile(settings.ALLOWED_HOST_PATTERN)
 
 
@@ -33,9 +48,11 @@ def _is_host_allowed(hostname: str) -> bool:
     """Vérifie que le hostname est dans l'allowlist.
 
     Acceptés :
-      - hostnames matchant ALLOWED_HOST_PATTERN (ex: lycee-x.college.klassci.com)
-      - hostnames listés explicitement dans EXTRA_ALLOWED_HOSTS
       - hôtes locaux (localhost, 127.0.0.1, IPs numériques) — dev seulement
+      - hostnames listés explicitement dans EXTRA_ALLOWED_HOSTS
+      - college.klassci.com (single-domain prod)
+      - <tenant>.college.klassci.com (rétrocompat multi-subdomain)
+      - hostnames matchant ALLOWED_HOST_PATTERN (legacy custom config)
     """
     if hostname in _LOCAL_HOSTS:
         return True
@@ -43,41 +60,98 @@ def _is_host_allowed(hostname: str) -> bool:
         return True
     if hostname in settings.EXTRA_ALLOWED_HOSTS:
         return True
+    if _PROD_HOST_RE.match(hostname):
+        return True
     return bool(_ALLOWED_HOST_RE.match(hostname))
 
 
-def _extract_tenant(host: str) -> str:
-    """Extrait et valide le tenant_id depuis le header Host.
+def _tenant_from_jwt(authorization: str) -> str | None:
+    """Extrait tenant_id du claim JWT si l'Authorization header est valide.
 
-    Précondition : le hostname a déjà été validé via _is_host_allowed.
-
-    Exemples :
-        lycee-x.college.klassci.com  → "lycee-x"
-        localhost                     → settings.LOCAL_TENANT_ID
-        127.0.0.1                     → settings.LOCAL_TENANT_ID
+    Ne valide PAS l'expiration ni la signature ici — c'est le job des dependencies.
+    On a juste besoin du tenant pour scoper la DB. Si le JWT est invalide/expiré,
+    le code en aval renverra 401 mais on aura déjà la bonne DB.
     """
-    hostname = host.split(":")[0]
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return None
+    token = authorization[7:].strip()
+    if not token:
+        return None
+    try:
+        # options: ne pas vérifier la signature/exp ici — juste lire le claim
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_signature": True, "verify_exp": False},
+        )
+    except jwt.InvalidTokenError:
+        return None
+    tenant = payload.get("tenant_id")
+    if isinstance(tenant, str) and (tenant in _LOCAL_HOSTS or _TENANT_SLUG_RE.match(tenant)):
+        return tenant
+    return None
+
+
+def _tenant_from_header(value: str) -> str | None:
+    """Valide et retourne tenant_slug depuis le header X-Tenant-Slug."""
+    if not value:
+        return None
+    value = value.strip().lower()
+    if value == settings.LOCAL_TENANT_ID or _TENANT_SLUG_RE.match(value):
+        return value
+    return None
+
+
+def _tenant_from_subdomain(hostname: str) -> str | None:
+    """Rétrocompat : extrait le tenant du sous-domaine (legacy multi-subdomain).
+
+    college.klassci.com           → None (pas de subdomain, c'est le root)
+    lycee-x.college.klassci.com   → "lycee-x"
+    localhost                     → None (handled separately)
+    """
     if hostname in _LOCAL_HOSTS:
-        return settings.LOCAL_TENANT_ID
+        return None
     if hostname.replace(".", "").isdigit():
-        return settings.LOCAL_TENANT_ID
+        return None
     parts = hostname.split(".")
-    if len(parts) >= 3:
+    # college.klassci.com a 3 parts mais on veut SKIP : pas de tenant subdomain
+    if len(parts) >= 4 or (len(parts) == 3 and not hostname.startswith("college.")):
         slug = parts[0]
         if _TENANT_SLUG_RE.match(slug):
             return slug
-    logger.warning(
-        "Invalid or missing tenant slug in Host header: %s — falling back to local", host[:100]
-    )
+    return None
+
+
+def _resolve_tenant(request: Request) -> str:
+    """Résout le tenant_id selon l'ordre :
+    1. JWT claim tenant_id (Authorization header)
+    2. Header X-Tenant-Slug (login flow, avant JWT)
+    3. Subdomain (rétrocompat multi-subdomain)
+    4. Host local → LOCAL_TENANT_ID
+    """
+    auth_header = request.headers.get("authorization", "")
+    if tenant := _tenant_from_jwt(auth_header):
+        return tenant
+
+    tenant_header = request.headers.get("x-tenant-slug", "")
+    if tenant := _tenant_from_header(tenant_header):
+        return tenant
+
+    hostname = request.headers.get("host", "").split(":")[0]
+    if tenant := _tenant_from_subdomain(hostname):
+        return tenant
+
+    if hostname in _LOCAL_HOSTS or hostname.replace(".", "").isdigit():
+        return settings.LOCAL_TENANT_ID
+
+    # college.klassci.com root sans JWT ni header → local par défaut
+    # (situation transition pendant déploiement single-domain)
     return settings.LOCAL_TENANT_ID
 
 
 class TenantMiddleware:
-    """Middleware ASGI pur — évite le double-wrapping de BaseHTTPMiddleware.
-
-    BaseHTTPMiddleware buffer le corps complet de la réponse en mémoire et
-    interdit le streaming. Ce middleware ASGI natif n'a pas ces limitations.
-    """
+    """Middleware ASGI pur — évite le double-wrapping de BaseHTTPMiddleware."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -97,7 +171,7 @@ class TenantMiddleware:
                 await response(scope, receive, send)
                 return
 
-            tenant = _extract_tenant(host)
+            tenant = _resolve_tenant(request)
             token = current_tenant_id.set(tenant)
             try:
                 await self.app(scope, receive, send)
@@ -105,3 +179,16 @@ class TenantMiddleware:
                 current_tenant_id.reset(token)
         else:
             await self.app(scope, receive, send)
+
+
+# Backward-compat exports (used by tests)
+def _extract_tenant(host: str) -> str:
+    """Legacy fonction : retourne le tenant from host. Use _resolve_tenant pour la prod."""
+    hostname = host.split(":")[0]
+    if hostname in _LOCAL_HOSTS:
+        return settings.LOCAL_TENANT_ID
+    if hostname.replace(".", "").isdigit():
+        return settings.LOCAL_TENANT_ID
+    if tenant := _tenant_from_subdomain(hostname):
+        return tenant
+    return settings.LOCAL_TENANT_ID
