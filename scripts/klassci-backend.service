@@ -26,10 +26,13 @@ StandardError=journal
 SyslogIdentifier=klassci-backend
 
 # Hardening
+# /tmp is writable by default with PrivateTmp=false — no need to whitelist
+# /tmp/klassci-uploads in ReadWritePaths (would require the path to exist at
+# namespace setup time, which happens BEFORE ExecStartPre).
 NoNewPrivileges=true
 ProtectSystem=full
 PrivateTmp=false
-ReadWritePaths=/tmp/klassci-uploads /home/ubuntu/klassci/klassci-backend
+ReadWritePaths=/home/ubuntu/klassci/klassci-backend
 
 [Install]
 WantedBy=multi-user.target
