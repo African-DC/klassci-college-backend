@@ -138,9 +138,7 @@ def test_get_council_minutes_success() -> None:
             new=AsyncMock(return_value=SAMPLE_COUNCIL),
         ):
             with TestClient(app) as client:
-                resp = client.get(
-                    "/reports/council-minutes/3/1?academic_year_id=1"
-                )
+                resp = client.get("/reports/council-minutes/3/1?academic_year_id=1")
         assert resp.status_code == 200
         data = resp.json()
         assert data["class_id"] == 3
@@ -158,14 +156,10 @@ def test_get_council_minutes_not_found() -> None:
 
         with patch(
             "app.services.council_service.get_council_minutes",
-            new=AsyncMock(
-                side_effect=NotFoundError("CouncilMinutes", "class=999/trimester=1")
-            ),
+            new=AsyncMock(side_effect=NotFoundError("CouncilMinutes", "class=999/trimester=1")),
         ):
             with TestClient(app) as client:
-                resp = client.get(
-                    "/reports/council-minutes/999/1?academic_year_id=1"
-                )
+                resp = client.get("/reports/council-minutes/999/1?academic_year_id=1")
         assert resp.status_code == 404
     finally:
         _clear_deps()
@@ -190,9 +184,7 @@ def test_get_council_minutes_pdf_success() -> None:
             ),
         ):
             with TestClient(app) as client:
-                resp = client.get(
-                    "/reports/council-minutes/3/1/pdf?academic_year_id=1"
-                )
+                resp = client.get("/reports/council-minutes/3/1/pdf?academic_year_id=1")
         assert resp.status_code == 200
         data = resp.json()
         assert "pdf_url" in data

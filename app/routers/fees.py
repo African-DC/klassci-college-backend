@@ -181,7 +181,11 @@ async def list_fee_options(
 ) -> OptionalFeeOptionListResponse:
     """Liste paginee des options de frais optionnels avec filtres."""
     return await fee_service.list_optional_fee_options(
-        db, page=page, size=size, category_id=category_id, academic_year_id=academic_year_id,
+        db,
+        page=page,
+        size=size,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
     )
 
 

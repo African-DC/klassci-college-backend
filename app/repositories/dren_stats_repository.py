@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import AcademicYear, Class, Level, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.grade import Bulletin, Grade, Evaluation
+from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Genre, Student
 
@@ -104,12 +104,9 @@ async def get_bulletin_rates(
     Returns (success_rate, failure_rate, redoublement_rate, exclusion_rate) as percentages.
     """
     # Find the latest trimester with bulletins
-    latest_trimester_stmt = (
-        select(func.max(Bulletin.trimester))
-        .where(
-            Bulletin.academic_year_id == academic_year_id,
-            Bulletin.average.isnot(None),
-        )
+    latest_trimester_stmt = select(func.max(Bulletin.trimester)).where(
+        Bulletin.academic_year_id == academic_year_id,
+        Bulletin.average.isnot(None),
     )
     result = await db.execute(latest_trimester_stmt)
     latest_trimester = result.scalar_one_or_none()

@@ -57,18 +57,13 @@ async def get_evaluations_for_class_trimester(
     return list(result.scalars().all())
 
 
-async def get_entered_grades_for_evaluations(
-    db: AsyncSession, eval_ids: list[int]
-) -> list[Grade]:
+async def get_entered_grades_for_evaluations(db: AsyncSession, eval_ids: list[int]) -> list[Grade]:
     """Retourne toutes les notes saisies pour une liste d'evaluations."""
     if not eval_ids:
         return []
-    stmt = (
-        select(Grade)
-        .where(
-            Grade.evaluation_id.in_(eval_ids),
-            Grade.status == GradeStatus.ENTERED,
-        )
+    stmt = select(Grade).where(
+        Grade.evaluation_id.in_(eval_ids),
+        Grade.status == GradeStatus.ENTERED,
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
@@ -202,9 +197,7 @@ async def get_bulletin_by_id(db: AsyncSession, bulletin_id: int) -> Bulletin | N
     return result.scalar_one_or_none()
 
 
-async def count_enrolled_students(
-    db: AsyncSession, class_id: int, academic_year_id: int
-) -> int:
+async def count_enrolled_students(db: AsyncSession, class_id: int, academic_year_id: int) -> int:
     """Compte les eleves inscrits valides dans une classe."""
     stmt = (
         select(func.count())

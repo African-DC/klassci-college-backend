@@ -2,17 +2,24 @@
 
 import logging
 
+from fastapi import HTTPException
 from sqlalchemy import case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from fastapi import HTTPException
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
-from app.models.user import Parent, ParentStudent, Student, StaffProfile, TeacherProfile, User, UserRoleEnum
+from app.models.user import (
+    Parent,
+    ParentStudent,
+    StaffProfile,
+    Student,
+    TeacherProfile,
+    User,
+    UserRoleEnum,
+)
 from app.repositories import admin_repository as repo
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -23,12 +30,12 @@ from app.schemas.admin import (
     ClassListResponse,
     ClassResponse,
     ClassUpdate,
+    EnrollmentPatternUpdate,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
     ParentCreate,
-    ParentFullResponse,
     ParentListResponse,
     ParentResponse,
     ParentUpdate,
@@ -37,6 +44,12 @@ from app.schemas.admin import (
     RoleListResponse,
     RoleResponse,
     RoleUpdate,
+    RoomBatchCreateResponse,
+    RoomCreate,
+    RoomListResponse,
+    RoomResponse,
+    RoomUpdate,
+    SchoolInfoUpdate,
     SeriesCreate,
     SeriesListResponse,
     SeriesResponse,
@@ -60,12 +73,6 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
-    EnrollmentPatternUpdate,
-    RoomBatchCreateResponse,
-    RoomCreate,
-    RoomListResponse,
-    RoomResponse,
-    RoomUpdate,
 )
 
 logger = logging.getLogger(__name__)
@@ -166,9 +173,7 @@ async def update_student(
     return _student_to_response(refreshed)
 
 
-async def delete_student(
-    db: AsyncSession, student_id: int, *, deleted_by: int
-) -> None:
+async def delete_student(db: AsyncSession, student_id: int, *, deleted_by: int) -> None:
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
@@ -191,9 +196,7 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     # Get student with user
-    stmt = select(Student).where(Student.id == student_id).options(
-        selectinload(Student.user)
-    )
+    stmt = select(Student).where(Student.id == student_id).options(selectinload(Student.user))
     student = (await db.execute(stmt)).scalar_one_or_none()
     if student is None:
         raise NotFoundError("Student", student_id)
@@ -232,7 +235,9 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     enrollment = (await db.execute(enroll_stmt)).scalar_one_or_none()
     if enrollment:
         result["current_class_name"] = enrollment.class_.name if enrollment.class_ else None
-        result["current_academic_year"] = enrollment.academic_year.name if enrollment.academic_year else None
+        result["current_academic_year"] = (
+            enrollment.academic_year.name if enrollment.academic_year else None
+        )
         result["current_enrollment_status"] = enrollment.status
         result["current_enrollment_id"] = enrollment.id
 
@@ -249,7 +254,9 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
         result["attendance_present"] = att_row.present or 0
         result["attendance_absent"] = att_row.absent or 0
         result["attendance_late"] = att_row.late or 0
-        result["attendance_rate"] = round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
+        result["attendance_rate"] = (
+            round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
+        )
 
     # Financial summary
     fees_stmt = (
@@ -307,7 +314,9 @@ async def create_student_user_account(
         student.user_id = user.id
         await db.flush()
 
-        from app.models.permission import Role, UserRole as UserRoleModel
+        from app.models.permission import Role
+        from app.models.permission import UserRole as UserRoleModel
+
         role = (await db.execute(select(Role).where(Role.name == "student"))).scalar_one_or_none()
         if role:
             db.add(UserRoleModel(user_id=user.id, role_id=role.id))
@@ -459,9 +468,7 @@ async def update_teacher(
     return _teacher_to_response(refreshed)
 
 
-async def delete_teacher(
-    db: AsyncSession, teacher_id: int, *, deleted_by: int
-) -> None:
+async def delete_teacher(db: AsyncSession, teacher_id: int, *, deleted_by: int) -> None:
     teacher = await repo.get_teacher_by_id(db, teacher_id)
     if teacher is None:
         raise NotFoundError("Teacher", teacher_id)
@@ -485,8 +492,10 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     from app.models.user import TeacherProfile
 
     # Get teacher with user
-    stmt = select(TeacherProfile).where(TeacherProfile.id == teacher_id).options(
-        selectinload(TeacherProfile.user)
+    stmt = (
+        select(TeacherProfile)
+        .where(TeacherProfile.id == teacher_id)
+        .options(selectinload(TeacherProfile.user))
     )
     teacher = (await db.execute(stmt)).scalar_one_or_none()
     if teacher is None:
@@ -511,21 +520,19 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
         result["user_created_at"] = teacher.user.created_at
 
     # Count distinct classes (via timetable slots)
-    classes_stmt = select(
-        func.count(func.distinct(TimetableSlot.class_id))
-    ).where(TimetableSlot.teacher_id == teacher_id)
+    classes_stmt = select(func.count(func.distinct(TimetableSlot.class_id))).where(
+        TimetableSlot.teacher_id == teacher_id
+    )
 
     # Count distinct students in those classes (via enrollments)
-    students_stmt = select(
-        func.count(func.distinct(Enrollment.student_id))
-    ).join(
-        TimetableSlot, Enrollment.class_id == TimetableSlot.class_id
-    ).where(TimetableSlot.teacher_id == teacher_id)
+    students_stmt = (
+        select(func.count(func.distinct(Enrollment.student_id)))
+        .join(TimetableSlot, Enrollment.class_id == TimetableSlot.class_id)
+        .where(TimetableSlot.teacher_id == teacher_id)
+    )
 
     # Count evaluations
-    evals_stmt = select(
-        func.count()
-    ).where(Evaluation.teacher_id == teacher_id)
+    evals_stmt = select(func.count()).where(Evaluation.teacher_id == teacher_id)
 
     classes_count = (await db.execute(classes_stmt)).scalar() or 0
     students_count = (await db.execute(students_stmt)).scalar() or 0
@@ -537,23 +544,33 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
 
     # Hours per week (sum of subject hours_per_week via SubjectInstance)
     from app.models.academic import SubjectInstance
-    hours_stmt = select(
-        func.coalesce(func.sum(SubjectInstance.hours_per_week), 0)
-    ).where(SubjectInstance.teacher_id == teacher_id)
+
+    hours_stmt = select(func.coalesce(func.sum(SubjectInstance.hours_per_week), 0)).where(
+        SubjectInstance.teacher_id == teacher_id
+    )
     result["hours_per_week"] = float((await db.execute(hours_stmt)).scalar() or 0)
 
     # Availability rate
     from app.models.timetable import TeacherAvailability
-    total_avail_stmt = select(func.count()).select_from(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id
+
+    total_avail_stmt = (
+        select(func.count())
+        .select_from(TeacherAvailability)
+        .where(TeacherAvailability.teacher_id == teacher_id)
     )
-    available_stmt = select(func.count()).select_from(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
-        TeacherAvailability.available == True,
+    available_stmt = (
+        select(func.count())
+        .select_from(TeacherAvailability)
+        .where(
+            TeacherAvailability.teacher_id == teacher_id,
+            TeacherAvailability.available,
+        )
     )
     total_avail = (await db.execute(total_avail_stmt)).scalar() or 0
     available_count = (await db.execute(available_stmt)).scalar() or 0
-    result["availability_rate"] = round((available_count / total_avail * 100) if total_avail > 0 else 0, 1)
+    result["availability_rate"] = round(
+        (available_count / total_avail * 100) if total_avail > 0 else 0, 1
+    )
 
     # Include photo_url
     result["photo_url"] = teacher.photo_url
@@ -593,9 +610,7 @@ async def get_staff(db: AsyncSession, staff_id: int) -> StaffResponse:
     return _staff_to_response(staff)
 
 
-async def create_staff(
-    db: AsyncSession, data: StaffCreate, *, created_by: int
-) -> StaffResponse:
+async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) -> StaffResponse:
     async with db.begin_nested():
         staff = await repo.create_staff(db, **data.model_dump())
         await audit_log(
@@ -639,9 +654,7 @@ async def update_staff(
     return _staff_to_response(refreshed)
 
 
-async def delete_staff(
-    db: AsyncSession, staff_id: int, *, deleted_by: int
-) -> None:
+async def delete_staff(db: AsyncSession, staff_id: int, *, deleted_by: int) -> None:
     staff = await repo.get_staff_by_id(db, staff_id)
     if staff is None:
         raise NotFoundError("Staff", staff_id)
@@ -661,8 +674,10 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     """Enriched staff profile with user account info."""
     from app.models.user import StaffProfile
 
-    stmt = select(StaffProfile).where(StaffProfile.id == staff_id).options(
-        selectinload(StaffProfile.user)
+    stmt = (
+        select(StaffProfile)
+        .where(StaffProfile.id == staff_id)
+        .options(selectinload(StaffProfile.user))
     )
     staff = (await db.execute(stmt)).scalar_one_or_none()
     if staff is None:
@@ -722,9 +737,13 @@ async def get_parent(db: AsyncSession, parent_id: int) -> ParentResponse:
 
 async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
     """Enriched parent profile with user account and children list."""
-    stmt = select(Parent).where(Parent.id == parent_id).options(
-        selectinload(Parent.user),
-        selectinload(Parent.children).selectinload(ParentStudent.student),
+    stmt = (
+        select(Parent)
+        .where(Parent.id == parent_id)
+        .options(
+            selectinload(Parent.user),
+            selectinload(Parent.children).selectinload(ParentStudent.student),
+        )
     )
     parent = (await db.execute(stmt)).scalar_one_or_none()
     if parent is None:
@@ -748,19 +767,19 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
     children = []
     for link in parent.children:
         s = link.student
-        children.append({
-            "student_id": s.id,
-            "student_name": f"{s.first_name} {s.last_name}",
-            "relationship_type": link.relationship_type,
-        })
+        children.append(
+            {
+                "student_id": s.id,
+                "student_name": f"{s.first_name} {s.last_name}",
+                "relationship_type": link.relationship_type,
+            }
+        )
     result["children"] = children
 
     return result
 
 
-async def create_parent(
-    db: AsyncSession, data: ParentCreate, *, created_by: int
-) -> ParentResponse:
+async def create_parent(db: AsyncSession, data: ParentCreate, *, created_by: int) -> ParentResponse:
     async with db.begin_nested():
         user_id = None
 
@@ -785,7 +804,8 @@ async def create_parent(
             user_id = user.id
 
             # Assign parent role via user_roles table
-            from app.models.permission import Role, UserRole as UserRoleModel
+            from app.models.permission import Role
+            from app.models.permission import UserRole as UserRoleModel
 
             role_stmt = select(Role).where(Role.name == "parent")
             role = (await db.execute(role_stmt)).scalar_one_or_none()
@@ -845,9 +865,7 @@ async def update_parent(
     return _parent_to_response(refreshed)
 
 
-async def delete_parent(
-    db: AsyncSession, parent_id: int, *, deleted_by: int
-) -> None:
+async def delete_parent(db: AsyncSession, parent_id: int, *, deleted_by: int) -> None:
     parent = await repo.get_parent_by_id(db, parent_id)
     if parent is None:
         raise NotFoundError("Parent", parent_id)
@@ -904,7 +922,11 @@ async def link_parent_to_student(
                 new_values={"relationship_type": relationship_type},
             )
         await db.commit()
-        return {"parent_id": parent_id, "student_id": student_id, "relationship_type": relationship_type}
+        return {
+            "parent_id": parent_id,
+            "student_id": student_id,
+            "relationship_type": relationship_type,
+        }
 
     async with db.begin_nested():
         link = ParentStudent(
@@ -927,7 +949,11 @@ async def link_parent_to_student(
             },
         )
     await db.commit()
-    return {"parent_id": parent_id, "student_id": student_id, "relationship_type": relationship_type}
+    return {
+        "parent_id": parent_id,
+        "student_id": student_id,
+        "relationship_type": relationship_type,
+    }
 
 
 async def unlink_parent_from_student(
@@ -1014,9 +1040,7 @@ def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     )
 
 
-async def _get_enrolled_counts(
-    db: AsyncSession, class_ids: list[int]
-) -> dict[int, int]:
+async def _get_enrolled_counts(db: AsyncSession, class_ids: list[int]) -> dict[int, int]:
     """Retourne le nombre d'inscriptions actives par classe."""
     if not class_ids:
         return {}
@@ -1045,7 +1069,12 @@ async def list_classes(
     search: str | None = None,
 ) -> ClassListResponse:
     classes, total = await repo.list_classes(
-        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id, search=search
+        db,
+        page=page,
+        size=size,
+        level_id=level_id,
+        academic_year_id=academic_year_id,
+        search=search,
     )
     counts = await _get_enrolled_counts(db, [c.id for c in classes])
     return ClassListResponse(
@@ -1064,9 +1093,7 @@ async def get_class(db: AsyncSession, class_id: int) -> ClassResponse:
     return _class_to_response(cls, enrolled_count=counts.get(cls.id, 0))
 
 
-async def create_class(
-    db: AsyncSession, data: ClassCreate, *, created_by: int
-) -> ClassResponse:
+async def create_class(db: AsyncSession, data: ClassCreate, *, created_by: int) -> ClassResponse:
     async with db.begin_nested():
         cls = await repo.create_class(db, **data.model_dump())
         await audit_log(
@@ -1110,9 +1137,7 @@ async def update_class(
     return _class_to_response(refreshed)
 
 
-async def delete_class(
-    db: AsyncSession, class_id: int, *, deleted_by: int
-) -> None:
+async def delete_class(db: AsyncSession, class_id: int, *, deleted_by: int) -> None:
     cls = await repo.get_class_by_id(db, class_id)
     if cls is None:
         raise NotFoundError("Class", class_id)
@@ -1154,7 +1179,9 @@ async def list_subjects(
     level_id: int | None = None,
     search: str | None = None,
 ) -> SubjectListResponse:
-    subjects, total = await repo.list_subjects(db, page=page, size=size, level_id=level_id, search=search)
+    subjects, total = await repo.list_subjects(
+        db, page=page, size=size, level_id=level_id, search=search
+    )
     return SubjectListResponse(
         items=[_subject_to_response(s) for s in subjects],
         total=total,
@@ -1216,9 +1243,7 @@ async def update_subject(
     return _subject_to_response(refreshed)
 
 
-async def delete_subject(
-    db: AsyncSession, subject_id: int, *, deleted_by: int
-) -> None:
+async def delete_subject(db: AsyncSession, subject_id: int, *, deleted_by: int) -> None:
     subject = await repo.get_subject_by_id(db, subject_id)
     if subject is None:
         raise NotFoundError("Subject", subject_id)
@@ -1359,9 +1384,7 @@ async def update_academic_year(
     return _academic_year_to_response(refreshed)
 
 
-async def delete_academic_year(
-    db: AsyncSession, year_id: int, *, deleted_by: int
-) -> None:
+async def delete_academic_year(db: AsyncSession, year_id: int, *, deleted_by: int) -> None:
     year = await repo.get_academic_year_by_id(db, year_id)
     if year is None:
         raise NotFoundError("AcademicYear", year_id)
@@ -1403,11 +1426,7 @@ async def set_current_academic_year(
         stmt = update(AcademicYear).values(is_current=False)
         await db.execute(stmt)
         # Set this year as current
-        stmt = (
-            update(AcademicYear)
-            .where(AcademicYear.id == year_id)
-            .values(is_current=True)
-        )
+        stmt = update(AcademicYear).where(AcademicYear.id == year_id).values(is_current=True)
         await db.execute(stmt)
         await audit_log(
             db,
@@ -1430,8 +1449,8 @@ async def set_current_academic_year(
 # ---------------------------------------------------------------------------
 
 
-def _level_to_response(l: object) -> LevelResponse:
-    return LevelResponse.model_validate(l)
+def _level_to_response(level: object) -> LevelResponse:
+    return LevelResponse.model_validate(level)
 
 
 async def list_levels(
@@ -1442,7 +1461,7 @@ async def list_levels(
 ) -> LevelListResponse:
     levels, total = await repo.list_levels(db, page=page, size=size)
     return LevelListResponse(
-        items=[_level_to_response(l) for l in levels],
+        items=[_level_to_response(level) for level in levels],
         total=total,
         page=page,
         size=size,
@@ -1456,9 +1475,7 @@ async def get_level(db: AsyncSession, level_id: int) -> LevelResponse:
     return _level_to_response(level)
 
 
-async def create_level(
-    db: AsyncSession, data: LevelCreate, *, created_by: int
-) -> LevelResponse:
+async def create_level(db: AsyncSession, data: LevelCreate, *, created_by: int) -> LevelResponse:
     async with db.begin_nested():
         level = await repo.create_level(db, **data.model_dump())
         await audit_log(
@@ -1502,9 +1519,7 @@ async def update_level(
     return _level_to_response(refreshed)
 
 
-async def delete_level(
-    db: AsyncSession, level_id: int, *, deleted_by: int
-) -> None:
+async def delete_level(db: AsyncSession, level_id: int, *, deleted_by: int) -> None:
     level = await repo.get_level_by_id(db, level_id)
     if level is None:
         raise NotFoundError("Level", level_id)
@@ -1536,7 +1551,7 @@ async def get_school_settings(db: AsyncSession) -> SchoolSettings:
 
 
 async def update_school_info(
-    db: AsyncSession, data: "SchoolInfoUpdate", *, updated_by: int
+    db: AsyncSession, data: SchoolInfoUpdate, *, updated_by: int
 ) -> SchoolSettings:
     """Update general school info fields (name, address, phone, email, logo, ministry_code)."""
     school = await get_school_settings(db)
@@ -1618,7 +1633,12 @@ async def get_student_enrollment_fees(
     souscrites (StudentOption).
     """
     from app.models.enrollment import Enrollment, StudentOption
-    from app.models.fee import EnrollmentFee, FeeVariant, FeeCategory, OptionalFeeOption, Payment, PaymentStatus
+    from app.models.fee import (
+        EnrollmentFee,
+        FeeVariant,
+        OptionalFeeOption,
+        PaymentStatus,
+    )
 
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
@@ -1644,10 +1664,7 @@ async def get_student_enrollment_fees(
             if ef.fee_variant and ef.fee_variant.category
             else "Inconnu"
         )
-        paid = sum(
-            float(p.amount) for p in ef.payments
-            if p.status == PaymentStatus.COMPLETED
-        )
+        paid = sum(float(p.amount) for p in ef.payments if p.status == PaymentStatus.COMPLETED)
         amount = float(ef.amount)
         remaining = max(0.0, amount - paid)
 
@@ -1670,7 +1687,9 @@ async def get_student_enrollment_fees(
         .join(Enrollment, StudentOption.enrollment_id == Enrollment.id)
         .where(Enrollment.student_id == student_id)
         .options(
-            selectinload(StudentOption.optional_fee_option).selectinload(OptionalFeeOption.category),
+            selectinload(StudentOption.optional_fee_option).selectinload(
+                OptionalFeeOption.category
+            ),
         )
         .order_by(StudentOption.enrollment_id, StudentOption.id)
     )
@@ -1793,9 +1812,7 @@ async def get_series(db: AsyncSession, series_id: int) -> SeriesResponse:
     return _series_to_response(series)
 
 
-async def create_series(
-    db: AsyncSession, data: SeriesCreate, *, created_by: int
-) -> SeriesResponse:
+async def create_series(db: AsyncSession, data: SeriesCreate, *, created_by: int) -> SeriesResponse:
     async with db.begin_nested():
         series = await repo.create_series(db, **data.model_dump())
         await audit_log(
@@ -1839,9 +1856,7 @@ async def update_series(
     return _series_to_response(refreshed)
 
 
-async def delete_series(
-    db: AsyncSession, series_id: int, *, deleted_by: int
-) -> None:
+async def delete_series(db: AsyncSession, series_id: int, *, deleted_by: int) -> None:
     series = await repo.get_series_by_id(db, series_id)
     if series is None:
         raise NotFoundError("Series", series_id)
@@ -1898,9 +1913,7 @@ async def get_role(db: AsyncSession, role_id: int) -> RoleResponse:
     return _role_to_response(role)
 
 
-async def create_role(
-    db: AsyncSession, data: RoleCreate, *, created_by: int
-) -> RoleResponse:
+async def create_role(db: AsyncSession, data: RoleCreate, *, created_by: int) -> RoleResponse:
     async with db.begin_nested():
         role = await repo.create_role(db, name=data.name, description=data.description)
         if data.permission_ids:
@@ -1953,9 +1966,7 @@ async def update_role(
     return _role_to_response(refreshed)
 
 
-async def delete_role(
-    db: AsyncSession, role_id: int, *, deleted_by: int
-) -> None:
+async def delete_role(db: AsyncSession, role_id: int, *, deleted_by: int) -> None:
     role = await repo.get_role_by_id(db, role_id)
     if role is None:
         raise NotFoundError("Role", role_id)
@@ -2004,7 +2015,11 @@ async def list_rooms(
     search: str | None = None,
 ) -> RoomListResponse:
     rooms, total = await repo.list_rooms(
-        db, page=page, size=size, room_type=room_type, search=search,
+        db,
+        page=page,
+        size=size,
+        room_type=room_type,
+        search=search,
     )
     return RoomListResponse(
         items=[_room_to_response(r) for r in rooms],
@@ -2025,7 +2040,10 @@ async def create_room(
     db: AsyncSession, data: RoomCreate, *, created_by: int | None = None
 ) -> RoomResponse:
     room = await repo.create_room(
-        db, name=data.name, capacity=data.capacity, room_type=data.room_type,
+        db,
+        name=data.name,
+        capacity=data.capacity,
+        room_type=data.room_type,
     )
     # Link room to class if class_id provided + sync capacity
     if data.class_id:
@@ -2084,9 +2102,7 @@ async def update_room(
     return _room_to_response(room)
 
 
-async def delete_room(
-    db: AsyncSession, room_id: int, *, deleted_by: int | None = None
-) -> None:
+async def delete_room(db: AsyncSession, room_id: int, *, deleted_by: int | None = None) -> None:
     room = await repo.get_room_by_id(db, room_id)
     if not room:
         raise NotFoundError("Room", room_id)
@@ -2105,7 +2121,8 @@ async def batch_create_rooms_for_classes(
     db: AsyncSession, *, created_by: int | None = None
 ) -> RoomBatchCreateResponse:
     """Crée une salle pour chaque classe qui n'en a pas encore."""
-    from app.models.academic import Class as ClassModel, Room as RoomModel
+    from app.models.academic import Class as ClassModel
+    from app.models.academic import Room as RoomModel
 
     # Get all classes without a room
     stmt = select(ClassModel).where(ClassModel.room_id.is_(None))

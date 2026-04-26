@@ -138,7 +138,9 @@ def test_generate_bulletins_no_students() -> None:
         with patch(
             "app.services.reports_service.generate_bulletins",
             new=AsyncMock(
-                side_effect=BusinessValidationError("No enrolled students found for class 3 / year 1")
+                side_effect=BusinessValidationError(
+                    "No enrolled students found for class 3 / year 1"
+                )
             ),
         ):
             with TestClient(app) as client:

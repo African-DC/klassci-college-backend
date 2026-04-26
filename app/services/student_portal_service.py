@@ -121,7 +121,9 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
             if p.status == PaymentStatus.COMPLETED:
                 total_paid += p.amount
 
-        category_name = ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"
+        category_name = (
+            ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"
+        )
         fee_responses.append(
             EnrollmentFeeResponse(
                 id=ef.id,

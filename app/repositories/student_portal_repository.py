@@ -4,12 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear, Class, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.fee import EnrollmentFee, FeeVariant, Payment
+from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
-from app.models.timetable import Timetable, TimetableSlot
-from app.models.user import Student, TeacherProfile
+from app.models.timetable import TimetableSlot
+from app.models.user import Student
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
@@ -19,9 +18,7 @@ async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | No
     return result.scalar_one_or_none()
 
 
-async def get_active_enrollment_for_student(
-    db: AsyncSession, student_id: int
-) -> Enrollment | None:
+async def get_active_enrollment_for_student(db: AsyncSession, student_id: int) -> Enrollment | None:
     """Retourne l'inscription active (non annulee/rejetee) la plus recente."""
     stmt = (
         select(Enrollment)
@@ -66,9 +63,7 @@ async def get_grades_for_student(
     return list(result.scalars().all())
 
 
-async def get_timetable_slots_for_class(
-    db: AsyncSession, class_id: int
-) -> list[TimetableSlot]:
+async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list[TimetableSlot]:
     """Retourne les creneaux emploi du temps d'une classe."""
     stmt = (
         select(TimetableSlot)
@@ -100,9 +95,7 @@ async def get_enrollment_fees_for_enrollment(
     return list(result.scalars().all())
 
 
-async def get_published_bulletins_for_student(
-    db: AsyncSession, student_id: int
-) -> list[Bulletin]:
+async def get_published_bulletins_for_student(db: AsyncSession, student_id: int) -> list[Bulletin]:
     """Retourne les bulletins publies d'un eleve."""
     stmt = (
         select(Bulletin)

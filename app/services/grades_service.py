@@ -130,9 +130,7 @@ async def batch_update_grades(
     if invalid_ids:
         from app.core.exceptions import BusinessValidationError
 
-        raise BusinessValidationError(
-            f"Student IDs not enrolled in this evaluation: {invalid_ids}"
-        )
+        raise BusinessValidationError(f"Student IDs not enrolled in this evaluation: {invalid_ids}")
 
     grades = await repo.batch_update_grades(db, eval_id, entries)
 

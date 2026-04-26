@@ -6,7 +6,7 @@ from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import Class, Level, Room, Subject
+from app.models.academic import Class, Level, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.grade import Evaluation, Grade
 from app.models.timetable import TimetableSlot
@@ -20,9 +20,7 @@ async def get_teacher_by_user_id(db: AsyncSession, user_id: int) -> TeacherProfi
     return result.scalar_one_or_none()
 
 
-async def get_teacher_classes(
-    db: AsyncSession, teacher_id: int
-) -> list[dict]:
+async def get_teacher_classes(db: AsyncSession, teacher_id: int) -> list[dict]:
     """Retourne les classes distinctes assignées à un enseignant via timetable_slots."""
     stmt = (
         select(
@@ -65,9 +63,7 @@ async def get_teacher_classes(
     return results
 
 
-async def get_teacher_schedule(
-    db: AsyncSession, teacher_id: int
-) -> list[TimetableSlot]:
+async def get_teacher_schedule(db: AsyncSession, teacher_id: int) -> list[TimetableSlot]:
     """Retourne les créneaux emploi du temps d'un enseignant."""
     stmt = (
         select(TimetableSlot)
@@ -85,20 +81,16 @@ async def get_teacher_schedule(
 
 async def count_distinct_classes(db: AsyncSession, teacher_id: int) -> int:
     """Compte les classes distinctes assignées à un enseignant."""
-    stmt = (
-        select(func.count(distinct(TimetableSlot.class_id)))
-        .where(TimetableSlot.teacher_id == teacher_id)
+    stmt = select(func.count(distinct(TimetableSlot.class_id))).where(
+        TimetableSlot.teacher_id == teacher_id
     )
     return (await db.execute(stmt)).scalar() or 0
 
 
-async def count_total_students(
-    db: AsyncSession, teacher_id: int
-) -> int:
+async def count_total_students(db: AsyncSession, teacher_id: int) -> int:
     """Compte le nombre total d'élèves dans les classes de l'enseignant."""
-    class_ids_stmt = (
-        select(distinct(TimetableSlot.class_id))
-        .where(TimetableSlot.teacher_id == teacher_id)
+    class_ids_stmt = select(distinct(TimetableSlot.class_id)).where(
+        TimetableSlot.teacher_id == teacher_id
     )
     stmt = (
         select(func.count())
@@ -111,9 +103,7 @@ async def count_total_students(
     return (await db.execute(stmt)).scalar() or 0
 
 
-async def count_upcoming_evaluations(
-    db: AsyncSession, teacher_id: int
-) -> int:
+async def count_upcoming_evaluations(db: AsyncSession, teacher_id: int) -> int:
     """Compte les évaluations à venir pour cet enseignant."""
     today = date.today()
     stmt = (
@@ -127,9 +117,7 @@ async def count_upcoming_evaluations(
     return (await db.execute(stmt)).scalar() or 0
 
 
-async def get_class_averages(
-    db: AsyncSession, teacher_id: int
-) -> list[dict]:
+async def get_class_averages(db: AsyncSession, teacher_id: int) -> list[dict]:
     """Calcule la moyenne par classe/matière pour les évaluations de l'enseignant."""
     stmt = (
         select(

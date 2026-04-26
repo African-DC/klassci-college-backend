@@ -94,5 +94,9 @@ async def get_class_attendance(
     if class_id not in class_ids:
         raise HTTPException(status_code=403, detail="Vous n'etes pas assigne a cette classe")
     return await attendance_service.get_class_stats(
-        db, class_id, academic_year_id=academic_year_id, date_from=date_from, date_to=date_to,
+        db,
+        class_id,
+        academic_year_id=academic_year_id,
+        date_from=date_from,
+        date_to=date_to,
     )

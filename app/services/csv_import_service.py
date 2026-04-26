@@ -16,7 +16,14 @@ from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_COLUMNS = {"first_name", "last_name", "birth_date", "genre", "enrollment_number", "class_name"}
+REQUIRED_COLUMNS = {
+    "first_name",
+    "last_name",
+    "birth_date",
+    "genre",
+    "enrollment_number",
+    "class_name",
+}
 
 CSV_TEMPLATE = "first_name,last_name,birth_date,genre,enrollment_number,class_name\nJean,Dupont,2010-05-15,M,MAT001,6eme A\nMarie,Koné,2011-03-22,F,,6eme B\n"
 
@@ -49,7 +56,10 @@ def _validate_row(row: dict[str, str], row_num: int) -> tuple[dict | None, str |
     birth_date_str = row.get("birth_date", "").strip()
     birth_date = _parse_birth_date(birth_date_str)
     if birth_date_str and birth_date is None:
-        return None, f"Row {row_num}: invalid birth_date format '{birth_date_str}' (expected YYYY-MM-DD or DD/MM/YYYY)"
+        return (
+            None,
+            f"Row {row_num}: invalid birth_date format '{birth_date_str}' (expected YYYY-MM-DD or DD/MM/YYYY)",
+        )
 
     class_name = row.get("class_name", "").strip()
     if not class_name:
@@ -82,8 +92,8 @@ async def import_students_from_csv(
     except UnicodeDecodeError:
         try:
             content = csv_bytes.decode("latin-1")
-        except UnicodeDecodeError:
-            raise BusinessValidationError("Unable to decode CSV file. Use UTF-8 encoding.")
+        except UnicodeDecodeError as err:
+            raise BusinessValidationError("Unable to decode CSV file. Use UTF-8 encoding.") from err
 
     reader = csv.DictReader(io.StringIO(content))
 
@@ -139,12 +149,16 @@ async def import_students_from_csv(
         class_key = data["class_name"].strip().lower()
         class_ = classes.get(class_key)
         if class_ is None:
-            errors.append(f"Row {row_num}: class '{data['class_name']}' not found for current academic year")
+            errors.append(
+                f"Row {row_num}: class '{data['class_name']}' not found for current academic year"
+            )
             continue
 
         # Check enrollment_number duplicate
         if data["enrollment_number"] and data["enrollment_number"] in existing_numbers:
-            errors.append(f"Row {row_num}: enrollment_number '{data['enrollment_number']}' already exists")
+            errors.append(
+                f"Row {row_num}: enrollment_number '{data['enrollment_number']}' already exists"
+            )
             skipped += 1
             continue
 
@@ -164,7 +178,9 @@ async def import_students_from_csv(
                 if not data["enrollment_number"]:
                     if school_settings and school_settings.enrollment_number_pattern:
                         enrollment_num = await generate_enrollment_number(
-                            db, school_settings, class_data=class_,
+                            db,
+                            school_settings,
+                            class_data=class_,
                         )
                         student.enrollment_number = enrollment_num
                         existing_numbers.add(enrollment_num)

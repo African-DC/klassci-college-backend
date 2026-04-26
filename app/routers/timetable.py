@@ -105,7 +105,9 @@ async def export_timetable_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=emploi-du-temps-classe-{class_id}.pdf"},
+        headers={
+            "Content-Disposition": f"attachment; filename=emploi-du-temps-classe-{class_id}.pdf"
+        },
     )
 
 

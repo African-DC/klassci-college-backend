@@ -31,12 +31,12 @@ LEVELS = [
 
 # Series (lycee only — levels 5-7):
 SERIES = [
-    {"name": "A", "level_order": 5},   # 2nde
-    {"name": "C", "level_order": 6},   # 1ere
-    {"name": "D", "level_order": 6},   # 1ere
-    {"name": "A", "level_order": 7},   # Terminale
-    {"name": "C", "level_order": 7},   # Terminale
-    {"name": "D", "level_order": 7},   # Terminale
+    {"name": "A", "level_order": 5},  # 2nde
+    {"name": "C", "level_order": 6},  # 1ere
+    {"name": "D", "level_order": 6},  # 1ere
+    {"name": "A", "level_order": 7},  # Terminale
+    {"name": "C", "level_order": 7},  # Terminale
+    {"name": "D", "level_order": 7},  # Terminale
 ]
 
 SUBJECTS = [
@@ -113,10 +113,7 @@ async def seed_demo_data(tenant_slug: str) -> None:
                 # 2. Levels
                 for lvl in LEVELS:
                     await db.execute(
-                        text(
-                            "INSERT IGNORE INTO levels (name, `order`) "
-                            "VALUES (:name, :ord)"
-                        ),
+                        text("INSERT IGNORE INTO levels (name, `order`) VALUES (:name, :ord)"),
                         {"name": lvl["name"], "ord": lvl["order"]},
                     )
                 counts["levels"] = len(LEVELS)
@@ -130,8 +127,7 @@ async def seed_demo_data(tenant_slug: str) -> None:
                     level_id = level_row.scalar_one()
                     await db.execute(
                         text(
-                            "INSERT IGNORE INTO series (level_id, name) "
-                            "VALUES (:level_id, :name)"
+                            "INSERT IGNORE INTO series (level_id, name) VALUES (:level_id, :name)"
                         ),
                         {"level_id": level_id, "name": s["name"]},
                     )

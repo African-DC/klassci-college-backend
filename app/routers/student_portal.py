@@ -72,7 +72,13 @@ async def get_attendance(
     """Historique de presence de l'eleve connecte."""
     student = await student_portal_service._get_student_for_user(db, current_user.user_id)
     return await attendance_service.get_student_attendance(
-        db, student.id, status=status_filter, date_from=date_from, date_to=date_to, page=page, size=size,
+        db,
+        student.id,
+        status=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        size=size,
     )
 
 

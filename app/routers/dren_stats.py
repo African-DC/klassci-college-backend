@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import get_tenant_db, require_permission
 from app.schemas.dren_stats import DrenExportResponse, DrenStatsResponse
 from app.services import dren_stats_service as service
 

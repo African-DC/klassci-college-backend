@@ -12,7 +12,6 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db, re
 from app.schemas.council import (
     CouncilMinutesGenerateRequest,
     CouncilMinutesResponse,
-    CouncilMinutesPdfResponse,
     CouncilStudentDecisionResponse,
     DecisionOverrideRequest,
 )
@@ -58,9 +57,7 @@ async def get_council_minutes_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": (
-                f'inline; filename="pv_conseil_{class_id}_T{trimester}.pdf"'
-            )
+            "Content-Disposition": (f'inline; filename="pv_conseil_{class_id}_T{trimester}.pdf"')
         },
     )
 

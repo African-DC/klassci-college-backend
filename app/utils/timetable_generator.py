@@ -28,6 +28,7 @@ PREFERRED_BONUS = 10
 @dataclass
 class Assignment:
     """Assignation prof-matiere pour une classe."""
+
     teacher_id: int
     subject_id: int
     hours_per_week: int  # total hours (integer)
@@ -36,6 +37,7 @@ class Assignment:
 @dataclass
 class SlotBlock:
     """Un bloc de temps dans la grille du solveur."""
+
     day: str
     start_minutes: int  # minutes from midnight (e.g., 480 = 08:00)
     end_minutes: int
@@ -46,6 +48,7 @@ class SlotBlock:
 @dataclass
 class FixedBlock:
     """Bloc fixe (slot manuel) — doit etre conserve."""
+
     assignment_idx: int
     block_idx: int
 
@@ -53,6 +56,7 @@ class FixedBlock:
 @dataclass
 class MergedSlot:
     """Resultat fusionne : un creneau continu pour la DB."""
+
     assignment_idx: int
     day: str
     start_time: time
@@ -62,6 +66,7 @@ class MergedSlot:
 @dataclass
 class GeneratorResult:
     """Resultat du solveur."""
+
     feasible: bool
     merged_slots: list[MergedSlot] = field(default_factory=list)
 
@@ -80,13 +85,15 @@ def build_blocks(
         end_min = day_end_hour * 60
         t = start_min
         while t + slot_duration_minutes <= end_min:
-            blocks.append(SlotBlock(
-                day=day,
-                start_minutes=t,
-                end_minutes=t + slot_duration_minutes,
-                day_index=day_idx,
-                index=idx,
-            ))
+            blocks.append(
+                SlotBlock(
+                    day=day,
+                    start_minutes=t,
+                    end_minutes=t + slot_duration_minutes,
+                    day_index=day_idx,
+                    index=idx,
+                )
+            )
             t += slot_duration_minutes
             idx += 1
     return blocks
@@ -121,23 +128,27 @@ def merge_consecutive_blocks(
             current_end = blk.end_minutes
         else:
             # Save current group and start new one
-            result.append(MergedSlot(
-                assignment_idx=assignment_idx,
-                day=current_day,
-                start_time=minutes_to_time(current_start),
-                end_time=minutes_to_time(current_end),
-            ))
+            result.append(
+                MergedSlot(
+                    assignment_idx=assignment_idx,
+                    day=current_day,
+                    start_time=minutes_to_time(current_start),
+                    end_time=minutes_to_time(current_end),
+                )
+            )
             current_day = blk.day
             current_start = blk.start_minutes
             current_end = blk.end_minutes
 
     # Save last group
-    result.append(MergedSlot(
-        assignment_idx=assignment_idx,
-        day=current_day,
-        start_time=minutes_to_time(current_start),
-        end_time=minutes_to_time(current_end),
-    ))
+    result.append(
+        MergedSlot(
+            assignment_idx=assignment_idx,
+            day=current_day,
+            start_time=minutes_to_time(current_start),
+            end_time=minutes_to_time(current_end),
+        )
+    )
 
     return result
 
@@ -222,7 +233,7 @@ def solve(
         blocks_by_day.setdefault(blk.day_index, []).append(b_idx)
 
     for a in range(n_a):
-        for day_idx, day_blocks in blocks_by_day.items():
+        for _day_idx, day_blocks in blocks_by_day.items():
             if len(day_blocks) < 2:
                 continue
             # For contiguity: once you stop, you can't restart on the same day

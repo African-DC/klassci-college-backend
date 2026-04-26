@@ -67,8 +67,8 @@ async def get_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenStatsRe
         total_female += row[5]
 
     # 4. Success/failure/redoublement/exclusion rates
-    success_rate, failure_rate, redoublement_rate, exclusion_rate = (
-        await repo.get_bulletin_rates(db, academic_year_id)
+    success_rate, failure_rate, redoublement_rate, exclusion_rate = await repo.get_bulletin_rates(
+        db, academic_year_id
     )
 
     # 5. Subject averages
@@ -93,7 +93,7 @@ async def get_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenStatsRe
 
     # Add subjects that have teachers but no grades yet
     subjects_with_grades = {s.subject_id for s in subjects}
-    for subject_id, count in teacher_map.items():
+    for subject_id, _count in teacher_map.items():
         if subject_id not in subjects_with_grades:
             # We don't have the subject name here — skip these
             # They will appear once grades are entered

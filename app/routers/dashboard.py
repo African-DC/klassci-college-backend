@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.audit import AuditLog
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.models.enrollment import Enrollment, EnrollmentStatus
@@ -206,11 +207,7 @@ async def get_recent_activity(
     """Retourne les 10 dernières entrées du journal d'audit pour le widget activité."""
 
     # Simple query — résolution du nom en Python pour éviter les sous-requêtes corrélées
-    stmt = (
-        select(AuditLog)
-        .order_by(AuditLog.created_at.desc())
-        .limit(10)
-    )
+    stmt = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(10)
     result = await db.execute(stmt)
     logs = result.scalars().all()
 
@@ -220,19 +217,22 @@ async def get_recent_activity(
     if user_ids:
         # Chercher dans les profils
         for Model in (StaffProfile, TeacherProfile, Student):
-            found = (await db.execute(
-                select(Model.user_id, Model.first_name, Model.last_name)
-                .where(Model.user_id.in_(user_ids))
-            )).all()
+            found = (
+                await db.execute(
+                    select(Model.user_id, Model.first_name, Model.last_name).where(
+                        Model.user_id.in_(user_ids)
+                    )
+                )
+            ).all()
             for row in found:
                 if row.user_id not in user_names:
                     user_names[row.user_id] = f"{row.first_name} {row.last_name}"
         # Fallback email
         missing = user_ids - set(user_names.keys())
         if missing:
-            found = (await db.execute(
-                select(User.id, User.email).where(User.id.in_(missing))
-            )).all()
+            found = (
+                await db.execute(select(User.id, User.email).where(User.id.in_(missing)))
+            ).all()
             for row in found:
                 user_names[row.id] = row.email or f"Utilisateur #{row.id}"
 

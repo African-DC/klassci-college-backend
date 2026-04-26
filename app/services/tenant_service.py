@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -96,7 +97,7 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
 # Role definitions with their permission slugs
 # ---------------------------------------------------------------------------
 
-ROLE_DEFINITIONS: dict[str, dict] = {
+ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "admin": {
         "description": "Administrateur — accès complet",
         "permissions": [p["slug"] for p in ALL_PERMISSIONS],
@@ -187,9 +188,7 @@ async def run_migrations(tenant_slug: str) -> None:
         timeout=120,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            f"Alembic migration failed for tenant '{tenant_slug}': {result.stderr}"
-        )
+        raise RuntimeError(f"Alembic migration failed for tenant '{tenant_slug}': {result.stderr}")
     logger.info("Migrations applied for tenant '%s'", tenant_slug)
 
 
@@ -203,7 +202,7 @@ async def seed_tenant_data(
     school_phone: str | None = None,
     school_email: str | None = None,
     ministry_code: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Step 3: Seed permissions, roles, admin user, and school settings."""
     tenant_url = settings.DATABASE_URL.format(tenant=tenant_slug)
     engine = create_async_engine(tenant_url, pool_pre_ping=True)
@@ -215,20 +214,14 @@ async def seed_tenant_data(
                 # 3a. Seed permissions
                 for perm in ALL_PERMISSIONS:
                     await db.execute(
-                        text(
-                            "INSERT IGNORE INTO permissions (slug, name) "
-                            "VALUES (:slug, :name)"
-                        ),
+                        text("INSERT IGNORE INTO permissions (slug, name) VALUES (:slug, :name)"),
                         perm,
                     )
 
                 # 3b. Seed roles and link permissions
                 for role_name, role_def in ROLE_DEFINITIONS.items():
                     await db.execute(
-                        text(
-                            "INSERT IGNORE INTO roles (name, description) "
-                            "VALUES (:name, :desc)"
-                        ),
+                        text("INSERT IGNORE INTO roles (name, description) VALUES (:name, :desc)"),
                         {"name": role_name, "desc": role_def["description"]},
                     )
                     result = await db.execute(
@@ -267,10 +260,7 @@ async def seed_tenant_data(
                 )
                 admin_role_id = admin_role_result.scalar_one()
                 await db.execute(
-                    text(
-                        "INSERT INTO user_roles (user_id, role_id) "
-                        "VALUES (:user_id, :role_id)"
-                    ),
+                    text("INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)"),
                     {"user_id": admin_user_id, "role_id": admin_role_id},
                 )
 
@@ -317,7 +307,7 @@ async def provision_tenant(
     school_email: str | None = None,
     ministry_code: str | None = None,
     send_welcome_email: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """Full provisioning workflow: create DB -> migrate -> seed -> welcome email."""
     if not re.match(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$", tenant_slug):
         raise ValueError(
@@ -358,9 +348,7 @@ async def provision_tenant(
             temp_password=admin_password,
         )
         if not email_sent:
-            logger.warning(
-                "Welcome email not sent to %s — vérifier config SMTP", admin_email
-            )
+            logger.warning("Welcome email not sent to %s — vérifier config SMTP", admin_email)
 
     logger.info("=== Tenant '%s' provisioned successfully ===", tenant_slug)
     return {

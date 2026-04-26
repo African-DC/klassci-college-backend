@@ -88,9 +88,7 @@ class TenantMiddleware:
             hostname = host.split(":")[0]
 
             if not _is_host_allowed(hostname):
-                logger.warning(
-                    "Rejected request with disallowed Host header: %s", host[:100]
-                )
+                logger.warning("Rejected request with disallowed Host header: %s", host[:100])
                 response = JSONResponse(
                     status_code=400,
                     content={"detail": "Invalid host", "code": "HOST_NOT_ALLOWED"},

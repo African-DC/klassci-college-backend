@@ -1,7 +1,6 @@
 """Service de stockage fichiers — S3/DigitalOcean Spaces avec fallback local."""
 
 import logging
-import os
 import uuid
 from pathlib import Path
 

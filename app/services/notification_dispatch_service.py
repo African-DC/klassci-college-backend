@@ -6,7 +6,7 @@ selon les canaux demandés.
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,7 +100,11 @@ async def dispatch_notification(
     Returns:
         La notification in-app créée.
     """
-    n_type = notification_type.value if isinstance(notification_type, NotificationType) else notification_type
+    n_type = (
+        notification_type.value
+        if isinstance(notification_type, NotificationType)
+        else notification_type
+    )
     requested_channels: set[str] = {NotificationChannel.IN_APP.value}
     if channels:
         for ch in channels:
@@ -130,7 +134,7 @@ async def dispatch_notification(
         title=title,
         body=body,
         read=False,
-        sent_at=datetime.now(timezone.utc),
+        sent_at=datetime.now(UTC),
     )
     db.add(notification)
     await db.flush()

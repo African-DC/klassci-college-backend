@@ -311,8 +311,12 @@ async def get_unavailable_slot_indices(
     on suppose qu'il est disponible partout (pas de blocage).
     """
     # Check if teacher has ANY availability declarations
-    count_stmt = select(func.count()).select_from(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
+    count_stmt = (
+        select(func.count())
+        .select_from(TeacherAvailability)
+        .where(
+            TeacherAvailability.teacher_id == teacher_id,
+        )
     )
     total_declarations = (await db.execute(count_stmt)).scalar() or 0
 
@@ -362,14 +366,12 @@ async def get_preferred_slot_indices(
     indices: set[int] = set()
     for idx, slot in enumerate(available_slots):
         slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = _to_time(slot.start_time if hasattr(slot, "start_time") else slot["start_time"])
+        slot_start = _to_time(
+            slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
+        )
         slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
         for pref in preferred:
-            if (
-                pref.day == slot_day
-                and pref.start_time <= slot_start
-                and pref.end_time >= slot_end
-            ):
+            if pref.day == slot_day and pref.start_time <= slot_start and pref.end_time >= slot_end:
                 indices.add(idx)
                 break
     return indices
@@ -401,15 +403,13 @@ async def get_cross_class_blocked_slots(
     blocked: set[int] = set()
     for idx, slot in enumerate(available_slots):
         slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = _to_time(slot.start_time if hasattr(slot, "start_time") else slot["start_time"])
+        slot_start = _to_time(
+            slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
+        )
         slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
         for ex in existing:
             ex_day = ex.day if isinstance(ex.day, str) else ex.day
-            if (
-                ex_day == slot_day
-                and ex.start_time < slot_end
-                and ex.end_time > slot_start
-            ):
+            if ex_day == slot_day and ex.start_time < slot_end and ex.end_time > slot_start:
                 blocked.add(idx)
                 break
     return blocked
@@ -439,8 +439,12 @@ async def get_unavailable_block_indices(
     blocks: list,
 ) -> set[int]:
     """Retourne les indices de blocs ou le prof est indisponible."""
-    count_stmt = select(func.count()).select_from(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
+    count_stmt = (
+        select(func.count())
+        .select_from(TeacherAvailability)
+        .where(
+            TeacherAvailability.teacher_id == teacher_id,
+        )
     )
     total = (await db.execute(count_stmt)).scalar() or 0
     if total == 0:
