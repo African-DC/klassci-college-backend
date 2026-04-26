@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0F3F8C">
+<title>POC Voice Saisie Notes — KLASSCI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+  body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+
+  header { padding: 12px 0 8px; }
+  .badge { display: inline-block; background: #fef3c7; color: #78350f; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; letter-spacing: 0.5px; }
+  h1 { font-size: 18px; font-weight: 600; margin-top: 6px; color: #0F3F8C; }
+  .subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; padding: 16px 0; }
+
+  .student-card { background: white; border-radius: 16px; padding: 24px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; text-align: center; }
+  .student-position { font-size: 11px; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; }
+  .student-name { font-size: 22px; font-weight: 600; margin-top: 4px; color: #0f172a; }
+
+  .display { background: white; border-radius: 16px; padding: 24px; text-align: center; border: 1px solid #e2e8f0; min-height: 120px; display: flex; flex-direction: column; justify-content: center; }
+  .display.heard { border-color: #cbd5e1; background: #f8fafc; }
+  .display.parsed-ok { border-color: #10b981; background: #ecfdf5; }
+  .display.parsed-fail { border-color: #f59e0b; background: #fffbeb; }
+  .heard-label { font-size: 11px; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; }
+  .heard-text { font-size: 16px; color: #475569; margin-top: 4px; min-height: 22px; font-style: italic; }
+  .parsed-value { font-size: 56px; font-weight: 700; line-height: 1; margin-top: 12px; color: #0F3F8C; }
+  .parsed-value.absent { font-size: 32px; color: #f59e0b; }
+  .parsed-value.empty { color: #cbd5e1; }
+  .parsed-suffix { font-size: 16px; font-weight: 400; color: #94a3b8; margin-left: 4px; }
+
+  .mic-button { width: 96px; height: 96px; border-radius: 50%; border: none; background: linear-gradient(180deg, #0F3F8C, #1e40af); color: white; font-size: 36px; cursor: pointer; box-shadow: 0 8px 24px rgba(15, 63, 140, 0.3); transition: transform 0.1s, background 0.2s; align-self: center; touch-action: manipulation; }
+  .mic-button:active, .mic-button.listening { transform: scale(0.95); background: linear-gradient(180deg, #dc2626, #b91c1c); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); } 50% { box-shadow: 0 0 0 16px rgba(220, 38, 38, 0); } }
+  .mic-label { text-align: center; font-size: 12px; color: #64748b; margin-top: 6px; }
+
+  .numpad-toggle { background: none; border: 1px solid #cbd5e1; color: #475569; font-size: 13px; padding: 8px 16px; border-radius: 999px; cursor: pointer; align-self: center; touch-action: manipulation; }
+  .numpad-toggle:active { background: #f1f5f9; }
+
+  .numpad { display: none; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .numpad.shown { display: grid; }
+  .numpad button { background: white; border: 1px solid #e2e8f0; border-radius: 12px; height: 56px; font-size: 22px; font-weight: 500; color: #0f172a; cursor: pointer; touch-action: manipulation; }
+  .numpad button:active { background: #f1f5f9; }
+  .numpad button.action { background: #0F3F8C; color: white; border-color: #0F3F8C; font-size: 14px; font-weight: 600; }
+  .numpad button.action.absent { background: #f59e0b; border-color: #f59e0b; }
+  .numpad button.action.skip { background: #94a3b8; border-color: #94a3b8; }
+
+  .progress { padding: 8px 0; }
+  .progress-bar { background: #e2e8f0; height: 4px; border-radius: 2px; overflow: hidden; }
+  .progress-fill { background: #0F3F8C; height: 100%; transition: width 0.3s; }
+  .progress-text { font-size: 11px; color: #64748b; margin-top: 4px; text-align: center; }
+
+  .nav { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0 16px; }
+  .nav button { flex: 1; background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; font-size: 14px; color: #475569; cursor: pointer; touch-action: manipulation; }
+  .nav button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nav button.next { background: #0F3F8C; color: white; border-color: #0F3F8C; font-weight: 600; }
+
+  .error-banner { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 12px; font-size: 13px; margin-top: 8px; display: none; }
+  .error-banner.shown { display: block; }
+  .error-banner code { font-family: ui-monospace, monospace; background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="badge">POC — Web Speech API</span>
+  <h1>Saisie de note vocale</h1>
+  <p class="subtitle">Test du mode dictée pour le mode prof Mme Diallo</p>
+</header>
+
+<main>
+  <div class="progress">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width: 0%"></div></div>
+    <div class="progress-text" id="progress-text">0 / 5 saisis</div>
+  </div>
+
+  <div class="student-card">
+    <div class="student-position" id="student-position">ÉLÈVE 1 SUR 5</div>
+    <div class="student-name" id="student-name">Aminata Diallo</div>
+  </div>
+
+  <div class="display" id="display">
+    <div class="heard-label">Reconnu</div>
+    <div class="heard-text" id="heard">—</div>
+    <div class="parsed-value empty" id="parsed">__<span class="parsed-suffix">/20</span></div>
+  </div>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <button class="mic-button" id="mic-btn" aria-label="Activer le micro">🎤</button>
+  <div class="mic-label" id="mic-label">Touchez le micro et dictez la note</div>
+
+  <button class="numpad-toggle" id="numpad-toggle">Ouvrir le clavier numérique</button>
+
+  <div class="numpad" id="numpad">
+    <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button>
+    <button data-d="4">4</button><button data-d="5">5</button><button data-d="6">6</button>
+    <button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>
+    <button data-d=",">,</button><button data-d="0">0</button><button data-d="back">⌫</button>
+    <button class="action absent" data-d="absent">Absent</button>
+    <button class="action skip" data-d="skip">Passer</button>
+    <button class="action" data-d="confirm">Valider ✓</button>
+  </div>
+
+  <div class="nav">
+    <button id="prev-btn">◀ Précédent</button>
+    <button class="next" id="next-btn" disabled>Valider ▶</button>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+// Demo students (POC-only — replace with API call in real impl)
+const STUDENTS = [
+  { id: 1, name: 'Aminata Diallo' },
+  { id: 2, name: 'Pierre Kouassi' },
+  { id: 3, name: 'Mariam Touré' },
+  { id: 4, name: 'Jean-Baptiste Konan' },
+  { id: 5, name: 'Fatou N\'Guessan' },
+];
+
+const grades = new Map();  // studentId → number | null | undefined
+let currentIdx = 0;
+let buffer = '';  // numpad input buffer
+let recognition = null;
+
+// ---- Word-to-number French ----
+const FRENCH_NUMBERS = {
+  'zéro': 0, 'zero': 0,
+  'un': 1, 'une': 1,
+  'deux': 2,
+  'trois': 3,
+  'quatre': 4,
+  'cinq': 5, 'cinq cents': 0.5,  // edge case
+  'six': 6,
+  'sept': 7,
+  'huit': 8,
+  'neuf': 9,
+  'dix': 10,
+  'onze': 11,
+  'douze': 12,
+  'treize': 13,
+  'quatorze': 14,
+  'quinze': 15,
+  'seize': 16,
+  'dix-sept': 17, 'dix sept': 17,
+  'dix-huit': 18, 'dix huit': 18,
+  'dix-neuf': 19, 'dix neuf': 19,
+  'vingt': 20,
+};
+
+const ABSENT_KEYWORDS = ['absent', 'absente', 'non noté', 'non rendu', 'rien', 'pas noté'];
+
+/**
+ * Parse une phrase française pour en extraire une note /20.
+ * Retourne { value: number | null, label: string } ou null si rien reconnu.
+ *  - "douze" → 12
+ *  - "douze virgule cinq" → 12.5
+ *  - "douze sur vingt" → 12
+ *  - "douze et demi" → 12.5
+ *  - "absent" → null (saisi explicitement comme absent)
+ *  - "12,5" → 12.5
+ *  - "" → undefined (rien reconnu)
+ */
+function parseSpokenGrade(transcript) {
+  if (!transcript) return null;
+  let text = transcript.toLowerCase().trim()
+    .replace(/[.,!?;:]/g, '')
+    .replace(/sur vingt/g, '')
+    .replace(/^la note (est |de )?/, '')
+    .replace(/^c'est /, '')
+    .trim();
+
+  // Absent
+  for (const kw of ABSENT_KEYWORDS) {
+    if (text.includes(kw)) return { value: null, label: 'Absent' };
+  }
+
+  // Direct number "12,5" or "12.5" or "12"
+  const m = text.match(/(\d{1,2})[,.\s](\d{1,2})/);
+  if (m) {
+    const v = parseFloat(`${m[1]}.${m[2]}`);
+    if (v >= 0 && v <= 20) return { value: v, label: v.toString() };
+  }
+  const m2 = text.match(/^(\d{1,2})$/);
+  if (m2) {
+    const v = parseInt(m2[1], 10);
+    if (v >= 0 && v <= 20) return { value: v, label: v.toString() };
+  }
+
+  // Word-form: "douze virgule cinq" or "douze et demi"
+  // Replace "virgule" / "point" with "."
+  text = text.replace(/\b(virgule|point)\b/g, '.');
+  // Replace "et demi" with ".5"
+  text = text.replace(/\bet demi(e)?\b/g, '.5');
+
+  // Try to find integer + optional decimal
+  const tokens = text.split(/[\s.]+/).filter(Boolean);
+  let intPart = null;
+  let decPart = null;
+  let foundSep = false;
+
+  for (const tok of tokens) {
+    if (tok === '.') { foundSep = true; continue; }
+    // Composite "dix-sept"
+    const compositeMatch = Object.keys(FRENCH_NUMBERS).find(k => k === tok);
+    if (compositeMatch !== undefined) {
+      const num = FRENCH_NUMBERS[compositeMatch];
+      if (intPart === null) intPart = num;
+      else if (decPart === null && num >= 0 && num <= 9) decPart = num;
+    } else if (/^\d+$/.test(tok)) {
+      const num = parseInt(tok, 10);
+      if (intPart === null) intPart = num;
+      else if (decPart === null && num >= 0 && num <= 9) decPart = num;
+    }
+  }
+
+  // Detect implicit "douze cinq" pattern (no virgule said)
+  if (intPart !== null && decPart === null) {
+    // Look for "X Y" pattern where Y is 0-9
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const a = FRENCH_NUMBERS[tokens[i]];
+      const b = FRENCH_NUMBERS[tokens[i + 1]];
+      if (a !== undefined && b !== undefined && a >= 0 && a <= 20 && b >= 0 && b <= 9) {
+        intPart = a;
+        decPart = b;
+        break;
+      }
+    }
+  }
+
+  if (intPart === null) return null;
+  let v = intPart;
+  if (decPart !== null) v = intPart + decPart / 10;
+
+  if (v < 0 || v > 20) return { value: null, label: `Hors borne (${v})`, error: true };
+  return { value: v, label: v.toString() };
+}
+
+// ---- UI ----
+const display = document.getElementById('display');
+const heard = document.getElementById('heard');
+const parsed = document.getElementById('parsed');
+const studentName = document.getElementById('student-name');
+const studentPosition = document.getElementById('student-position');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
+const micBtn = document.getElementById('mic-btn');
+const micLabel = document.getElementById('mic-label');
+const numpadToggle = document.getElementById('numpad-toggle');
+const numpad = document.getElementById('numpad');
+const errorBanner = document.getElementById('error-banner');
+const prevBtn = document.getElementById('prev-btn');
+const nextBtn = document.getElementById('next-btn');
+
+let currentValue = undefined;  // undefined = not entered yet, null = absent, number = entered
+
+function refresh() {
+  const s = STUDENTS[currentIdx];
+  studentName.textContent = s.name;
+  studentPosition.textContent = `ÉLÈVE ${currentIdx + 1} SUR ${STUDENTS.length}`;
+  prevBtn.disabled = currentIdx === 0;
+
+  const filled = [...grades.values()].filter(v => v !== undefined).length;
+  progressFill.style.width = `${(filled / STUDENTS.length) * 100}%`;
+  progressText.textContent = `${filled} / ${STUDENTS.length} saisis`;
+
+  currentValue = grades.get(s.id);
+  updateDisplay();
+}
+
+function updateDisplay(spokenText = '') {
+  heard.textContent = spokenText || '—';
+  display.classList.remove('heard', 'parsed-ok', 'parsed-fail');
+
+  if (currentValue === undefined) {
+    parsed.innerHTML = '__<span class="parsed-suffix">/20</span>';
+    parsed.className = 'parsed-value empty';
+    nextBtn.disabled = true;
+    nextBtn.textContent = 'Valider ▶';
+  } else if (currentValue === null) {
+    parsed.innerHTML = 'ABSENT';
+    parsed.className = 'parsed-value absent';
+    nextBtn.disabled = false;
+    nextBtn.textContent = 'Suivant ▶';
+  } else {
+    parsed.innerHTML = `${currentValue}<span class="parsed-suffix">/20</span>`;
+    parsed.className = 'parsed-value';
+    if (spokenText) display.classList.add('parsed-ok');
+    nextBtn.disabled = false;
+    nextBtn.textContent = 'Suivant ▶';
+  }
+}
+
+function setGrade(value) {
+  const s = STUDENTS[currentIdx];
+  grades.set(s.id, value);
+  currentValue = value;
+  updateDisplay();
+}
+
+function showError(msg) {
+  errorBanner.innerHTML = msg;
+  errorBanner.classList.add('shown');
+  setTimeout(() => errorBanner.classList.remove('shown'), 5000);
+}
+
+// ---- Web Speech API ----
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) {
+  micBtn.disabled = true;
+  micBtn.style.opacity = '0.4';
+  micLabel.textContent = '⚠ Voice non supporté — utilisez le clavier';
+  showError('Web Speech API <code>SpeechRecognition</code> indisponible. Chrome Android/Desktop requis. Safari iOS limité.');
+} else {
+  recognition = new SR();
+  recognition.lang = 'fr-FR';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  let listening = false;
+
+  recognition.onstart = () => {
+    listening = true;
+    micBtn.classList.add('listening');
+    micLabel.textContent = '🎤 Écoute en cours…';
+    heard.textContent = '…';
+  };
+
+  recognition.onresult = (event) => {
+    let transcript = '';
+    let isFinal = false;
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+      if (event.results[i].isFinal) isFinal = true;
+    }
+    transcript = transcript.trim();
+    heard.textContent = transcript;
+
+    if (isFinal) {
+      const result = parseSpokenGrade(transcript);
+      if (result === null) {
+        display.classList.add('parsed-fail');
+        showError(`Pas compris : "${transcript}". Essaie "douze" ou "douze virgule cinq" ou "absent".`);
+      } else if (result.error) {
+        display.classList.add('parsed-fail');
+        showError(`Note hors borne : "${transcript}" → ${result.label}. Doit être 0-20.`);
+      } else {
+        setGrade(result.value);
+        updateDisplay(transcript);
+        // Auto-advance after 1.5s if successful
+        setTimeout(() => { if (currentIdx < STUDENTS.length - 1) goNext(); }, 1500);
+      }
+    }
+  };
+
+  recognition.onerror = (e) => {
+    listening = false;
+    micBtn.classList.remove('listening');
+    if (e.error === 'no-speech') {
+      micLabel.textContent = 'Aucune voix détectée — réessaie';
+    } else if (e.error === 'not-allowed') {
+      showError('Permission micro refusée. Active le micro dans les paramètres du navigateur.');
+      micLabel.textContent = '🎤 Permission refusée';
+    } else {
+      showError(`Erreur reconnaissance : <code>${e.error}</code>`);
+      micLabel.textContent = 'Erreur — touche pour réessayer';
+    }
+  };
+
+  recognition.onend = () => {
+    listening = false;
+    micBtn.classList.remove('listening');
+    if (micLabel.textContent.startsWith('🎤 Écoute')) {
+      micLabel.textContent = 'Touchez le micro et dictez la note';
+    }
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (listening) {
+      recognition.stop();
+    } else {
+      try { recognition.start(); } catch (e) { /* already started */ }
+    }
+  });
+}
+
+// ---- Numpad ----
+numpadToggle.addEventListener('click', () => {
+  const shown = numpad.classList.toggle('shown');
+  numpadToggle.textContent = shown ? 'Fermer le clavier' : 'Ouvrir le clavier numérique';
+});
+
+numpad.addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const d = btn.dataset.d;
+  if (d === 'absent') {
+    setGrade(null);
+    buffer = '';
+  } else if (d === 'skip') {
+    if (currentIdx < STUDENTS.length - 1) goNext();
+  } else if (d === 'confirm') {
+    if (buffer) {
+      const v = parseFloat(buffer.replace(',', '.'));
+      if (!isNaN(v) && v >= 0 && v <= 20) {
+        setGrade(v);
+        buffer = '';
+        if (currentIdx < STUDENTS.length - 1) setTimeout(goNext, 600);
+      } else {
+        showError(`Valeur invalide : "${buffer}". Doit être 0-20.`);
+      }
+    }
+  } else if (d === 'back') {
+    buffer = buffer.slice(0, -1);
+    parsed.innerHTML = buffer ? `${buffer}<span class="parsed-suffix">/20</span>` : '__<span class="parsed-suffix">/20</span>';
+    parsed.className = buffer ? 'parsed-value' : 'parsed-value empty';
+  } else {
+    if (buffer.length < 5) buffer += d;
+    parsed.innerHTML = `${buffer}<span class="parsed-suffix">/20</span>`;
+    parsed.className = 'parsed-value';
+  }
+});
+
+// ---- Navigation ----
+function goNext() {
+  if (currentIdx < STUDENTS.length - 1) {
+    currentIdx++;
+    buffer = '';
+    refresh();
+  } else {
+    // End: show summary
+    const filled = [...grades.values()].filter(v => v !== undefined).length;
+    const list = STUDENTS.map((s, i) => {
+      const v = grades.get(s.id);
+      const display = v === null ? '<span style="color:#f59e0b">Absent</span>' : (v === undefined ? '<span style="color:#cbd5e1">non saisi</span>' : `<b>${v}/20</b>`);
+      return `<li style="padding:8px 0;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between"><span>${s.name}</span>${display}</li>`;
+    }).join('');
+    document.body.innerHTML = `
+      <div style="padding:24px;height:100vh;overflow:auto">
+        <h1 style="color:#0F3F8C;font-size:20px">Récapitulatif — ${filled}/${STUDENTS.length} saisis</h1>
+        <ul style="list-style:none;margin-top:16px;background:white;padding:16px;border-radius:12px;border:1px solid #e2e8f0">${list}</ul>
+        <button onclick="location.reload()" style="margin-top:16px;background:#0F3F8C;color:white;border:none;padding:14px 24px;border-radius:12px;font-size:16px;font-weight:600;width:100%">Recommencer le POC</button>
+        <p style="margin-top:24px;font-size:13px;color:#64748b;text-align:center">POC validé ? <a href="https://github.com/African-DC/klassci-college-frontend">Suite : task #40 Mode Dictée full-screen</a></p>
+      </div>
+    `;
+  }
+}
+
+prevBtn.addEventListener('click', () => {
+  if (currentIdx > 0) { currentIdx--; buffer = ''; refresh(); }
+});
+
+nextBtn.addEventListener('click', goNext);
+
+refresh();
+</script>
+</body>
+</html>
