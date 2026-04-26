@@ -9,7 +9,7 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
 @router.get("/", response_model=PaginatedResponse[EnrollmentResponse])
 async def list_enrollments(
-    _: None = Depends(require_permission("enrollments:view")),
+    _: None = Depends(require_permission("enrollments:read")),
     db: AsyncSession = Depends(get_tenant_db),
 ):
     service = EnrollmentService(db)

@@ -89,6 +89,17 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "admin:parents:create", "name": "Create parents"},
     {"slug": "admin:parents:update", "name": "Update parents"},
     {"slug": "admin:parents:delete", "name": "Delete parents"},
+    # Roles & Permissions management (2)
+    {"slug": "admin:roles:read", "name": "View roles and permissions"},
+    {"slug": "admin:roles:write", "name": "Manage roles and permissions"},
+    # Rooms (4)
+    {"slug": "admin:rooms:read", "name": "View rooms"},
+    {"slug": "admin:rooms:create", "name": "Create rooms"},
+    {"slug": "admin:rooms:update", "name": "Update rooms"},
+    {"slug": "admin:rooms:delete", "name": "Delete rooms"},
+    # Series (2)
+    {"slug": "admin:series:read", "name": "View academic series"},
+    {"slug": "admin:series:write", "name": "Manage academic series"},
     # Super Admin (1)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
 ]
