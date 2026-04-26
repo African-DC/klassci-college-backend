@@ -157,7 +157,12 @@ def test_create_student_success() -> None:
             with TestClient(app) as client:
                 resp = client.post(
                     "/admin/students",
-                    json={"first_name": "Jean", "last_name": "Kouassi"},
+                    json={
+                        "first_name": "Jean",
+                        "last_name": "Kouassi",
+                        "email": "jean.kouassi@klassci.test",
+                        "password": "TestPass@123",
+                    },
                 )
     finally:
         _clear_deps()
@@ -278,7 +283,12 @@ def test_create_teacher_success() -> None:
             with TestClient(app) as client:
                 resp = client.post(
                     "/admin/teachers",
-                    json={"first_name": "Marie", "last_name": "Diallo", "user_id": 2},
+                    json={
+                        "first_name": "Marie",
+                        "last_name": "Diallo",
+                        "email": "marie.diallo@klassci.test",
+                        "password": "TestPass@123",
+                    },
                 )
     finally:
         _clear_deps()
