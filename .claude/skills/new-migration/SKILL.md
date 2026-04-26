@@ -3,7 +3,6 @@ name: new-migration
 description: Create and validate an Alembic migration safely. Use when changing the database schema.
 argument-hint: "[description] e.g. add-index-on-enrollments-status"
 disable-model-invocation: true
-allowed-tools: Bash(alembic *), Bash(python *), Read, Edit
 ---
 
 Create a safe Alembic migration for: $ARGUMENTS

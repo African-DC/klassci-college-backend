@@ -1,0 +1,26 @@
+[Unit]
+Description=KLASSCI College — Backup MySQL multi-tenant vers Spaces
+Documentation=file:/home/ubuntu/klassci/klassci-backend/scripts/README.md
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+EnvironmentFile=/etc/klassci/backup.env
+ExecStart=/home/ubuntu/klassci/klassci-backend/scripts/backup-mysql.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=klassci-backup
+
+# Protection systemd
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp /var/tmp
+
+# Limite ressources (protège contre fuite mémoire)
+MemoryMax=512M
+TasksMax=64

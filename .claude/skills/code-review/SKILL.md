@@ -2,7 +2,6 @@
 name: code-review
 description: Review backend Python/FastAPI code for bugs, security issues, performance, and adherence to KLASSCI conventions. Use when asked to review code or before creating a PR.
 disable-model-invocation: true
-allowed-tools: Bash(git *), Read, Grep, Glob
 ---
 
 Perform a thorough code review of the KLASSCI backend changes.

@@ -1,0 +1,76 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "B008",   # do not perform function calls in default arguments (FastAPI Depends)
+    "E501",   # line too long — ruff format handles this
+    "UP042",  # StrEnum migration — SQLAlchemy Enum type requires str+Enum pattern
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+# strict=true révèle 147 erreurs de typage pré-existantes dans le repo.
+# Décision P0a : démarrer en mode permissif et durcir progressivement.
+# TODO P1 (S2) : monter en strict module par module via [[tool.mypy.overrides]].
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+plugins = ["sqlalchemy.ext.mypy.plugin", "pydantic.mypy"]
+# Codes désactivés temporairement (reactiver progressivement en S2)
+disable_error_code = [
+    "type-arg",        # Missing type arguments for generic type
+    "attr-defined",    # SQLAlchemy 2.0 typing strictness
+    "no-any-return",   # Wide spectrum, à réactiver après refacto
+    "arg-type",        # SQLAlchemy where(...) typing
+    "assignment",      # Sequence type variance
+    "import-untyped",  # External libs sans stubs
+    "index",           # SQLAlchemy Row indexing
+    "unused-ignore",   # Pré-existants `# type: ignore` redondants
+    "untyped-decorator",
+    "no-untyped-def",
+    "no-untyped-call",
+    "valid-type",
+    "misc",
+]
+
+# Modules nouvellement écrits ou refondus — empêcher la régression
+[[tool.mypy.overrides]]
+module = [
+    "app.core.middleware",
+    "app.core.config",
+    "app.services.email_service",
+    "app.cli.provision_tenant",
+]
+strict = true
+disable_error_code = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/core/migrations/*", "tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

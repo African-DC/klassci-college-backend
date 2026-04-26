@@ -1,0 +1,45 @@
+name: Branch Naming
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  check-branch-name:
+    name: Validate Branch Name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch naming convention
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          echo "Branch: $BRANCH"
+
+          # Allowed patterns:
+          # feature/42-description
+          # fix/42-description
+          # refactor/42-description
+          # test/42-description
+          # chore/42-description (no issue number required for chore)
+          # hotfix/42-description
+          if [[ "$BRANCH" =~ ^(feature|fix|refactor|test|hotfix)/[0-9]+-[a-z0-9-]+$ ]] || \
+             [[ "$BRANCH" =~ ^chore/[a-z0-9-]+$ ]] || \
+             [[ "$BRANCH" == "develop" ]] || \
+             [[ "$BRANCH" == "staging" ]]; then
+            echo "✅ Branch name valid: $BRANCH"
+          else
+            echo "❌ Branch name invalide: $BRANCH"
+            echo ""
+            echo "Format attendu :"
+            echo "  feature/42-description-courte"
+            echo "  fix/42-description-courte"
+            echo "  hotfix/42-description-courte"
+            echo "  refactor/42-description-courte"
+            echo "  test/42-description-courte"
+            echo "  chore/description-courte"
+            echo ""
+            echo "Exemples valides :"
+            echo "  feature/1-core-bootstrap-fastapi"
+            echo "  fix/3-jwt-expiry-refresh"
+            echo "  chore/update-dependencies"
+            exit 1
+          fi

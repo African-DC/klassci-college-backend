@@ -1,0 +1,11 @@
+[Unit]
+Description=KLASSCI College — Backup quotidien à 02:00 UTC
+Documentation=file:/home/ubuntu/klassci/klassci-backend/scripts/README.md
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
