@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     DO_SPACES_ENDPOINT: str = "https://nyc3.digitaloceanspaces.com"
     DO_SPACES_BUCKET: str = "klassci-bulletins"
 
+    # Sentry (observabilité — no-op si SENTRY_DSN vide)
+    APP_VERSION: str = "0.1.0-alpha"
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_ENVIRONMENT: str = ""  # défaut: APP_ENV
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
