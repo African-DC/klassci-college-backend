@@ -3,6 +3,8 @@ Description=KLASSCI College Backend (FastAPI/uvicorn)
 Documentation=https://github.com/African-DC/klassci-college-backend
 After=network.target docker.service
 Wants=docker.service
+StartLimitBurst=10
+StartLimitIntervalSec=300
 
 [Service]
 Type=simple
@@ -15,8 +17,6 @@ ExecStart=/home/ubuntu/klassci/klassci-backend/.venv/bin/uvicorn app.main:app \
     --proxy-headers --forwarded-allow-ips=*
 Restart=always
 RestartSec=5
-StartLimitBurst=10
-StartLimitIntervalSec=300
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=klassci-backend
