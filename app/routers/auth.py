@@ -129,3 +129,18 @@ async def me(
         tenant_id=current_user.tenant_id,
         is_active=user.is_active,
     )
+
+
+@router.get("/me/permissions", response_model=list[str])
+async def my_permissions(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[str]:
+    """Retourne la liste des slugs de permissions effectives de l'utilisateur courant.
+
+    Utilisé par le FE pour le gating client-side (afficher/masquer les boutons).
+    Le check de sécurité reste côté serveur via require_permission(...).
+    """
+    from app.repositories.permission_repository import list_user_permissions
+
+    return await list_user_permissions(db, current_user.user_id)
