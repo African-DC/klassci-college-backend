@@ -282,22 +282,26 @@ function updateDisplay(spokenText = '') {
   heard.textContent = spokenText || '—';
   display.classList.remove('heard', 'parsed-ok', 'parsed-fail');
 
+  const isLast = currentIdx === STUDENTS.length - 1;
+  const nextLabel = isLast ? 'Voir le récap ▶' : 'Suivant ▶';
+  const nothingLabel = isLast ? 'Voir le récap ▶' : 'Valider ▶';
+
   if (currentValue === undefined) {
     parsed.innerHTML = '__<span class="parsed-suffix">/20</span>';
     parsed.className = 'parsed-value empty';
-    nextBtn.disabled = true;
-    nextBtn.textContent = 'Valider ▶';
+    nextBtn.disabled = !isLast; // sur le dernier, on peut toujours aller au récap (non-saisis listés)
+    nextBtn.textContent = nothingLabel;
   } else if (currentValue === null) {
     parsed.innerHTML = 'ABSENT';
     parsed.className = 'parsed-value absent';
     nextBtn.disabled = false;
-    nextBtn.textContent = 'Suivant ▶';
+    nextBtn.textContent = nextLabel;
   } else {
     parsed.innerHTML = `${currentValue}<span class="parsed-suffix">/20</span>`;
     parsed.className = 'parsed-value';
     if (spokenText) display.classList.add('parsed-ok');
     nextBtn.disabled = false;
-    nextBtn.textContent = 'Suivant ▶';
+    nextBtn.textContent = nextLabel;
   }
 }
 
@@ -438,21 +442,61 @@ function goNext() {
     buffer = '';
     refresh();
   } else {
-    // End: show summary
-    const filled = [...grades.values()].filter(v => v !== undefined).length;
-    const list = STUDENTS.map((s, i) => {
+    // End: show summary + submit
+    const entered = [...grades.values()].filter(v => typeof v === 'number').length;
+    const absents = [...grades.values()].filter(v => v === null).length;
+    const missing = STUDENTS.length - entered - absents;
+    const sum = [...grades.values()].filter(v => typeof v === 'number').reduce((a, b) => a + b, 0);
+    const avg = entered > 0 ? (sum / entered).toFixed(2) : '—';
+
+    const list = STUDENTS.map((s) => {
       const v = grades.get(s.id);
-      const display = v === null ? '<span style="color:#f59e0b">Absent</span>' : (v === undefined ? '<span style="color:#cbd5e1">non saisi</span>' : `<b>${v}/20</b>`);
-      return `<li style="padding:8px 0;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between"><span>${s.name}</span>${display}</li>`;
+      let cell, color, icon;
+      if (v === null) { cell = 'Absent'; color = '#f59e0b'; icon = '−'; }
+      else if (v === undefined) { cell = 'Non saisi'; color = '#94a3b8'; icon = '⚠'; }
+      else { cell = `${v}/20`; color = v < 10 ? '#dc2626' : (v >= 14 ? '#10b981' : '#475569'); icon = '✓'; }
+      return `<li style="padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center"><span style="color:#0f172a">${s.name}</span><span style="color:${color};font-weight:600">${icon} ${cell}</span></li>`;
     }).join('');
+
     document.body.innerHTML = `
-      <div style="padding:24px;height:100vh;overflow:auto">
-        <h1 style="color:#0F3F8C;font-size:20px">Récapitulatif — ${filled}/${STUDENTS.length} saisis</h1>
-        <ul style="list-style:none;margin-top:16px;background:white;padding:16px;border-radius:12px;border:1px solid #e2e8f0">${list}</ul>
-        <button onclick="location.reload()" style="margin-top:16px;background:#0F3F8C;color:white;border:none;padding:14px 24px;border-radius:12px;font-size:16px;font-weight:600;width:100%">Recommencer le POC</button>
-        <p style="margin-top:24px;font-size:13px;color:#64748b;text-align:center">POC validé ? <a href="https://github.com/African-DC/klassci-college-frontend">Suite : task #40 Mode Dictée full-screen</a></p>
+      <div style="padding:24px;min-height:100vh;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#0f172a">
+        <div style="max-width:600px;margin:0 auto">
+          <span style="background:#dbeafe;color:#1e3a8a;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;letter-spacing:0.5px">RÉCAPITULATIF</span>
+          <h1 style="color:#0F3F8C;font-size:24px;font-weight:600;margin-top:8px;font-family:Georgia,serif">Maths — Contrôle 1</h1>
+          <p style="color:#64748b;font-size:14px;margin-top:2px">6e A · Trimestre 1 · ${STUDENTS.length} élèves</p>
+
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:20px">
+            <div style="background:white;padding:12px;border-radius:12px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:24px;font-weight:700;color:#10b981">${entered}</div><div style="font-size:11px;color:#64748b;margin-top:2px">Saisies</div></div>
+            <div style="background:white;padding:12px;border-radius:12px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:24px;font-weight:700;color:#f59e0b">${absents}</div><div style="font-size:11px;color:#64748b;margin-top:2px">Absents</div></div>
+            <div style="background:white;padding:12px;border-radius:12px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:24px;font-weight:700;color:#94a3b8">${missing}</div><div style="font-size:11px;color:#64748b;margin-top:2px">Manquants</div></div>
+            <div style="background:white;padding:12px;border-radius:12px;border:1px solid #e2e8f0;text-align:center"><div style="font-size:24px;font-weight:700;color:#0F3F8C">${avg}</div><div style="font-size:11px;color:#64748b;margin-top:2px">Moyenne</div></div>
+          </div>
+
+          ${missing > 0 ? `<div style="margin-top:16px;padding:12px;background:#fef3c7;border-radius:8px;font-size:13px;color:#78350f"><b>⚠ ${missing} élève${missing > 1 ? 's' : ''} non saisi${missing > 1 ? 's' : ''}.</b> Tu peux soumettre quand même (ils seront marqués "à compléter") ou revenir en arrière.</div>` : ''}
+
+          <ul style="list-style:none;margin-top:16px;background:white;padding:0;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden">${list}</ul>
+
+          <button id="submit-btn" style="margin-top:16px;background:#0F3F8C;color:white;border:none;padding:16px 24px;border-radius:12px;font-size:16px;font-weight:600;width:100%;cursor:pointer">✓ Enregistrer et terminer</button>
+          <button onclick="history.back()" style="margin-top:8px;background:white;color:#475569;border:1px solid #e2e8f0;padding:14px 24px;border-radius:12px;font-size:14px;width:100%;cursor:pointer">◀ Retour aux notes</button>
+          <button onclick="location.reload()" style="margin-top:8px;background:transparent;color:#94a3b8;border:none;padding:8px;font-size:12px;width:100%;cursor:pointer">Recommencer le POC</button>
+
+          <p style="margin-top:24px;font-size:11px;color:#94a3b8;text-align:center;line-height:1.5">POC mode dictée — la version finale fera un PATCH /grades/{eval_id}<br>vers le BE et notifiera le prof titulaire si saisie déléguée par admin.</p>
+        </div>
       </div>
     `;
+
+    document.getElementById('submit-btn').addEventListener('click', () => {
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Enregistrement...';
+      // POC : simule l'appel API. Production: PATCH /grades/{eval_id} avec entered_by_user_id.
+      setTimeout(() => {
+        btn.style.background = '#10b981';
+        btn.innerHTML = '✓ Notes enregistrées';
+        const grades_payload = STUDENTS.map(s => ({student_id: s.id, value: grades.get(s.id) ?? null}));
+        console.log('PATCH /grades/{eval_id} payload would be:', grades_payload);
+      }, 800);
+    });
   }
 }
 
