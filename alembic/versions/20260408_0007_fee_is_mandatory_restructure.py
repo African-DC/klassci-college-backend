@@ -80,9 +80,11 @@ def downgrade() -> None:
     op.alter_column("fee_variants", "level_id", existing_type=sa.BigInteger(), nullable=True)
     op.add_column("fee_variants", sa.Column("class_id", sa.BigInteger(), nullable=True))
     op.create_index("class_id", "fee_variants", ["class_id"])
-    op.drop_index("ix_optional_fee_options_fee_category_id", "optional_fee_options")
+    # Drop FK on optional_fee_options.fee_category_id BEFORE dropping the index
+    # (index is required by the FK constraint on MySQL)
     op.drop_constraint(
         "fk_optional_fee_options_category", "optional_fee_options", type_="foreignkey"
     )
+    op.drop_index("ix_optional_fee_options_fee_category_id", "optional_fee_options")
     op.drop_column("optional_fee_options", "fee_category_id")
     op.drop_column("fee_categories", "is_mandatory")
