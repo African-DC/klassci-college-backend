@@ -168,8 +168,11 @@ const ABSENT_KEYWORDS = ['absent', 'absente', 'non noté', 'non rendu', 'rien', 
  */
 function parseSpokenGrade(transcript) {
   if (!transcript) return null;
+  // CRITIQUE : on ne strip PAS la virgule ni le point — ce sont des séparateurs
+  // décimaux. Chrome Speech-to-text retourne "13,5" en littéral pour "treize
+  // virgule cinq", il faut préserver cette info.
   let text = transcript.toLowerCase().trim()
-    .replace(/[.,!?;:]/g, '')
+    .replace(/[!?;:]/g, '')
     .replace(/sur vingt/g, '')
     .replace(/^la note (est |de )?/, '')
     .replace(/^c'est /, '')
@@ -180,16 +183,18 @@ function parseSpokenGrade(transcript) {
     if (text.includes(kw)) return { value: null, label: 'Absent' };
   }
 
-  // Direct number "12,5" or "12.5" or "12"
-  const m = text.match(/(\d{1,2})[,.\s](\d{1,2})/);
+  // Direct number "12,5" / "12.5" / "12, 5" (avec espace optionnel après virgule)
+  const m = text.match(/(\d{1,2})[,.\s]+(\d{1,2})\b/);
   if (m) {
     const v = parseFloat(`${m[1]}.${m[2]}`);
     if (v >= 0 && v <= 20) return { value: v, label: v.toString() };
+    if (v > 20) return { value: null, label: `Hors borne (${v})`, error: true };
   }
-  const m2 = text.match(/^(\d{1,2})$/);
+  const m2 = text.match(/^(\d{1,2})\.?$/);
   if (m2) {
     const v = parseInt(m2[1], 10);
     if (v >= 0 && v <= 20) return { value: v, label: v.toString() };
+    if (v > 20) return { value: null, label: `Hors borne (${v})`, error: true };
   }
 
   // Word-form: "douze virgule cinq" or "douze et demi"
