@@ -6,6 +6,7 @@ correctement.
 """
 
 import logging
+from typing import Any
 
 from app.core.config import settings
 
@@ -39,7 +40,7 @@ def init_sentry() -> None:
             FastApiIntegration(transaction_style="endpoint"),
             SqlalchemyIntegration(),
         ],
-        before_send=_strip_sensitive_data,
+        before_send=_strip_sensitive_data,  # type: ignore[arg-type]
     )
     logger.info(
         "Sentry initialized (env=%s release=%s traces=%.2f)",
@@ -49,13 +50,13 @@ def init_sentry() -> None:
     )
 
 
-_REDACT_HEADERS = {"authorization", "cookie", "x-api-key"}
+_REDACT_HEADERS: frozenset[str] = frozenset({"authorization", "cookie", "x-api-key"})
 
 
-def _strip_sensitive_data(event: dict, _hint: dict) -> dict:
-    """Remove auth headers + cookies from outbound events."""
+def _strip_sensitive_data(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str, Any]:
+    """Remove auth headers + cookies from outbound Sentry events."""
     request = event.get("request")
-    if request:
+    if isinstance(request, dict):
         headers = request.get("headers")
         if isinstance(headers, dict):
             for key in list(headers):
