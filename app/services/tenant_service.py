@@ -311,12 +311,14 @@ async def provision_tenant(
     school_name: str,
     admin_email: str,
     admin_password: str,
+    admin_first_name: str = "",
     school_address: str | None = None,
     school_phone: str | None = None,
     school_email: str | None = None,
     ministry_code: str | None = None,
+    send_welcome_email: bool = True,
 ) -> dict:
-    """Full provisioning workflow: create DB -> migrate -> seed."""
+    """Full provisioning workflow: create DB -> migrate -> seed -> welcome email."""
     if not re.match(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$", tenant_slug):
         raise ValueError(
             f"Invalid tenant_slug '{tenant_slug}': "
@@ -343,10 +345,29 @@ async def provision_tenant(
         ministry_code=ministry_code,
     )
 
+    # Step 4: Welcome email (best-effort — n'interrompt pas si SMTP fail)
+    email_sent = False
+    if send_welcome_email:
+        from app.services.email_service import send_tenant_welcome
+
+        email_sent = send_tenant_welcome(
+            admin_email=admin_email,
+            admin_first_name=admin_first_name,
+            school_name=school_name,
+            tenant_slug=tenant_slug,
+            temp_password=admin_password,
+        )
+        if not email_sent:
+            logger.warning(
+                "Welcome email not sent to %s — vérifier config SMTP", admin_email
+            )
+
     logger.info("=== Tenant '%s' provisioned successfully ===", tenant_slug)
     return {
         "tenant_slug": tenant_slug,
         "database": tenant_slug,
         "admin_email": result["admin_email"],
+        "tenant_url": f"https://{tenant_slug}.college.klassci.com",
+        "welcome_email_sent": email_sent,
         "status": "provisioned",
     }

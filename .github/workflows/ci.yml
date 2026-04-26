@@ -30,6 +30,63 @@ jobs:
       - name: Mypy type check
         run: mypy app/ --ignore-missing-imports
 
+  migrations:
+    name: Alembic migrations idempotence
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: klassci_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    env:
+      DATABASE_URL: mysql+aiomysql://root:testpassword@localhost:3306/klassci_test
+      SECRET_KEY: test-secret-key-for-ci-only
+      REDIS_URL: redis://localhost:6379
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..30}; do
+            mysqladmin ping -h 127.0.0.1 -u root -ptestpassword --silent && break
+            sleep 2
+          done
+
+      - name: Upgrade head
+        run: alembic upgrade head
+
+      - name: Downgrade base
+        run: alembic downgrade base
+
+      - name: Upgrade head again (idempotence check)
+        run: alembic upgrade head
+
+      - name: Detect schema drift vs models
+        run: |
+          # Check there's no pending autogenerate diff (models == DB)
+          alembic check 2>&1 || (echo "::error::Schema drift detected — models out of sync with migrations"; exit 1)
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -77,13 +134,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run migrations
-        continue-on-error: true
-        run: |
-          if [ -f alembic.ini ]; then
-            alembic upgrade head
-          else
-            echo "No alembic.ini yet — skipping (add once feat/core-bootstrap is merged)"
-          fi
+        run: alembic upgrade head
 
       - name: Run tests with coverage
         run: |
@@ -91,7 +142,7 @@ jobs:
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=0
+            --cov-fail-under=25
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v4

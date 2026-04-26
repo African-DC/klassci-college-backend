@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     # Tenant
     LOCAL_TENANT_ID: str = "local"  # tenant utilisé en dev local
 
+    # Host allowlist — protection CSRF / host header injection
+    # Pattern regex matchant les hôtes acceptés en production multi-tenant.
+    # Default couvre <tenant>.college.klassci.com (sous-domaines KLASSCI College).
+    # Localhost et IPs numériques sont toujours acceptés (dev) en plus du regex.
+    ALLOWED_HOST_PATTERN: str = r"^[a-z0-9][a-z0-9\-]{0,61}\.college\.klassci\.com$"
+    # Optionnel : liste explicite supplémentaire (CSV via env var)
+    EXTRA_ALLOWED_HOSTS: list[str] = []
+
     # Puppeteer microservice (génération bulletins PDF)
     PUPPETEER_URL: str = "http://localhost:3001"
 
