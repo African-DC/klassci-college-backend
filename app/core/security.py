@@ -16,12 +16,12 @@ from app.core.config import settings
 
 def hash_password(plain: str) -> str:
     """Retourne le hash bcrypt du mot de passe."""
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()  # type: ignore[no-any-return]
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Vérifie qu'un mot de passe correspond à son hash."""
-    return bcrypt.checkpw(plain.encode(), hashed.encode())  # type: ignore[no-any-return]
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
 # ---------------------------------------------------------------------------
