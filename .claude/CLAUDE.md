@@ -98,4 +98,5 @@ mypy app/
 @rules/python.md
 @rules/database.md
 @rules/security.md
+@rules/deploy.md
 @rules/git.md
