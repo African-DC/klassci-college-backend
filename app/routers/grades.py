@@ -56,13 +56,26 @@ async def create_evaluation(
     current_user: Any = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
-    teacher_profile_id = await get_teacher_profile_id(db, current_user.user_id)
-    if teacher_profile_id is None:
-        from fastapi import HTTPException
+    """Crée une évaluation.
 
-        raise HTTPException(status_code=403, detail="Only teachers can create evaluations")
+    - Si l'auteur est un enseignant titulaire → teacher_id auto-rempli depuis son profil.
+    - Sinon (admin/staff délégué) → data.teacher_id requis et validé.
+    L'audit `entered_by_user_id` capture systématiquement qui crée (delegation tracking).
+    """
+    from fastapi import HTTPException
+
+    teacher_id = await get_teacher_profile_id(db, current_user.user_id)
+    if teacher_id is None:
+        if data.teacher_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="teacher_id requis : précisez l'enseignant titulaire de l'évaluation",
+            )
+        if not await service.teacher_exists(db, data.teacher_id):
+            raise HTTPException(status_code=400, detail="Enseignant introuvable")
+        teacher_id = data.teacher_id
     return await service.create_evaluation(
-        db, data=data, teacher_id=teacher_profile_id, current_user_id=current_user.user_id
+        db, data=data, teacher_id=teacher_id, current_user_id=current_user.user_id
     )
 
 
