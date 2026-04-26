@@ -59,4 +59,6 @@ def downgrade() -> None:
     op.drop_table("subject_averages")
     op.drop_column("bulletins", "council_decision")
     op.drop_column("bulletins", "teacher_comment")
-    op.execute("DROP TYPE IF EXISTS council_decision")
+    # MySQL stocke les ENUM directement dans la définition de colonne — pas de
+    # type DDL global à drop comme en Postgres. La ligne `DROP TYPE` était un
+    # vestige Postgres et casse en MySQL.

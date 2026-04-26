@@ -19,7 +19,8 @@ from app.core.database import current_tenant_id
 logger = logging.getLogger(__name__)
 
 # Hôtes qui mappent vers le tenant de développement local
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", ""}
+# Inclut "testserver" (par défaut FastAPI TestClient) pour ne pas casser la suite tests.
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", ""}
 
 # Slug valide : lettres minuscules, chiffres, tirets — 2 à 63 chars (RFC 1123)
 _TENANT_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
