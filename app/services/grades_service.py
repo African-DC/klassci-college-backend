@@ -132,7 +132,9 @@ async def batch_update_grades(
 
         raise BusinessValidationError(f"Student IDs not enrolled in this evaluation: {invalid_ids}")
 
-    grades = await repo.batch_update_grades(db, eval_id, entries)
+    grades = await repo.batch_update_grades(
+        db, eval_id, entries, entered_by_user_id=current_user_id
+    )
 
     await audit_log(
         db,

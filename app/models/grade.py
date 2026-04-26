@@ -113,6 +113,15 @@ class Grade(Base, TimestampMixin):
         default=GradeStatus.PENDING,
         index=True,
     )
+    # Audit trail : qui a saisi cette note (peut être un admin déléguant pour un prof
+    # qui ne maîtrise pas l'outil — workflow réel CI). NULL pour les notes legacy
+    # antérieures à la migration 0019 ou si le current_user n'est pas tracé.
+    entered_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     evaluation: Mapped[Evaluation] = relationship(back_populates="grades")
     student: Mapped[Student] = relationship(back_populates="grades")

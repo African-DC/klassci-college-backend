@@ -150,19 +150,28 @@ async def batch_update_grades(
     db: AsyncSession,
     eval_id: int,
     entries: list[dict[str, Any]],
+    *,
+    entered_by_user_id: int | None = None,
 ) -> list[Grade]:
-    """Met à jour les notes en batch — entries = [{student_id, value}, ...]."""
+    """Met à jour les notes en batch — entries = [{student_id, value}, ...].
+
+    `entered_by_user_id` : audit trail pour la délégation (admin saisit
+    pour un prof). NULL si non tracé.
+    """
     for entry in entries:
+        values: dict[str, Any] = {
+            "value": entry["value"],
+            "status": GradeStatus.ENTERED if entry["value"] is not None else GradeStatus.PENDING,
+        }
+        if entered_by_user_id is not None:
+            values["entered_by_user_id"] = entered_by_user_id
         stmt = (
             update(Grade)
             .where(
                 Grade.evaluation_id == eval_id,
                 Grade.student_id == entry["student_id"],
             )
-            .values(
-                value=entry["value"],
-                status=GradeStatus.ENTERED if entry["value"] is not None else GradeStatus.PENDING,
-            )
+            .values(**values)
         )
         await db.execute(stmt)
 
