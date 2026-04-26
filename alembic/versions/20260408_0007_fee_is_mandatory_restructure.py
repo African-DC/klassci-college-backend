@@ -36,9 +36,30 @@ def upgrade() -> None:
         ["id"],
         ondelete="RESTRICT",
     )
-    op.create_index("ix_optional_fee_options_fee_category_id", "optional_fee_options", ["fee_category_id"])
+    op.create_index(
+        "ix_optional_fee_options_fee_category_id",
+        "optional_fee_options",
+        ["fee_category_id"],
+    )
 
-    # 3. Drop class_id index and column from fee_variants (no FK exists on class_id)
+    # 3. Drop class_id from fee_variants — FK was auto-named by MySQL (initial_schema
+    # didn't pin a constraint name). Look it up in information_schema then drop it.
+    bind = op.get_bind()
+    fk_name = bind.execute(
+        sa.text(
+            """
+            SELECT CONSTRAINT_NAME
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'fee_variants'
+              AND COLUMN_NAME = 'class_id'
+              AND REFERENCED_TABLE_NAME IS NOT NULL
+            LIMIT 1
+            """
+        )
+    ).scalar()
+    if fk_name:
+        op.drop_constraint(fk_name, "fee_variants", type_="foreignkey")
     op.drop_index("class_id", "fee_variants")
     op.drop_column("fee_variants", "class_id")
 
@@ -60,6 +81,8 @@ def downgrade() -> None:
     op.add_column("fee_variants", sa.Column("class_id", sa.BigInteger(), nullable=True))
     op.create_index("class_id", "fee_variants", ["class_id"])
     op.drop_index("ix_optional_fee_options_fee_category_id", "optional_fee_options")
-    op.drop_constraint("fk_optional_fee_options_category", "optional_fee_options", type_="foreignkey")
+    op.drop_constraint(
+        "fk_optional_fee_options_category", "optional_fee_options", type_="foreignkey"
+    )
     op.drop_column("optional_fee_options", "fee_category_id")
     op.drop_column("fee_categories", "is_mandatory")
