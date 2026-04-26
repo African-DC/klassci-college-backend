@@ -1,6 +1,7 @@
 """Service admin — logique métier CRUD pour les entités de base."""
 
 import logging
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy import case, func, select, update
@@ -1946,18 +1947,30 @@ async def update_role(
     if not field_changes and not has_perm_change:
         return _role_to_response(role)
 
+    # Capture old permission_ids BEFORE the update so audit trail records the diff.
+    old_perm_ids = (
+        sorted(rp.permission_id for rp in role.permissions) if has_perm_change else None
+    )
+
     async with db.begin_nested():
         if field_changes:
             await repo.update_role(db, role, **field_changes)
         if has_perm_change:
             await repo.set_role_permissions(db, role_id, data.permission_ids)
+        old_values: dict[str, Any] | None = (
+            {"permission_ids": old_perm_ids} if has_perm_change else None
+        )
+        new_values = data.model_dump(exclude_none=True, mode="json")
+        if has_perm_change and "permission_ids" in new_values:
+            new_values["permission_ids"] = sorted(new_values["permission_ids"])
         await audit_log(
             db,
             entity_type="role",
             action=AuditAction.UPDATE,
             user_id=updated_by,
             entity_id=role_id,
-            new_values=data.model_dump(exclude_none=True, mode="json"),
+            old_values=old_values,
+            new_values=new_values,
         )
     await db.commit()
     refreshed = await repo.get_role_by_id(db, role_id)
