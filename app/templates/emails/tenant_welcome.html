@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenue sur KLASSCI College</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f6fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f6fa;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(15,63,140,0.08);">
+
+          <!-- Header KLASSCI -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#0F3F8C 0%,#1453B8 100%);padding:32px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">KLASSCI College</h1>
+              <p style="margin:8px 0 0 0;color:#dde7f5;font-size:14px;">Plateforme de gestion scolaire</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 32px 24px 32px;">
+              <h2 style="margin:0 0 16px 0;color:#0F3F8C;font-size:22px;font-weight:600;">Bienvenue, {admin_first_name} !</h2>
+
+              <p style="margin:0 0 16px 0;color:#1f2937;font-size:15px;line-height:1.6;">
+                L'espace <strong>{school_name}</strong> a été créé avec succès sur KLASSCI College. Votre compte administrateur est prêt à être utilisé.
+              </p>
+
+              <!-- Credentials box -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin:24px 0;">
+                <tr>
+                  <td style="padding:20px;">
+                    <p style="margin:0 0 12px 0;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Vos identifiants</p>
+
+                    <p style="margin:0 0 6px 0;color:#1f2937;font-size:14px;">
+                      <strong style="display:inline-block;width:80px;color:#64748b;">URL :</strong>
+                      <a href="{tenant_url}" style="color:#0F3F8C;text-decoration:none;font-weight:500;">{tenant_url}</a>
+                    </p>
+                    <p style="margin:0 0 6px 0;color:#1f2937;font-size:14px;">
+                      <strong style="display:inline-block;width:80px;color:#64748b;">Email :</strong>
+                      <span style="font-family:'SF Mono',Monaco,Consolas,monospace;">{admin_email}</span>
+                    </p>
+                    <p style="margin:0;color:#1f2937;font-size:14px;">
+                      <strong style="display:inline-block;width:80px;color:#64748b;">Mot de passe :</strong>
+                      <span style="font-family:'SF Mono',Monaco,Consolas,monospace;background-color:#fef3c7;padding:2px 6px;border-radius:4px;">{temp_password}</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 24px 0;">
+                    <a href="{tenant_url}/login" style="display:inline-block;background-color:#F58220;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:14px 32px;border-radius:8px;">
+                      Se connecter à mon espace
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 8px 0;color:#1f2937;font-size:14px;line-height:1.6;">
+                <strong>Important :</strong> changez votre mot de passe dès la première connexion via <em>Mon profil → Sécurité</em>.
+              </p>
+
+              <p style="margin:0;color:#1f2937;font-size:14px;line-height:1.6;">
+                Une question ? Répondez simplement à ce mail, nous sommes là pour vous accompagner.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 32px;background-color:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0;color:#64748b;font-size:12px;line-height:1.5;">
+                KLASSCI College · Gestion scolaire pour collèges et lycées<br>
+                <a href="https://klassci.com" style="color:#64748b;text-decoration:underline;">klassci.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

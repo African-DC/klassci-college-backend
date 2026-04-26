@@ -1,0 +1,21 @@
+Bienvenue sur KLASSCI College, {admin_first_name} !
+
+L'espace {school_name} a été créé avec succès. Votre compte administrateur
+est prêt à être utilisé.
+
+VOS IDENTIFIANTS
+================
+URL          : {tenant_url}
+Email        : {admin_email}
+Mot de passe : {temp_password}
+
+Pour vous connecter : {tenant_url}/login
+
+IMPORTANT : changez votre mot de passe dès la première connexion via
+Mon profil → Sécurité.
+
+Une question ? Répondez simplement à ce mail.
+
+—
+KLASSCI College — Gestion scolaire pour collèges et lycées
+https://klassci.com
