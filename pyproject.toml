@@ -39,7 +39,6 @@ disable_error_code = [
     "import-untyped",  # External libs sans stubs
     "index",           # SQLAlchemy Row indexing
     "unused-ignore",   # Pré-existants `# type: ignore` redondants
-    "untyped-decorator",
     "no-untyped-def",
     "no-untyped-call",
     "valid-type",
@@ -51,6 +50,7 @@ disable_error_code = [
 module = [
     "app.core.middleware",
     "app.core.config",
+    "app.core.sentry",
     "app.services.email_service",
     "app.cli.provision_tenant",
 ]
