@@ -1,24 +1,28 @@
 [Unit]
-Description=KLASSCI College — Test hebdomadaire de restauration backup
+Description=KLASSCI College — Restore-test hebdomadaire des backups
 Documentation=file:/home/ubuntu/klassci/klassci-backend/scripts/README.md
-After=network-online.target mysql.service
+After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 
 [Service]
 Type=oneshot
 User=ubuntu
 Group=ubuntu
-EnvironmentFile=/etc/klassci/backup.env
+EnvironmentFile=-/etc/klassci/backup.env
 ExecStart=/home/ubuntu/klassci/klassci-backend/scripts/restore-test.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=klassci-restore-test
 
-NoNewPrivileges=true
+# Protection systemd (relaxée pour permettre docker exec)
+NoNewPrivileges=false
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/tmp /var/tmp
+ReadWritePaths=/home/ubuntu/klassci/backups /tmp /var/tmp
 
+# Limite ressources
 MemoryMax=1G
 TasksMax=64
+TimeoutStartSec=1800
