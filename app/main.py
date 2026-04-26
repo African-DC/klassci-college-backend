@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import TenantMiddleware
+from app.core.sentry import init_sentry
 from app.routers.admin import router as admin_router
 from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
@@ -30,6 +31,10 @@ from app.routers.super_admin import router as super_admin_router
 from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
+
+# Sentry must be initialized BEFORE FastAPI() so its middleware attaches.
+# No-op if SENTRY_DSN is empty.
+init_sentry()
 
 app = FastAPI(
     title=settings.APP_NAME,
