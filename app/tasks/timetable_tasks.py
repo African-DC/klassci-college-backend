@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from datetime import time
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -71,7 +70,10 @@ async def _generate_async(
     """Corps async de la generation — solveur + persistence."""
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import (
-        Assignment, FixedBlock, build_blocks, solve,
+        Assignment,
+        FixedBlock,
+        build_blocks,
+        solve,
     )
 
     current_tenant_id.set(tenant_id)
@@ -116,8 +118,7 @@ async def _generate_async(
 
         # Build preferred blocks
         pref: dict[int, set[int]] = {
-            int(tid_str): set(indices)
-            for tid_str, indices in preferred_blocks.items()
+            int(tid_str): set(indices) for tid_str, indices in preferred_blocks.items()
         }
 
         # Solve
@@ -130,7 +131,9 @@ async def _generate_async(
             preferred_blocks=pref if pref else None,
         )
         if not gen_result.feasible:
-            raise ValueError("OR-Tools: aucun emploi du temps faisable avec les contraintes donnees")
+            raise ValueError(
+                "OR-Tools: aucun emploi du temps faisable avec les contraintes donnees"
+            )
 
         # Create timetable header
         timetable = await repo.create_timetable(
@@ -150,8 +153,11 @@ async def _generate_async(
             ms_end_min = ms.end_time.hour * 60 + ms.end_time.minute
             is_manual = False
             for blk in grid_blocks:
-                if (blk.day == ms.day and blk.start_minutes >= ms_start_min
-                        and blk.end_minutes <= ms_end_min):
+                if (
+                    blk.day == ms.day
+                    and blk.start_minutes >= ms_start_min
+                    and blk.end_minutes <= ms_end_min
+                ):
                     if (ms.assignment_idx, blk.index) in manual_block_set:
                         is_manual = True
                         break

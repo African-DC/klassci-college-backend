@@ -1,7 +1,6 @@
 """Service inscriptions — logique métier CRUD + frais automatiques."""
 
 import logging
-from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +14,6 @@ from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
 from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
-from app.services.matricule_service import generate_enrollment_number
 from app.schemas.enrollment import (
     EnrollmentCreate,
     EnrollmentListResponse,
@@ -25,6 +23,7 @@ from app.schemas.enrollment import (
     FeeVariantResponse,
     ReEnrollmentCreate,
 )
+from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +179,11 @@ async def update_enrollment(
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
 
-    old_values = {"status": enrollment.status, "notes": enrollment.notes, "class_id": enrollment.class_id}
+    old_values = {
+        "status": enrollment.status,
+        "notes": enrollment.notes,
+        "class_id": enrollment.class_id,
+    }
     class_changed = data.class_id is not None and data.class_id != enrollment.class_id
 
     async with db.begin_nested():
@@ -322,7 +325,9 @@ async def create_enrollment_with_student(
             school = settings_result.scalar_one_or_none()
             if school and school.enrollment_number_pattern:
                 enrollment_num = await generate_enrollment_number(
-                    db, school, class_data=class_,
+                    db,
+                    school,
+                    class_data=class_,
                 )
                 student.enrollment_number = enrollment_num
                 await db.flush()
@@ -355,7 +360,8 @@ async def create_enrollment_with_student(
                 parent_user_id = parent_user.id
 
                 # Assign parent role via user_roles table
-                from app.models.permission import Role, UserRole as UserRoleModel
+                from app.models.permission import Role
+                from app.models.permission import UserRole as UserRoleModel
 
                 role_stmt = select(Role).where(Role.name == "parent")
                 role = (await db.execute(role_stmt)).scalar_one_or_none()
@@ -507,9 +513,8 @@ async def _create_mandatory_enrollment_fees(
         return
 
     # Récupérer les fee_variant_ids déjà liés à cette inscription
-    existing_stmt = (
-        select(EnrollmentFee.fee_variant_id)
-        .where(EnrollmentFee.enrollment_id == enrollment_id)
+    existing_stmt = select(EnrollmentFee.fee_variant_id).where(
+        EnrollmentFee.enrollment_id == enrollment_id
     )
     existing_ids = set((await db.execute(existing_stmt)).scalars().all())
 
@@ -713,14 +718,14 @@ async def get_applicable_fee_variants(
             or_(
                 # Mandatory: must match academic_year + level + series
                 and_(
-                    FeeCategory.is_mandatory == True,
+                    FeeCategory.is_mandatory,
                     FeeVariant.academic_year_id == class_.academic_year_id,
                     FeeVariant.level_id == class_.level_id,
                     series_condition,
                 ),
                 # Optional: match academic_year, level NULL (global) or matching
                 and_(
-                    FeeCategory.is_mandatory == False,
+                    not FeeCategory.is_mandatory,
                     FeeVariant.academic_year_id == class_.academic_year_id,
                     level_condition,
                     series_condition,

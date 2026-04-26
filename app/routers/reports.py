@@ -80,5 +80,7 @@ async def publish_bulletins(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Publie les bulletins d'une classe/trimestre (is_published=True)."""
-    count = await service.publish_bulletins(db, class_id, trimester, academic_year_id, published_by=current_user.user_id)
+    count = await service.publish_bulletins(
+        db, class_id, trimester, academic_year_id, published_by=current_user.user_id
+    )
     return {"published": count}

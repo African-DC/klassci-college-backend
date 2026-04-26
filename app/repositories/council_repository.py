@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +17,6 @@ from app.models.grade import (
     CouncilStudentDecision,
 )
 from app.models.user import Student
-
 
 # ---------------------------------------------------------------------------
 # Read

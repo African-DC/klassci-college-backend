@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 def _is_configured() -> bool:
     """Vérifie que les paramètres Twilio sont renseignés."""
     return bool(
-        settings.TWILIO_ACCOUNT_SID
-        and settings.TWILIO_AUTH_TOKEN
-        and settings.TWILIO_PHONE_NUMBER
+        settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_PHONE_NUMBER
     )
 
 

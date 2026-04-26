@@ -92,9 +92,7 @@ class Room(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    room_type: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="classroom"
-    )
+    room_type: Mapped[str] = mapped_column(String(30), nullable=False, server_default="classroom")
 
     classes: Mapped[list[Class]] = relationship(back_populates="room")
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="room")
@@ -157,12 +155,15 @@ class Subject(Base, TimestampMixin):
     hours_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     teacher_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("teacher_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+        BigInteger,
+        ForeignKey("teacher_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     level: Mapped[Level | None] = relationship(foreign_keys=[level_id])
     series: Mapped[Series | None] = relationship(foreign_keys=[series_id])
-    teacher: Mapped["TeacherProfile | None"] = relationship(foreign_keys=[teacher_id])
+    teacher: Mapped[TeacherProfile | None] = relationship(foreign_keys=[teacher_id])
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="subject")
 
 
@@ -186,6 +187,12 @@ class SchoolSettings(Base, TimestampMixin):
     enrollment_number_pattern: Mapped[str | None] = mapped_column(String(200), nullable=True)
     enrollment_number_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Timetable generation settings
-    slot_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
-    day_start_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
-    day_end_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=17, server_default="17")
+    slot_duration_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=60, server_default="60"
+    )
+    day_start_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=7, server_default="7"
+    )
+    day_end_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=17, server_default="17"
+    )

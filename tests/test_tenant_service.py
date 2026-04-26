@@ -10,7 +10,6 @@ from app.services.tenant_service import (
     provision_tenant,
 )
 
-
 # ---------------------------------------------------------------------------
 # Validation du slug
 # ---------------------------------------------------------------------------
@@ -154,6 +153,4 @@ def test_role_permissions_reference_valid_slugs() -> None:
     valid_slugs = {p["slug"] for p in ALL_PERMISSIONS}
     for role_name, role_def in ROLE_DEFINITIONS.items():
         for slug in role_def["permissions"]:
-            assert slug in valid_slugs, (
-                f"Role '{role_name}' references unknown permission '{slug}'"
-            )
+            assert slug in valid_slugs, f"Role '{role_name}' references unknown permission '{slug}'"

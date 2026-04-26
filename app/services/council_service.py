@@ -13,7 +13,6 @@ from app.repositories import council_repository as repo
 from app.schemas.council import (
     CouncilMinutesGenerateRequest,
     CouncilMinutesResponse,
-    CouncilMinutesPdfResponse,
     CouncilStudentDecisionResponse,
     DecisionOverrideRequest,
 )
@@ -104,9 +103,7 @@ async def generate_council_minutes(
     # Get enrolled students
     students = await repo.get_enrolled_students(db, data.class_id, data.academic_year_id)
     if not students:
-        raise BusinessValidationError(
-            f"No enrolled students found for class {data.class_id}"
-        )
+        raise BusinessValidationError(f"No enrolled students found for class {data.class_id}")
 
     async with db.begin_nested():
         # Create the council minutes record
@@ -249,6 +246,7 @@ async def get_council_minutes_pdf(
 
     return generate_council_minutes_pdf(council_data, school)
 
+
 # ---------------------------------------------------------------------------
 # Override decision
 # ---------------------------------------------------------------------------
@@ -271,9 +269,7 @@ async def override_decision(
     }
 
     async with db.begin_nested():
-        await repo.update_decision_override(
-            db, decision, data.final_decision, data.override_reason
-        )
+        await repo.update_decision_override(db, decision, data.final_decision, data.override_reason)
         await audit_log(
             db,
             entity_type="council_student_decision",
@@ -295,15 +291,12 @@ async def override_decision(
         raise NotFoundError("CouncilStudentDecision", decision_id)
 
     # Load student for name
-    from sqlalchemy.orm import selectinload
     from sqlalchemy import select as sa_select
+    from sqlalchemy.orm import selectinload
+
     from app.models.grade import CouncilStudentDecision as CSD
 
-    stmt = (
-        sa_select(CSD)
-        .where(CSD.id == decision_id)
-        .options(selectinload(CSD.student))
-    )
+    stmt = sa_select(CSD).where(CSD.id == decision_id).options(selectinload(CSD.student))
     result = await db.execute(stmt)
     refreshed = result.scalar_one_or_none()
     if refreshed is None:

@@ -1,4 +1,4 @@
-"""Tests du TenantMiddleware — extraction et validation du slug tenant."""
+"""Tests du TenantMiddleware — extraction tenant + host allowlist."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,10 +9,55 @@ from starlette.routing import Route
 
 from app.core.config import settings
 from app.core.database import current_tenant_id
-from app.core.middleware import TenantMiddleware, _extract_tenant
+from app.core.middleware import TenantMiddleware, _extract_tenant, _is_host_allowed
 
 # ---------------------------------------------------------------------------
-# _extract_tenant — hôtes locaux
+# _is_host_allowed — allowlist
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "",
+        # IPs numériques (dev)
+        "16.58.132.68",
+        "192.168.1.10",
+        # Sous-domaines KLASSCI College valides
+        "lycee-x.college.klassci.com",
+        "college-victor-hugo.college.klassci.com",
+        "ab.college.klassci.com",
+    ],
+)
+def test_allowed_hosts(host: str) -> None:
+    assert _is_host_allowed(host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        # Domaine racine sans sous-domaine — pas de tenant
+        "klassci.com",
+        # Domaine sans .college (KLASSCIv2 Université, pas notre scope)
+        "lycee-x.klassci.com",
+        # Domaines arbitraires (potentielle injection)
+        "evil.com",
+        "klassci-college.evil.com",
+        # Tentatives d'injection via caractères spéciaux
+        "../../etc/passwd.college.klassci.com",
+        "{injection}.college.klassci.com",
+        "_invalid.college.klassci.com",
+    ],
+)
+def test_disallowed_hosts(host: str) -> None:
+    assert not _is_host_allowed(host)
+
+
+# ---------------------------------------------------------------------------
+# _extract_tenant — hôtes locaux (préconditionnés via _is_host_allowed)
 # ---------------------------------------------------------------------------
 
 
@@ -29,10 +74,10 @@ def test_local_hosts_return_local_tenant(host: str) -> None:
 @pytest.mark.parametrize(
     "host, expected",
     [
-        ("lycee-x.klassci.com", "lycee-x"),
-        ("college-victor-hugo.klassci.com", "college-victor-hugo"),
-        ("ab.klassci.com", "ab"),
-        ("lycee-x.klassci.com:443", "lycee-x"),
+        ("lycee-x.college.klassci.com", "lycee-x"),
+        ("college-victor-hugo.college.klassci.com", "college-victor-hugo"),
+        ("ab.college.klassci.com", "ab"),
+        ("lycee-x.college.klassci.com:443", "lycee-x"),
     ],
 )
 def test_valid_subdomain_returns_slug(host: str, expected: str) -> None:
@@ -40,32 +85,7 @@ def test_valid_subdomain_returns_slug(host: str, expected: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _extract_tenant — slugs invalides rejetés vers LOCAL_TENANT_ID
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "host",
-    [
-        # Injection via caractères spéciaux
-        ("../../etc/passwd.klassci.com"),
-        ("{injection}.klassci.com"),
-        ("_invalid.klassci.com"),
-        ("-bad.klassci.com"),
-        ("bad-.klassci.com"),
-        # Slug trop court (1 char)
-        ("x.klassci.com"),
-        # Pas assez de parties pour un sous-domaine
-        ("klassci.com"),
-        ("justone"),
-    ],
-)
-def test_invalid_slug_falls_back_to_local(host: str) -> None:
-    assert _extract_tenant(host) == settings.LOCAL_TENANT_ID
-
-
-# ---------------------------------------------------------------------------
-# TenantMiddleware.__call__ — test ASGI via httpx
+# TenantMiddleware — test ASGI via httpx
 # ---------------------------------------------------------------------------
 
 
@@ -80,7 +100,7 @@ _test_app = TenantMiddleware(Starlette(routes=[Route("/tenant", _tenant_echo)]))
 @pytest.mark.asyncio
 async def test_middleware_sets_tenant_from_subdomain() -> None:
     async with AsyncClient(
-        transport=ASGITransport(app=_test_app), base_url="http://lycee-x.klassci.com"
+        transport=ASGITransport(app=_test_app), base_url="http://lycee-x.college.klassci.com"
     ) as client:
         response = await client.get("/tenant")
     assert response.status_code == 200
@@ -98,10 +118,21 @@ async def test_middleware_local_host_uses_local_tenant() -> None:
 
 
 @pytest.mark.asyncio
-async def test_middleware_invalid_slug_falls_back_to_local() -> None:
+async def test_middleware_rejects_disallowed_host() -> None:
+    """Un hostname non allowlisté doit être rejeté en 400 sans atteindre l'app."""
     async with AsyncClient(
-        transport=ASGITransport(app=_test_app), base_url="http://_bad.klassci.com"
+        transport=ASGITransport(app=_test_app), base_url="http://evil.com"
     ) as client:
         response = await client.get("/tenant")
-    assert response.status_code == 200
-    assert response.text == settings.LOCAL_TENANT_ID
+    assert response.status_code == 400
+    assert response.json()["code"] == "HOST_NOT_ALLOWED"
+
+
+@pytest.mark.asyncio
+async def test_middleware_rejects_klassciv2_university_subdomain() -> None:
+    """Les sous-domaines KLASSCIv2 (Université) ne doivent pas atteindre College."""
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://lycee-x.klassci.com"
+    ) as client:
+        response = await client.get("/tenant")
+    assert response.status_code == 400

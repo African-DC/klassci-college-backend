@@ -40,6 +40,7 @@ SAMPLE_AVAILABILITY = TeacherAvailabilityResponse(
     start_time="08:00",
     end_time="17:00",
     available=True,
+    preferred=False,
 )
 
 MOCK_USER = TokenData(user_id=1, tenant_id="local", email="admin@college.ci")

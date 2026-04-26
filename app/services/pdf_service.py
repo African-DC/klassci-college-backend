@@ -70,7 +70,13 @@ def _esc(val: Any) -> str:
     """Escape HTML characters."""
     if val is None:
         return ""
-    return str(val).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return (
+        str(val)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def _format_decimal(val: Decimal | None) -> str:
@@ -120,9 +126,9 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     for sa in subject_averages:
         subject_rows += f"""
         <tr>
-            <td>{_esc(sa.get('subject_name', ''))}</td>
-            <td class="text-center">{_format_decimal(sa.get('average'))}</td>
-            <td class="text-center">{sa.get('coefficient', 1)}</td>
+            <td>{_esc(sa.get("subject_name", ""))}</td>
+            <td class="text-center">{_format_decimal(sa.get("average"))}</td>
+            <td class="text-center">{sa.get("coefficient", 1)}</td>
         </tr>
         """
 
@@ -234,9 +240,7 @@ def generate_council_minutes_pdf(
 
     # Stats
     passage_count = sum(
-        1
-        for d in decisions
-        if (d.get("final_decision") or d.get("auto_decision")) == "passage"
+        1 for d in decisions if (d.get("final_decision") or d.get("auto_decision")) == "passage"
     )
     redoublement_count = sum(
         1
@@ -244,14 +248,10 @@ def generate_council_minutes_pdf(
         if (d.get("final_decision") or d.get("auto_decision")) == "redoublement"
     )
     exclusion_count = sum(
-        1
-        for d in decisions
-        if (d.get("final_decision") or d.get("auto_decision")) == "exclusion"
+        1 for d in decisions if (d.get("final_decision") or d.get("auto_decision")) == "exclusion"
     )
     repechage_count = sum(
-        1
-        for d in decisions
-        if (d.get("final_decision") or d.get("auto_decision")) == "repechage"
+        1 for d in decisions if (d.get("final_decision") or d.get("auto_decision")) == "repechage"
     )
 
     # Decision rows
@@ -262,11 +262,11 @@ def generate_council_minutes_pdf(
         decision_rows += f"""
         <tr>
             <td class="text-center">{i}</td>
-            <td>{_esc(d.get('student_name', ''))}</td>
-            <td class="text-center">{_format_decimal(d.get('average'))}</td>
-            <td class="text-center">{d.get('rank', '-') or '-'}</td>
-            <td class="text-center">{d.get('absence_count', 0)}</td>
-            <td class="text-center">{_esc(d.get('auto_decision', ''))}</td>
+            <td>{_esc(d.get("student_name", ""))}</td>
+            <td class="text-center">{_format_decimal(d.get("average"))}</td>
+            <td class="text-center">{d.get("rank", "-") or "-"}</td>
+            <td class="text-center">{d.get("absence_count", 0)}</td>
+            <td class="text-center">{_esc(d.get("auto_decision", ""))}</td>
             <td class="text-center">{_esc(final)}</td>
             <td>{override}</td>
         </tr>
@@ -401,7 +401,11 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     received_by = _esc(payment_data.get("received_by_name", ""))
 
     amount_str = _format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "-")
-    pay_date = created_at.strftime("%d/%m/%Y %H:%M") if isinstance(created_at, datetime) else str(created_at or "")
+    pay_date = (
+        created_at.strftime("%d/%m/%Y %H:%M")
+        if isinstance(created_at, datetime)
+        else str(created_at or "")
+    )
 
     method_labels = {
         "cash": "Especes",
@@ -507,8 +511,16 @@ _DAYS_FR = {
 
 # Palette for subjects (cycled)
 _SLOT_COLORS = [
-    "#E8F0FE", "#FEF3E2", "#E8F5E9", "#FDE8E8", "#EDE7F6",
-    "#FFF8E1", "#E0F7FA", "#FCE4EC", "#F3E5F5", "#E8EAF6",
+    "#E8F0FE",
+    "#FEF3E2",
+    "#E8F5E9",
+    "#FDE8E8",
+    "#EDE7F6",
+    "#FFF8E1",
+    "#E0F7FA",
+    "#FCE4EC",
+    "#F3E5F5",
+    "#E8EAF6",
 ]
 
 
@@ -537,7 +549,9 @@ def generate_timetable_pdf(
     for s in slots:
         sname = s.get("subject_name", "")
         if sname and sname not in subject_colors:
-            subject_colors[sname] = s.get("subject_color") or _SLOT_COLORS[color_idx % len(_SLOT_COLORS)]
+            subject_colors[sname] = (
+                s.get("subject_color") or _SLOT_COLORS[color_idx % len(_SLOT_COLORS)]
+            )
             color_idx += 1
 
     # Organize slots by day
@@ -567,16 +581,16 @@ def generate_timetable_pdf(
                 subject = _esc(s.get("subject_name", ""))
                 teacher = _esc(s.get("teacher_name", ""))
                 room = _esc(s.get("room", ""))
-                time_str = f'{s["start_time"]}-{s["end_time"]}'
+                time_str = f"{s['start_time']}-{s['end_time']}"
                 room_div = f'<div style="color:#888;">{room}</div>' if room else ""
                 return (
                     f'<td rowspan="{span}" style="background:{bg}; vertical-align:top; padding:4px; '
                     f'border:1px solid #ccc; font-size:8px; line-height:1.3;">'
                     f'<div style="font-weight:bold; font-size:9px; color:{_PRIMARY};">{subject}</div>'
                     f'<div style="color:#555;">{teacher}</div>'
-                    f'{room_div}'
+                    f"{room_div}"
                     f'<div style="color:#999; font-size:7px;">{time_str}</div>'
-                    f'</td>'
+                    f"</td>"
                 )
             elif start < hour < end:
                 return ""

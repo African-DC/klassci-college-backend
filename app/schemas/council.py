@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # Request
 # ---------------------------------------------------------------------------
@@ -22,9 +21,7 @@ class CouncilMinutesGenerateRequest(BaseModel):
 
 
 class DecisionOverrideRequest(BaseModel):
-    final_decision: str = Field(
-        ..., pattern=r"^(passage|repechage|redoublement|exclusion)$"
-    )
+    final_decision: str = Field(..., pattern=r"^(passage|repechage|redoublement|exclusion)$")
     override_reason: str = Field(..., min_length=3, max_length=1000)
 
 

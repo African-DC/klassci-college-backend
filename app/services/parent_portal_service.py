@@ -77,7 +77,9 @@ async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
                 class_id=active.class_id,
                 class_name=active.class_.name if active.class_ else str(active.class_id),
                 academic_year_name=(
-                    active.academic_year.name if active.academic_year else str(active.academic_year_id)
+                    active.academic_year.name
+                    if active.academic_year
+                    else str(active.academic_year_id)
                 ),
                 status=active.status,
             )
@@ -124,9 +126,7 @@ async def get_child_grades(
     return ChildGradesResponse(student_id=student_id, grades=grade_details)
 
 
-async def get_child_fees(
-    db: AsyncSession, user_id: int, student_id: int
-) -> ChildFeesResponse:
+async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> ChildFeesResponse:
     """Retourne les frais d'un enfant pour son inscription active."""
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
@@ -224,14 +224,19 @@ async def get_child_timetable(
         raise NotFoundError("Active enrollment not found for student", student_id)
 
     from app.repositories import student_portal_repository as student_repo
+
     slots = await student_repo.get_timetable_slots_for_class(db, enrollment.class_id)
 
     slot_responses = [
         ChildTimetableSlot(
             id=s.id,
             day=s.day,
-            start_time=s.start_time.strftime("%H:%M") if hasattr(s.start_time, "strftime") else str(s.start_time),
-            end_time=s.end_time.strftime("%H:%M") if hasattr(s.end_time, "strftime") else str(s.end_time),
+            start_time=s.start_time.strftime("%H:%M")
+            if hasattr(s.start_time, "strftime")
+            else str(s.start_time),
+            end_time=s.end_time.strftime("%H:%M")
+            if hasattr(s.end_time, "strftime")
+            else str(s.end_time),
             subject_name=s.subject.name if s.subject else "",
             teacher_name=f"{s.teacher.first_name} {s.teacher.last_name}" if s.teacher else "",
             room_name=s.room.name if s.room else None,

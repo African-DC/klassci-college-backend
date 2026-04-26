@@ -1,6 +1,7 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
-from sqlalchemy import and_, delete as sa_delete, func, or_, select
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -8,7 +9,6 @@ from app.models.academic import AcademicYear, Class, Level, Room, Series, Subjec
 from app.models.permission import Permission, Role, RolePermission
 from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile
 from app.utils.fuzzy_search import fuzzy_filter_by_name
-
 
 # ---------------------------------------------------------------------------
 # Student
@@ -45,7 +45,8 @@ async def list_students(
         all_stmt = select(Student).order_by(Student.id.desc())
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
-            all_rows, search,
+            all_rows,
+            search,
             name_getter=lambda s: f"{s.first_name} {s.last_name} {s.enrollment_number or ''}",
             limit=size,
         )
@@ -61,9 +62,7 @@ async def create_student(db: AsyncSession, **kwargs: object) -> Student:
     return student
 
 
-async def update_student(
-    db: AsyncSession, student: Student, **kwargs: object
-) -> Student:
+async def update_student(db: AsyncSession, student: Student, **kwargs: object) -> Student:
     for key, value in kwargs.items():
         if value is not None:
             setattr(student, key, value)
@@ -99,7 +98,10 @@ async def list_teachers(
         for word in words:
             pattern = f"%{word}%"
             base = base.where(
-                or_(TeacherProfile.first_name.ilike(pattern), TeacherProfile.last_name.ilike(pattern))
+                or_(
+                    TeacherProfile.first_name.ilike(pattern),
+                    TeacherProfile.last_name.ilike(pattern),
+                )
             )
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
@@ -110,7 +112,8 @@ async def list_teachers(
         all_stmt = select(TeacherProfile).order_by(TeacherProfile.id.desc())
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
-            all_rows, search,
+            all_rows,
+            search,
             name_getter=lambda t: f"{t.first_name} {t.last_name}",
             limit=size,
         )
@@ -175,7 +178,8 @@ async def list_staff(
         all_stmt = select(StaffProfile).order_by(StaffProfile.id.desc())
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
-            all_rows, search,
+            all_rows,
+            search,
             name_getter=lambda s: f"{s.first_name} {s.last_name}",
             limit=size,
         )
@@ -190,9 +194,7 @@ async def create_staff(db: AsyncSession, **kwargs: object) -> StaffProfile:
     return staff
 
 
-async def update_staff(
-    db: AsyncSession, staff: StaffProfile, **kwargs: object
-) -> StaffProfile:
+async def update_staff(db: AsyncSession, staff: StaffProfile, **kwargs: object) -> StaffProfile:
     for key, value in kwargs.items():
         if value is not None:
             setattr(staff, key, value)
@@ -239,7 +241,8 @@ async def list_parents(
         all_stmt = select(Parent).order_by(Parent.id.desc())
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
-            all_rows, search,
+            all_rows,
+            search,
             name_getter=lambda p: f"{p.first_name} {p.last_name}",
             limit=size,
         )
@@ -255,9 +258,7 @@ async def create_parent(db: AsyncSession, **kwargs: object) -> Parent:
     return parent
 
 
-async def update_parent(
-    db: AsyncSession, parent: Parent, **kwargs: object
-) -> Parent:
+async def update_parent(db: AsyncSession, parent: Parent, **kwargs: object) -> Parent:
     for key, value in kwargs.items():
         if value is not None:
             setattr(parent, key, value)
@@ -270,9 +271,7 @@ async def delete_parent(db: AsyncSession, parent: Parent) -> None:
     await db.flush()
 
 
-async def get_student_parents(
-    db: AsyncSession, student_id: int
-) -> list[tuple[Parent, str]]:
+async def get_student_parents(db: AsyncSession, student_id: int) -> list[tuple[Parent, str]]:
     """Return list of (Parent, relationship_type) for a student."""
     stmt = (
         select(Parent, ParentStudent.relationship_type)
@@ -363,7 +362,9 @@ async def delete_class(db: AsyncSession, cls: Class) -> None:
 async def get_subject_by_id(db: AsyncSession, subject_id: int) -> Subject | None:
     stmt = (
         select(Subject)
-        .options(selectinload(Subject.level), selectinload(Subject.series), selectinload(Subject.teacher))
+        .options(
+            selectinload(Subject.level), selectinload(Subject.series), selectinload(Subject.teacher)
+        )
         .where(Subject.id == subject_id)
     )
     return (await db.execute(stmt)).scalar_one_or_none()
@@ -406,9 +407,7 @@ async def create_subject(db: AsyncSession, **kwargs: object) -> Subject:
     return subject
 
 
-async def update_subject(
-    db: AsyncSession, subject: Subject, **kwargs: object
-) -> Subject:
+async def update_subject(db: AsyncSession, subject: Subject, **kwargs: object) -> Subject:
     for key, value in kwargs.items():
         if value is not None:
             setattr(subject, key, value)
@@ -426,9 +425,7 @@ async def delete_subject(db: AsyncSession, subject: Subject) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def get_academic_year_by_id(
-    db: AsyncSession, year_id: int
-) -> AcademicYear | None:
+async def get_academic_year_by_id(db: AsyncSession, year_id: int) -> AcademicYear | None:
     stmt = select(AcademicYear).where(AcademicYear.id == year_id)
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -535,7 +532,12 @@ async def list_series(
         base = base.where(Series.level_id == level_id)
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
-    stmt = base.options(selectinload(Series.level)).offset((page - 1) * size).limit(size).order_by(Series.id.desc())
+    stmt = (
+        base.options(selectinload(Series.level))
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(Series.id.desc())
+    )
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total
 
@@ -638,11 +640,7 @@ async def list_permissions(db: AsyncSession) -> list[Permission]:
 
 
 async def get_room_by_id(db: AsyncSession, room_id: int) -> Room | None:
-    stmt = (
-        select(Room)
-        .options(selectinload(Room.classes))
-        .where(Room.id == room_id)
-    )
+    stmt = select(Room).options(selectinload(Room.classes)).where(Room.id == room_id)
     return (await db.execute(stmt)).scalar_one_or_none()
 
 

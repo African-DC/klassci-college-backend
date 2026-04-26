@@ -36,9 +36,7 @@ SAMPLE_NOTIFICATION = NotificationResponse(
     created_at=NOW,
 )
 
-SAMPLE_READ_NOTIFICATION = SAMPLE_NOTIFICATION.model_copy(
-    update={"read": True, "read_at": NOW}
-)
+SAMPLE_READ_NOTIFICATION = SAMPLE_NOTIFICATION.model_copy(update={"read": True, "read_at": NOW})
 
 SAMPLE_LIST = NotificationListResponse(
     items=[SAMPLE_NOTIFICATION],
@@ -203,9 +201,7 @@ def test_mark_as_read_forbidden() -> None:
         with patch(
             "app.routers.notifications.notification_service.mark_as_read",
             new_callable=AsyncMock,
-            side_effect=PermissionDeniedError(
-                "Cannot mark another user's notification as read"
-            ),
+            side_effect=PermissionDeniedError("Cannot mark another user's notification as read"),
         ):
             with TestClient(app) as client:
                 resp = client.patch("/notifications/2/read")

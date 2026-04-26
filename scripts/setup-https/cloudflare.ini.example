@@ -1,0 +1,17 @@
+# Credentials Cloudflare pour certbot DNS-01 challenge
+#
+# À installer dans : /root/.secrets/cloudflare.ini
+# Permissions OBLIGATOIRES : chmod 600 (sinon certbot refuse)
+#
+# Comment créer le token :
+# 1. Aller sur https://dash.cloudflare.com/profile/api-tokens
+# 2. Cliquer "Create Token"
+# 3. Choisir template "Edit zone DNS"
+# 4. Permissions :
+#    - Zone : Read
+#    - Zone : DNS : Edit
+# 5. Zone Resources : Include → Specific zone → klassci.com
+# 6. TTL : laisser None (pas d'expiration)
+# 7. Continue → Create Token → Copier la valeur (visible UNE seule fois)
+
+dns_cloudflare_api_token = paste-your-cloudflare-api-token-here

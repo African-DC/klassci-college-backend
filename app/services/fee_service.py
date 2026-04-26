@@ -102,9 +102,7 @@ async def update_fee_category(
     return _fee_category_to_response(refreshed)
 
 
-async def delete_fee_category(
-    db: AsyncSession, category_id: int, *, deleted_by: int
-) -> None:
+async def delete_fee_category(db: AsyncSession, category_id: int, *, deleted_by: int) -> None:
     category = await repo.get_fee_category_by_id(db, category_id)
     if category is None:
         raise NotFoundError("FeeCategory", category_id)
@@ -207,9 +205,7 @@ async def update_fee_variant(
     return _fee_variant_to_response(refreshed)
 
 
-async def delete_fee_variant(
-    db: AsyncSession, variant_id: int, *, deleted_by: int
-) -> None:
+async def delete_fee_variant(db: AsyncSession, variant_id: int, *, deleted_by: int) -> None:
     variant = await repo.get_fee_variant_by_id(db, variant_id)
     if variant is None:
         raise NotFoundError("FeeVariant", variant_id)
@@ -243,7 +239,11 @@ async def list_optional_fee_options(
     academic_year_id: int | None = None,
 ) -> OptionalFeeOptionListResponse:
     options, total = await repo.list_optional_fee_options(
-        db, page=page, size=size, category_id=category_id, academic_year_id=academic_year_id,
+        db,
+        page=page,
+        size=size,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
     )
     return OptionalFeeOptionListResponse(
         items=[_fee_option_to_response(o) for o in options],
@@ -306,9 +306,7 @@ async def update_optional_fee_option(
     return _fee_option_to_response(refreshed)
 
 
-async def delete_optional_fee_option(
-    db: AsyncSession, option_id: int, *, deleted_by: int
-) -> None:
+async def delete_optional_fee_option(db: AsyncSession, option_id: int, *, deleted_by: int) -> None:
     option = await repo.get_optional_fee_option_by_id(db, option_id)
     if option is None:
         raise NotFoundError("OptionalFeeOption", option_id)

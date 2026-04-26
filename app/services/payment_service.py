@@ -21,9 +21,13 @@ from app.models.fee import (
 )
 from app.models.user import User
 from app.repositories import payment_repository as repo
-from app.schemas.payment import PaymentCreate, PaymentListResponse, PaymentResponse, PaymentSummaryResponse
+from app.schemas.payment import (
+    PaymentCreate,
+    PaymentListResponse,
+    PaymentResponse,
+    PaymentSummaryResponse,
+)
 from app.services.pdf_service import generate_receipt_pdf
-
 
 # ---------------------------------------------------------------------------
 # State machine for payment transitions
@@ -159,8 +163,8 @@ async def create_payment(
 
     # After commit, notify student of payment received (best-effort)
     try:
-        from app.services import notification_dispatch_service as notif
         from app.models.notification import NotificationType
+        from app.services import notification_dispatch_service as notif
 
         if refreshed and refreshed.enrollment_fee and refreshed.enrollment_fee.enrollment:
             enrollment = refreshed.enrollment_fee.enrollment
@@ -363,8 +367,8 @@ async def validate_payment(
 
     # Notification best-effort
     try:
-        from app.services import notification_dispatch_service as notif
         from app.models.notification import NotificationType
+        from app.services import notification_dispatch_service as notif
 
         refreshed = await repo.get_payment_by_id(db, payment.id)
         if refreshed and refreshed.enrollment_fee and refreshed.enrollment_fee.enrollment:
@@ -457,22 +461,27 @@ async def get_payments_summary(
     pay_stmt = select(
         func.count().label("payment_count"),
         func.coalesce(
-            func.sum(case((Payment.status == PaymentStatus.COMPLETED.value, Payment.amount), else_=0)),
+            func.sum(
+                case((Payment.status == PaymentStatus.COMPLETED.value, Payment.amount), else_=0)
+            ),
             0,
         ).label("total_paid"),
         func.coalesce(
-            func.sum(case((Payment.status == PaymentStatus.PENDING.value, Payment.amount), else_=0)),
+            func.sum(
+                case((Payment.status == PaymentStatus.PENDING.value, Payment.amount), else_=0)
+            ),
             0,
         ).label("total_pending"),
         func.coalesce(
-            func.sum(case((Payment.status == PaymentStatus.CANCELLED.value, Payment.amount), else_=0)),
+            func.sum(
+                case((Payment.status == PaymentStatus.CANCELLED.value, Payment.amount), else_=0)
+            ),
             0,
         ).label("total_cancelled"),
     )
     if academic_year_id is not None:
         pay_stmt = (
-            pay_stmt
-            .join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
+            pay_stmt.join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
             .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
             .where(Enrollment.academic_year_id == academic_year_id)
         )

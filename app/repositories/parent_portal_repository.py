@@ -4,9 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.fee import EnrollmentFee, FeeVariant, Payment
+from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.user import Parent, ParentStudent, Student
 
@@ -36,9 +35,9 @@ async def list_children(db: AsyncSession, parent_id: int) -> list[ParentStudent]
         select(ParentStudent)
         .where(ParentStudent.parent_id == parent_id)
         .options(
-            selectinload(ParentStudent.student).selectinload(Student.enrollments).selectinload(
-                Enrollment.class_
-            ),
+            selectinload(ParentStudent.student)
+            .selectinload(Student.enrollments)
+            .selectinload(Enrollment.class_),
             selectinload(ParentStudent.student)
             .selectinload(Student.enrollments)
             .selectinload(Enrollment.academic_year),
@@ -66,9 +65,7 @@ async def get_student_grades(
     return list(result.scalars().unique().all())
 
 
-async def get_student_active_enrollment(
-    db: AsyncSession, student_id: int
-) -> Enrollment | None:
+async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment | None:
     """Retourne l'inscription active d'un élève avec ses frais et paiements."""
     stmt = (
         select(Enrollment)
@@ -77,7 +74,9 @@ async def get_student_active_enrollment(
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
         )
         .options(
-            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
+            selectinload(Enrollment.enrollment_fees)
+            .selectinload(EnrollmentFee.fee_variant)
+            .selectinload(FeeVariant.category),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
         )
         .order_by(Enrollment.id.desc())

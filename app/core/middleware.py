@@ -1,9 +1,16 @@
-"""TenantMiddleware — résout le tenant depuis le sous-domaine de la requête."""
+"""TenantMiddleware — résout le tenant depuis le sous-domaine de la requête.
+
+Inclut une **host allowlist** qui rejette les requêtes avec un Host header
+non conforme. Critique pour la sécurité multi-tenant : avec AUTH_TRUST_HOST=true
+côté FE, un attacker contrôlant un sous-domaine arbitraire pourrait minter des
+cookies d'auth s'il n'y a pas de validation explicite.
+"""
 
 import logging
 import re
 
 from starlette.requests import Request
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import settings
@@ -12,26 +19,46 @@ from app.core.database import current_tenant_id
 logger = logging.getLogger(__name__)
 
 # Hôtes qui mappent vers le tenant de développement local
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", ""}
+# Inclut "testserver" (par défaut FastAPI TestClient) pour ne pas casser la suite tests.
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", ""}
 
 # Slug valide : lettres minuscules, chiffres, tirets — 2 à 63 chars (RFC 1123)
 _TENANT_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
+
+# Compilé une fois au démarrage depuis settings.ALLOWED_HOST_PATTERN
+_ALLOWED_HOST_RE = re.compile(settings.ALLOWED_HOST_PATTERN)
+
+
+def _is_host_allowed(hostname: str) -> bool:
+    """Vérifie que le hostname est dans l'allowlist.
+
+    Acceptés :
+      - hostnames matchant ALLOWED_HOST_PATTERN (ex: lycee-x.college.klassci.com)
+      - hostnames listés explicitement dans EXTRA_ALLOWED_HOSTS
+      - hôtes locaux (localhost, 127.0.0.1, IPs numériques) — dev seulement
+    """
+    if hostname in _LOCAL_HOSTS:
+        return True
+    if hostname.replace(".", "").isdigit():
+        return True
+    if hostname in settings.EXTRA_ALLOWED_HOSTS:
+        return True
+    return bool(_ALLOWED_HOST_RE.match(hostname))
 
 
 def _extract_tenant(host: str) -> str:
     """Extrait et valide le tenant_id depuis le header Host.
 
-    Exemples :
-        lycee-x.klassci.com  → "lycee-x"
-        localhost             → settings.LOCAL_TENANT_ID
-        127.0.0.1            → settings.LOCAL_TENANT_ID
+    Précondition : le hostname a déjà été validé via _is_host_allowed.
 
-    Un slug invalide (injection, format inconnu) est rejeté vers LOCAL_TENANT_ID.
+    Exemples :
+        lycee-x.college.klassci.com  → "lycee-x"
+        localhost                     → settings.LOCAL_TENANT_ID
+        127.0.0.1                     → settings.LOCAL_TENANT_ID
     """
     hostname = host.split(":")[0]
     if hostname in _LOCAL_HOSTS:
         return settings.LOCAL_TENANT_ID
-    # Detect numeric IP addresses (e.g., 16.58.132.68) — treat as local
     if hostname.replace(".", "").isdigit():
         return settings.LOCAL_TENANT_ID
     parts = hostname.split(".")
@@ -59,6 +86,17 @@ class TenantMiddleware:
         if scope["type"] in {"http", "websocket"}:
             request = Request(scope)
             host = request.headers.get("host", "")
+            hostname = host.split(":")[0]
+
+            if not _is_host_allowed(hostname):
+                logger.warning("Rejected request with disallowed Host header: %s", host[:100])
+                response = JSONResponse(
+                    status_code=400,
+                    content={"detail": "Invalid host", "code": "HOST_NOT_ALLOWED"},
+                )
+                await response(scope, receive, send)
+                return
+
             tenant = _extract_tenant(host)
             token = current_tenant_id.set(tenant)
             try:

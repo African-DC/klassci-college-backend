@@ -7,14 +7,13 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.academic import SchoolSettings
-from app.models.grade import Bulletin, CouncilDecision, Mention, SubjectAverage
+from app.models.grade import Bulletin, CouncilDecision, Mention
 from app.repositories import reports_repository as repo
 from app.schemas.reports import (
     BulletinGenerateResponse,
@@ -145,9 +144,9 @@ async def generate_bulletins(
         ev = eval_map.get(g.evaluation_id)
         if ev is None:
             continue
-        student_subject_grades.setdefault(g.student_id, {}).setdefault(
-            ev.subject_id, []
-        ).append((g.value, ev.coefficient))
+        student_subject_grades.setdefault(g.student_id, {}).setdefault(ev.subject_id, []).append(
+            (g.value, ev.coefficient)
+        )
 
     # Subject coefficient map
     subject_coeff_map: dict[int, int] = {}
@@ -231,13 +230,15 @@ async def generate_bulletins(
             t1_bulletin = await repo.get_bulletin(db, sid, class_id, academic_year_id, 1)
             t2_bulletin = await repo.get_bulletin(db, sid, class_id, academic_year_id, 2)
 
-            t1_avg = t1_bulletin.average if t1_bulletin and t1_bulletin.average is not None else None
-            t2_avg = t2_bulletin.average if t2_bulletin and t2_bulletin.average is not None else None
+            t1_avg = (
+                t1_bulletin.average if t1_bulletin and t1_bulletin.average is not None else None
+            )
+            t2_avg = (
+                t2_bulletin.average if t2_bulletin and t2_bulletin.average is not None else None
+            )
 
             if t1_avg is not None and t2_avg is not None:
-                mga = _quantize(
-                    (t1_avg * 1 + t2_avg * 2 + t3_avg * 2) / 5
-                )
+                mga = _quantize((t1_avg * 1 + t2_avg * 2 + t3_avg * 2) / 5)
                 mga_map[sid] = mga
                 council_decisions[sid] = _compute_council_decision(mga)
             else:
@@ -402,7 +403,7 @@ async def publish_bulletins(
             Bulletin.class_id == class_id,
             Bulletin.trimester == trimester,
             Bulletin.academic_year_id == academic_year_id,
-            Bulletin.is_published == False,
+            not Bulletin.is_published,
         )
         .values(is_published=True)
     )
@@ -413,10 +414,12 @@ async def publish_bulletins(
     # Dispatch notifications to parents (background, best-effort)
     if count > 0:
         try:
-            from app.services import notification_dispatch_service as notif
             from app.models.notification import NotificationType
+            from app.services import notification_dispatch_service as notif
 
-            bulletins = await repo.list_bulletins_for_class(db, class_id, trimester, academic_year_id)
+            bulletins = await repo.list_bulletins_for_class(
+                db, class_id, trimester, academic_year_id
+            )
             for b in bulletins:
                 if b.student and b.student.user_id:
                     await notif.dispatch_notification(

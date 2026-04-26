@@ -3,7 +3,7 @@
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
@@ -18,6 +18,10 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    LevelCreate,
+    LevelListResponse,
+    LevelResponse,
+    LevelUpdate,
     ParentCreate,
     ParentFullResponse,
     ParentLinkBody,
@@ -29,16 +33,17 @@ from app.schemas.admin import (
     RoleListResponse,
     RoleResponse,
     RoleUpdate,
+    RoomBatchCreateResponse,
+    RoomCreate,
+    RoomListResponse,
+    RoomResponse,
+    RoomUpdate,
     SchoolInfoUpdate,
     SchoolSettingsResponse,
     SeriesCreate,
     SeriesListResponse,
     SeriesResponse,
     SeriesUpdate,
-    LevelCreate,
-    LevelListResponse,
-    LevelResponse,
-    LevelUpdate,
     StaffCreate,
     StaffFullResponse,
     StaffListResponse,
@@ -47,8 +52,6 @@ from app.schemas.admin import (
     StudentCreate,
     StudentEnrollmentFeeListResponse,
     StudentFullResponse,
-    UserAccountCreate,
-    UserAccountUpdate,
     StudentListResponse,
     StudentResponse,
     StudentUpdate,
@@ -62,15 +65,10 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
-    RoomBatchCreateResponse,
-    RoomCreate,
-    RoomListResponse,
-    RoomResponse,
-    RoomUpdate,
+    UserAccountCreate,
+    UserAccountUpdate,
 )
-from app.services import admin_service
-from app.services import enrollment_service
-from app.services import matricule_service
+from app.services import admin_service, enrollment_service, matricule_service
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -134,9 +132,7 @@ async def update_student(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> StudentResponse:
     """Met a jour un eleve (patch partiel)."""
-    return await admin_service.update_student(
-        db, student_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_student(db, student_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -175,7 +171,9 @@ async def upload_student_photo(
         f.write(content)
 
     photo_url = f"/uploads/photos/{filename}"
-    student = await admin_service.update_student_photo(db, student_id, photo_url, updated_by=current_user.user_id)
+    student = await admin_service.update_student_photo(
+        db, student_id, photo_url, updated_by=current_user.user_id
+    )
     return {"photo_url": student.photo_url}
 
 
@@ -319,9 +317,7 @@ async def update_teacher(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> TeacherResponse:
     """Met a jour un enseignant (patch partiel)."""
-    return await admin_service.update_teacher(
-        db, teacher_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_teacher(db, teacher_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/teachers/{teacher_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -360,7 +356,9 @@ async def upload_teacher_photo(
         f.write(content)
 
     photo_url = f"/uploads/photos/{filename}"
-    teacher = await admin_service.update_teacher_photo(db, teacher_id, photo_url, updated_by=current_user.user_id)
+    teacher = await admin_service.update_teacher_photo(
+        db, teacher_id, photo_url, updated_by=current_user.user_id
+    )
     return {"photo_url": teacher.photo_url}
 
 
@@ -432,9 +430,7 @@ async def update_staff(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> StaffResponse:
     """Met a jour un membre du personnel (patch partiel)."""
-    return await admin_service.update_staff(
-        db, staff_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_staff(db, staff_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -473,7 +469,9 @@ async def upload_staff_photo(
         f.write(content)
 
     photo_url = f"/uploads/photos/{filename}"
-    staff = await admin_service.update_staff_photo(db, staff_id, photo_url, updated_by=current_user.user_id)
+    staff = await admin_service.update_staff_photo(
+        db, staff_id, photo_url, updated_by=current_user.user_id
+    )
     return {"photo_url": staff.photo_url}
 
 
@@ -505,7 +503,12 @@ async def list_classes(
 ) -> ClassListResponse:
     """Liste paginee des classes avec filtres."""
     return await admin_service.list_classes(
-        db, page=page, size=size, level_id=level_id, academic_year_id=academic_year_id, search=search
+        db,
+        page=page,
+        size=size,
+        level_id=level_id,
+        academic_year_id=academic_year_id,
+        search=search,
     )
 
 
@@ -539,9 +542,7 @@ async def update_class(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassResponse:
     """Met a jour une classe (patch partiel)."""
-    return await admin_service.update_class(
-        db, class_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_class(db, class_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/classes/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -570,7 +571,9 @@ async def list_subjects(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SubjectListResponse:
     """Liste paginee des matieres."""
-    return await admin_service.list_subjects(db, page=page, size=size, level_id=level_id, search=search)
+    return await admin_service.list_subjects(
+        db, page=page, size=size, level_id=level_id, search=search
+    )
 
 
 @router.post("/subjects", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
@@ -584,7 +587,9 @@ async def create_subject(
     return await admin_service.create_subject(db, data, created_by=current_user.user_id)
 
 
-@router.post("/subjects/duplicate", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/subjects/duplicate", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED
+)
 async def duplicate_subject(
     data: SubjectDuplicateRequest,
     current_user: TokenData = Depends(get_current_user),
@@ -614,9 +619,7 @@ async def update_subject(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SubjectResponse:
     """Met a jour une matiere (patch partiel)."""
-    return await admin_service.update_subject(
-        db, subject_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_subject(db, subject_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/subjects/{subject_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -767,9 +770,7 @@ async def update_level(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> LevelResponse:
     """Met a jour un niveau (patch partiel)."""
-    return await admin_service.update_level(
-        db, level_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_level(db, level_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/levels/{level_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -834,9 +835,7 @@ async def update_enrollment_pattern(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Update the enrollment number auto-generation pattern."""
-    return await admin_service.update_enrollment_pattern(
-        db, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_enrollment_pattern(db, data, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -886,9 +885,7 @@ async def update_series(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SeriesResponse:
     """Met à jour une série (patch partiel)."""
-    return await admin_service.update_series(
-        db, series_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_series(db, series_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/series/{series_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -948,9 +945,7 @@ async def update_role(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> RoleResponse:
     """Met à jour un rôle et ses permissions (patch partiel)."""
-    return await admin_service.update_role(
-        db, role_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_role(db, role_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -994,7 +989,11 @@ async def list_rooms(
 ) -> RoomListResponse:
     """Liste paginee des salles avec filtres."""
     return await admin_service.list_rooms(
-        db, page=page, size=size, room_type=room_type, search=search,
+        db,
+        page=page,
+        size=size,
+        room_type=room_type,
+        search=search,
     )
 
 
@@ -1017,7 +1016,8 @@ async def batch_create_rooms(
 ) -> RoomBatchCreateResponse:
     """Crée automatiquement une salle pour chaque classe sans salle."""
     return await admin_service.batch_create_rooms_for_classes(
-        db, created_by=current_user.user_id,
+        db,
+        created_by=current_user.user_id,
     )
 
 
@@ -1041,7 +1041,10 @@ async def update_room(
 ) -> RoomResponse:
     """Met a jour une salle."""
     return await admin_service.update_room(
-        db, room_id, data, updated_by=current_user.user_id,
+        db,
+        room_id,
+        data,
+        updated_by=current_user.user_id,
     )
 
 
@@ -1113,9 +1116,7 @@ async def update_parent(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ParentResponse:
     """Met à jour un parent (patch partiel)."""
-    return await admin_service.update_parent(
-        db, parent_id, data, updated_by=current_user.user_id
-    )
+    return await admin_service.update_parent(db, parent_id, data, updated_by=current_user.user_id)
 
 
 @router.delete("/parents/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,7 @@
 """Router portail parent — endpoints /parent."""
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_role
 from app.schemas.parent_portal import (
@@ -11,8 +12,6 @@ from app.schemas.parent_portal import (
     ChildTimetableResponse,
 )
 from app.services import parent_portal_service
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(
     prefix="/parent",

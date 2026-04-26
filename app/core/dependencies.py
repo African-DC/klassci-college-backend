@@ -134,8 +134,6 @@ def require_role(*role_names: str) -> Any:
         )
         row = (await db.execute(stmt)).scalar_one_or_none()
         if row is None:
-            raise PermissionDeniedError(
-                f"Rôle requis : {', '.join(role_names)}"
-            )
+            raise PermissionDeniedError(f"Rôle requis : {', '.join(role_names)}")
 
     return Depends(_check)

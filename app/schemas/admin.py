@@ -4,7 +4,6 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
 # ---------------------------------------------------------------------------
 # Student
 # ---------------------------------------------------------------------------

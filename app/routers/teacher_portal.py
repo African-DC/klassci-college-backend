@@ -55,6 +55,10 @@ async def get_class_attendance(
 ) -> ClassAttendanceStats:
     """Stats de presence pour une classe assignee a l'enseignant connecte."""
     return await teacher_portal_service.get_class_attendance(
-        db, current_user.user_id, class_id,
-        academic_year_id=academic_year_id, date_from=date_from, date_to=date_to,
+        db,
+        current_user.user_id,
+        class_id,
+        academic_year_id=academic_year_id,
+        date_from=date_from,
+        date_to=date_to,
     )

@@ -80,9 +80,10 @@ async def create_session(
     # After commit, notify absent students (best-effort)
     try:
         from sqlalchemy import select
-        from app.services import notification_dispatch_service as notif
+
         from app.models.notification import NotificationType
         from app.models.user import Student
+        from app.services import notification_dispatch_service as notif
 
         for record in data.records:
             if record.status == "absent" and record.student_id:

@@ -13,7 +13,7 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
-    from app.models.academic import AcademicYear, Class, Level, Series
+    from app.models.academic import AcademicYear, Level, Series
     from app.models.enrollment import Enrollment, StudentOption
 
 
@@ -73,7 +73,10 @@ class FeeVariant(Base, TimestampMixin):
     __tablename__ = "fee_variants"
     __table_args__ = (
         UniqueConstraint(
-            "fee_category_id", "level_id", "series_id", "academic_year_id",
+            "fee_category_id",
+            "level_id",
+            "series_id",
+            "academic_year_id",
             name="uq_fee_variant_category_level_series_year",
         ),
     )

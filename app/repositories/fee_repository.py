@@ -5,15 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.fee import FeeCategory, FeeVariant, OptionalFeeOption
 
-
 # ---------------------------------------------------------------------------
 # FeeCategory
 # ---------------------------------------------------------------------------
 
 
-async def get_fee_category_by_id(
-    db: AsyncSession, category_id: int
-) -> FeeCategory | None:
+async def get_fee_category_by_id(db: AsyncSession, category_id: int) -> FeeCategory | None:
     stmt = select(FeeCategory).where(FeeCategory.id == category_id)
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -59,9 +56,7 @@ async def delete_fee_category(db: AsyncSession, category: FeeCategory) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def get_fee_variant_by_id(
-    db: AsyncSession, variant_id: int
-) -> FeeVariant | None:
+async def get_fee_variant_by_id(db: AsyncSession, variant_id: int) -> FeeVariant | None:
     stmt = select(FeeVariant).where(FeeVariant.id == variant_id)
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -96,9 +91,7 @@ async def create_fee_variant(db: AsyncSession, **kwargs: object) -> FeeVariant:
     return variant
 
 
-async def update_fee_variant(
-    db: AsyncSession, variant: FeeVariant, **kwargs: object
-) -> FeeVariant:
+async def update_fee_variant(db: AsyncSession, variant: FeeVariant, **kwargs: object) -> FeeVariant:
     for key, value in kwargs.items():
         if value is not None:
             setattr(variant, key, value)

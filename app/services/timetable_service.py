@@ -276,12 +276,11 @@ async def diagnostic_for_class(
     - total_slots_available: int
     - manual_slots_count: int
     """
-    from sqlalchemy import select, or_, func
+    from sqlalchemy import func, or_, select
+
     from app.models.academic import Class, Subject
 
-    cls = (await db.execute(
-        select(Class).where(Class.id == class_id)
-    )).scalar_one_or_none()
+    cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
 
@@ -304,19 +303,23 @@ async def diagnostic_for_class(
     for s in subjects:
         total_hours += s.hours_per_week
         if s.teacher_id and s.teacher:
-            with_teacher.append({
-                "id": s.id,
-                "name": s.name,
-                "hours_per_week": s.hours_per_week,
-                "teacher_id": s.teacher_id,
-                "teacher_name": f"{s.teacher.first_name} {s.teacher.last_name}",
-            })
+            with_teacher.append(
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "hours_per_week": s.hours_per_week,
+                    "teacher_id": s.teacher_id,
+                    "teacher_name": f"{s.teacher.first_name} {s.teacher.last_name}",
+                }
+            )
         else:
-            without_teacher.append({
-                "id": s.id,
-                "name": s.name,
-                "hours_per_week": s.hours_per_week,
-            })
+            without_teacher.append(
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "hours_per_week": s.hours_per_week,
+                }
+            )
 
     # Count manual slots for this class
     manual_count_stmt = (
@@ -347,7 +350,9 @@ async def diagnostic_for_class(
 async def _get_timetable_settings(db: AsyncSession) -> tuple[int, int, int]:
     """Retourne (slot_duration_minutes, day_start_hour, day_end_hour) depuis SchoolSettings."""
     from sqlalchemy import select
+
     from app.models.academic import SchoolSettings
+
     stmt = select(SchoolSettings).limit(1)
     settings = (await db.execute(stmt)).scalar_one_or_none()
     if settings is None:
@@ -375,7 +380,8 @@ async def auto_generate(
     7. Supprime seulement les slots auto-generes
     8. Lance le solveur
     """
-    from sqlalchemy import select, or_, delete
+    from sqlalchemy import delete, or_, select
+
     from app.models.academic import Class, Subject
     from app.models.timetable import DayOfWeek
 
@@ -383,9 +389,7 @@ async def auto_generate(
     slot_duration, day_start, day_end = await _get_timetable_settings(db)
 
     # 2. Get class
-    cls = (await db.execute(
-        select(Class).where(Class.id == class_id)
-    )).scalar_one_or_none()
+    cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
 
@@ -416,10 +420,17 @@ async def auto_generate(
     ]
 
     # 5. Day names (English)
-    day_names = [d.value for d in [
-        DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
-        DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY,
-    ]]
+    day_names = [
+        d.value
+        for d in [
+            DayOfWeek.MONDAY,
+            DayOfWeek.TUESDAY,
+            DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY,
+            DayOfWeek.FRIDAY,
+            DayOfWeek.SATURDAY,
+        ]
+    ]
 
     # 6. Delete only auto-generated slots
     del_stmt = delete(TimetableSlot).where(
@@ -431,6 +442,7 @@ async def auto_generate(
 
     # 7. Load manual slots — convert to block indices
     from app.utils.timetable_generator import build_blocks
+
     grid_blocks = build_blocks(day_names, day_start, day_end, slot_duration)
 
     manual_slots = await repo.list_manual_slots_for_class(db, class_id)
@@ -451,7 +463,11 @@ async def auto_generate(
 
         # Find all blocks that this manual slot covers
         for blk in grid_blocks:
-            if blk.day == ms_day and blk.start_minutes >= ms_start_min and blk.end_minutes <= ms_end_min:
+            if (
+                blk.day == ms_day
+                and blk.start_minutes >= ms_start_min
+                and blk.end_minutes <= ms_end_min
+            ):
                 manual_fixed_data.append({"assignment_idx": asg_idx, "block_idx": blk.index})
 
     # 8. Cross-class conflicts — convert to block indices
@@ -459,7 +475,10 @@ async def auto_generate(
     cross_class_blocked: dict[int, list[int]] = {}
     for tid in teacher_ids:
         blocked_indices = await repo.get_cross_class_blocked_block_indices(
-            db, tid, class_id, grid_blocks,
+            db,
+            tid,
+            class_id,
+            grid_blocks,
         )
         if blocked_indices:
             cross_class_blocked[tid] = list(blocked_indices)
@@ -475,6 +494,7 @@ async def auto_generate(
 
     # 10. Trigger Celery task
     from app.tasks.timetable_tasks import generate_timetable_task
+
     task = generate_timetable_task.delay(
         tenant_id,
         class_id,
@@ -503,12 +523,22 @@ def trigger_generate(
         tenant_id,
         request.class_id,
         request.academic_year_id,
-        [{"teacher_id": a.teacher_id, "subject_id": a.subject_id, "hours_per_week": a.hours_per_week}
-         for a in request.assignments],
+        [
+            {
+                "teacher_id": a.teacher_id,
+                "subject_id": a.subject_id,
+                "hours_per_week": a.hours_per_week,
+            }
+            for a in request.assignments
+        ],
         ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-        7, 17, 60,  # defaults
+        7,
+        17,
+        60,  # defaults
         request.room_id,
-        [], {}, {},
+        [],
+        {},
+        {},
     )
     return GenerateTimetableResponse(task_id=str(task.id))
 
@@ -546,7 +576,8 @@ def get_task_status(task_id: str) -> TaskStatusResponse:
 async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     """Generate a PDF of the timetable for a class."""
     from sqlalchemy import select
-    from app.models.academic import Class, AcademicYear, SchoolSettings
+
+    from app.models.academic import AcademicYear, Class, SchoolSettings
     from app.services.pdf_service import generate_timetable_pdf
 
     # Get class info
@@ -555,9 +586,9 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
         raise NotFoundError("Class", class_id)
 
     # Get current academic year
-    ay = (await db.execute(
-        select(AcademicYear).where(AcademicYear.is_current == True)
-    )).scalar_one_or_none()
+    ay = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current))
+    ).scalar_one_or_none()
     academic_year_name = ay.name if ay else ""
 
     # Get school settings
@@ -575,15 +606,21 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     for s in slots_raw:
         start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
         end_t = s.end_time if isinstance(s.end_time, str) else s.end_time.strftime("%H:%M")
-        slots_data.append({
-            "day": s.day,
-            "start_time": start_t,
-            "end_time": end_t,
-            "subject_name": s.subject.name if s.subject else "",
-            "teacher_name": f"{s.teacher.last_name} {s.teacher.first_name}" if s.teacher else "",
-            "room": s.room.name if s.room else None,
-            "subject_color": s.subject.color if s.subject and hasattr(s.subject, "color") else None,
-        })
+        slots_data.append(
+            {
+                "day": s.day,
+                "start_time": start_t,
+                "end_time": end_t,
+                "subject_name": s.subject.name if s.subject else "",
+                "teacher_name": f"{s.teacher.last_name} {s.teacher.first_name}"
+                if s.teacher
+                else "",
+                "room": s.room.name if s.room else None,
+                "subject_color": s.subject.color
+                if s.subject and hasattr(s.subject, "color")
+                else None,
+            }
+        )
 
     class_name = cls.name
     return generate_timetable_pdf(
@@ -643,7 +680,10 @@ async def update_teacher_availability(
     if av is None:
         raise NotFoundError("TeacherAvailability", av_id)
     av = await repo.update_teacher_availability(
-        db, av, available=data.available, preferred=data.preferred,
+        db,
+        av,
+        available=data.available,
+        preferred=data.preferred,
     )
     await db.commit()
     return _to_availability_response(av)

@@ -85,9 +85,7 @@ async def re_enroll_student(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
     """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
-    return await enrollment_service.re_enroll_student(
-        db, data, created_by=current_user.user_id
-    )
+    return await enrollment_service.re_enroll_student(db, data, created_by=current_user.user_id)
 
 
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])
