@@ -1,0 +1,30 @@
+[Unit]
+Description=KLASSCI College Celery Worker (background tasks, OR-Tools schedule)
+Documentation=https://github.com/African-DC/klassci-college-backend
+After=network.target docker.service klassci-backend.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/klassci/klassci-backend
+EnvironmentFile=/home/ubuntu/klassci/klassci-backend/.env
+ExecStart=/home/ubuntu/klassci/klassci-backend/.venv/bin/celery -A app.core.celery_app worker \
+    --loglevel=info --pool=solo
+Restart=always
+RestartSec=5
+StartLimitBurst=10
+StartLimitIntervalSec=300
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=klassci-celery
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=false
+ReadWritePaths=/home/ubuntu/klassci/klassci-backend
+
+[Install]
+WantedBy=multi-user.target

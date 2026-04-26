@@ -1,0 +1,31 @@
+[Unit]
+Description=KLASSCI College Backend (FastAPI/uvicorn)
+Documentation=https://github.com/African-DC/klassci-college-backend
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/klassci/klassci-backend
+EnvironmentFile=/home/ubuntu/klassci/klassci-backend/.env
+ExecStart=/home/ubuntu/klassci/klassci-backend/.venv/bin/uvicorn app.main:app \
+    --host 0.0.0.0 --port 8000 \
+    --proxy-headers --forwarded-allow-ips=*
+Restart=always
+RestartSec=5
+StartLimitBurst=10
+StartLimitIntervalSec=300
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=klassci-backend
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=false
+ReadWritePaths=/tmp/klassci-uploads /home/ubuntu/klassci/klassci-backend
+
+[Install]
+WantedBy=multi-user.target
