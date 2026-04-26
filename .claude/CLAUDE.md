@@ -98,5 +98,6 @@ mypy app/
 @rules/python.md
 @rules/database.md
 @rules/security.md
+@rules/auth-architecture.md
 @rules/deploy.md
 @rules/git.md
