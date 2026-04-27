@@ -1,0 +1,104 @@
+name: Deploy BE to EC2
+
+on:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-be-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build wheelhouse + ship + migrate + restart
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Cache wheelhouse
+        id: wheels-cache
+        uses: actions/cache@v4
+        with:
+          path: wheels/
+          # Re-build wheelhouse uniquement quand requirements.txt change
+          key: wheels-${{ runner.os }}-py3.12-${{ hashFiles('requirements.txt') }}
+
+      - name: Build wheelhouse (if cache miss)
+        if: steps.wheels-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip wheel --wheel-dir=wheels -r requirements.txt
+          ls -lh wheels/ | head -10
+
+      - name: Pack artifacts
+        run: |
+          tar czf wheels.tgz wheels/
+          tar czf code.tgz app alembic alembic.ini scripts requirements.txt
+          ls -lh wheels.tgz code.tgz
+
+      - name: Setup SSH key
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship + install (no compile) + alembic + restart + health + rollback
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -e
+          scp -i ~/.ssh/id_deploy wheels.tgz code.tgz ubuntu@$HOST:/tmp/
+          ssh -i ~/.ssh/id_deploy ubuntu@$HOST 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          APP=/home/ubuntu/klassci/klassci-backend
+          cd "$APP"
+          source .venv/bin/activate
+
+          # Install pre-built wheels (no compilation on prod — rule deploy.md)
+          tar xzf /tmp/wheels.tgz -C /tmp/
+          pip install --no-index --find-links=/tmp/wheels -r requirements.txt
+
+          # Snapshot code BEFORE replacing — rollback target
+          tar czf /tmp/code-prev.tgz app alembic
+          tar xzf /tmp/code.tgz
+
+          # Migrations BEFORE restart (expand-contract — old code still runs OK
+          # against new schema). Si fail → rollback code, ne PAS restart.
+          if ! TENANT_ID=local alembic upgrade head; then
+            echo "::error::Alembic migration failed. Rolling back code (BE not restarted)."
+            tar xzf /tmp/code-prev.tgz
+            exit 1
+          fi
+
+          # Restart les 2 services BE
+          sudo systemctl restart klassci-backend klassci-celery
+
+          # Health check retry
+          for i in 1 2 3 4 5 6; do
+            sleep 3
+            if curl -fsS -o /dev/null http://localhost:8000/health; then
+              echo "BE health OK after attempt $i"
+              exit 0
+            fi
+          done
+
+          echo "::error::BE health failed. Rolling back code (migrations stay forward — manual fix if needed)."
+          tar xzf /tmp/code-prev.tgz
+          sudo systemctl restart klassci-backend klassci-celery
+          exit 1
+          REMOTE
+
+      - name: Verify HTTPS endpoint
+        run: |
+          curl -fsS -o /dev/null -w "BE /api-be/health %{http_code} (%{time_total}s)\n" https://college.klassci.com/api-be/health

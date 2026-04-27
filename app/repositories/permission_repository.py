@@ -21,3 +21,20 @@ async def check_user_permission(db: AsyncSession, user_id: int, slug: str) -> bo
     )
     result = await db.execute(stmt)
     return bool(result.scalar())
+
+
+async def list_user_permissions(db: AsyncSession, user_id: int) -> list[str]:
+    """Retourne la liste des slugs de permissions effectives de l'utilisateur.
+
+    Utilisé par l'endpoint /auth/me/permissions pour le gating UI côté FE.
+    """
+    stmt = (
+        select(Permission.slug)
+        .distinct()
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .join(UserRole, UserRole.role_id == RolePermission.role_id)
+        .where(UserRole.user_id == user_id)
+        .order_by(Permission.slug)
+    )
+    result = await db.execute(stmt)
+    return [row[0] for row in result.all()]

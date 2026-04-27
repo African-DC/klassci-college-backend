@@ -21,6 +21,9 @@ class EvaluationCreate(BaseModel):
     class_id: int
     academic_year_id: int
     trimester: int = Field(ge=1, le=3)
+    # Optional — auto-resolved from current_user when an enseignant crée.
+    # Required when an admin/staff délégué crée pour un prof.
+    teacher_id: int | None = None
 
 
 class EvaluationResponse(BaseModel):

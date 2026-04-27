@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import NotFoundError
 from app.models.grade import Evaluation
+from app.models.user import TeacherProfile
 from app.repositories import grades_repository as repo
 from app.schemas.grades import (
     BulletinGenerateResponse,
@@ -60,6 +62,12 @@ async def list_evaluations(
         trimester=trimester,
     )
     return [_build_eval_response(ev) for ev in evals]
+
+
+async def teacher_exists(db: AsyncSession, teacher_id: int) -> bool:
+    """Vérifie qu'un teacher_profile existe — utilisé pour valider la délégation admin."""
+    result = await db.execute(select(exists().where(TeacherProfile.id == teacher_id)))
+    return bool(result.scalar())
 
 
 async def create_evaluation(
@@ -132,7 +140,9 @@ async def batch_update_grades(
 
         raise BusinessValidationError(f"Student IDs not enrolled in this evaluation: {invalid_ids}")
 
-    grades = await repo.batch_update_grades(db, eval_id, entries)
+    grades = await repo.batch_update_grades(
+        db, eval_id, entries, entered_by_user_id=current_user_id
+    )
 
     await audit_log(
         db,
