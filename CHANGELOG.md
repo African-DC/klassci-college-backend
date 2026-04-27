@@ -10,6 +10,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Liste des élèves côté admin enrichie de la classe et du statut d'inscription pour l'année courante : un seul appel API au lieu de cliquer chaque fiche pour savoir où l'élève est *(admin)* (#82).
+- Filtres par classe et liste des élèves « à inscrire » exposés en un endpoint dédié, prêt à alimenter les chips de la liste élèves *(admin)* (#82).
 - Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit *(admin, enseignant)*.
 - Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées *(tous)*.
 - Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève des scénarios E2E *(devops)*.

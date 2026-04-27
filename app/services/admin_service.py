@@ -59,9 +59,12 @@ from app.schemas.admin import (
     StaffListResponse,
     StaffResponse,
     StaffUpdate,
+    CurrentEnrollmentInfo,
+    StudentClassFilterCount,
     StudentCreate,
     StudentEnrollmentFeeListResponse,
     StudentEnrollmentFeeResponse,
+    StudentFiltersResponse,
     StudentListResponse,
     StudentResponse,
     StudentUpdate,
@@ -85,7 +88,22 @@ logger = logging.getLogger(__name__)
 
 
 def _student_to_response(s: object) -> StudentResponse:
-    return StudentResponse.model_validate(s)
+    """Convertit un Student ORM en StudentResponse, en attachant l'inscription courante.
+
+    `s.enrollments` est déjà borné par `with_loader_criteria` à l'année courante +
+    status=valide côté repo, donc au plus 1 entrée. None si non inscrit.
+    """
+    response = StudentResponse.model_validate(s)
+    enrollments = getattr(s, "enrollments", None) or []
+    if enrollments:
+        e = enrollments[0]
+        response.current_enrollment = CurrentEnrollmentInfo(
+            enrollment_id=e.id,
+            class_id=e.class_id,
+            class_name=e.class_.name if e.class_ else "",
+            status=e.status,
+        )
+    return response
 
 
 async def list_students(
@@ -94,13 +112,44 @@ async def list_students(
     page: int = 1,
     size: int = 20,
     search: str | None = None,
+    class_id: int | None = None,
+    unenrolled_only: bool = False,
 ) -> StudentListResponse:
-    students, total = await repo.list_students(db, page=page, size=size, search=search)
+    if class_id is not None and unenrolled_only:
+        raise BusinessValidationError(
+            "Précisez soit class_id soit unenrolled_only, pas les deux.",
+        )
+    students, total = await repo.list_students(
+        db,
+        page=page,
+        size=size,
+        search=search,
+        class_id=class_id,
+        unenrolled_only=unenrolled_only,
+    )
     return StudentListResponse(
         items=[_student_to_response(s) for s in students],
         total=total,
         page=page,
         size=size,
+    )
+
+
+async def get_students_filters(db: AsyncSession) -> StudentFiltersResponse:
+    """Counts pour les chips : total, par classe, sans inscription année courante."""
+    data = await repo.get_students_filters(db)
+    return StudentFiltersResponse(
+        total=data["total"],
+        by_class=[
+            StudentClassFilterCount(
+                class_id=row["class_id"],
+                class_name=row["class_name"],
+                count=row["count"],
+            )
+            for row in data["by_class"]
+        ],
+        no_current_enrollment_count=data["no_current_enrollment_count"],
+        current_academic_year_id=data["current_academic_year_id"],
     )
 
 
