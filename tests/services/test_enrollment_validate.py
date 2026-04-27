@@ -23,18 +23,23 @@ from app.services import enrollment_service
 
 def _make_enrollment(status: EnrollmentStatus, enrollment_id: int = 1) -> SimpleNamespace:
     """Stand-in Enrollment ORM avec les champs touchés par _to_response."""
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
     return SimpleNamespace(
         id=enrollment_id,
         student_id=42,
         class_id=3,
         academic_year_id=1,
         academic_year=SimpleNamespace(id=1, name="2025-2026"),
+        student=SimpleNamespace(id=42, first_name="Awa", last_name="Traoré"),
+        class_=SimpleNamespace(id=3, name="6ème A"),
         status=status,
         notes=None,
         created_by=1,
         enrollment_fees=[],
-        created_at=None,
-        updated_at=None,
+        created_at=now,
+        updated_at=now,
     )
 
 
