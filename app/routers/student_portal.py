@@ -9,6 +9,7 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.schemas.attendance import StudentAttendanceResponse
 from app.schemas.student_portal import (
     StudentBulletinsListResponse,
+    StudentDashboardResponse,
     StudentFeesResponse,
     StudentGradesListResponse,
     StudentProfileResponse,
@@ -17,6 +18,15 @@ from app.schemas.student_portal import (
 from app.services import attendance_service, student_portal_service
 
 router = APIRouter(prefix="/student", tags=["student-portal"])
+
+
+@router.get("/dashboard", response_model=StudentDashboardResponse)
+async def get_student_dashboard(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> StudentDashboardResponse:
+    """Dashboard élève : nom, classe, prochain cours, moyenne, frais, absences."""
+    return await student_portal_service.get_dashboard(db, current_user.user_id)
 
 
 @router.get("/grades", response_model=StudentGradesListResponse)

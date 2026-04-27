@@ -11,12 +11,13 @@ from app.models.user import TeacherProfile
 from app.repositories import teacher_portal_repository as repo
 from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
-    ClassAverageItem,
     TeacherClassesListResponse,
     TeacherClassResponse,
     TeacherDashboardStats,
+    TeacherNextCourse,
     TeacherScheduleResponse,
     TeacherScheduleSlot,
+    TeacherUpcomingEval,
 )
 from app.services import attendance_service
 
@@ -59,21 +60,24 @@ async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleRespons
 
 
 async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboardStats:
-    """Retourne les KPIs du dashboard enseignant."""
+    """Retourne le dashboard de l'enseignant connecté.
+
+    Aligné sur le contrat FE `TeacherDashboardSchema` (lib/contracts/teacher-portal.ts) :
+    nom, totaux, prochain cours, évaluations à venir/récentes.
+    """
     teacher = await _get_teacher_for_user(db, user_id)
 
     total_classes = await repo.count_distinct_classes(db, teacher.id)
     total_students = await repo.count_total_students(db, teacher.id)
-    upcoming_evaluations = await repo.count_upcoming_evaluations(db, teacher.id)
-    averages_raw = await repo.get_class_averages(db, teacher.id)
-
-    class_averages = [ClassAverageItem(**a) for a in averages_raw]
+    next_course_raw = await repo.get_next_course(db, teacher.id)
+    upcoming_raw = await repo.list_upcoming_evaluations(db, teacher.id, limit=5)
 
     return TeacherDashboardStats(
+        teacher_name=f"{teacher.first_name} {teacher.last_name}".strip(),
         total_classes=total_classes,
         total_students=total_students,
-        upcoming_evaluations=upcoming_evaluations,
-        class_averages=class_averages,
+        next_course=TeacherNextCourse(**next_course_raw) if next_course_raw else None,
+        upcoming_evaluations=[TeacherUpcomingEval(**e) for e in upcoming_raw],
     )
 
 

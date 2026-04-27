@@ -134,3 +134,32 @@ class StudentProfileResponse(BaseModel):
     class_id: int | None
     enrollment_status: str | None
     academic_year_name: str | None
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+class StudentNextCourse(BaseModel):
+    """Prochain créneau dans la semaine pour l'élève."""
+
+    subject_name: str
+    teacher_name: str
+    start_time: str  # HH:MM
+    end_time: str
+    room: str | None = None
+
+
+class StudentDashboardResponse(BaseModel):
+    """Contrat consommé par /student/dashboard côté FE.
+
+    Voir `klassci-frontend/lib/contracts/student-portal.ts:StudentDashboardSchema`.
+    """
+
+    student_name: str
+    class_name: str
+    next_course: StudentNextCourse | None = None
+    general_average: float | None = None
+    fees_remaining: float
+    total_absences: int

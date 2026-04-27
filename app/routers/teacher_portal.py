@@ -35,12 +35,12 @@ async def get_teacher_schedule(
     return await teacher_portal_service.get_schedule(db, current_user.user_id)
 
 
-@router.get("/dashboard-stats", response_model=TeacherDashboardStats)
-async def get_teacher_dashboard_stats(
+@router.get("/dashboard", response_model=TeacherDashboardStats)
+async def get_teacher_dashboard(
     current_user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> TeacherDashboardStats:
-    """Retourne les KPIs du dashboard enseignant."""
+    """Retourne le dashboard enseignant (KPIs + prochain cours + évaluations à venir)."""
     return await teacher_portal_service.get_dashboard_stats(db, current_user.user_id)
 
 
