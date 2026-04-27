@@ -52,17 +52,13 @@ async def subjects_for_class(db: AsyncSession, class_id: int) -> list[Subject]:
     """
     class_obj = await _get_class_or_404(db, class_id)
     stmt = (
-        select(Subject)
-        .where(subject_for_class_predicate(class_obj))
-        .order_by(Subject.name.asc())
+        select(Subject).where(subject_for_class_predicate(class_obj)).order_by(Subject.name.asc())
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
-async def validate_subject_class_pair(
-    db: AsyncSession, class_id: int, subject_id: int
-) -> None:
+async def validate_subject_class_pair(db: AsyncSession, class_id: int, subject_id: int) -> None:
     """Lève une 422 si la matière n'est pas enseignée dans cette classe.
 
     Utilise la même clause `subject_for_class_predicate` que la liste — donc
@@ -76,6 +72,4 @@ async def validate_subject_class_pair(
     )
     result = await db.execute(stmt)
     if result.scalar_one_or_none() is None:
-        raise BusinessValidationError(
-            "Cette matière n'est pas enseignée dans cette classe."
-        )
+        raise BusinessValidationError("Cette matière n'est pas enseignée dans cette classe.")
