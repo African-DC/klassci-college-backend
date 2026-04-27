@@ -808,3 +808,84 @@ class RoomListResponse(BaseModel):
 class RoomBatchCreateResponse(BaseModel):
     created: int
     rooms: list[RoomResponse]
+
+
+# ---------------------------------------------------------------------------
+# Promotions (mass year rollover) — cycle 3 plan B
+# ---------------------------------------------------------------------------
+
+
+class PromotionPreviewRequest(BaseModel):
+    """Demande de pre-flight pour une promotion bulk d'année.
+
+    Le `class_mapping` est explicite : `{source_class_id: target_class_id}`.
+    Aucun parsing automatique de nom de classe — décision design pour éviter
+    les fragilités de naming convention entre tenants.
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    class_mapping: dict[int, int]
+
+
+class SourceClassSummary(BaseModel):
+    source_class_id: int
+    target_class_id: int
+    target_class_name: str
+    students_to_promote: int
+    target_capacity: int
+    target_remaining: int
+
+
+class PromotionCapacityWarning(BaseModel):
+    source_class_id: int
+    target_class_id: int
+    target_class_name: str
+    requested: int
+    available: int
+    overflow: int
+
+
+class PromotionPreviewResponse(BaseModel):
+    """Résumé pre-flight : nb d'élèves promotables par classe + warnings capacité.
+
+    Les warnings ne bloquent pas l'execute (l'admin peut décider de couper la
+    sélection) — ils informent. Seuls les erreurs structurelles (classes
+    inexistantes, AY identiques) bloquent et lèvent une 422 dès le preview.
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    source_classes: list[SourceClassSummary]
+    capacity_warnings: list[PromotionCapacityWarning]
+    promotable_count: int
+
+
+class PromotionExecuteRequest(PromotionPreviewRequest):
+    """Identique au preview, dans une route séparée pour clarté HTTP."""
+
+    pass
+
+
+class PromotionExecuteError(BaseModel):
+    student_id: int
+    source_enrollment_id: int
+    reason: str
+
+
+class PromotionExecuteResponse(BaseModel):
+    """Réponse partial-success-with-reporting (pattern fintech 2024+).
+
+    `promoted_count` = nouvelles inscriptions créées dans cette exécution.
+    `skipped_count` = élèves déjà inscrits dans target_ay (idempotency safe).
+    `error_count` + `errors[]` = échecs explicites (capacité dépassée,
+    classes non mappées, validations métier).
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    promoted_count: int
+    promoted_enrollment_ids: list[int]
+    skipped_count: int
+    error_count: int
+    errors: list[PromotionExecuteError]
