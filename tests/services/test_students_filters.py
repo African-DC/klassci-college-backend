@@ -181,3 +181,49 @@ async def test_filters_returns_counts_per_class() -> None:
     assert result.current_academic_year_id == 7
     # Sanity check : 12 + 8 + 3 = 23, donc 27 élèves sont en non-valide ou multi-tenant
     # (le total est indépendant des cohortes — un élève peut n'être nulle part).
+
+
+# ---------------------------------------------------------------------------
+# get_student_by_id — eager-load obligatoire (regression PR #83 → hotfix)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_student_by_id_eager_loads_enrollments() -> None:
+    """Régression : sans selectinload, _student_to_response déclenche MissingGreenlet en prod.
+
+    PR #83 a ajouté la lecture de `s.enrollments` dans `_student_to_response`,
+    mais `repo.get_student_by_id` n'avait pas été mis à jour pour eager-loader
+    cette relation. Résultat : 4 endpoints cassés en cascade (GET / POST / PATCH /
+    photo upload) — l'admin en prod voyait "Connexion au serveur impossible".
+
+    Ce test garantit que la fonction emit bien un select(Student) AVEC loader
+    options. On l'inspecte via _with_options (interne SQLAlchemy 2.0 mais stable).
+    """
+    from app.repositories.admin_repository import get_student_by_id
+
+    captured: dict = {"stmts": []}
+
+    async def fake_execute(stmt: object) -> MagicMock:
+        captured["stmts"].append(stmt)
+        result = MagicMock()
+        result.scalar_one_or_none = MagicMock(return_value=None)
+        result.scalar = MagicMock(return_value=None)
+        return result
+
+    db = AsyncMock()
+    db.execute = fake_execute
+
+    await get_student_by_id(db, 1)
+
+    # 2 executes attendus : (1) get_current_academic_year_id, (2) le select Student
+    stmts = captured["stmts"]
+    assert len(stmts) == 2, (
+        f"Expected 2 db.execute calls (year + student), got {len(stmts)}"
+    )
+
+    student_stmt = stmts[1]
+    options = getattr(student_stmt, "_with_options", ())
+    assert options, (
+        "get_student_by_id doit appliquer selectinload sur Student.enrollments — "
+        "sans, _student_to_response trigger MissingGreenlet en prod async session"
+    )

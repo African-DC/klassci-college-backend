@@ -16,14 +16,46 @@ from app.utils.fuzzy_search import fuzzy_filter_by_name
 # ---------------------------------------------------------------------------
 
 
-async def get_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
-    stmt = select(Student).where(Student.id == student_id)
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
 async def get_current_academic_year_id(db: AsyncSession) -> int | None:
     """Retourne l'id de l'année scolaire courante (`is_current = true`) ou None."""
     stmt = select(AcademicYear.id).where(AcademicYear.is_current.is_(True)).limit(1)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
+    """Loader options bornant `Student.enrollments` à l'année courante + status valide.
+
+    Single source of truth partagée entre `list_students` et `get_student_by_id` :
+    sans ce eager-load, `_student_to_response` plante avec `MissingGreenlet` quand
+    il lit `s.enrollments` (lazy-load implicite hors greenlet async).
+    """
+    options: list = [selectinload(Student.enrollments).options(selectinload(Enrollment.class_))]
+    if current_ay_id is not None:
+        options.append(
+            with_loader_criteria(
+                Enrollment,
+                and_(
+                    Enrollment.academic_year_id == current_ay_id,
+                    Enrollment.status == EnrollmentStatus.VALIDE,
+                ),
+                include_aliases=True,
+            )
+        )
+    return options
+
+
+async def get_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
+    """Charge un Student avec son inscription année courante eager-loaded.
+
+    Eager-load obligatoire : tous les callers passent par `_student_to_response`
+    qui lit `s.enrollments` — sans options, MissingGreenlet → 500.
+    """
+    current_ay_id = await get_current_academic_year_id(db)
+    stmt = (
+        select(Student)
+        .where(Student.id == student_id)
+        .options(*_student_with_current_enrollment_options(current_ay_id))
+    )
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
@@ -91,21 +123,7 @@ async def list_students(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
 
-    # `with_loader_criteria` borne le selectinload de Student.enrollments aux
-    # enrollments valide de l'année courante. Single source of truth pour
-    # "current_enrollment" partagée par list_students et tout futur consumer.
-    options: list = [selectinload(Student.enrollments).options(selectinload(Enrollment.class_))]
-    if current_ay_id is not None:
-        options.append(
-            with_loader_criteria(
-                Enrollment,
-                and_(
-                    Enrollment.academic_year_id == current_ay_id,
-                    Enrollment.status == EnrollmentStatus.VALIDE,
-                ),
-                include_aliases=True,
-            )
-        )
+    options = _student_with_current_enrollment_options(current_ay_id)
 
     stmt = (
         base.options(*options)
