@@ -44,6 +44,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_grades_entered_by_user_id", table_name="grades")
+    # Order matters on MySQL : the FK depends on the index, so drop the
+    # constraint first or MySQL refuses with errno 1553.
     op.drop_constraint("fk_grades_entered_by_user_id", "grades", type_="foreignkey")
+    op.drop_index("ix_grades_entered_by_user_id", table_name="grades")
     op.drop_column("grades", "entered_by_user_id")
