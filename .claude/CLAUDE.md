@@ -101,3 +101,4 @@ mypy app/
 @rules/auth-architecture.md
 @rules/deploy.md
 @rules/git.md
+@rules/changelog.md
