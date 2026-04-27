@@ -138,19 +138,26 @@ async def _ensure_user(db: Any, email: str, role: str, profile: dict[str, Any]) 
             },
         )
     elif table == "students":
-        await db.execute(
-            text(
-                "INSERT IGNORE INTO students "
-                "(user_id, first_name, last_name, enrollment_number) "
-                "VALUES (:user_id, :first_name, :last_name, :enrollment_number)"
-            ),
-            {
-                "user_id": user_id,
-                "first_name": profile["first_name"],
-                "last_name": profile["last_name"],
-                "enrollment_number": profile["enrollment_number"],
-            },
+        # students.user_id is a regular FK (not UNIQUE) — guard against
+        # duplicate linkage which would break Student.scalar_one_or_none().
+        existing = await db.execute(
+            text("SELECT id FROM students WHERE user_id = :user_id LIMIT 1"),
+            {"user_id": user_id},
         )
+        if existing.scalar_one_or_none() is None:
+            await db.execute(
+                text(
+                    "INSERT INTO students "
+                    "(user_id, first_name, last_name, enrollment_number) "
+                    "VALUES (:user_id, :first_name, :last_name, :enrollment_number)"
+                ),
+                {
+                    "user_id": user_id,
+                    "first_name": profile["first_name"],
+                    "last_name": profile["last_name"],
+                    "enrollment_number": profile["enrollment_number"],
+                },
+            )
 
 
 async def main() -> None:
