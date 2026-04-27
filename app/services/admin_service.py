@@ -1948,9 +1948,7 @@ async def update_role(
         return _role_to_response(role)
 
     # Capture old permission_ids BEFORE the update so audit trail records the diff.
-    old_perm_ids = (
-        sorted(rp.permission_id for rp in role.permissions) if has_perm_change else None
-    )
+    old_perm_ids = sorted(rp.permission_id for rp in role.permissions) if has_perm_change else None
 
     async with db.begin_nested():
         if field_changes:
