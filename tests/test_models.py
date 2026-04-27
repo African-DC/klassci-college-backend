@@ -122,9 +122,9 @@ def test_decimal_columns_on_financial_models() -> None:
     for model_cls in (Payment, FeeVariant, OptionalFeeOption, EnrollmentFee):
         table = Base.metadata.tables[model_cls.__tablename__]
         amount_col = table.c["amount"]
-        assert isinstance(amount_col.type, Numeric), (
-            f"{model_cls.__name__}.amount doit être Numeric, pas {type(amount_col.type)}"
-        )
+        assert isinstance(
+            amount_col.type, Numeric
+        ), f"{model_cls.__name__}.amount doit être Numeric, pas {type(amount_col.type)}"
         assert amount_col.type.precision == 15
         assert amount_col.type.scale == 2
 
