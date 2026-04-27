@@ -12,8 +12,12 @@ Permission : `enrollments:promote` (à seeder dans `tenant_service.ALL_PERMISSIO
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_tenant_db
-from app.core.dependencies import TokenData, get_current_user, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    require_permission,
+)
 from app.schemas.admin import (
     PromotionExecuteRequest,
     PromotionExecuteResponse,
