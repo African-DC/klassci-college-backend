@@ -77,6 +77,7 @@ class TeacherUpcomingEval(BaseModel):
     title: str
     type: str
     date: str  # ISO date YYYY-MM-DD
+    class_id: int
     class_name: str
     subject_name: str
     graded_students: int

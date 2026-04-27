@@ -156,6 +156,7 @@ async def list_upcoming_evaluations(
                 "title": ev.title,
                 "type": ev.type.value if hasattr(ev.type, "value") else str(ev.type),
                 "date": ev.date.isoformat(),
+                "class_id": ev.class_id,
                 "class_name": ev.class_.name if ev.class_ else "",
                 "subject_name": ev.subject.name if ev.subject else "",
                 "graded_students": graded,
