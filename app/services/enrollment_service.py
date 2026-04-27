@@ -228,6 +228,49 @@ async def update_enrollment(
     return _to_response(refreshed)
 
 
+async def validate_enrollment(
+    db: AsyncSession,
+    enrollment_id: int,
+    validated_by: int,
+) -> EnrollmentResponse:
+    """Transitionne une inscription `prospect` ou `en_validation` vers `valide`.
+
+    Endpoint dédié (pas un PATCH générique) : audit log porte
+    `action=validate` plutôt que `update`, et le transition guard refuse
+    explicitement les autres statuts avec un message clair côté admin.
+    """
+    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
+    if enrollment is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+
+    previous_status = enrollment.status
+    if previous_status == EnrollmentStatus.VALIDE:
+        raise BusinessValidationError("Cette inscription est déjà validée.")
+    if previous_status not in (EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION):
+        raise BusinessValidationError(
+            f"Impossible de valider une inscription au statut « {previous_status.value} »."
+        )
+
+    async with db.begin_nested():
+        await repo.update_enrollment(db, enrollment, status=EnrollmentStatus.VALIDE)
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.UPDATE,
+            user_id=validated_by,
+            entity_id=enrollment_id,
+            old_values={"status": previous_status.value},
+            new_values={"status": EnrollmentStatus.VALIDE.value, "transition": "validate"},
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_enrollment_by_id(db, enrollment_id)
+    if refreshed is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+    return _to_response(refreshed)
+
+
 async def delete_enrollment(
     db: AsyncSession,
     enrollment_id: int,
