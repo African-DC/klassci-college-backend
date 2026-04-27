@@ -217,9 +217,7 @@ async def test_get_student_by_id_eager_loads_enrollments() -> None:
 
     # 2 executes attendus : (1) get_current_academic_year_id, (2) le select Student
     stmts = captured["stmts"]
-    assert len(stmts) == 2, (
-        f"Expected 2 db.execute calls (year + student), got {len(stmts)}"
-    )
+    assert len(stmts) == 2, f"Expected 2 db.execute calls (year + student), got {len(stmts)}"
 
     student_stmt = stmts[1]
     options = getattr(student_stmt, "_with_options", ())
