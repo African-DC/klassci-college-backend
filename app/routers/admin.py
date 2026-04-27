@@ -51,6 +51,7 @@ from app.schemas.admin import (
     StaffUpdate,
     StudentCreate,
     StudentEnrollmentFeeListResponse,
+    StudentFiltersResponse,
     StudentFullResponse,
     StudentListResponse,
     StudentResponse,
@@ -83,13 +84,43 @@ UPLOAD_DIR = "/tmp/klassci-uploads/photos"
 @router.get("/students", response_model=StudentListResponse)
 async def list_students(
     search: str | None = Query(None),
+    class_id: int | None = Query(
+        None,
+        description=(
+            "Filtre les élèves dont l'inscription valide pour l'année courante "
+            "est dans cette classe (mutuellement exclusif avec unenrolled_only)."
+        ),
+    ),
+    unenrolled_only: bool = Query(
+        False,
+        description=(
+            "Si true, ne retourne que les élèves SANS inscription valide pour "
+            "l'année courante (mutuellement exclusif avec class_id)."
+        ),
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> StudentListResponse:
-    """Liste paginee des eleves avec recherche optionnelle."""
-    return await admin_service.list_students(db, page=page, size=size, search=search)
+    """Liste paginée des élèves enrichie de l'inscription année courante."""
+    return await admin_service.list_students(
+        db,
+        page=page,
+        size=size,
+        search=search,
+        class_id=class_id,
+        unenrolled_only=unenrolled_only,
+    )
+
+
+@router.get("/students/filters", response_model=StudentFiltersResponse)
+async def get_students_filters(
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> StudentFiltersResponse:
+    """Counts pour la barre de chips : total + par classe + sans inscription année courante."""
+    return await admin_service.get_students_filters(db)
 
 
 @router.post("/students", response_model=StudentResponse, status_code=status.HTTP_201_CREATED)
