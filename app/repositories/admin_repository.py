@@ -1,11 +1,12 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, with_loader_criteria
 
 from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.permission import Permission, Role, RolePermission
 from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile
 from app.utils.fuzzy_search import fuzzy_filter_by_name
@@ -20,14 +21,36 @@ async def get_student_by_id(db: AsyncSession, student_id: int) -> Student | None
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
+async def get_current_academic_year_id(db: AsyncSession) -> int | None:
+    """Retourne l'id de l'année scolaire courante (`is_current = true`) ou None."""
+    stmt = select(AcademicYear.id).where(AcademicYear.is_current.is_(True)).limit(1)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 async def list_students(
     db: AsyncSession,
     *,
     page: int = 1,
     size: int = 20,
     search: str | None = None,
+    class_id: int | None = None,
+    unenrolled_only: bool = False,
 ) -> tuple[list[Student], int]:
+    """Liste paginée des élèves, enrichie de l'inscription année courante.
+
+    Le `with_loader_criteria` borne les `Student.enrollments` chargés à l'année
+    courante uniquement, status `valide`. Combiné à la `UniqueConstraint(student_id,
+    academic_year_id)` sur `enrollments`, on a au plus une enrollment par élève
+    après filtrage — pas besoin de window function ni de tri par updated_at.
+
+    `class_id` filtre les élèves dont l'inscription courante est dans cette classe.
+    `unenrolled_only` filtre les élèves SANS inscription valide cette année.
+    Les deux filtres sont mutuellement exclusifs (422 levée côté service).
+    """
+    current_ay_id = await get_current_academic_year_id(db)
+
     base = select(Student)
+
     if search:
         words = search.strip().split()
         for word in words:
@@ -35,14 +58,68 @@ async def list_students(
             base = base.where(
                 or_(Student.first_name.ilike(pattern), Student.last_name.ilike(pattern))
             )
+
+    # Class filter / unenrolled filter — both go through enrollments.
+    if class_id is not None:
+        # Élève qui a une enrollment valide dans la classe demandée pour l'année courante.
+        if current_ay_id is None:
+            return [], 0  # pas d'année courante → liste vide pour ce filtre
+        base = base.where(
+            Student.enrollments.any(
+                and_(
+                    Enrollment.academic_year_id == current_ay_id,
+                    Enrollment.status == EnrollmentStatus.VALIDE,
+                    Enrollment.class_id == class_id,
+                )
+            )
+        )
+    elif unenrolled_only:
+        # Élève SANS aucune enrollment valide pour l'année courante.
+        if current_ay_id is None:
+            # Pas d'année courante → tous les élèves sont "non inscrits".
+            pass
+        else:
+            base = base.where(
+                ~Student.enrollments.any(
+                    and_(
+                        Enrollment.academic_year_id == current_ay_id,
+                        Enrollment.status == EnrollmentStatus.VALIDE,
+                    )
+                )
+            )
+
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
-    stmt = base.offset((page - 1) * size).limit(size).order_by(Student.id.desc())
+
+    # `with_loader_criteria` borne le selectinload de Student.enrollments aux
+    # enrollments valide de l'année courante. Single source of truth pour
+    # "current_enrollment" partagée par list_students et tout futur consumer.
+    options: list = [selectinload(Student.enrollments).options(selectinload(Enrollment.class_))]
+    if current_ay_id is not None:
+        options.append(
+            with_loader_criteria(
+                Enrollment,
+                and_(
+                    Enrollment.academic_year_id == current_ay_id,
+                    Enrollment.status == EnrollmentStatus.VALIDE,
+                ),
+                include_aliases=True,
+            )
+        )
+
+    stmt = (
+        base.options(*options)
+        .order_by(Student.last_name.asc(), Student.first_name.asc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
     rows = list((await db.execute(stmt)).scalars().all())
 
-    # Fuzzy fallback: if ILIKE found nothing but search was provided
-    if search and total == 0:
-        all_stmt = select(Student).order_by(Student.id.desc())
+    # Fuzzy fallback: si ILIKE n'a rien trouvé, on tente une recherche floue
+    # (sans les filtres class_id / unenrolled_only — c'est volontaire :
+    # l'utilisateur cherche un élève par nom, pas par cohorte).
+    if search and total == 0 and class_id is None and not unenrolled_only:
+        all_stmt = select(Student).options(*options).order_by(Student.last_name.asc())
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
             all_rows,
@@ -53,6 +130,70 @@ async def list_students(
         return fuzzy_results, len(fuzzy_results)
 
     return rows, total
+
+
+async def get_students_filters(db: AsyncSession) -> dict:
+    """Compte les élèves par cohorte pour la barre de chips.
+
+    Retourne `{ total, by_class: [...], no_current_enrollment_count }`.
+    `by_class` ne liste que les classes ayant au moins 1 inscription valide
+    cette année — pas la peine d'afficher les classes vides comme chip.
+    """
+    current_ay_id = await get_current_academic_year_id(db)
+
+    total_stmt = select(func.count(Student.id))
+    total: int = (await db.execute(total_stmt)).scalar() or 0
+
+    by_class: list[dict] = []
+    no_current = 0
+
+    if current_ay_id is None:
+        # Pas d'année courante → tout le monde est "non inscrit".
+        return {
+            "total": total,
+            "by_class": [],
+            "no_current_enrollment_count": total,
+            "current_academic_year_id": None,
+        }
+
+    # Comptage par classe via JOIN avec enrollments valide année courante.
+    by_class_stmt = (
+        select(
+            Class.id.label("class_id"),
+            Class.name.label("class_name"),
+            func.count(func.distinct(Enrollment.student_id)).label("count"),
+        )
+        .select_from(Enrollment)
+        .join(Class, Enrollment.class_id == Class.id)
+        .where(
+            Enrollment.academic_year_id == current_ay_id,
+            Enrollment.status == EnrollmentStatus.VALIDE,
+        )
+        .group_by(Class.id, Class.name)
+        .order_by(Class.name.asc())
+    )
+    rows = (await db.execute(by_class_stmt)).all()
+    by_class = [
+        {"class_id": r.class_id, "class_name": r.class_name, "count": r.count} for r in rows
+    ]
+
+    # Élèves sans enrollment valide cette année.
+    no_current_stmt = select(func.count(Student.id)).where(
+        ~Student.enrollments.any(
+            and_(
+                Enrollment.academic_year_id == current_ay_id,
+                Enrollment.status == EnrollmentStatus.VALIDE,
+            )
+        )
+    )
+    no_current = (await db.execute(no_current_stmt)).scalar() or 0
+
+    return {
+        "total": total,
+        "by_class": by_class,
+        "no_current_enrollment_count": no_current,
+        "current_academic_year_id": current_ay_id,
+    }
 
 
 async def create_student(db: AsyncSession, **kwargs: object) -> Student:

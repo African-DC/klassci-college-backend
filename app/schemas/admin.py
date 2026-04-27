@@ -46,6 +46,22 @@ class StudentUpdate(BaseModel):
         return v
 
 
+class CurrentEnrollmentInfo(BaseModel):
+    """Inscription d'un élève pour l'année académique courante (status `valide`).
+
+    Au plus une instance par élève (UniqueConstraint(student_id, academic_year_id)
+    + filtre status=valide). `null` côté StudentResponse si l'élève n'est pas
+    inscrit cette année.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    enrollment_id: int
+    class_id: int
+    class_name: str
+    status: str
+
+
 class StudentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -61,6 +77,31 @@ class StudentResponse(BaseModel):
     user_id: int | None
     created_at: datetime
     updated_at: datetime
+    # Enrichi par list_students avec l'inscription année courante (None si non inscrit).
+    current_enrollment: CurrentEnrollmentInfo | None = None
+
+
+class StudentClassFilterCount(BaseModel):
+    """Compteur d'élèves dans une classe pour la barre de chips."""
+
+    class_id: int
+    class_name: str
+    count: int
+
+
+class StudentFiltersResponse(BaseModel):
+    """Counts pour la barre de filtre-chips de /admin/students.
+
+    `total` : tous les élèves du tenant (indépendant de l'année).
+    `by_class` : listes des classes avec au moins 1 inscription valide cette année.
+    `no_current_enrollment_count` : élèves sans inscription valide cette année.
+    `current_academic_year_id` : null si aucune année n'est marquée courante.
+    """
+
+    total: int
+    by_class: list[StudentClassFilterCount]
+    no_current_enrollment_count: int
+    current_academic_year_id: int | None = None
 
 
 class StudentFullResponse(BaseModel):
