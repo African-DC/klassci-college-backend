@@ -11,6 +11,7 @@ from app.schemas.teacher_portal import (
     TeacherClassesListResponse,
     TeacherDashboardStats,
     TeacherScheduleResponse,
+    TeacherUpcomingEval,
 )
 from app.services import teacher_portal_service
 
@@ -42,6 +43,15 @@ async def get_teacher_dashboard(
 ) -> TeacherDashboardStats:
     """Retourne le dashboard enseignant (KPIs + prochain cours + évaluations à venir)."""
     return await teacher_portal_service.get_dashboard_stats(db, current_user.user_id)
+
+
+@router.get("/evaluations", response_model=list[TeacherUpcomingEval])
+async def list_teacher_evaluations(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[TeacherUpcomingEval]:
+    """Liste toutes les évaluations du prof connecté pour la page Mes évaluations."""
+    return await teacher_portal_service.list_evaluations(db, current_user.user_id)
 
 
 @router.get("/classes/{class_id}/attendance", response_model=ClassAttendanceStats)

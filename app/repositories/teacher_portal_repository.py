@@ -121,29 +121,29 @@ async def list_upcoming_evaluations(
     db: AsyncSession,
     teacher_id: int,
     *,
-    limit: int = 5,
+    limit: int | None = 5,
+    cutoff_days: int | None = 7,
 ) -> list[dict]:
-    """Liste les évaluations récentes ou à venir pour le dashboard.
+    """Liste les évaluations du prof avec class + subject + comptage des notes.
 
-    Inclut date >= today - 7 days pour montrer aussi les évals récentes
-    qui peuvent encore avoir des notes à saisir. Joint avec class + subject
-    pour l'affichage et compte les notes saisies.
+    Par défaut : limite à 5 entries et filtre date >= today - 7 days (pour le
+    dashboard hero). Pour la page complète "Mes évaluations", passer
+    `limit=None` et `cutoff_days=None` pour obtenir l'historique complet.
     """
-    cutoff = date.today() - timedelta(days=7)
-    stmt = (
+    base = (
         select(Evaluation)
         .options(
             selectinload(Evaluation.class_),
             selectinload(Evaluation.subject),
             selectinload(Evaluation.grades),
         )
-        .where(
-            Evaluation.teacher_id == teacher_id,
-            Evaluation.date >= cutoff,
-        )
-        .order_by(Evaluation.date.asc())
-        .limit(limit)
+        .where(Evaluation.teacher_id == teacher_id)
+        .order_by(Evaluation.date.desc())
     )
+    if cutoff_days is not None:
+        cutoff = date.today() - timedelta(days=cutoff_days)
+        base = base.where(Evaluation.date >= cutoff).order_by(Evaluation.date.asc())
+    stmt = base.limit(limit) if limit is not None else base
     rows = (await db.execute(stmt)).scalars().all()
 
     items: list[dict] = []

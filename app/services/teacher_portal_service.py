@@ -81,6 +81,13 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboar
     )
 
 
+async def list_evaluations(db: AsyncSession, user_id: int) -> list[TeacherUpcomingEval]:
+    """Liste toutes les évaluations du prof, sans cutoff ni limite."""
+    teacher = await _get_teacher_for_user(db, user_id)
+    rows = await repo.list_upcoming_evaluations(db, teacher.id, limit=None, cutoff_days=None)
+    return [TeacherUpcomingEval(**e) for e in rows]
+
+
 async def get_class_attendance(
     db: AsyncSession,
     user_id: int,
