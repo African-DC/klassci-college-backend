@@ -60,8 +60,38 @@ class ClassAverageItem(BaseModel):
     average: float | None
 
 
+class TeacherNextCourse(BaseModel):
+    """Prochain créneau de cours à venir pour l'enseignant."""
+
+    subject_name: str
+    class_name: str
+    start_time: str  # "HH:MM"
+    end_time: str
+    room: str | None = None
+
+
+class TeacherUpcomingEval(BaseModel):
+    """Évaluation à venir (ou récente non saisie) pour le hero du dashboard."""
+
+    id: int
+    title: str
+    type: str
+    date: str  # ISO date YYYY-MM-DD
+    class_id: int
+    class_name: str
+    subject_name: str
+    graded_students: int
+    total_students: int
+
+
 class TeacherDashboardStats(BaseModel):
+    """Contrat consommé par /teacher/dashboard côté FE.
+
+    Voir `klassci-frontend/lib/contracts/teacher-portal.ts:TeacherDashboardSchema`.
+    """
+
+    teacher_name: str
     total_classes: int
     total_students: int
-    upcoming_evaluations: int
-    class_averages: list[ClassAverageItem]
+    next_course: TeacherNextCourse | None = None
+    upcoming_evaluations: list[TeacherUpcomingEval]

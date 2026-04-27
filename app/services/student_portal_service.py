@@ -1,11 +1,15 @@
 """Service portail eleve — logique metier read-only."""
 
+from datetime import datetime
 from decimal import Decimal
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.models.attendance import AttendanceRecord, AttendanceStatus
 from app.models.fee import PaymentStatus
+from app.models.grade import Grade
 from app.models.user import Student
 from app.repositories import student_portal_repository as repo
 from app.schemas.student_portal import (
@@ -14,9 +18,11 @@ from app.schemas.student_portal import (
     EvaluationDetail,
     PaymentResponse,
     StudentBulletinsListResponse,
+    StudentDashboardResponse,
     StudentFeesResponse,
     StudentGradeResponse,
     StudentGradesListResponse,
+    StudentNextCourse,
     StudentProfileResponse,
     StudentTimetableResponse,
     TimetableSlotResponse,
@@ -197,4 +203,102 @@ async def get_profile(db: AsyncSession, user_id: int) -> StudentProfileResponse:
         class_id=class_id,
         enrollment_status=enrollment_status,
         academic_year_name=academic_year_name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+_DAY_INDEX_TO_NAME = {
+    0: "lundi",
+    1: "mardi",
+    2: "mercredi",
+    3: "jeudi",
+    4: "vendredi",
+    5: "samedi",
+    6: "dimanche",
+}
+
+
+async def _next_course_for_class(db: AsyncSession, class_id: int) -> StudentNextCourse | None:
+    """Retourne le prochain créneau dans la semaine pour une classe."""
+    slots = await repo.get_timetable_slots_for_class(db, class_id)
+    if not slots:
+        return None
+
+    now = datetime.now()
+    today = _DAY_INDEX_TO_NAME.get(now.weekday())
+    current_time = now.time()
+
+    candidates = [s for s in slots if s.day == today and s.start_time > current_time]
+    candidates.sort(key=lambda s: s.start_time)
+
+    chosen = candidates[0] if candidates else slots[0]  # fallback : 1er slot semaine
+    teacher_name = ""
+    if chosen.teacher:
+        teacher_name = f"{chosen.teacher.first_name} {chosen.teacher.last_name}".strip()
+
+    return StudentNextCourse(
+        subject_name=chosen.subject.name if chosen.subject else "",
+        teacher_name=teacher_name,
+        start_time=chosen.start_time.strftime("%H:%M"),
+        end_time=chosen.end_time.strftime("%H:%M"),
+        room=chosen.room.name if chosen.room else None,
+    )
+
+
+async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardResponse:
+    """Compose le dashboard de l'élève à partir des sources existantes.
+
+    Aligné sur le contrat FE `StudentDashboardSchema`
+    (lib/contracts/student-portal.ts) : nom, classe, prochain cours,
+    moyenne générale du trimestre courant, frais restants, total absences.
+    """
+    student = await _get_student_for_user(db, user_id)
+    enrollment = await repo.get_active_enrollment_for_student(db, student.id)
+
+    class_name = enrollment.class_.name if enrollment else "—"
+    class_id = enrollment.class_id if enrollment else None
+
+    # Prochain cours
+    next_course = await _next_course_for_class(db, class_id) if class_id else None
+
+    # Moyenne générale (toutes notes saisies, tous trimestres confondus pour
+    # garder l'usage simple à l'écran d'accueil).
+    avg_stmt = select(func.avg(Grade.value)).where(
+        Grade.student_id == student.id, Grade.value.is_not(None)
+    )
+    avg_raw = (await db.execute(avg_stmt)).scalar()
+    general_average = round(float(avg_raw), 2) if avg_raw is not None else None
+
+    # Frais restants (somme balance des fees non payés)
+    fees_remaining = Decimal("0")
+    if enrollment:
+        fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
+        for fee in fees:
+            paid = sum(p.amount for p in fee.payments if p.status == PaymentStatus.COMPLETED)
+            balance = fee.amount - paid
+            if balance > 0:
+                fees_remaining += balance
+
+    # Total absences
+    abs_stmt = (
+        select(func.count())
+        .select_from(AttendanceRecord)
+        .where(
+            AttendanceRecord.student_id == student.id,
+            AttendanceRecord.status == AttendanceStatus.ABSENT,
+        )
+    )
+    total_absences = (await db.execute(abs_stmt)).scalar() or 0
+
+    return StudentDashboardResponse(
+        student_name=f"{student.first_name} {student.last_name}".strip(),
+        class_name=class_name,
+        next_course=next_course,
+        general_average=general_average,
+        fees_remaining=float(fees_remaining),
+        total_absences=int(total_absences),
     )

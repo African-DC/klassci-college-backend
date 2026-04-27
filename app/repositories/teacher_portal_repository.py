@@ -1,6 +1,6 @@
 """Repository portail enseignant — accès DB read-only pour le teacher portal."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,6 +115,126 @@ async def count_upcoming_evaluations(db: AsyncSession, teacher_id: int) -> int:
         )
     )
     return (await db.execute(stmt)).scalar() or 0
+
+
+async def list_upcoming_evaluations(
+    db: AsyncSession,
+    teacher_id: int,
+    *,
+    limit: int | None = 5,
+    cutoff_days: int | None = 7,
+) -> list[dict]:
+    """Liste les évaluations du prof avec class + subject + comptage des notes.
+
+    Par défaut : limite à 5 entries et filtre date >= today - 7 days (pour le
+    dashboard hero). Pour la page complète "Mes évaluations", passer
+    `limit=None` et `cutoff_days=None` pour obtenir l'historique complet.
+    """
+    base = (
+        select(Evaluation)
+        .options(
+            selectinload(Evaluation.class_),
+            selectinload(Evaluation.subject),
+            selectinload(Evaluation.grades),
+        )
+        .where(Evaluation.teacher_id == teacher_id)
+        .order_by(Evaluation.date.desc())
+    )
+    if cutoff_days is not None:
+        cutoff = date.today() - timedelta(days=cutoff_days)
+        base = base.where(Evaluation.date >= cutoff).order_by(Evaluation.date.asc())
+    stmt = base.limit(limit) if limit is not None else base
+    rows = (await db.execute(stmt)).scalars().all()
+
+    items: list[dict] = []
+    for ev in rows:
+        graded = sum(1 for g in (ev.grades or []) if g.value is not None)
+        total = len(ev.grades or [])
+        items.append(
+            {
+                "id": ev.id,
+                "title": ev.title,
+                "type": ev.type.value if hasattr(ev.type, "value") else str(ev.type),
+                "date": ev.date.isoformat(),
+                "class_id": ev.class_id,
+                "class_name": ev.class_.name if ev.class_ else "",
+                "subject_name": ev.subject.name if ev.subject else "",
+                "graded_students": graded,
+                "total_students": total,
+            }
+        )
+    return items
+
+
+async def get_next_course(db: AsyncSession, teacher_id: int) -> dict | None:
+    """Retourne le prochain créneau d'enseignement (today/future).
+
+    Le timetable est hebdomadaire — on cherche aujourd'hui après l'heure
+    courante, sinon le 1er créneau du prochain jour de la semaine. Renvoie
+    None si l'enseignant n'a aucun créneau planifié.
+    """
+    from datetime import datetime
+
+    now = datetime.now()
+    today_name = _DAY_INDEX_TO_NAME.get(now.weekday())
+    current_time = now.time()
+
+    # 1) Slot aujourd'hui après l'heure courante
+    if today_name is not None:
+        stmt_today = (
+            select(TimetableSlot)
+            .options(
+                selectinload(TimetableSlot.subject),
+                selectinload(TimetableSlot.class_),
+                selectinload(TimetableSlot.room),
+            )
+            .where(
+                TimetableSlot.teacher_id == teacher_id,
+                TimetableSlot.day == today_name,
+                TimetableSlot.start_time > current_time,
+            )
+            .order_by(TimetableSlot.start_time.asc())
+            .limit(1)
+        )
+        slot = (await db.execute(stmt_today)).scalar_one_or_none()
+        if slot is not None:
+            return _slot_to_dict(slot)
+
+    # 2) Sinon premier slot du prochain jour de la semaine où le prof enseigne
+    stmt_any = (
+        select(TimetableSlot)
+        .options(
+            selectinload(TimetableSlot.subject),
+            selectinload(TimetableSlot.class_),
+            selectinload(TimetableSlot.room),
+        )
+        .where(TimetableSlot.teacher_id == teacher_id)
+        .order_by(TimetableSlot.day.asc(), TimetableSlot.start_time.asc())
+        .limit(1)
+    )
+    slot = (await db.execute(stmt_any)).scalar_one_or_none()
+    return _slot_to_dict(slot) if slot is not None else None
+
+
+_DAY_INDEX_TO_NAME = {
+    0: "lundi",
+    1: "mardi",
+    2: "mercredi",
+    3: "jeudi",
+    4: "vendredi",
+    5: "samedi",
+    6: "dimanche",
+}
+
+
+def _slot_to_dict(slot: TimetableSlot) -> dict:
+    return {
+        "subject_name": slot.subject.name if slot.subject else "",
+        "class_name": slot.class_.name if slot.class_ else "",
+        "start_time": slot.start_time.strftime("%H:%M"),
+        "end_time": slot.end_time.strftime("%H:%M"),
+        "room": slot.room.name if slot.room else None,
+    }
 
 
 async def get_class_averages(db: AsyncSession, teacher_id: int) -> list[dict]:

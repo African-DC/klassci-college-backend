@@ -8,12 +8,13 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
 from app.schemas.teacher_portal import (
-    ClassAverageItem,
     TeacherClassesListResponse,
     TeacherClassResponse,
     TeacherDashboardStats,
+    TeacherNextCourse,
     TeacherScheduleResponse,
     TeacherScheduleSlot,
+    TeacherUpcomingEval,
 )
 
 # ---------------------------------------------------------------------------
@@ -50,18 +51,32 @@ SAMPLE_SCHEDULE = TeacherScheduleResponse(
     total=1,
 )
 
-SAMPLE_AVERAGE = ClassAverageItem(
+SAMPLE_NEXT_COURSE = TeacherNextCourse(
+    subject_name="Mathematiques",
+    class_name="Terminale C",
+    start_time="08:00",
+    end_time="10:00",
+    room="Salle 12",
+)
+
+SAMPLE_UPCOMING_EVAL = TeacherUpcomingEval(
+    id=42,
+    title="Devoir n1",
+    type="controle",
+    date="2026-04-30",
     class_id=1,
     class_name="Terminale C",
     subject_name="Mathematiques",
-    average=14.5,
+    graded_students=0,
+    total_students=30,
 )
 
 SAMPLE_STATS = TeacherDashboardStats(
+    teacher_name="Aminata Coulibaly",
     total_classes=3,
     total_students=105,
-    upcoming_evaluations=2,
-    class_averages=[SAMPLE_AVERAGE],
+    next_course=SAMPLE_NEXT_COURSE,
+    upcoming_evaluations=[SAMPLE_UPCOMING_EVAL],
 )
 
 
@@ -176,12 +191,12 @@ def test_get_teacher_schedule_not_a_teacher() -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /teacher/dashboard-stats
+# GET /teacher/dashboard
 # ---------------------------------------------------------------------------
 
 
 def test_get_teacher_dashboard_stats_success() -> None:
-    """GET /teacher/dashboard-stats → 200 + KPIs."""
+    """GET /teacher/dashboard → 200 + KPIs."""
     _override_deps()
     try:
         with patch(
@@ -190,21 +205,22 @@ def test_get_teacher_dashboard_stats_success() -> None:
             return_value=SAMPLE_STATS,
         ):
             with TestClient(app) as client:
-                resp = client.get("/teacher/dashboard-stats")
+                resp = client.get("/teacher/dashboard")
     finally:
         _clear_deps()
 
     assert resp.status_code == 200
     body = resp.json()
+    assert body["teacher_name"] == "Aminata Coulibaly"
     assert body["total_classes"] == 3
     assert body["total_students"] == 105
-    assert body["upcoming_evaluations"] == 2
-    assert len(body["class_averages"]) == 1
-    assert body["class_averages"][0]["average"] == 14.5
+    assert body["next_course"]["subject_name"] == "Mathematiques"
+    assert len(body["upcoming_evaluations"]) == 1
+    assert body["upcoming_evaluations"][0]["id"] == 42
 
 
 def test_get_teacher_dashboard_stats_not_a_teacher() -> None:
-    """GET /teacher/dashboard-stats sans profil enseignant → 404."""
+    """GET /teacher/dashboard sans profil enseignant → 404."""
     from app.core.exceptions import NotFoundError
 
     _override_deps()
@@ -215,7 +231,7 @@ def test_get_teacher_dashboard_stats_not_a_teacher() -> None:
             side_effect=NotFoundError("TeacherProfile", 10),
         ):
             with TestClient(app) as client:
-                resp = client.get("/teacher/dashboard-stats")
+                resp = client.get("/teacher/dashboard")
     finally:
         _clear_deps()
 
