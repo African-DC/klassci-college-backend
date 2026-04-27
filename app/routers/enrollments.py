@@ -133,6 +133,28 @@ async def delete_enrollment(
     await enrollment_service.delete_enrollment(db, enrollment_id, deleted_by=current_user.user_id)
 
 
+@router.post(
+    "/{enrollment_id}/validate",
+    response_model=EnrollmentResponse,
+    summary="Valider une inscription",
+    description=(
+        "Transitionne une inscription `prospect` ou `en_validation` vers `valide`. "
+        "Endpoint dédié pour audit log explicite et transition guard. Refuse les "
+        "autres statuts avec 422."
+    ),
+)
+async def validate_enrollment(
+    enrollment_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentResponse:
+    """Valide une inscription (transition prospect/en_validation → valide)."""
+    return await enrollment_service.validate_enrollment(
+        db, enrollment_id, validated_by=current_user.user_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # Optional fee subscriptions
 # ---------------------------------------------------------------------------
