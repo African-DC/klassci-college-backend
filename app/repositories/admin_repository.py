@@ -376,10 +376,25 @@ async def list_subjects(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
+    class_id: int | None = None,
     search: str | None = None,
 ) -> tuple[list[Subject], int]:
+    # `class_id` filtre les matières enseignées dans cette classe (level + series, avec
+    # null-semantics) en réutilisant le prédicat partagé de curriculum_service.
+    # `level_id` reste un filtre direct sur Subject.level_id, conservé pour la
+    # rétrocompat. Les deux sont mutuellement exclusifs côté service (422).
+    from app.models.academic import Class
+    from app.services.curriculum_service import subject_for_class_predicate
+
     base = select(Subject)
-    if level_id is not None:
+    if class_id is not None:
+        class_obj = await db.get(Class, class_id)
+        if class_obj is None:
+            from app.core.exceptions import NotFoundError
+
+            raise NotFoundError("Class", class_id)
+        base = base.where(subject_for_class_predicate(class_obj))
+    elif level_id is not None:
         base = base.where(Subject.level_id == level_id)
     if search:
         pattern = f"%{search}%"

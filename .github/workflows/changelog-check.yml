@@ -1,0 +1,62 @@
+name: Changelog Check
+
+# Forces every PR with user-facing commits (`feat:`, `fix:`, `perf:`,
+# `breaking:`) to also update CHANGELOG.md. Skip explicitly with the
+# `skip-changelog` label when the change is genuinely internal-only
+# (refactor, ci, docs reorg, etc.).
+
+on:
+  pull_request:
+    branches: [main, staging, develop]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changelog:
+    name: Verify CHANGELOG.md update
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect user-facing commits since base branch
+        id: detect
+        run: |
+          set -euo pipefail
+          BASE_SHA=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          COMMITS=$(git log --format='%s' "$BASE_SHA..HEAD")
+          USER_FACING=$(echo "$COMMITS" | grep -E '^(feat|fix|perf|breaking)(\(|:)' || true)
+          if [ -z "$USER_FACING" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No user-facing commits — changelog update not required."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "commits<<EOF"
+              echo "$USER_FACING"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify CHANGELOG.md was updated
+        if: steps.detect.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          BASE_SHA=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          if ! git diff --name-only "$BASE_SHA..HEAD" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::User-facing commits found but CHANGELOG.md was not updated."
+            echo ""
+            echo "Commits flagged:"
+            echo "${{ steps.detect.outputs.commits }}" | sed 's/^/  - /'
+            echo ""
+            echo "Add an entry under '## [Unreleased]' in CHANGELOG.md, or apply"
+            echo "the 'skip-changelog' label if this PR has no user-visible impact."
+            echo "See .claude/rules/changelog.md for the editorial guidelines."
+            exit 1
+          fi
+          echo "::notice::CHANGELOG.md updated alongside user-facing commits — OK."

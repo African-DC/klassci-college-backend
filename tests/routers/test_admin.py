@@ -475,6 +475,47 @@ def test_list_subjects_success() -> None:
     assert resp.json()["items"][0]["coefficient"] == 3
 
 
+def test_list_subjects_filtered_by_class_id() -> None:
+    """GET /admin/subjects?class_id=N → 200 et le param est forwardé au service.
+
+    Le filtre applique le prédicat curriculum (level + série + null-semantics)
+    pour ne montrer que les matières enseignées dans la classe sélectionnée.
+    """
+    _override_deps()
+    try:
+        with patch(
+            f"{SVC}.list_subjects",
+            new_callable=AsyncMock,
+            return_value=SubjectListResponse(items=[SAMPLE_SUBJECT], total=1, page=1, size=20),
+        ) as mock_svc:
+            with TestClient(app) as client:
+                resp = client.get("/admin/subjects?class_id=42")
+        mock_svc.assert_awaited_once()
+        kwargs = mock_svc.call_args.kwargs
+        assert kwargs.get("class_id") == 42
+        assert kwargs.get("level_id") is None
+    finally:
+        _clear_deps()
+    assert resp.status_code == 200
+
+
+def test_list_subjects_class_and_level_both_returns_422() -> None:
+    """GET /admin/subjects?class_id=N&level_id=M → 422 (mutuellement exclusifs).
+
+    Si les deux filtres sont passés simultanément, le service refuse plutôt que
+    de deviner lequel applique — l'API doit être sans ambiguïté pour les clients.
+    """
+    _override_deps()
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/admin/subjects?class_id=1&level_id=2")
+    finally:
+        _clear_deps()
+    assert resp.status_code == 422
+    detail = resp.json().get("detail", "")
+    assert "class_id" in detail or "level_id" in detail
+
+
 def test_create_subject_success() -> None:
     _override_deps()
     try:
