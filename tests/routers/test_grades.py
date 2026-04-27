@@ -166,6 +166,46 @@ def test_create_evaluation_invalid_coefficient() -> None:
         _clear_deps()
 
 
+def test_create_evaluation_rejects_subject_not_taught_at_class() -> None:
+    """POST /evaluations avec une paire (class_id, subject_id) incohérente → 422 FR.
+
+    Le service délègue à curriculum_service.validate_subject_class_pair() qui lève
+    BusinessValidationError. Le message doit rester actionnable pour l'admin —
+    on évite les jargons techniques type "FK constraint".
+    """
+    _override_deps()
+    try:
+        from app.core.exceptions import BusinessValidationError
+
+        with patch(
+            "app.services.grades_service.create_evaluation",
+            new=AsyncMock(
+                side_effect=BusinessValidationError(
+                    "Cette matière n'est pas enseignée dans cette classe."
+                )
+            ),
+        ):
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/evaluations",
+                    json={
+                        "title": "Contrôle",
+                        "type": "controle",
+                        "date": str(TODAY),
+                        "coefficient": 1,
+                        "subject_id": 999,
+                        "class_id": 3,
+                        "academic_year_id": 1,
+                        "trimester": 1,
+                    },
+                )
+        assert resp.status_code == 422
+        detail = resp.json().get("detail", "")
+        assert "n'est pas enseignée" in detail
+    finally:
+        _clear_deps()
+
+
 # ---------------------------------------------------------------------------
 # GET /grades
 # ---------------------------------------------------------------------------

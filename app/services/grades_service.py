@@ -18,6 +18,7 @@ from app.schemas.grades import (
     EvaluationCreate,
     GradeBatchUpdate,
 )
+from app.services.curriculum_service import validate_subject_class_pair
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,11 @@ async def create_evaluation(
     teacher_id: int,
     current_user_id: int,
 ) -> dict[str, Any]:
+    # Fail-fast : refuser une paire (class_id, subject_id) incohérente avant toute
+    # autre lecture/écriture. Utilise le même prédicat que le filtre Subject côté UI,
+    # garantissant qu'une matière visible dans le Select ne sera jamais rejetée ici.
+    await validate_subject_class_pair(db, data.class_id, data.subject_id)
+
     students = await repo.get_students_for_class(db, data.class_id, data.academic_year_id)
 
     eval_data = data.model_dump()

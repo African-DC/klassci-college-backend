@@ -563,7 +563,17 @@ async def delete_class(
 
 @router.get("/subjects", response_model=SubjectListResponse)
 async def list_subjects(
-    level_id: int | None = Query(None),
+    level_id: int | None = Query(
+        None,
+        description="Filtre par niveau (mutuellement exclusif avec class_id).",
+    ),
+    class_id: int | None = Query(
+        None,
+        description=(
+            "Filtre par matières enseignées dans cette classe (level + série, "
+            "incluant les matières globales). Mutuellement exclusif avec level_id."
+        ),
+    ),
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
@@ -572,7 +582,12 @@ async def list_subjects(
 ) -> SubjectListResponse:
     """Liste paginee des matieres."""
     return await admin_service.list_subjects(
-        db, page=page, size=size, level_id=level_id, search=search
+        db,
+        page=page,
+        size=size,
+        level_id=level_id,
+        class_id=class_id,
+        search=search,
     )
 
 
