@@ -13,15 +13,20 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit *(admin, enseignant)*.
 - Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées *(tous)*.
 - Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève des scénarios E2E *(devops)*.
+- Tableau de bord élève : nom, classe, prochain cours, moyenne générale, frais restants et total d'absences, en un seul appel *(élève)* (#75).
+- Liste exhaustive des évaluations de l'enseignant connecté pour alimenter la page « Mes évaluations » côté portail *(enseignant)* (#75).
 
 ### Changed
 
 - Audit des changements de permissions de rôle : on garde désormais l'état avant et après pour reconstruire le diff de chaque modification *(admin, super-admin)*.
+- Tableau de bord enseignant repensé : nom, prochain cours, totaux et liste des évaluations à venir avec progression de saisie, en cohérence avec ce qu'affiche le portail *(enseignant)* (#75).
 
 ### Fixed
 
 - Permissions de gestion des rôles, des salles et des séries désormais seedées par défaut. Auparavant, les pages correspondantes côté portail étaient inaccessibles en silence (#73).
 - Démontage propre de la migration ajoutant la traçabilité de saisie des notes (l'ordre de suppression de l'index et de la contrainte cassait la rétrogradation sur MySQL).
+- Tableau de bord enseignant et tableau de bord élève qui renvoyaient « Connexion impossible » en boucle : les chemins et formats de réponse sont désormais alignés avec ce que les portails attendent *(enseignant, élève)* (#75).
+- Script de seed des comptes test : protège contre la création de profils élève en double pour un même utilisateur, qui faisait planter le tableau de bord élève en production *(devops)*.
 
 ## [0.1.0-alpha] - 2026-04-26
 
