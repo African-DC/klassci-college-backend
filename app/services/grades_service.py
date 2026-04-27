@@ -84,11 +84,17 @@ async def create_evaluation(
 
     students = await repo.get_students_for_class(db, data.class_id, data.academic_year_id)
 
+    # Repo : types Python (date.date, Enum) attendus par SQLAlchemy.
     eval_data = data.model_dump()
     eval_data["teacher_id"] = teacher_id
 
     evaluation = await repo.create_evaluation(db, data=eval_data, students=students)
 
+    # Audit : la colonne JSON ne sait pas sérialiser un `date` Python ; on
+    # utilise `mode="json"` comme tous les autres services (admin, fees,
+    # attendance) — sinon `audit_log` lève TypeError et le POST échoue en 500.
+    audit_payload = data.model_dump(mode="json")
+    audit_payload["teacher_id"] = teacher_id
     await audit_log(
         db,
         user_id=current_user_id,
@@ -96,7 +102,7 @@ async def create_evaluation(
         entity_id=evaluation.id,
         action=AuditAction.CREATE,
         old_values=None,
-        new_values=eval_data,
+        new_values=audit_payload,
     )
 
     await db.commit()
