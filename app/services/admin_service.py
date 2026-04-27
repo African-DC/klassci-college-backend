@@ -1178,10 +1178,20 @@ async def list_subjects(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
+    class_id: int | None = None,
     search: str | None = None,
 ) -> SubjectListResponse:
+    if class_id is not None and level_id is not None:
+        raise BusinessValidationError(
+            "Précisez soit class_id soit level_id, pas les deux.",
+        )
     subjects, total = await repo.list_subjects(
-        db, page=page, size=size, level_id=level_id, search=search
+        db,
+        page=page,
+        size=size,
+        level_id=level_id,
+        class_id=class_id,
+        search=search,
     )
     return SubjectListResponse(
         items=[_subject_to_response(s) for s in subjects],
