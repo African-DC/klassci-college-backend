@@ -163,3 +163,41 @@ async def compose_certificate_data(
         "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
         "issued_at": datetime.utcnow(),
     }
+
+
+async def compose_attendance_certificate_data(
+    db: AsyncSession,
+    student_id: int,
+) -> dict[str, Any]:
+    """Compose data for the attestation de frequentation PDF.
+
+    Reuses the active enrollment (same as compose_certificate_data) and
+    augments with the attendance summary aggregated for the same academic
+    year.
+    """
+    from app.services.attendance_service import get_student_attendance_summary
+
+    student = await db.get(Student, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    enrollment = await _get_active_enrollment(db, student_id)
+    summary = await get_student_attendance_summary(
+        db, student_id, academic_year_id=enrollment.academic_year_id
+    )
+
+    return {
+        "student": {
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "birth_date": student.birth_date,
+            "genre": student.genre.value if student.genre else None,
+            "enrollment_number": student.enrollment_number,
+            "city": student.city,
+            "commune": student.commune,
+        },
+        "class_name": enrollment.class_.name if enrollment.class_ else "",
+        "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
+        "attendance": summary,
+        "issued_at": datetime.utcnow(),
+    }
