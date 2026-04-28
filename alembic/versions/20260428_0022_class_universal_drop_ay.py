@@ -156,7 +156,12 @@ def downgrade() -> None:
         )
         """
     )
-    op.alter_column("classes", "academic_year_id", nullable=False)
+    op.alter_column(
+        "classes",
+        "academic_year_id",
+        existing_type=sa.BigInteger(),
+        nullable=False,
+    )
     op.create_foreign_key(
         "classes_ibfk_1",
         "classes",
