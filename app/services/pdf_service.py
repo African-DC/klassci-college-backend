@@ -8,12 +8,64 @@ en dev local on a rarement besoin des PDF.
 
 from __future__ import annotations
 
+import base64
 import logging
+import os
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Image embedding helpers (logo, signature, etc.)
+# ---------------------------------------------------------------------------
+
+
+_UPLOAD_ROOT = "/tmp/klassci-uploads"
+_MIME_BY_EXT = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+}
+
+
+def _image_to_datauri(url_or_path: str | None) -> str | None:
+    """Resolve an image URL/path and return a `data:image/...;base64,...` URI.
+
+    Accepts:
+    - relative URLs like `/uploads/photos/abc.png` (resolved against `_UPLOAD_ROOT`)
+    - absolute filesystem paths
+    Returns None if the file cannot be found or read.
+
+    WeasyPrint embeds inline data URIs reliably across multi-tenant containers,
+    avoiding the brittleness of file:// or HTTP-fetched assets.
+    """
+    if not url_or_path:
+        return None
+
+    candidates: list[str] = []
+    if url_or_path.startswith("/uploads/"):
+        candidates.append(os.path.join(_UPLOAD_ROOT, url_or_path[len("/uploads/"):]))
+    else:
+        candidates.append(url_or_path)
+
+    for path in candidates:
+        try:
+            if not os.path.exists(path):
+                continue
+            with open(path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("ascii")
+            ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
+            mime = _MIME_BY_EXT.get(ext, "image/png")
+            return f"data:{mime};base64,{encoded}"
+        except OSError as exc:
+            logger.warning("Could not embed image %s: %s", path, exc)
+            continue
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -57,15 +109,74 @@ _BASE_STYLES = """
 """
 
 
-def _school_header_html(school_name: str, ministry_code: str | None) -> str:
+def _school_header_html(settings: dict[str, Any]) -> str:
+    """Render the official document header with logo, school name, ministry code.
+
+    Defensive `.get()` access on settings keys: missing keys are tolerated and
+    the corresponding section is simply omitted (graceful degrade for tenants
+    that have not configured logo/address yet).
+    """
+    school_name = settings.get("school_name", "Etablissement")
+    ministry_code = settings.get("ministry_code")
+    address = settings.get("address")
+    logo_datauri = _image_to_datauri(settings.get("logo_url"))
+
     code_line = ""
     if ministry_code:
         code_line = f'<div class="ministry-code">Code : {_esc(ministry_code)}</div>'
+
+    address_line = ""
+    if address:
+        address_line = (
+            f'<div style="font-size:9px; color:#555;">{_esc(address)}</div>'
+        )
+
+    logo_block = ""
+    if logo_datauri:
+        logo_block = (
+            f'<div style="text-align:center; margin-bottom:6px;">'
+            f'<img src="{logo_datauri}" alt="Logo" '
+            f'style="max-height:60px; max-width:140px;" /></div>'
+        )
+
     return f"""
     {_CI_HEADER}
+    {logo_block}
     <div class="school-header">
         <div class="school-name">{_esc(school_name)}</div>
         {code_line}
+        {address_line}
+    </div>
+    """
+
+
+def _official_footer_html(settings: dict[str, Any]) -> str:
+    """Render the official signature block (head master name, title, signature image).
+
+    Returns empty string if neither head_master_name nor signature_image_url
+    is configured. Used by certificate / attestation / bulletins requiring
+    formal sign-off (PR #105+).
+    """
+    head_master_name = settings.get("head_master_name")
+    head_master_title = settings.get("head_master_title") or "Le Chef d'Etablissement"
+    signature_datauri = _image_to_datauri(settings.get("signature_image_url"))
+
+    if not head_master_name and not signature_datauri:
+        return ""
+
+    signature_img = ""
+    if signature_datauri:
+        signature_img = (
+            f'<div style="margin: 6px 0;">'
+            f'<img src="{signature_datauri}" alt="Signature" '
+            f'style="max-height:60px; max-width:200px;" /></div>'
+        )
+
+    return f"""
+    <div style="margin-top: 30px; text-align: center;">
+        <div style="font-style: italic;">{_esc(head_master_title)}</div>
+        {signature_img}
+        <div style="font-weight: bold;">{_esc(head_master_name or "")}</div>
     </div>
     """
 
@@ -148,7 +259,7 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     <html lang="fr">
     <head><meta charset="UTF-8">{_BASE_STYLES}</head>
     <body>
-        {_school_header_html(school_name, ministry_code)}
+        {_school_header_html(school_settings)}
 
         <h1>BULLETIN DE NOTES &mdash; Trimestre {trimester}</h1>
 
@@ -301,7 +412,7 @@ def generate_council_minutes_pdf(
     <html lang="fr">
     <head><meta charset="UTF-8">{landscape_style}</head>
     <body>
-        {_school_header_html(school_name, ministry_code)}
+        {_school_header_html(school_settings)}
 
         <h1>PROCES-VERBAL DU CONSEIL DE CLASSE &mdash; Trimestre {trimester}</h1>
 
@@ -444,7 +555,7 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     <html lang="fr">
     <head><meta charset="UTF-8">{receipt_style}</head>
     <body>
-        {_school_header_html(school_name, ministry_code)}
+        {_school_header_html(school_settings)}
         {"<div style='text-align:center; font-size:9px;'>" + address + "</div>" if address else ""}
         {"<div style='text-align:center; font-size:9px;'>Tel : " + phone + "</div>" if phone else ""}
 
@@ -651,7 +762,7 @@ def generate_timetable_pdf(
     <head><meta charset="UTF-8">{timetable_style}</head>
     <body>
         <div class="header">
-            {_school_header_html(school_name, ministry_code)}
+            {_school_header_html(school_settings)}
             <div class="class-info">EMPLOI DU TEMPS &mdash; {_esc(class_name)}</div>
             <div class="sub-info">Annee scolaire : {_esc(academic_year)}</div>
         </div>

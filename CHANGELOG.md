@@ -10,6 +10,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents *(admin)* (#105).
+- Le logo de l'établissement et la signature officielle sont désormais embarqués dans tous les PDFs (bulletin, PV de conseil, reçu de paiement, emploi du temps) lorsqu'ils sont configurés. L'absence de configuration ne casse rien, le PDF se génère sans logo *(admin)* (#105).
 - Promotion en masse de fin d'année : l'admin choisit la classe de destination de chaque classe source et obtient en un appel un aperçu des élèves promus, des avertissements de capacité, et un rapport de promotions appliquées avec les exceptions *(admin)* (#95).
 - Validation d'inscription en un appel dédié : l'admin peut désormais passer un prospect ou une inscription en attente directement à l'état validé, avec audit traçable et message clair si la transition est refusée *(admin)* (#93).
 - Liste des élèves côté admin enrichie de la classe et du statut d'inscription pour l'année courante : un seul appel API au lieu de cliquer chaque fiche pour savoir où l'élève est *(admin)* (#82).

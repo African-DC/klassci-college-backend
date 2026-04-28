@@ -85,6 +85,9 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "reports:read", "name": "View reports"},
     {"slug": "reports:generate", "name": "Generate reports"},
     {"slug": "reports:override", "name": "Override council decisions"},
+    # Official documents (2)
+    {"slug": "documents:certificate", "name": "Generate certificat de scolarite"},
+    {"slug": "documents:attendance", "name": "Generate attestation de frequentation"},
     # Parents (4)
     {"slug": "admin:parents:read", "name": "View parents"},
     {"slug": "admin:parents:create", "name": "Create parents"},

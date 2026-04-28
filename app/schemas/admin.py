@@ -603,6 +603,9 @@ class SchoolSettingsResponse(BaseModel):
     email: str | None
     logo_url: str | None
     ministry_code: str | None
+    signature_image_url: str | None
+    head_master_name: str | None
+    head_master_title: str | None
     enrollment_number_pattern: str | None
     enrollment_number_counter: int
     created_at: datetime
@@ -663,6 +666,9 @@ class SchoolInfoUpdate(BaseModel):
     email: str | None = None
     logo_url: str | None = None
     ministry_code: str | None = None
+    signature_image_url: str | None = None
+    head_master_name: str | None = None
+    head_master_title: str | None = None
 
 
 # ---------------------------------------------------------------------------
