@@ -790,3 +790,92 @@ def generate_timetable_pdf(
     from weasyprint import HTML  # lazy import — see module docstring
 
     return HTML(string=html).write_pdf()
+
+
+# ---------------------------------------------------------------------------
+# Certificat de scolarite PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_certificate_scolarite_pdf(
+    data: dict[str, Any], school_settings: dict[str, Any]
+) -> bytes:
+    """Generate the official certificat de scolarite PDF.
+
+    data keys (from student_documents_service.compose_certificate_data):
+        student: dict with first_name, last_name, birth_date, genre,
+                 enrollment_number, city, commune
+        class_name: str
+        academic_year_name: str
+        issued_at: datetime
+
+    school_settings: full settings dict (logo_url, signature_image_url,
+    head_master_name, head_master_title) — see PR #105.
+    """
+    from weasyprint import HTML  # lazy import — see module docstring
+
+    student = data.get("student", {}) or {}
+    first_name = _esc(student.get("first_name", ""))
+    last_name = _esc(student.get("last_name", ""))
+    full_name = f"{first_name} {last_name}".strip()
+    birth_date = student.get("birth_date")
+    birth_date_str = birth_date.strftime("%d/%m/%Y") if birth_date else "..."
+    genre = student.get("genre")
+    matricule = _esc(student.get("enrollment_number") or "...")
+    # Lieu de naissance : on n'a pas de champ dédié (#107 out of scope), on
+    # utilise la ville comme proxy. Si tenant pilote demande, ajouter un
+    # champ Student.birthplace dans une migration ultérieure.
+    birthplace = _esc(student.get("city") or student.get("commune") or "...")
+
+    class_name = _esc(data.get("class_name") or "")
+    academic_year_name = _esc(data.get("academic_year_name") or "")
+    issued_at = data.get("issued_at") or datetime.utcnow()
+    issued_str = issued_at.strftime("%d/%m/%Y") if isinstance(issued_at, datetime) else ""
+
+    # Forme grammaticale : "ne le ... a ..." vs "nee le ... a ..."
+    ne_form = "née" if genre == "F" else "né"
+    inscrit_form = "inscrite" if genre == "F" else "inscrit"
+
+    head_master_name = school_settings.get("head_master_name") or "Le Chef d'Établissement"
+    head_master_title = (
+        school_settings.get("head_master_title") or "Le Chef d'Établissement"
+    )
+
+    body_paragraph = (
+        f"<p>Je soussigné(e), <strong>{_esc(head_master_name)}</strong>, "
+        f"{_esc(head_master_title)}, certifie que :</p>"
+        f"<p style='text-align:center; font-size:13px; margin: 14px 0;'>"
+        f"<strong>{full_name}</strong></p>"
+        f"<p>{ne_form} le <strong>{birth_date_str}</strong> à <strong>{birthplace}</strong>, "
+        f"matricule <strong>{matricule}</strong>, est régulièrement {inscrit_form} "
+        f"en classe de <strong>{class_name}</strong> au titre de l'année scolaire "
+        f"<strong>{academic_year_name}</strong>.</p>"
+        f"<p>En foi de quoi, le présent certificat lui est délivré pour servir et valoir "
+        f"ce que de droit.</p>"
+    )
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head><meta charset="UTF-8">{_BASE_STYLES}</head>
+    <body>
+        {_school_header_html(school_settings)}
+
+        <h1 style="text-align:center; margin: 18px 0 10px 0; letter-spacing:2px;">
+            CERTIFICAT DE SCOLARITÉ
+        </h1>
+
+        <div style="line-height: 1.7; font-size: 12px; margin: 12px 0;">
+            {body_paragraph}
+        </div>
+
+        <div style="margin-top: 24px; text-align: right;">
+            Fait le {_esc(issued_str)}
+        </div>
+
+        {_official_footer_html(school_settings)}
+    </body>
+    </html>
+    """
+
+    return HTML(string=html).write_pdf()

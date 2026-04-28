@@ -27,6 +27,7 @@ from app.routers.parent_portal import router as parent_portal_router
 from app.routers.payments import router as payments_router
 from app.routers.promotions import router as promotions_router
 from app.routers.reports import router as reports_router
+from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.super_admin import router as super_admin_router
 from app.routers.teacher_portal import router as teacher_portal_router
@@ -81,6 +82,7 @@ app.include_router(student_portal_router)
 app.include_router(parent_portal_router)
 app.include_router(teacher_portal_router)
 app.include_router(reports_router)
+app.include_router(student_documents_router)
 app.include_router(council_router)
 app.include_router(dren_stats_router)
 app.include_router(super_admin_router)

@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- **Certificat de scolarité officiel** : l'admin (et le parent en self-service) peut télécharger un PDF République de Côte d'Ivoire signé par le chef d'établissement, avec corps formel "Le soussigné certifie que [élève], né(e) le ... à ..., est régulièrement inscrit(e) en classe de [...] au titre de l'année scolaire [...]". Endpoint `GET /students/{id}/documents/certificat-scolarite.pdf` avec garde d'accès parent (lien parent_student) et étudiant (compte propre) *(admin, parent, élève)* (#107).
 - Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents *(admin)* (#105).
 - Le logo de l'établissement et la signature officielle sont désormais embarqués dans tous les PDFs (bulletin, PV de conseil, reçu de paiement, emploi du temps) lorsqu'ils sont configurés. L'absence de configuration ne casse rien, le PDF se génère sans logo *(admin)* (#105).
 - Promotion en masse de fin d'année : l'admin choisit la classe de destination de chaque classe source et obtient en un appel un aperçu des élèves promus, des avertissements de capacité, et un rapport de promotions appliquées avec les exceptions *(admin)* (#95).
