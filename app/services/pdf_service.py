@@ -879,3 +879,109 @@ def generate_certificate_scolarite_pdf(
     """
 
     return HTML(string=html).write_pdf()
+
+
+# ---------------------------------------------------------------------------
+# Attestation de frequentation PDF
+# ---------------------------------------------------------------------------
+
+
+def generate_attendance_certificate_pdf(
+    data: dict[str, Any], school_settings: dict[str, Any]
+) -> bytes:
+    """Generate the official attestation de frequentation PDF.
+
+    data keys (from student_documents_service.compose_attendance_certificate_data):
+        student: dict with first_name, last_name, genre, enrollment_number
+        class_name: str
+        academic_year_name: str
+        attendance: dict with total, present, absent, late, excused, attendance_rate
+        issued_at: datetime
+
+    school_settings: full settings dict — see PR #105.
+    """
+    from weasyprint import HTML  # lazy import — see module docstring
+
+    student = data.get("student", {}) or {}
+    first_name = _esc(student.get("first_name", ""))
+    last_name = _esc(student.get("last_name", ""))
+    full_name = f"{first_name} {last_name}".strip()
+    genre = student.get("genre")
+    matricule = _esc(student.get("enrollment_number") or "...")
+
+    class_name = _esc(data.get("class_name") or "")
+    academic_year_name = _esc(data.get("academic_year_name") or "")
+    issued_at = data.get("issued_at") or datetime.utcnow()
+    issued_str = issued_at.strftime("%d/%m/%Y") if isinstance(issued_at, datetime) else ""
+
+    inscrit_form = "inscrite" if genre == "F" else "inscrit"
+
+    attendance = data.get("attendance", {}) or {}
+    total = attendance.get("total", 0)
+    present = attendance.get("present", 0)
+    late = attendance.get("late", 0)
+    absent = attendance.get("absent", 0)
+    excused = attendance.get("excused", 0)
+    rate = attendance.get("attendance_rate", 0.0)
+
+    head_master_name = school_settings.get("head_master_name") or "Le Chef d'Établissement"
+    head_master_title = (
+        school_settings.get("head_master_title") or "Le Chef d'Établissement"
+    )
+
+    body_paragraph = (
+        f"<p>Je soussigné(e), <strong>{_esc(head_master_name)}</strong>, "
+        f"{_esc(head_master_title)}, atteste que :</p>"
+        f"<p style='text-align:center; font-size:13px; margin: 14px 0;'>"
+        f"<strong>{full_name}</strong></p>"
+        f"<p>matricule <strong>{matricule}</strong>, est régulièrement {inscrit_form} "
+        f"en classe de <strong>{class_name}</strong> au titre de l'année scolaire "
+        f"<strong>{academic_year_name}</strong>.</p>"
+        f"<p>Au {_esc(issued_str)}, son taux de fréquentation s'élève à "
+        f"<strong>{rate:.2f}%</strong> sur <strong>{total}</strong> séance(s) enregistrée(s).</p>"
+    )
+
+    stats_table = f"""
+    <table style="width: 60%; margin: 14px auto; border-collapse: collapse; font-size: 11px;">
+        <tr>
+            <th style="border:1px solid #555; padding:4px; background:#e9e9e9;">Présent</th>
+            <th style="border:1px solid #555; padding:4px; background:#e9e9e9;">Retard</th>
+            <th style="border:1px solid #555; padding:4px; background:#e9e9e9;">Absence excusée</th>
+            <th style="border:1px solid #555; padding:4px; background:#e9e9e9;">Absence non excusée</th>
+        </tr>
+        <tr>
+            <td style="border:1px solid #555; padding:4px; text-align:center;">{present}</td>
+            <td style="border:1px solid #555; padding:4px; text-align:center;">{late}</td>
+            <td style="border:1px solid #555; padding:4px; text-align:center;">{excused}</td>
+            <td style="border:1px solid #555; padding:4px; text-align:center;">{absent}</td>
+        </tr>
+    </table>
+    """
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head><meta charset="UTF-8">{_BASE_STYLES}</head>
+    <body>
+        {_school_header_html(school_settings)}
+
+        <h1 style="text-align:center; margin: 18px 0 10px 0; letter-spacing:2px;">
+            ATTESTATION DE FRÉQUENTATION
+        </h1>
+
+        <div style="line-height: 1.7; font-size: 12px; margin: 12px 0;">
+            {body_paragraph}
+        </div>
+
+        {stats_table}
+
+        <div style="margin-top: 24px; text-align: right;">
+            Fait le {_esc(issued_str)}
+        </div>
+
+        {_official_footer_html(school_settings)}
+    </body>
+    </html>
+    """
+
+    return HTML(string=html).write_pdf()
