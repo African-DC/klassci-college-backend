@@ -794,7 +794,7 @@ async def get_applicable_fee_variants(
                 ),
                 # Optional: match academic_year, level NULL (global) or matching
                 and_(
-                    not FeeCategory.is_mandatory,
+                    FeeCategory.is_mandatory.is_(False),
                     FeeVariant.academic_year_id == academic_year_id,
                     level_condition,
                     series_condition,
