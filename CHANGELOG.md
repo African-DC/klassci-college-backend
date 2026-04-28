@@ -48,6 +48,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 
+- Liste des bulletins (`GET /reports/bulletins`) qui renvoyait une 500 « Internal Server Error » à cause d'un `NULLS LAST` dans le tri par rang non supporté par MySQL. Remplacé par l'astuce portable `IS NULL` qui place les bulletins sans rang en queue *(admin)* (#113).
 - Publication des bulletins : la mise à `publié` ne s'appliquait à aucune ligne (les notifications aux parents n'étaient jamais envoyées). Bug silencieux d'un `not` Python évalué au chargement du module au lieu d'un filtre SQL (#101).
 - Frais optionnels (cantine, transport, activités) qui n'étaient jamais récupérés automatiquement à l'inscription d'un élève : seuls les frais obligatoires apparaissaient. Même bug `not` Python sur la colonne SQLAlchemy *(admin)* (#101).
 - Fiche élève, création, modification et upload de photo qui renvoyaient « Connexion au serveur impossible » depuis l'enrichissement de la liste : restaurés en eager-loadant l'inscription année courante au chargement d'un élève *(admin)*.
