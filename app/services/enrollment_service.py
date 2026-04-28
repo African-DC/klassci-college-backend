@@ -76,7 +76,9 @@ async def create_enrollment(
         class_ = await repo.get_class_by_id_for_update(db, data.class_id)
         if class_ is None:
             raise BusinessValidationError(f"Class {data.class_id} not found")
-        enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+        enrolled_count = await repo.count_active_enrollments_for_class(
+            db, data.class_id, data.academic_year_id
+        )
         if enrolled_count >= class_.max_students:
             raise BusinessValidationError(
                 f"Class {data.class_id} is full ({class_.max_students} students max)"
@@ -107,7 +109,9 @@ async def create_enrollment(
             )
 
         # Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(db, enrollment.id, data.class_id)
+        await _create_mandatory_enrollment_fees(
+            db, enrollment.id, data.class_id, data.academic_year_id
+        )
 
         await audit_log(
             db,
@@ -192,7 +196,9 @@ async def update_enrollment(
             new_class = await repo.get_class_by_id_for_update(db, data.class_id)
             if new_class is None:
                 raise BusinessValidationError(f"Class {data.class_id} not found")
-            enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+            enrolled_count = await repo.count_active_enrollments_for_class(
+                db, data.class_id, enrollment.academic_year_id
+            )
             if enrolled_count >= new_class.max_students:
                 raise BusinessValidationError(
                     f"Class {data.class_id} is full ({new_class.max_students} students max)"
@@ -345,7 +351,9 @@ async def create_enrollment_with_student(
         class_ = await repo.get_class_by_id_for_update(db, data.class_id)
         if class_ is None:
             raise BusinessValidationError(f"Class {data.class_id} not found")
-        enrolled_count = await repo.count_active_enrollments_for_class(db, data.class_id)
+        enrolled_count = await repo.count_active_enrollments_for_class(
+            db, data.class_id, data.academic_year_id
+        )
         if enrolled_count >= class_.max_students:
             raise BusinessValidationError(
                 f"Class {data.class_id} is full ({class_.max_students} students max)"
@@ -448,7 +456,9 @@ async def create_enrollment_with_student(
             )
 
         # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(db, enrollment.id, data.class_id)
+        await _create_mandatory_enrollment_fees(
+            db, enrollment.id, data.class_id, data.academic_year_id
+        )
 
         await audit_log(
             db,
@@ -507,11 +517,13 @@ async def re_enroll_student(
 async def _get_mandatory_fee_variants(
     db: AsyncSession,
     class_id: int,
+    academic_year_id: int,
 ) -> list[FeeVariant]:
-    """Retourne les FeeVariants obligatoires applicables à une classe.
+    """Retourne les FeeVariants obligatoires applicables à une classe pour l'AY donnée.
 
-    Résout par level_id + series_id + academic_year_id de la classe,
-    filtrés aux catégories is_mandatory=True.
+    Refactor #97 : Class est désormais universal (pas de academic_year_id),
+    donc l'AY est passée explicitement par le caller (qui l'a depuis le payload
+    EnrollmentCreate.academic_year_id).
     """
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
@@ -531,7 +543,7 @@ async def _get_mandatory_fee_variants(
         select(FeeVariant)
         .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
         .where(
-            FeeVariant.academic_year_id == class_.academic_year_id,
+            FeeVariant.academic_year_id == academic_year_id,
             FeeVariant.level_id == class_.level_id,
             series_condition,
             FeeCategory.is_mandatory == True,  # noqa: E712
@@ -545,13 +557,14 @@ async def _create_mandatory_enrollment_fees(
     db: AsyncSession,
     enrollment_id: int,
     class_id: int,
+    academic_year_id: int,
 ) -> None:
     """Crée les EnrollmentFee pour tous les frais obligatoires d'une classe.
 
     Idempotent : ne crée pas de doublons si un enrollment_fee existe déjà
     pour un fee_variant donné.
     """
-    variants = await _get_mandatory_fee_variants(db, class_id)
+    variants = await _get_mandatory_fee_variants(db, class_id, academic_year_id)
     if not variants:
         return
 
@@ -606,7 +619,9 @@ async def regenerate_enrollment_fees(
     await db.flush()
 
     # Re-créer les frais obligatoires manquants
-    await _create_mandatory_enrollment_fees(db, enrollment_id, enrollment.class_id)
+    await _create_mandatory_enrollment_fees(
+        db, enrollment_id, enrollment.class_id, enrollment.academic_year_id
+    )
 
     await audit_log(
         db,
@@ -725,18 +740,29 @@ async def unsubscribe_optional_fee(
 async def get_applicable_fee_variants(
     db: AsyncSession,
     class_id: int,
+    academic_year_id: int | None = None,
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnée.
 
     Frais obligatoires : filtrés par level_id + series_id + academic_year_id.
     Frais optionnels : level_id NULL (globaux) OU matching level — les frais
     optionnels comme la cantine sont un prix fixe, pas lié au niveau.
+
+    Refactor #97 : Class est universel, l'AY est passée explicitement par le
+    caller (ou résolue depuis l'AY courante si omise).
     """
     stmt = select(Class).where(Class.id == class_id)
     result = await db.execute(stmt)
     class_ = result.scalar_one_or_none()
     if class_ is None:
         raise BusinessValidationError(f"Class {class_id} not found")
+
+    if academic_year_id is None:
+        current_ay_stmt = select(AcademicYear).where(AcademicYear.is_current.is_(True))
+        current_ay = (await db.execute(current_ay_stmt)).scalar_one_or_none()
+        if current_ay is None:
+            raise BusinessValidationError("Aucune année académique courante configurée.")
+        academic_year_id = current_ay.id
 
     # Series condition: exact match OR NULL (applicable à tout le niveau)
     if class_.series_id:
@@ -762,14 +788,14 @@ async def get_applicable_fee_variants(
                 # Mandatory: must match academic_year + level + series
                 and_(
                     FeeCategory.is_mandatory,
-                    FeeVariant.academic_year_id == class_.academic_year_id,
+                    FeeVariant.academic_year_id == academic_year_id,
                     FeeVariant.level_id == class_.level_id,
                     series_condition,
                 ),
                 # Optional: match academic_year, level NULL (global) or matching
                 and_(
                     not FeeCategory.is_mandatory,
-                    FeeVariant.academic_year_id == class_.academic_year_id,
+                    FeeVariant.academic_year_id == academic_year_id,
                     level_condition,
                     series_condition,
                 ),

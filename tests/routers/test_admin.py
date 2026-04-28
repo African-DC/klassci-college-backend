@@ -86,7 +86,6 @@ SAMPLE_CLASS = ClassResponse(
     name="6eme A",
     level_id=1,
     series_id=None,
-    academic_year_id=1,
     room_id=None,
     max_students=40,
     created_at=NOW,
@@ -411,13 +410,13 @@ def test_list_classes_with_filters() -> None:
             return_value=ClassListResponse(items=[], total=0, page=1, size=20),
         ) as mock_list:
             with TestClient(app) as client:
-                resp = client.get("/admin/classes?level_id=1&academic_year_id=1")
+                resp = client.get("/admin/classes?level_id=1")
     finally:
         _clear_deps()
     assert resp.status_code == 200
     call_kwargs = mock_list.call_args.kwargs
     assert call_kwargs["level_id"] == 1
-    assert call_kwargs["academic_year_id"] == 1
+    # Refactor #97 : academic_year_id n'est plus un filtre sur Class (universel).
 
 
 def test_create_class_success() -> None:
@@ -431,7 +430,7 @@ def test_create_class_success() -> None:
             with TestClient(app) as client:
                 resp = client.post(
                     "/admin/classes",
-                    json={"name": "6eme A", "level_id": 1, "academic_year_id": 1},
+                    json={"name": "6eme A", "level_id": 1},
                 )
     finally:
         _clear_deps()

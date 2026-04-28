@@ -22,6 +22,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Changed
 
+- Les classes (6ème A, Terminale C, …) deviennent permanentes : on ne crée plus une nouvelle classe à chaque rentrée. À chaque changement d'année, la classe reste, on réinscrit ou on promeut les élèves, et la promotion devient un simple choix de destination *(admin)* (#97).
 - Audit des changements de permissions de rôle : on garde désormais l'état avant et après pour reconstruire le diff de chaque modification *(admin, super-admin)*.
 - Tableau de bord enseignant repensé : nom, prochain cours, totaux et liste des évaluations à venir avec progression de saisie, en cohérence avec ce qu'affiche le portail *(enseignant)* (#75).
 - Création d'évaluation : la matière doit être enseignée dans la classe sélectionnée. Toute combinaison incohérente est refusée avec un message clair en français *(admin, enseignant)* (#76).

@@ -42,7 +42,9 @@ class AcademicYear(Base, TimestampMixin):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    classes: Mapped[list[Class]] = relationship(back_populates="academic_year")
+    # Class is now universal (no academic_year_id). Listing « classes courantes »
+    # passe par JOIN sur Enrollment.academic_year_id côté repo, pas via cette
+    # relation qui n'existe plus depuis le refactor #97.
 
 
 # ---------------------------------------------------------------------------
@@ -104,21 +106,24 @@ class Room(Base, TimestampMixin):
 
 
 class Class(Base, TimestampMixin):
-    """Classe scolaire (ex : Terminale C, 6ème A)."""
+    """Classe scolaire universelle (ex : Terminale C, 6ème A).
+
+    Refactor #97 : Class est désormais universelle (1 row par classe à vie).
+    L'année académique est portée par Enrollment.academic_year_id, pas par Class.
+    Les changements rares de max_students/room_id sont audit-loggés via la table
+    audit_logs existante (entity_type=class, action=update).
+    """
 
     __tablename__ = "classes"
-    __table_args__ = (UniqueConstraint("name", "academic_year_id"),)
+    __table_args__ = (UniqueConstraint("name"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     level_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     series_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("series.id", ondelete="RESTRICT"), nullable=True, index=True
-    )
-    academic_year_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
     room_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("rooms.id", ondelete="SET NULL"), nullable=True, index=True
@@ -127,7 +132,6 @@ class Class(Base, TimestampMixin):
 
     level: Mapped[Level] = relationship(back_populates="classes")
     series: Mapped[Series | None] = relationship(back_populates="classes")
-    academic_year: Mapped[AcademicYear] = relationship(back_populates="classes")
     room: Mapped[Room | None] = relationship(back_populates="classes")
     enrollments: Mapped[list[Enrollment]] = relationship(back_populates="class_")
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="class_")
