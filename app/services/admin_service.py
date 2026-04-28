@@ -592,11 +592,11 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     result["students_count"] = students_count
     result["evaluations_count"] = evaluations_count
 
-    # Hours per week (sum of subject hours_per_week via SubjectInstance)
-    from app.models.academic import SubjectInstance
+    # Hours per week (sum of subject hours_per_week via Subject assigned to teacher)
+    from app.models.academic import Subject
 
-    hours_stmt = select(func.coalesce(func.sum(SubjectInstance.hours_per_week), 0)).where(
-        SubjectInstance.teacher_id == teacher_id
+    hours_stmt = select(func.coalesce(func.sum(Subject.hours_per_week), 0)).where(
+        Subject.teacher_id == teacher_id
     )
     result["hours_per_week"] = float((await db.execute(hours_stmt)).scalar() or 0)
 
