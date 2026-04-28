@@ -1,4 +1,10 @@
-"""Service PDF — generation de bulletins, PV de conseil et reçus de paiement."""
+"""Service PDF — generation de bulletins, PV de conseil et reçus de paiement.
+
+WeasyPrint est importé paresseusement (à l'intérieur de chaque fonction qui
+l'utilise) pour permettre au BE de booter sur Windows sans GTK installé. Les
+endpoints PDF crashent à l'appel et non au boot, ce qui est acceptable car
+en dev local on a rarement besoin des PDF.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +12,6 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-
-from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +203,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     </html>
     """
 
+    from weasyprint import HTML  # lazy import — see module docstring
+
     return HTML(string=html).write_pdf()
 
 
@@ -366,6 +372,8 @@ def generate_council_minutes_pdf(
     </html>
     """
 
+    from weasyprint import HTML  # lazy import — see module docstring
+
     return HTML(string=html).write_pdf()
 
 
@@ -486,6 +494,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     </body>
     </html>
     """
+
+    from weasyprint import HTML  # lazy import — see module docstring
 
     return HTML(string=html).write_pdf()
 
@@ -665,5 +675,7 @@ def generate_timetable_pdf(
     </body>
     </html>
     """
+
+    from weasyprint import HTML  # lazy import — see module docstring
 
     return HTML(string=html).write_pdf()
