@@ -525,20 +525,21 @@ async def delete_staff_photo(
 @router.get("/classes", response_model=ClassListResponse)
 async def list_classes(
     level_id: int | None = Query(None),
-    academic_year_id: int | None = Query(None),
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("admin:classes:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassListResponse:
-    """Liste paginee des classes avec filtres."""
+    """Liste paginee des classes avec filtres.
+
+    Refactor #97 : Class est universel, plus de filtre par academic_year_id.
+    """
     return await admin_service.list_classes(
         db,
         page=page,
         size=size,
         level_id=level_id,
-        academic_year_id=academic_year_id,
         search=search,
     )
 

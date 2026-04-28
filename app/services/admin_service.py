@@ -1066,24 +1066,19 @@ async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
 def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     level_name = None
     series_name = None
-    academic_year_name = None
     if hasattr(c, "level") and c.level is not None:
         level_name = c.level.name
     if hasattr(c, "series") and c.series is not None:
         series_name = c.series.name
-    if hasattr(c, "academic_year") and c.academic_year is not None:
-        academic_year_name = c.academic_year.name
     return ClassResponse(
         id=c.id,
         name=c.name,
         level_id=c.level_id,
         series_id=c.series_id,
-        academic_year_id=c.academic_year_id,
         room_id=c.room_id,
         max_students=c.max_students,
         level_name=level_name,
         series_name=series_name,
-        academic_year_name=academic_year_name,
         enrolled_count=enrolled_count,
         created_at=c.created_at,
         updated_at=c.updated_at,
@@ -1115,7 +1110,6 @@ async def list_classes(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
-    academic_year_id: int | None = None,
     search: str | None = None,
 ) -> ClassListResponse:
     classes, total = await repo.list_classes(
@@ -1123,7 +1117,6 @@ async def list_classes(
         page=page,
         size=size,
         level_id=level_id,
-        academic_year_id=academic_year_id,
         search=search,
     )
     counts = await _get_enrolled_counts(db, [c.id for c in classes])

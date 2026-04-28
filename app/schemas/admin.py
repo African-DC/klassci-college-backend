@@ -363,10 +363,15 @@ class ParentListResponse(BaseModel):
 
 
 class ClassCreate(BaseModel):
+    """Schéma création de classe.
+
+    Refactor #97 : Class est universel, pas de academic_year_id. L'année est
+    portée par Enrollment lors de l'inscription.
+    """
+
     name: str
     level_id: int
     series_id: int | None = None
-    academic_year_id: int
     room_id: int | None = None
     max_students: int = 40
 
@@ -382,7 +387,6 @@ class ClassUpdate(BaseModel):
     name: str | None = None
     level_id: int | None = None
     series_id: int | None = None
-    academic_year_id: int | None = None
     room_id: int | None = None
     max_students: int | None = None
 
@@ -401,12 +405,10 @@ class ClassResponse(BaseModel):
     name: str
     level_id: int
     series_id: int | None
-    academic_year_id: int
     room_id: int | None
     max_students: int
     level_name: str | None = None
     series_name: str | None = None
-    academic_year_name: str | None = None
     enrolled_count: int = 0
     created_at: datetime
     updated_at: datetime

@@ -91,11 +91,18 @@ async def re_enroll_student(
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])
 async def get_applicable_fee_variants(
     class_id: int = Query(..., description="ID de la classe pour la resolution des frais"),
+    academic_year_id: int | None = Query(
+        None,
+        description=(
+            "AY pour le matching des frais. Si omis, l'AY courante est utilisée. "
+            "Class étant universel (refactor #97), l'AY n'est plus inférée depuis la classe."
+        ),
+    ),
     _: None = require_permission("enrollments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_service.get_applicable_fee_variants(db, class_id)
+    return await enrollment_service.get_applicable_fee_variants(db, class_id, academic_year_id)
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)

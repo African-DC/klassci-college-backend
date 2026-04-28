@@ -119,8 +119,8 @@ async def import_students_from_csv(
     settings_result = await db.execute(select(SchoolSettings).limit(1))
     school_settings = settings_result.scalar_one_or_none()
 
-    # Pre-fetch classes for the current academic year
-    stmt = select(Class).where(Class.academic_year_id == current_year.id)
+    # Pre-fetch classes (Class est universel post-refactor #97 : pas de filtre AY)
+    stmt = select(Class)
     result = await db.execute(stmt)
     classes = {c.name.strip().lower(): c for c in result.scalars().all()}
 

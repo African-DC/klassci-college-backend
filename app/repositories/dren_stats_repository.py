@@ -41,7 +41,7 @@ async def get_enrollment_counts_by_level(
         .join(Enrollment, Enrollment.class_id == Class.id)
         .join(Student, Student.id == Enrollment.student_id)
         .where(
-            Class.academic_year_id == academic_year_id,
+            Enrollment.academic_year_id == academic_year_id,
             Enrollment.status.in_([EnrollmentStatus.VALIDE, EnrollmentStatus.EN_VALIDATION]),
         )
         .group_by(Level.id, Level.name, Level.order)
@@ -83,7 +83,7 @@ async def get_enrollment_counts_by_class(
         .join(Student, Student.id == Enrollment.student_id)
         .outerjoin(bulletin_avg_sq, bulletin_avg_sq.c.class_id == Class.id)
         .where(
-            Class.academic_year_id == academic_year_id,
+            Enrollment.academic_year_id == academic_year_id,
             Enrollment.status.in_([EnrollmentStatus.VALIDE, EnrollmentStatus.EN_VALIDATION]),
         )
         .group_by(Class.id, Class.name, Class.level_id, bulletin_avg_sq.c.class_avg)

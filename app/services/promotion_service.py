@@ -54,18 +54,18 @@ async def _validate_run_inputs(
     if source_ay_id == target_ay_id:
         raise BusinessValidationError("L'année source et l'année cible doivent être différentes.")
 
+    # Refactor #97 : Class est universel, pas de filtre par target_ay_id ici.
+    # La capacity/availability AY-cible est calculée downstream via
+    # count_active_enrollments_for_class(class_id, target_ay_id).
     target_class_ids = list(set(class_mapping.values()))
-    classes_stmt = select(Class).where(
-        Class.id.in_(target_class_ids),
-        Class.academic_year_id == target_ay_id,
-    )
+    classes_stmt = select(Class).where(Class.id.in_(target_class_ids))
     classes = (await db.execute(classes_stmt)).scalars().all()
     classes_by_id: dict[int, Class] = {c.id: c for c in classes}
 
     missing = [cid for cid in target_class_ids if cid not in classes_by_id]
     if missing:
         raise BusinessValidationError(
-            f"Classes destination introuvables dans l'année cible : {missing}. "
+            f"Classes destination introuvables : {missing}. "
             "Créez-les d'abord ou ajustez le mapping."
         )
 
@@ -109,7 +109,9 @@ async def preview_promotion(
         nb_to_promote = counts_by_source.get(source_id, 0)
         promotable_count += nb_to_promote
 
-        existing_count = await enrollment_repo.count_active_enrollments_for_class(db, target_id)
+        existing_count = await enrollment_repo.count_active_enrollments_for_class(
+            db, target_id, target_ay_id
+        )
         remaining = max(0, target.max_students - existing_count)
 
         source_summaries.append(

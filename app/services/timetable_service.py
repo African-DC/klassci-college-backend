@@ -382,7 +382,7 @@ async def auto_generate(
     """
     from sqlalchemy import delete, or_, select
 
-    from app.models.academic import Class, Subject
+    from app.models.academic import AcademicYear, Class, Subject
     from app.models.timetable import DayOfWeek
 
     # 1. Settings
@@ -392,6 +392,14 @@ async def auto_generate(
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
+
+    # Refactor #97 : Class est universel, l'AY pour le timetable est l'AY courante.
+    current_ay = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
+    if current_ay is None:
+        raise BusinessValidationError("Aucune année académique courante configurée.")
+    academic_year_id = current_ay.id
 
     # 3. Get subjects for this level
     subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
@@ -498,7 +506,7 @@ async def auto_generate(
     task = generate_timetable_task.delay(
         tenant_id,
         class_id,
-        cls.academic_year_id,
+        academic_year_id,
         assignments_data,
         day_names,
         day_start,

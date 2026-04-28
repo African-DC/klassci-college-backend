@@ -453,7 +453,6 @@ async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
         .options(
             selectinload(Class.level),
             selectinload(Class.series),
-            selectinload(Class.academic_year),
         )
         .where(Class.id == class_id)
     )
@@ -466,14 +465,11 @@ async def list_classes(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
-    academic_year_id: int | None = None,
     search: str | None = None,
 ) -> tuple[list[Class], int]:
     base = select(Class)
     if level_id is not None:
         base = base.where(Class.level_id == level_id)
-    if academic_year_id is not None:
-        base = base.where(Class.academic_year_id == academic_year_id)
     if search:
         pattern = f"%{search}%"
         base = base.where(Class.name.ilike(pattern))
@@ -483,7 +479,6 @@ async def list_classes(
         base.options(
             selectinload(Class.level),
             selectinload(Class.series),
-            selectinload(Class.academic_year),
         )
         .offset((page - 1) * size)
         .limit(size)
