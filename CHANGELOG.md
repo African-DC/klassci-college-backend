@@ -28,6 +28,20 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Création d'évaluation : la matière doit être enseignée dans la classe sélectionnée. Toute combinaison incohérente est refusée avec un message clair en français *(admin, enseignant)* (#76).
 - Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée *(admin)* (#76).
 
+### Removed
+
+- Génération asynchrone des bulletins via Celery + Puppeteer : flow orphelin depuis le pivot architectural d'avril 2026. La génération sync via WeasyPrint reste seule porte d'entrée *(devops, super-admin)* (#103).
+- Endpoints `POST /bulletins/generate` et `GET /bulletins/tasks/{task_id}` exposés à la racine : remplacés par les endpoints `/reports/bulletins/*` qui retournent directement les bulletins générés sans détour Celery (#103).
+
+### Added
+
+- Endpoint `GET /reports/bulletins` avec filtres optionnels (`class_id`, `trimester`, `academic_year_id`, `is_published`) pour la consultation transverse côté admin (#103).
+- Endpoint `GET /reports/bulletins/{bulletin_id}` pour récupérer un bulletin précis par identifiant (utilisé par la modale de prévisualisation côté admin) (#103).
+
+### Changed
+
+- Publication des bulletins : la réponse expose désormais un message lisible et un compteur (`{message, count}`) au lieu d'un objet brut, pour cohérence avec le contrat utilisé côté front *(admin)* (#103).
+
 ### Fixed
 
 - Fiche élève, création, modification et upload de photo qui renvoyaient « Connexion au serveur impossible » depuis l'enrichissement de la liste : restaurés en eager-loadant l'inscription année courante au chargement d'un élève *(admin)*.

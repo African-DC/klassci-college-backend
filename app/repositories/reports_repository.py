@@ -157,27 +157,32 @@ async def create_subject_average(
     return sa_record
 
 
-async def list_bulletins_for_class(
+async def list_bulletins(
     db: AsyncSession,
-    class_id: int,
-    trimester: int,
-    academic_year_id: int,
+    *,
+    class_id: int | None = None,
+    trimester: int | None = None,
+    academic_year_id: int | None = None,
+    is_published: bool | None = None,
 ) -> list[Bulletin]:
-    """Retourne tous les bulletins d'une classe pour un trimestre."""
+    """Retourne les bulletins selon filtres optionnels."""
     stmt = (
         select(Bulletin)
-        .where(
-            Bulletin.class_id == class_id,
-            Bulletin.trimester == trimester,
-            Bulletin.academic_year_id == academic_year_id,
-        )
         .options(
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
             selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
         )
-        .order_by(Bulletin.rank.asc().nullslast())
+        .order_by(Bulletin.academic_year_id.desc(), Bulletin.trimester.desc(), Bulletin.rank.asc().nullslast())
     )
+    if class_id is not None:
+        stmt = stmt.where(Bulletin.class_id == class_id)
+    if trimester is not None:
+        stmt = stmt.where(Bulletin.trimester == trimester)
+    if academic_year_id is not None:
+        stmt = stmt.where(Bulletin.academic_year_id == academic_year_id)
+    if is_published is not None:
+        stmt = stmt.where(Bulletin.is_published.is_(is_published))
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
