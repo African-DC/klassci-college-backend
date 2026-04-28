@@ -403,7 +403,7 @@ async def publish_bulletins(
             Bulletin.class_id == class_id,
             Bulletin.trimester == trimester,
             Bulletin.academic_year_id == academic_year_id,
-            not Bulletin.is_published,
+            Bulletin.is_published.is_(False),
         )
         .values(is_published=True)
     )
