@@ -74,6 +74,7 @@ from app.services import admin_service, enrollment_service, matricule_service
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 UPLOAD_DIR = "/tmp/klassci-uploads/photos"
+SIGNATURE_UPLOAD_DIR = "/tmp/klassci-uploads/signatures"
 
 
 # ---------------------------------------------------------------------------
@@ -856,6 +857,52 @@ async def update_school_info(
     """Met a jour les informations generales de l'etablissement."""
     school = await admin_service.update_school_info(db, data, updated_by=current_user.user_id)
     return SchoolSettingsResponse.model_validate(school)
+
+
+@router.post("/settings/signature")
+async def upload_school_signature(
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload la signature/tampon officiel pour les documents administratifs.
+
+    Reutilise le pattern d'upload des photos eleves : MIME whitelist,
+    5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
+    """
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+
+    os.makedirs(SIGNATURE_UPLOAD_DIR, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png"
+    filename = f"signature_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(SIGNATURE_UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    signature_url = f"/uploads/signatures/{filename}"
+    school = await admin_service.update_school_info(
+        db,
+        SchoolInfoUpdate(signature_image_url=signature_url),
+        updated_by=current_user.user_id,
+    )
+    return {"signature_image_url": school.signature_image_url}
+
+
+@router.delete("/settings/signature", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_school_signature(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Retire la signature officielle de l'etablissement."""
+    await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------

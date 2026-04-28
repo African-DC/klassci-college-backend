@@ -340,6 +340,10 @@ async def _get_school_settings(db: AsyncSession) -> dict[str, Any]:
         "ministry_code": settings.ministry_code,
         "address": settings.address,
         "phone": settings.phone,
+        "logo_url": settings.logo_url,
+        "signature_image_url": settings.signature_image_url,
+        "head_master_name": settings.head_master_name,
+        "head_master_title": settings.head_master_title,
     }
 
 
