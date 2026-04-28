@@ -173,7 +173,14 @@ async def list_bulletins(
             selectinload(Bulletin.class_),
             selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
         )
-        .order_by(Bulletin.academic_year_id.desc(), Bulletin.trimester.desc(), Bulletin.rank.asc().nullslast())
+        .order_by(
+            Bulletin.academic_year_id.desc(),
+            Bulletin.trimester.desc(),
+            # MySQL doesn't support `NULLS LAST`. The `IS NULL` trick puts NULLs at
+            # the end (booleans cast to 0=non-null, 1=null in ORDER BY context).
+            Bulletin.rank.is_(None),
+            Bulletin.rank.asc(),
+        )
     )
     if class_id is not None:
         stmt = stmt.where(Bulletin.class_id == class_id)
