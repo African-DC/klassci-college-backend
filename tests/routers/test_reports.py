@@ -156,12 +156,12 @@ def test_generate_bulletins_no_students() -> None:
 
 
 # ---------------------------------------------------------------------------
-# GET /reports/bulletins/{class_id}/{trimester}
+# GET /reports/bulletins (filtres optionnels)
 # ---------------------------------------------------------------------------
 
 
 def test_list_bulletins_success() -> None:
-    """GET /reports/bulletins/3/1 → 200 + liste des bulletins."""
+    """GET /reports/bulletins → 200 + liste filtrable."""
     _override_deps()
     try:
         with patch(
@@ -169,7 +169,9 @@ def test_list_bulletins_success() -> None:
             new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE),
         ):
             with TestClient(app) as client:
-                resp = client.get("/reports/bulletins/3/1?academic_year_id=1")
+                resp = client.get(
+                    "/reports/bulletins?class_id=3&trimester=1&academic_year_id=1"
+                )
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
@@ -179,12 +181,64 @@ def test_list_bulletins_success() -> None:
         _clear_deps()
 
 
+def test_list_bulletins_no_filters() -> None:
+    """GET /reports/bulletins sans filtres → 200 (liste complete tenant)."""
+    _override_deps()
+    try:
+        with patch(
+            "app.services.reports_service.list_bulletins",
+            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/reports/bulletins")
+        assert resp.status_code == 200
+    finally:
+        _clear_deps()
+
+
 def test_list_bulletins_no_auth() -> None:
-    """GET /reports/bulletins/3/1 sans token → 401/403."""
+    """GET /reports/bulletins sans token → 401/403."""
     _clear_deps()
     with TestClient(app) as client:
-        resp = client.get("/reports/bulletins/3/1?academic_year_id=1")
+        resp = client.get("/reports/bulletins")
     assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# GET /reports/bulletins/{bulletin_id}
+# ---------------------------------------------------------------------------
+
+
+def test_get_bulletin_success() -> None:
+    """GET /reports/bulletins/1 → 200 + bulletin detail."""
+    _override_deps()
+    try:
+        with patch(
+            "app.services.reports_service.get_bulletin_response",
+            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE.items[0]),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/reports/bulletins/1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 1
+    finally:
+        _clear_deps()
+
+
+def test_get_bulletin_not_found() -> None:
+    """GET /reports/bulletins/999 → 404."""
+    _override_deps()
+    try:
+        with patch(
+            "app.services.reports_service.get_bulletin_response",
+            new=AsyncMock(return_value=None),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/reports/bulletins/999")
+        assert resp.status_code == 404
+    finally:
+        _clear_deps()
 
 
 # ---------------------------------------------------------------------------

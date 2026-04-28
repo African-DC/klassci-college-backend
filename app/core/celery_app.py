@@ -8,7 +8,7 @@ celery_app = Celery(
     "klassci",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.timetable_tasks", "app.tasks.grades_tasks"],
+    include=["app.tasks.timetable_tasks"],
 )
 
 celery_app.conf.update(
