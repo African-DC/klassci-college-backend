@@ -10,7 +10,6 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
 
-
 MOCK_USER = TokenData(user_id=1, tenant_id="local", email="admin@college.ci")
 
 
@@ -41,33 +40,38 @@ def test_get_certificat_success() -> None:
     """Admin avec permission → 200 + bytes PDF."""
     _override_deps()
     try:
-        with patch(
-            "app.services.student_documents_service.verify_document_access",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.services.student_documents_service.compose_certificate_data",
-            new=AsyncMock(
-                return_value={
-                    "student": {
-                        "first_name": "Aya",
-                        "last_name": "Koffi",
-                        "birth_date": None,
-                        "genre": "F",
-                        "enrollment_number": "2024-001",
-                        "city": "Abidjan",
-                        "commune": "Cocody",
-                    },
-                    "class_name": "6e A",
-                    "academic_year_name": "2025-2026",
-                    "issued_at": None,
-                }
+        with (
+            patch(
+                "app.services.student_documents_service.verify_document_access",
+                new=AsyncMock(return_value=None),
             ),
-        ), patch(
-            "app.services.student_documents_service._get_school_settings_dict",
-            new=AsyncMock(return_value={"school_name": "Ecole Test"}),
-        ), patch(
-            "app.routers.student_documents.generate_certificate_scolarite_pdf",
-            return_value=b"%PDF-1.4 fake bytes",
+            patch(
+                "app.services.student_documents_service.compose_certificate_data",
+                new=AsyncMock(
+                    return_value={
+                        "student": {
+                            "first_name": "Aya",
+                            "last_name": "Koffi",
+                            "birth_date": None,
+                            "genre": "F",
+                            "enrollment_number": "2024-001",
+                            "city": "Abidjan",
+                            "commune": "Cocody",
+                        },
+                        "class_name": "6e A",
+                        "academic_year_name": "2025-2026",
+                        "issued_at": None,
+                    }
+                ),
+            ),
+            patch(
+                "app.services.student_documents_service._get_school_settings_dict",
+                new=AsyncMock(return_value={"school_name": "Ecole Test"}),
+            ),
+            patch(
+                "app.routers.student_documents.generate_certificate_scolarite_pdf",
+                return_value=b"%PDF-1.4 fake bytes",
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get("/students/1/documents/certificat-scolarite.pdf")
@@ -84,15 +88,18 @@ def test_get_certificat_no_active_enrollment() -> None:
 
     _override_deps()
     try:
-        with patch(
-            "app.services.student_documents_service.verify_document_access",
-            new=AsyncMock(return_value=None),
-        ), patch(
-            "app.services.student_documents_service.compose_certificate_data",
-            new=AsyncMock(
-                side_effect=BusinessValidationError(
-                    "Aucune inscription valide trouvée pour cet élève."
-                )
+        with (
+            patch(
+                "app.services.student_documents_service.verify_document_access",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "app.services.student_documents_service.compose_certificate_data",
+                new=AsyncMock(
+                    side_effect=BusinessValidationError(
+                        "Aucune inscription valide trouvée pour cet élève."
+                    )
+                ),
             ),
         ):
             with TestClient(app) as client:

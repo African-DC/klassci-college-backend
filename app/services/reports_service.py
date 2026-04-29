@@ -333,7 +333,9 @@ async def list_bulletins(
         if key not in counts:
             counts[key] = await repo.count_enrolled_students(db, b.class_id, b.academic_year_id)
     return BulletinListResponse(
-        items=[_bulletin_to_response(b, counts[(b.class_id, b.academic_year_id)]) for b in bulletins],
+        items=[
+            _bulletin_to_response(b, counts[(b.class_id, b.academic_year_id)]) for b in bulletins
+        ],
         total=len(bulletins),
     )
 

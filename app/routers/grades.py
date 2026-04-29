@@ -119,5 +119,3 @@ async def get_grades_summary(
         trimester=trimester,
         academic_year_id=academic_year_id,
     )
-
-
