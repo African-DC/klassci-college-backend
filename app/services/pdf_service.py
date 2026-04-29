@@ -49,7 +49,7 @@ def _image_to_datauri(url_or_path: str | None) -> str | None:
 
     candidates: list[str] = []
     if url_or_path.startswith("/uploads/"):
-        candidates.append(os.path.join(_UPLOAD_ROOT, url_or_path[len("/uploads/"):]))
+        candidates.append(os.path.join(_UPLOAD_ROOT, url_or_path[len("/uploads/") :]))
     else:
         candidates.append(url_or_path)
 
@@ -127,9 +127,7 @@ def _school_header_html(settings: dict[str, Any]) -> str:
 
     address_line = ""
     if address:
-        address_line = (
-            f'<div style="font-size:9px; color:#555;">{_esc(address)}</div>'
-        )
+        address_line = f'<div style="font-size:9px; color:#555;">{_esc(address)}</div>'
 
     logo_block = ""
     if logo_datauri:
@@ -217,9 +215,6 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     school_settings keys:
         school_name, ministry_code
     """
-    school_name = school_settings.get("school_name", "Etablissement")
-    ministry_code = school_settings.get("ministry_code")
-
     student_name = _esc(bulletin_data.get("student_name", ""))
     class_name = _esc(bulletin_data.get("class_name", ""))
     trimester = bulletin_data.get("trimester", "")
@@ -339,9 +334,6 @@ def generate_council_minutes_pdf(
     school_settings keys:
         school_name, ministry_code
     """
-    school_name = school_settings.get("school_name", "Etablissement")
-    ministry_code = school_settings.get("ministry_code")
-
     class_name = _esc(council_data.get("class_name", ""))
     trimester = council_data.get("trimester", "")
     academic_year = _esc(council_data.get("academic_year_name", ""))
@@ -503,8 +495,6 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     school_settings keys:
         school_name, ministry_code, address, phone
     """
-    school_name = school_settings.get("school_name", "Etablissement")
-    ministry_code = school_settings.get("ministry_code")
     address = _esc(school_settings.get("address", ""))
     phone = _esc(school_settings.get("phone", ""))
 
@@ -658,9 +648,6 @@ def generate_timetable_pdf(
     slots: list of dicts with day, start_time, end_time, subject_name,
            teacher_name, room, subject_color
     """
-    school_name = school_settings.get("school_name", "Etablissement")
-    ministry_code = school_settings.get("ministry_code")
-
     # Build hours list
     hours = list(range(day_start, day_end))
 
@@ -837,9 +824,7 @@ def generate_certificate_scolarite_pdf(
     inscrit_form = "inscrite" if genre == "F" else "inscrit"
 
     head_master_name = school_settings.get("head_master_name") or "Le Chef d'Établissement"
-    head_master_title = (
-        school_settings.get("head_master_title") or "Le Chef d'Établissement"
-    )
+    head_master_title = school_settings.get("head_master_title") or "Le Chef d'Établissement"
 
     body_paragraph = (
         f"<p>Je soussigné(e), <strong>{_esc(head_master_name)}</strong>, "
@@ -925,9 +910,7 @@ def generate_attendance_certificate_pdf(
     rate = attendance.get("attendance_rate", 0.0)
 
     head_master_name = school_settings.get("head_master_name") or "Le Chef d'Établissement"
-    head_master_title = (
-        school_settings.get("head_master_title") or "Le Chef d'Établissement"
-    )
+    head_master_title = school_settings.get("head_master_title") or "Le Chef d'Établissement"
 
     body_paragraph = (
         f"<p>Je soussigné(e), <strong>{_esc(head_master_name)}</strong>, "

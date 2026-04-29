@@ -291,6 +291,7 @@ async def get_student_attendance_summary(
     Used by the attestation de frequentation PDF (#109).
     """
     from sqlalchemy import func, select
+
     from app.models.attendance import (
         AttendanceContext,
         AttendanceRecord,

@@ -169,9 +169,7 @@ def test_list_bulletins_success() -> None:
             new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE),
         ):
             with TestClient(app) as client:
-                resp = client.get(
-                    "/reports/bulletins?class_id=3&trimester=1&academic_year_id=1"
-                )
+                resp = client.get("/reports/bulletins?class_id=3&trimester=1&academic_year_id=1")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
@@ -215,7 +213,7 @@ def test_get_bulletin_success() -> None:
     try:
         with patch(
             "app.services.reports_service.get_bulletin_response",
-            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE.items[0]),
+            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE["items"][0]),
         ):
             with TestClient(app) as client:
                 resp = client.get("/reports/bulletins/1")

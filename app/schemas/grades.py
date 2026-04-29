@@ -90,5 +90,3 @@ class GradesSummaryResponse(BaseModel):
     trimester: int
     students: list[StudentSummary]
     subjects: list[SubjectSummary]
-
-
