@@ -213,7 +213,7 @@ def test_get_bulletin_success() -> None:
     try:
         with patch(
             "app.services.reports_service.get_bulletin_response",
-            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE.items[0]),
+            new=AsyncMock(return_value=SAMPLE_LIST_RESPONSE["items"][0]),
         ):
             with TestClient(app) as client:
                 resp = client.get("/reports/bulletins/1")
