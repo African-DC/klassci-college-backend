@@ -21,7 +21,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Filtres par classe et liste des élèves « à inscrire » exposés en un endpoint dédié, prêt à alimenter les chips de la liste élèves *(admin)* (#82).
 - Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit *(admin, enseignant)*.
 - Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées *(tous)*.
-- Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève des scénarios E2E *(devops)*.
+- Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève / parent des scénarios E2E. Le compte parent est lié à un élève seedé pour exercer les flows portail parent *(devops)* (#118).
 - Tableau de bord élève : nom, classe, prochain cours, moyenne générale, frais restants et total d'absences, en un seul appel *(élève)* (#75).
 - Liste exhaustive des évaluations de l'enseignant connecté pour alimenter la page « Mes évaluations » côté portail *(enseignant)* (#75).
 
