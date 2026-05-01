@@ -53,7 +53,11 @@ class ParentDashboardChild(BaseModel):
     class_name: str
     general_average: float | None
     total_absences: int
-    fees_remaining: Decimal
+    # Float (not Decimal) so the JSON encoder emits a number, not a string.
+    # The FE Zod schema validates as z.number() — Pydantic's default
+    # Decimal→str serialization breaks the contract. Acceptable precision
+    # loss because we display thousands of XOF, not micropayments.
+    fees_remaining: float
 
 
 class ParentDashboardResponse(BaseModel):

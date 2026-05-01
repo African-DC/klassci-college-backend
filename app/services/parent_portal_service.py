@@ -166,7 +166,7 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardRespon
                 class_name=class_name,
                 general_average=general_average,
                 total_absences=total_absences,
-                fees_remaining=fees_remaining,
+                fees_remaining=float(fees_remaining),
             )
         )
 
