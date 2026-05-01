@@ -22,6 +22,8 @@ from app.schemas.parent_portal import (
     ChildTimetableSlot,
     FeeDetail,
     GradeDetail,
+    ParentDashboardChild,
+    ParentDashboardResponse,
     PaymentDetail,
 )
 
@@ -97,6 +99,82 @@ async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
         )
 
     return ChildrenListResponse(children=children)
+
+
+async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardResponse:
+    """Dashboard parent : pour chaque enfant, agrège classe + moyenne + absences + reste à payer.
+
+    Réutilise les helpers existants (frais, attendance) plutôt que de
+    dupliquer la logique. Une query par enfant sur grades / fees / attendance
+    — acceptable pour la cardinalité typique (1-3 enfants par parent).
+    """
+    from app.services.attendance_service import get_student_attendance_summary
+
+    parent = await _get_parent_for_user(db, user_id)
+    links = await repo.list_children(db, parent.id)
+    parent_name = f"{parent.first_name} {parent.last_name}".strip()
+
+    summaries: list[ParentDashboardChild] = []
+    for link in links:
+        student = link.student
+        full_name = f"{student.last_name} {student.first_name}".strip()
+
+        active_enrollments = [
+            e
+            for e in student.enrollments
+            if e.status not in (EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE)
+        ]
+        active = max(active_enrollments, key=lambda e: e.id) if active_enrollments else None
+        class_name = active.class_.name if active and active.class_ else "—"
+        ay_id = active.academic_year_id if active else None
+
+        # General average — moyenne arithmétique simple des notes valides.
+        # MVP : on n'applique pas les coefficients (la matière les porte) ;
+        # le bulletin officiel utilise déjà la formule pondérée. Ici c'est
+        # un indicateur global pour le résumé parent, pas un bulletin.
+        grades = await repo.get_student_grades(db, student.id)
+        valid_values = [
+            float(g.value) for g in grades if g.value is not None and g.evaluation is not None
+        ]
+        general_average = round(sum(valid_values) / len(valid_values), 2) if valid_values else None
+
+        # Total absences sur l'année active.
+        if ay_id is not None:
+            summary = await get_student_attendance_summary(db, student.id, academic_year_id=ay_id)
+            total_absences = int(summary.get("absent", 0)) + int(summary.get("absent_excuse", 0))
+        else:
+            total_absences = 0
+
+        # Fees remaining — sum (amount - completed payments) sur l'inscription active.
+        fees_remaining = Decimal("0.00")
+        if active is not None:
+            enrollment = await repo.get_student_active_enrollment(db, student.id)
+            if enrollment is not None:
+                for ef in enrollment.enrollment_fees:
+                    paid = sum(
+                        (p.amount for p in ef.payments if p.status == PaymentStatus.COMPLETED),
+                        Decimal("0.00"),
+                    )
+                    remaining = ef.amount - paid
+                    if remaining > 0:
+                        fees_remaining += remaining
+
+        summaries.append(
+            ParentDashboardChild(
+                id=student.id,
+                full_name=full_name,
+                class_name=class_name,
+                general_average=general_average,
+                total_absences=total_absences,
+                fees_remaining=fees_remaining,
+            )
+        )
+
+    return ParentDashboardResponse(
+        parent_name=parent_name,
+        total_children=len(summaries),
+        children=summaries,
+    )
 
 
 async def get_child_grades(

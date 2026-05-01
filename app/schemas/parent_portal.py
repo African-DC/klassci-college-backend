@@ -41,6 +41,30 @@ class ChildrenListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Dashboard (résumé global parent)
+# ---------------------------------------------------------------------------
+
+
+class ParentDashboardChild(BaseModel):
+    """Résumé KPIs d'un enfant pour la dashboard parent."""
+
+    id: int
+    full_name: str
+    class_name: str
+    general_average: float | None
+    total_absences: int
+    fees_remaining: Decimal
+
+
+class ParentDashboardResponse(BaseModel):
+    """Dashboard parent — agrège les KPIs des enfants liés."""
+
+    parent_name: str
+    total_children: int
+    children: list[ParentDashboardChild]
+
+
+# ---------------------------------------------------------------------------
 # Grades
 # ---------------------------------------------------------------------------
 

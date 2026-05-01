@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Tableau de bord parent : un seul appel retourne pour chaque enfant la classe, la moyenne générale, le nombre d'absences et le solde restant à payer, sans avoir à ouvrir chaque fiche *(parent)* (#120).
 - **Attestation de fréquentation officielle** : PDF République de Côte d'Ivoire signé par le chef d'établissement avec un tableau des statistiques de présence (présent / retard / absence excusée / absence non excusée) et un taux de fréquentation calculé sur l'année scolaire en cours. Endpoint `GET /students/{id}/documents/attestation-frequentation.pdf` avec les mêmes gardes d'accès que le certificat *(admin, parent, élève)* (#109).
 - **Certificat de scolarité officiel** : l'admin (et le parent en self-service) peut télécharger un PDF République de Côte d'Ivoire signé par le chef d'établissement, avec corps formel "Le soussigné certifie que [élève], né(e) le ... à ..., est régulièrement inscrit(e) en classe de [...] au titre de l'année scolaire [...]". Endpoint `GET /students/{id}/documents/certificat-scolarite.pdf` avec garde d'accès parent (lien parent_student) et étudiant (compte propre) *(admin, parent, élève)* (#107).
 - Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents *(admin)* (#105).
