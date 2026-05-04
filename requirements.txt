@@ -11,7 +11,7 @@ cryptography==46.0.5
 redis==5.2.1
 celery==5.4.0
 httpx==0.28.1
-python-multipart==0.0.22
+python-multipart==0.0.27
 boto3==1.42.97
 twilio==9.10.5
 ortools>=9.10
