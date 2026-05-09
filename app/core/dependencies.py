@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import jwt
@@ -21,11 +21,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @dataclass
 class TokenData:
-    """Données extraites du JWT — représente l'utilisateur authentifié."""
+    """Données extraites du JWT ou du PAT — représente l'appelant authentifié."""
 
     user_id: int
     tenant_id: str
     email: str
+    auth_method: str = "jwt"
+    pat_id: int | None = None
+    pat_scopes: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -48,11 +51,7 @@ async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> TokenData:
-    """Décode le JWT, vérifie le tenant et valide l'utilisateur en base."""
+async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError as exc:
@@ -73,7 +72,6 @@ async def get_current_user(
     except (KeyError, ValueError, TypeError) as exc:
         raise UnauthorizedError("Invalid token claims") from exc
 
-    # Vérification DB : utilisateur actif
     from app.repositories.user_repository import get_user_by_id
 
     user = await get_user_by_id(db, user_id)
@@ -84,7 +82,42 @@ async def get_current_user(
         user_id=user_id,
         tenant_id=token_tenant,
         email=payload.get("email", ""),
+        auth_method="jwt",
     )
+
+
+async def _authenticate_pat(token: str, db: AsyncSession) -> TokenData:
+    from app.repositories.user_repository import get_user_by_id
+    from app.services.pat_service import lookup_pat, touch_last_used
+
+    pat = await lookup_pat(db, token)
+    if pat is None:
+        raise UnauthorizedError("Invalid or expired access token")
+
+    user = await get_user_by_id(db, pat.user_id)
+    if not user or not user.is_active:
+        raise UnauthorizedError("User not found or inactive")
+
+    await touch_last_used(db, pat.id)
+
+    return TokenData(
+        user_id=pat.user_id,
+        tenant_id=current_tenant_id.get(),
+        email=user.email,
+        auth_method="pat",
+        pat_id=pat.id,
+        pat_scopes=list(pat.scopes),
+    )
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> TokenData:
+    """Authenticate via JWT or PAT. Dispatch on token prefix."""
+    if token.startswith("klc_pat_"):
+        return await _authenticate_pat(token, db)
+    return await _authenticate_jwt(token, db)
 
 
 # ---------------------------------------------------------------------------
@@ -92,13 +125,38 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 
 
+def _scope_matches(scopes: list[str], required: str) -> bool:
+    """Wildcard-aware scope check, mirrored from pat_service.has_scope."""
+    if required in scopes:
+        return True
+    parts = required.split(":")
+    for i in range(len(parts)):
+        wildcard = ":".join(parts[:i]) + (":*" if i > 0 else "*")
+        if wildcard in scopes:
+            return True
+    return False
+
+
 def require_permission(permission_slug: str) -> Any:
-    """Retourne une dépendance FastAPI qui vérifie une permission en base."""
+    """Retourne une dépendance FastAPI qui vérifie une permission.
+
+    Pour les PAT : autorise uniquement si la permission est couverte par le scope
+    déclaré à la création du token. La permission DB du user n'est PAS re-vérifiée
+    pour l'instant (TODO BE-4 : intersection user-role × pat-scope pour révoquer
+    les permissions perdues sur tous les PAT existants).
+
+    Pour les JWT : flow historique — lecture de la matrice rôle/permission en DB.
+    """
 
     async def _check(
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
+        if current_user.auth_method == "pat":
+            if not _scope_matches(current_user.pat_scopes, permission_slug):
+                raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
+            return
+
         from app.repositories.permission_repository import check_user_permission
 
         has_perm = await check_user_permission(db, current_user.user_id, permission_slug)

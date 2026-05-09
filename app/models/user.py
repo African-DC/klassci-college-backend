@@ -35,6 +35,7 @@ class UserRoleEnum(str, enum.Enum):
     STAFF = "staff"
     STUDENT = "student"
     PARENT = "parent"
+    SUPER_ADMIN = "super_admin"
 
 
 class Genre(str, enum.Enum):
