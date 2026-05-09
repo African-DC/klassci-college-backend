@@ -68,10 +68,20 @@ async def list_classes(tenant_slug: str, *, limit: int, offset: int) -> list[dic
     )
 
 
+_ALLOWED_COUNT_TABLES = frozenset(
+    {"students", "teacher_profiles", "teachers", "staff_profiles", "classes", "users"}
+)
+
+
 async def count_rows(tenant_slug: str, table: str) -> int:
-    """Count rows for a single table on the target tenant. Caller must validate the table name."""
-    if not table.replace("_", "").isalnum():
-        raise ValueError(f"Invalid table name '{table}'")
+    """Count rows for a single allow-listed table on the target tenant.
+
+    Strict allowlist (not just regex) because the table name reaches a raw
+    f-string SQL — a typo upstream that lets through e.g. ``students; --``
+    must be impossible by construction.
+    """
+    if table not in _ALLOWED_COUNT_TABLES:
+        raise ValueError(f"Table '{table}' not in count allowlist")
     async with short_lived_engine(tenant_database_url(tenant_slug), pool_pre_ping=True) as engine:
         async with engine.begin() as conn:
             result = await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))

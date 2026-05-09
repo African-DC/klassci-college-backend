@@ -19,7 +19,7 @@ def teacher_group() -> None:
 @click.pass_context
 def list_teachers(ctx: click.Context, tenant_slug: str, limit: int, offset: int) -> None:
     """List teachers (paginated)."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]

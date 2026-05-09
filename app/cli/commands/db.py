@@ -28,7 +28,7 @@ def db_query(
     yes: bool,
 ) -> None:
     """Run a SQL query. Without --execute you get warnings only (preview)."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]

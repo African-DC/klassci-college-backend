@@ -16,7 +16,7 @@ def pat_group() -> None:
 @click.pass_context
 def list_pats(ctx: click.Context) -> None:
     """List your tokens (no plaintext shown — only metadata)."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
@@ -67,7 +67,7 @@ def create_pat(
     expires_in_days: int,
 ) -> None:
     """Mint a new token. The plaintext is shown ONCE — copy it immediately."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
@@ -102,7 +102,7 @@ def create_pat(
 @click.pass_context
 def revoke_pat(ctx: click.Context, pat_id: int, yes: bool) -> None:
     """Permanently revoke a token by id. Cannot be undone."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
 

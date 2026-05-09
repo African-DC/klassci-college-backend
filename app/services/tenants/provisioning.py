@@ -29,7 +29,15 @@ logger = logging.getLogger(__name__)
 
 
 async def create_tenant_database(tenant_slug: str) -> None:
-    """Step 1: create the MySQL database for the tenant (idempotent)."""
+    """Step 1: create the MySQL database for the tenant (idempotent).
+
+    Re-validates the slug at the boundary even though callers (provision_tenant
+    and the BE-7 operations layer) are expected to have already done so. The
+    slug ends up in raw SQL via f-string because MySQL ``CREATE DATABASE``
+    does not accept parameter binding for the database name — defense in
+    depth via strict regex is the only available control.
+    """
+    validate_tenant_slug(tenant_slug)
     async with short_lived_engine(
         management_database_url(), isolation_level="AUTOCOMMIT"
     ) as engine:
@@ -45,6 +53,7 @@ async def create_tenant_database(tenant_slug: str) -> None:
 
 async def run_migrations(tenant_slug: str) -> None:
     """Step 2: run all Alembic migrations on the tenant database."""
+    validate_tenant_slug(tenant_slug)
     env = os.environ.copy()
     env["TENANT_ID"] = tenant_slug
     result = subprocess.run(
@@ -182,6 +191,7 @@ async def seed_tenant_data(
     ministry_code: str | None = None,
 ) -> dict[str, Any]:
     """Step 3: seed permissions, roles, admin user, and school settings."""
+    validate_tenant_slug(tenant_slug)
     async with short_lived_engine(tenant_database_url(tenant_slug), pool_pre_ping=True) as engine:
         factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
         async with factory() as db:

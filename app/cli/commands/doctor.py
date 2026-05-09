@@ -11,7 +11,7 @@ from app.cli.output import emit
 @click.pass_context
 def doctor(ctx: click.Context) -> None:
     """Run platform health checks (backend / database / Redis / SMTP)."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]

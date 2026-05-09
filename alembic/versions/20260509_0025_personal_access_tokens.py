@@ -51,7 +51,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_pat_expires_at", table_name="personal_access_tokens")
-    op.drop_index("idx_pat_user_id", table_name="personal_access_tokens")
-    op.drop_index("uq_pat_token_hash", table_name="personal_access_tokens")
+    # ``op.drop_table`` cascades the foreign-key + indexes; explicit
+    # ``op.drop_index`` calls would fail with MySQL 1553 because the
+    # user_id index backs the FK and cannot be dropped while it exists.
     op.drop_table("personal_access_tokens")

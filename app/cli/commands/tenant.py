@@ -17,7 +17,7 @@ def tenant_group() -> None:
 @click.pass_context
 def list_tenants(ctx: click.Context) -> None:
     """List all tenants on the platform."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
@@ -38,7 +38,7 @@ def list_tenants(ctx: click.Context) -> None:
 @click.pass_context
 def show_tenant(ctx: click.Context, slug: str) -> None:
     """Show details and stats for a single tenant."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
@@ -68,7 +68,7 @@ def show_tenant(ctx: click.Context, slug: str) -> None:
 @click.pass_context
 def check_slug(ctx: click.Context, slug: str) -> None:
     """Check whether a slug is valid and available."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
@@ -107,7 +107,7 @@ def create_tenant(
     ministry_code: str | None,
 ) -> None:
     """Provision a new tenant (creates DB, runs migrations, seeds admin)."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]

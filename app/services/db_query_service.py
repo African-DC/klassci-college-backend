@@ -20,14 +20,16 @@ from app.core.database import tenant_database_url
 from app.services.tenants._engine import short_lived_engine
 
 _DANGER_PATTERNS = [
-    (re.compile(r"\bDROP\s+(TABLE|DATABASE|INDEX|VIEW)\b", re.IGNORECASE), "DROP_STATEMENT"),
+    (re.compile(r"\bDROP[ \t]+(TABLE|DATABASE|INDEX|VIEW)\b", re.IGNORECASE), "DROP_STATEMENT"),
     (re.compile(r"\bTRUNCATE\b", re.IGNORECASE), "TRUNCATE_STATEMENT"),
-    (re.compile(r"\bALTER\s+TABLE\b", re.IGNORECASE), "ALTER_TABLE"),
+    (re.compile(r"\bALTER[ \t]+TABLE\b", re.IGNORECASE), "ALTER_TABLE"),
     (re.compile(r"\bGRANT\b", re.IGNORECASE), "GRANT_STATEMENT"),
     (re.compile(r"\bREVOKE\b", re.IGNORECASE), "REVOKE_STATEMENT"),
 ]
-_WHERE_LESS_DELETE = re.compile(r"\bDELETE\s+FROM\s+\w+\s*(?:;|$)", re.IGNORECASE)
-_WHERE_LESS_UPDATE = re.compile(r"\bUPDATE\s+\w+\s+SET\s+[^;]+?(?:;|$)", re.IGNORECASE)
+# Use bounded fixed-width whitespace classes (no `\s+\s*` overlap) to avoid
+# polynomial backtracking on adversarial SQL inputs.
+_WHERE_LESS_DELETE = re.compile(r"\bDELETE[ \t]+FROM[ \t]+\w+[ \t]*(?:;|$)", re.IGNORECASE)
+_WHERE_LESS_UPDATE = re.compile(r"\bUPDATE[ \t]+\w+[ \t]+SET[ \t]+[^;]+?(?:;|$)", re.IGNORECASE)
 
 
 def analyse_sql(sql: str) -> list[dict[str, str]]:
@@ -60,6 +62,9 @@ async def execute_sql(
     *,
     limit: int,
 ) -> dict[str, Any]:
+    from app.core.slug import validate_tenant_slug
+
+    validate_tenant_slug(tenant_slug)
     start = time.perf_counter()
     async with short_lived_engine(tenant_database_url(tenant_slug), pool_pre_ping=True) as engine:
         async with engine.begin() as conn:

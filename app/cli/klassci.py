@@ -2,6 +2,10 @@
 
 Invoke via ``python -m app.cli.klassci`` (a console_scripts entry point
 will land once the project ships a ``[project]`` section in pyproject).
+
+``get_dispatcher`` lives in ``app.cli.context`` to break the cyclic
+import that arose when command modules needed to access the dispatcher
+defined alongside the root group.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from app.cli.commands.pat import pat_group
 from app.cli.commands.student import student_group
 from app.cli.commands.teacher import teacher_group
 from app.cli.commands.tenant import tenant_group
-from app.cli.dispatcher import LocalDispatcher, RemoteDispatcher
+from app.cli.context import get_dispatcher  # noqa: F401  re-export for backward compat
 
 VERSION = "0.1.0"
 
@@ -64,19 +68,6 @@ def cli(
     ctx.obj["api_url"] = api_url
     ctx.obj["profile"] = profile
     ctx.obj["format"] = output_format
-
-
-def get_dispatcher(ctx: click.Context):
-    """Lazy: build the dispatcher only when an authenticated subcommand needs it."""
-    if "dispatcher" in ctx.obj:
-        return ctx.obj["dispatcher"]
-    if ctx.obj["mode"] == "local":
-        ctx.obj["dispatcher"] = LocalDispatcher()
-    else:
-        ctx.obj["dispatcher"] = RemoteDispatcher(
-            api_url=ctx.obj["api_url"], profile=ctx.obj["profile"]
-        )
-    return ctx.obj["dispatcher"]
 
 
 cli.add_command(login)

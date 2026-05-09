@@ -13,7 +13,7 @@ from app.cli.output import emit
 @click.pass_context
 def logs(ctx: click.Context, service: str, lines: int) -> None:
     """Tail journalctl for a service. Auth headers / tokens / emails are redacted."""
-    from app.cli.klassci import get_dispatcher
+    from app.cli.context import get_dispatcher
 
     dispatcher = get_dispatcher(ctx)
     fmt = ctx.obj["format"]
