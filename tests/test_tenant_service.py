@@ -7,8 +7,10 @@ import pytest
 from app.services.tenant_service import (
     ALL_PERMISSIONS,
     ROLE_DEFINITIONS,
+    TenantAlreadyProvisioned,
     provision_tenant,
 )
+from app.services.tenants import create_admin_user_for_tenant
 
 # ---------------------------------------------------------------------------
 # Validation du slug
@@ -30,7 +32,7 @@ from app.services.tenant_service import (
 )
 def test_provision_tenant_invalid_slug(slug: str) -> None:
     """Les slugs invalides doivent lever ValueError."""
-    with pytest.raises(ValueError, match="Invalid tenant_slug"):
+    with pytest.raises(ValueError, match="2-63 caractères"):
         import asyncio
 
         asyncio.run(
@@ -63,15 +65,15 @@ async def test_provision_tenant_success() -> None:
     """Le workflow complet doit appeler create DB, migrate, seed dans l'ordre."""
     with (
         patch(
-            "app.services.tenant_service.create_tenant_database",
+            "app.services.tenants.provisioning.create_tenant_database",
             new_callable=AsyncMock,
         ) as mock_create_db,
         patch(
-            "app.services.tenant_service.run_migrations",
+            "app.services.tenants.provisioning.run_migrations",
             new_callable=AsyncMock,
         ) as mock_migrate,
         patch(
-            "app.services.tenant_service.seed_tenant_data",
+            "app.services.tenants.provisioning.seed_tenant_data",
             new_callable=AsyncMock,
             return_value={"admin_user_id": 1, "admin_email": "admin@test.ci"},
         ) as mock_seed,
@@ -154,3 +156,75 @@ def test_role_permissions_reference_valid_slugs() -> None:
     for role_name, role_def in ROLE_DEFINITIONS.items():
         for slug in role_def["permissions"]:
             assert slug in valid_slugs, f"Role '{role_name}' references unknown permission '{slug}'"
+
+
+def test_super_admin_role_present_with_all_super_admin_perms() -> None:
+    """The super_admin role must exist and own every super-admin:* permission."""
+    assert "super_admin" in ROLE_DEFINITIONS
+    super_admin_perms = set(ROLE_DEFINITIONS["super_admin"]["permissions"])
+    expected = {p["slug"] for p in ALL_PERMISSIONS if p["slug"].startswith("super-admin:")}
+    assert super_admin_perms == expected
+    assert len(expected) >= 7, "Expected at least 7 super-admin:* permissions seeded"
+
+
+def test_admin_role_does_not_carry_super_admin_perms() -> None:
+    """admin / director are tenant-scoped — they must NOT carry cross-tenant powers."""
+    for role_name in ("admin", "director"):
+        perms = ROLE_DEFINITIONS[role_name]["permissions"]
+        assert not any(
+            p.startswith("super-admin:") for p in perms
+        ), f"Role '{role_name}' must not include super-admin:* permissions"
+
+
+# ---------------------------------------------------------------------------
+# Idempotency — re-running provision_tenant on a bootstrapped tenant
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_admin_user_raises_when_admin_already_exists() -> None:
+    """Re-provisioning a tenant whose admin already exists must raise TenantAlreadyProvisioned."""
+    db = AsyncMock()
+    select_existing = MagicMock()
+    select_existing.scalar_one_or_none = MagicMock(return_value=42)
+    db.execute = AsyncMock(return_value=select_existing)
+
+    with pytest.raises(TenantAlreadyProvisioned) as excinfo:
+        await create_admin_user_for_tenant(
+            db,
+            tenant_slug="lycee-test",
+            admin_email="admin@lycee-test.ci",
+            admin_password="SecureP@ss123",
+            school_name="Lycee Test",
+        )
+
+    assert excinfo.value.tenant_slug == "lycee-test"
+    assert excinfo.value.admin_email == "admin@lycee-test.ci"
+    assert excinfo.value.existing_user_id == 42
+    db.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_admin_user_inserts_when_admin_does_not_exist() -> None:
+    """First-time provisioning must insert the admin user, role link, and staff_profile."""
+    db = AsyncMock()
+    no_existing = MagicMock()
+    no_existing.scalar_one_or_none = MagicMock(return_value=None)
+    insert_user = MagicMock()
+    insert_user.lastrowid = 99
+    role_lookup = MagicMock()
+    role_lookup.scalar_one = MagicMock(return_value=1)
+
+    db.execute = AsyncMock(side_effect=[no_existing, insert_user, role_lookup, None, None])
+
+    user_id = await create_admin_user_for_tenant(
+        db,
+        tenant_slug="lycee-test",
+        admin_email="admin@lycee-test.ci",
+        admin_password="SecureP@ss123",
+        school_name="Lycee Test",
+    )
+
+    assert user_id == 99
+    # 5 statements: SELECT existing, INSERT user, SELECT role, INSERT user_role, INSERT staff_profile
+    assert db.execute.await_count == 5
