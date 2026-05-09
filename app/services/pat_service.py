@@ -10,11 +10,12 @@ salt+slow-hashing buy nothing meaningful while costing CPU on every request.
 
 import hashlib
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.datetimes import utcnow_naive
 from app.models.personal_access_token import PersonalAccessToken
 
 PAT_PREFIX = "klc_pat_"
@@ -56,7 +57,7 @@ async def create_pat(
         token_prefix=prefix,
         user_id=user_id,
         scopes=list(scopes),
-        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=expires_in_days),
+        expires_at=utcnow_naive() + timedelta(days=expires_in_days),
     )
     db.add(pat)
     await db.flush()
@@ -71,11 +72,9 @@ async def lookup_pat(db: AsyncSession, plaintext: str) -> PersonalAccessToken | 
     stmt = select(PersonalAccessToken).where(PersonalAccessToken.token_hash == token_hash)
     result = await db.execute(stmt)
     pat = result.scalar_one_or_none()
-    if pat is None:
+    if pat is None or pat.revoked_at is not None:
         return None
-    if pat.revoked_at is not None:
-        return None
-    if pat.expires_at < datetime.now(UTC).replace(tzinfo=None):
+    if pat.expires_at < utcnow_naive():
         return None
     return pat
 
@@ -85,7 +84,7 @@ async def touch_last_used(db: AsyncSession, pat_id: int) -> None:
     stmt = (
         update(PersonalAccessToken)
         .where(PersonalAccessToken.id == pat_id)
-        .values(last_used_at=datetime.now(UTC).replace(tzinfo=None))
+        .values(last_used_at=utcnow_naive())
     )
     await db.execute(stmt)
 
@@ -98,7 +97,7 @@ async def revoke_pat(db: AsyncSession, pat_id: int) -> bool:
             PersonalAccessToken.id == pat_id,
             PersonalAccessToken.revoked_at.is_(None),
         )
-        .values(revoked_at=datetime.now(UTC).replace(tzinfo=None))
+        .values(revoked_at=utcnow_naive())
     )
     result = await db.execute(stmt)
     return result.rowcount > 0
@@ -114,13 +113,21 @@ async def list_user_pats(db: AsyncSession, user_id: int) -> list[PersonalAccessT
     return list(result.scalars().all())
 
 
-def has_scope(pat: PersonalAccessToken, required: str) -> bool:
-    """Wildcard scope check: ``super-admin:*`` covers ``super-admin:tenants:read``, etc."""
-    if required in pat.scopes:
+def scope_matches(scopes: list[str], required: str) -> bool:
+    """Wildcard-aware scope check.
+
+    ``super-admin:*`` covers ``super-admin:tenants:read`` and any other
+    sub-segment. ``*`` covers everything.
+    """
+    if required in scopes:
         return True
     parts = required.split(":")
     for i in range(len(parts)):
         wildcard = ":".join(parts[:i]) + (":*" if i > 0 else "*")
-        if wildcard in pat.scopes:
+        if wildcard in scopes:
             return True
     return False
+
+
+def has_scope(pat: PersonalAccessToken, required: str) -> bool:
+    return scope_matches(pat.scopes, required)

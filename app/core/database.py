@@ -17,6 +17,21 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_DATABASES: frozenset[str] = frozenset(
+    {"information_schema", "mysql", "performance_schema", "sys", "alembic_migration"}
+)
+
+
+def management_database_url() -> str:
+    """URL pour les requêtes cross-tenant (information_schema, CREATE DATABASE)."""
+    return settings.DATABASE_URL.replace("/{tenant}", "/")
+
+
+def tenant_database_url(tenant_slug: str) -> str:
+    """URL d'un tenant spécifique — utiliser hors du flow get_db() scopé JWT."""
+    return settings.DATABASE_URL.format(tenant=tenant_slug)
+
+
 # ContextVar qui stocke le tenant_id courant pour chaque requête
 current_tenant_id: ContextVar[str] = ContextVar(
     "current_tenant_id", default=settings.LOCAL_TENANT_ID

@@ -1,10 +1,10 @@
 """Schémas Pydantic pour les opérations super-admin sur les tenants."""
 
-import re
-from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, field_validator
+
+from app.core.slug import validate_tenant_slug
 
 
 class TenantProvisionRequest(BaseModel):
@@ -20,9 +20,7 @@ class TenantProvisionRequest(BaseModel):
     @field_validator("tenant_slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
-        if not re.match(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$", v):
-            raise ValueError("Must be 2-63 chars, lowercase alphanumeric + hyphens")
-        return v
+        return validate_tenant_slug(v)
 
     @field_validator("admin_password")
     @classmethod
@@ -44,7 +42,6 @@ class TenantListItem(BaseModel):
     slug: str
     url: str
     db_size_bytes: int
-    created_at: datetime | None = None
 
 
 class TenantListResponse(BaseModel):
@@ -95,15 +92,4 @@ class SlugCheckResponse(BaseModel):
 
 
 def to_detail_response(payload: dict[str, Any]) -> TenantDetailResponse:
-    return TenantDetailResponse(
-        slug=payload["slug"],
-        url=payload["url"],
-        school_settings=(
-            TenantSchoolSettings(**payload["school_settings"])
-            if payload.get("school_settings")
-            else None
-        ),
-        counts=TenantCounts(**payload["counts"]),
-        alembic_head=payload.get("alembic_head"),
-        db_size_bytes=payload["db_size_bytes"],
-    )
+    return TenantDetailResponse.model_validate(payload)

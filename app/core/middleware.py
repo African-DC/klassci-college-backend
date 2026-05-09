@@ -76,12 +76,14 @@ def _tenant_from_jwt(authorization: str) -> str | None:
     sera résolu via header / subdomain / fallback local. Le PAT lui-même est
     validé en DB par get_current_user (ne peut pas faire d'await ici).
     """
+    from app.services.pat_service import is_pat_token
+
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     token = authorization[7:].strip()
     if not token:
         return None
-    if token.startswith("klc_pat_"):
+    if is_pat_token(token):
         return None
     try:
         # options: ne pas vérifier la signature/exp ici — juste lire le claim

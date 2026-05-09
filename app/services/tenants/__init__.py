@@ -7,6 +7,7 @@ focused submodule (lifecycle.py, query.py) rather than this __init__.
 from app.services.tenants.exceptions import TenantAlreadyProvisioned
 from app.services.tenants.permissions import ALL_PERMISSIONS, ROLE_DEFINITIONS
 from app.services.tenants.provisioning import (
+    create_admin_user_for_tenant,
     create_tenant_database,
     provision_tenant,
     run_migrations,
@@ -23,6 +24,7 @@ __all__ = [
     "ALL_PERMISSIONS",
     "ROLE_DEFINITIONS",
     "TenantAlreadyProvisioned",
+    "create_admin_user_for_tenant",
     "create_tenant_database",
     "get_tenant_summary",
     "get_tenants_overview",

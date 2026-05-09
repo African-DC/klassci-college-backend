@@ -4,38 +4,36 @@ Idempotent on the user existence check: re-running for a tenant whose admin
 already exists raises `TenantAlreadyProvisioned` instead of silently
 overwriting credentials or duplicating staff_profiles / school_settings.
 
-Subprocess-based alembic call inherited from the original implementation. A
-follow-up task (see operations layer) may swap to a programmatic alembic
-runner once the CLI matures, but subprocess is robust enough for now and
-isolates env var leakage.
+Subprocess-based alembic call (rather than programmatic) isolates env-var
+leakage between concurrent provisioning calls.
 """
 
 import logging
 import os
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core.config import settings
+from app.core.database import management_database_url, tenant_database_url
 from app.core.security import hash_password
+from app.core.slug import validate_tenant_slug
+from app.models.user import UserRoleEnum
+from app.services.tenants._engine import short_lived_engine
 from app.services.tenants.exceptions import TenantAlreadyProvisioned
 from app.services.tenants.permissions import ALL_PERMISSIONS, ROLE_DEFINITIONS
 
 logger = logging.getLogger(__name__)
 
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
-
 
 async def create_tenant_database(tenant_slug: str) -> None:
     """Step 1: create the MySQL database for the tenant (idempotent)."""
-    base_url = settings.DATABASE_URL.replace("/{tenant}", "/")
-    mgmt_engine = create_async_engine(base_url, isolation_level="AUTOCOMMIT")
-    try:
-        async with mgmt_engine.begin() as conn:
+    async with short_lived_engine(
+        management_database_url(), isolation_level="AUTOCOMMIT"
+    ) as engine:
+        async with engine.begin() as conn:
             await conn.execute(
                 text(
                     f"CREATE DATABASE IF NOT EXISTS `{tenant_slug}` "
@@ -43,8 +41,6 @@ async def create_tenant_database(tenant_slug: str) -> None:
                 )
             )
             logger.info("Database '%s' created", tenant_slug)
-    finally:
-        await mgmt_engine.dispose()
 
 
 async def run_migrations(tenant_slug: str) -> None:
@@ -92,7 +88,7 @@ async def _seed_permissions_and_roles(db: AsyncSession) -> None:
             )
 
 
-async def _create_admin_user(
+async def create_admin_user_for_tenant(
     db: AsyncSession,
     *,
     tenant_slug: str,
@@ -100,6 +96,7 @@ async def _create_admin_user(
     admin_password: str,
     school_name: str,
 ) -> int:
+    """Insert admin User + UserRole + StaffProfile, or raise if already exists."""
     existing = await db.execute(
         text("SELECT id FROM users WHERE email = :email"),
         {"email": admin_email},
@@ -112,20 +109,23 @@ async def _create_admin_user(
             existing_user_id=existing_id,
         )
 
-    await db.execute(
+    insert_user = await db.execute(
         text(
             "INSERT INTO users (email, hashed_password, role, is_active) "
-            "VALUES (:email, :hashed, 'admin', 1)"
+            "VALUES (:email, :hashed, :role, 1)"
         ),
-        {"email": admin_email, "hashed": hash_password(admin_password)},
+        {
+            "email": admin_email,
+            "hashed": hash_password(admin_password),
+            "role": UserRoleEnum.ADMIN.value,
+        },
     )
-    inserted = await db.execute(
-        text("SELECT id FROM users WHERE email = :email"),
-        {"email": admin_email},
-    )
-    admin_user_id = inserted.scalar_one()
+    admin_user_id = int(insert_user.lastrowid)
 
-    role_lookup = await db.execute(text("SELECT id FROM roles WHERE name = 'admin'"))
+    role_lookup = await db.execute(
+        text("SELECT id FROM roles WHERE name = :name"),
+        {"name": UserRoleEnum.ADMIN.value},
+    )
     admin_role_id = role_lookup.scalar_one()
     await db.execute(
         text("INSERT INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)"),
@@ -182,14 +182,12 @@ async def seed_tenant_data(
     ministry_code: str | None = None,
 ) -> dict[str, Any]:
     """Step 3: seed permissions, roles, admin user, and school settings."""
-    tenant_url = settings.DATABASE_URL.format(tenant=tenant_slug)
-    engine = create_async_engine(tenant_url, pool_pre_ping=True)
-    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-    try:
+    async with short_lived_engine(tenant_database_url(tenant_slug), pool_pre_ping=True) as engine:
+        factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
         async with factory() as db:
             async with db.begin():
                 await _seed_permissions_and_roles(db)
-                admin_user_id = await _create_admin_user(
+                admin_user_id = await create_admin_user_for_tenant(
                     db,
                     tenant_slug=tenant_slug,
                     admin_email=admin_email,
@@ -206,8 +204,6 @@ async def seed_tenant_data(
                 )
             logger.info("Seed data inserted for tenant '%s'", tenant_slug)
             return {"admin_user_id": admin_user_id, "admin_email": admin_email}
-    finally:
-        await engine.dispose()
 
 
 async def provision_tenant(
@@ -224,11 +220,7 @@ async def provision_tenant(
     send_welcome_email: bool = True,
 ) -> dict[str, Any]:
     """Full provisioning workflow: create DB → migrate → seed → welcome email."""
-    if not _SLUG_RE.match(tenant_slug):
-        raise ValueError(
-            f"Invalid tenant_slug '{tenant_slug}': "
-            "must be 2-63 chars, lowercase alphanumeric + hyphens"
-        )
+    validate_tenant_slug(tenant_slug)
 
     logger.info("=== Provisioning tenant '%s' ===", tenant_slug)
 

@@ -44,20 +44,6 @@ def _clear_deps() -> None:
     app.dependency_overrides.clear()
 
 
-def _bypass_perm() -> None:
-    """Force require_permission to no-op so endpoint logic can be tested."""
-    from app.core import dependencies as deps
-
-    async def _allow(*_a, **_kw):
-        return None
-
-    # Replace the wrapped check function. require_permission(...) returns
-    # Depends(_check); we override the underlying _check via dep overrides
-    # using FastAPI's standard mechanism.
-    # Simplest approach: monkey-patch require_permission to return a no-op
-    # dependency. Done in tests via patch as needed.
-
-
 # ---------------------------------------------------------------------------
 # POST /super-admin/tenants
 # ---------------------------------------------------------------------------
@@ -171,13 +157,11 @@ def test_list_tenants_returns_overview() -> None:
             "slug": "lycee-moderne",
             "url": "https://lycee-moderne.college.klassci.com",
             "db_size_bytes": 12345678,
-            "created_at": None,
         },
         {
             "slug": "college-01",
             "url": "https://college-01.college.klassci.com",
             "db_size_bytes": 9876543,
-            "created_at": None,
         },
     ]
     try:

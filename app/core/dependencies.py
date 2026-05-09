@@ -3,6 +3,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any
 
 import jwt
@@ -86,7 +87,11 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     )
 
 
+_LAST_USED_THROTTLE = timedelta(minutes=5)
+
+
 async def _authenticate_pat(token: str, db: AsyncSession) -> TokenData:
+    from app.core.datetimes import utcnow_naive
     from app.repositories.user_repository import get_user_by_id
     from app.services.pat_service import lookup_pat, touch_last_used
 
@@ -98,7 +103,8 @@ async def _authenticate_pat(token: str, db: AsyncSession) -> TokenData:
     if not user or not user.is_active:
         raise UnauthorizedError("User not found or inactive")
 
-    await touch_last_used(db, pat.id)
+    if pat.last_used_at is None or utcnow_naive() - pat.last_used_at >= _LAST_USED_THROTTLE:
+        await touch_last_used(db, pat.id)
 
     return TokenData(
         user_id=pat.user_id,
@@ -115,7 +121,9 @@ async def get_current_user(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> TokenData:
     """Authenticate via JWT or PAT. Dispatch on token prefix."""
-    if token.startswith("klc_pat_"):
+    from app.services.pat_service import is_pat_token
+
+    if is_pat_token(token):
         return await _authenticate_pat(token, db)
     return await _authenticate_jwt(token, db)
 
@@ -125,35 +133,23 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 
 
-def _scope_matches(scopes: list[str], required: str) -> bool:
-    """Wildcard-aware scope check, mirrored from pat_service.has_scope."""
-    if required in scopes:
-        return True
-    parts = required.split(":")
-    for i in range(len(parts)):
-        wildcard = ":".join(parts[:i]) + (":*" if i > 0 else "*")
-        if wildcard in scopes:
-            return True
-    return False
-
-
 def require_permission(permission_slug: str) -> Any:
     """Retourne une dépendance FastAPI qui vérifie une permission.
 
-    Pour les PAT : autorise uniquement si la permission est couverte par le scope
-    déclaré à la création du token. La permission DB du user n'est PAS re-vérifiée
-    pour l'instant (TODO BE-4 : intersection user-role × pat-scope pour révoquer
-    les permissions perdues sur tous les PAT existants).
+    Pour les PAT : la permission doit être couverte par le scope déclaré à
+    la création du token.
 
-    Pour les JWT : flow historique — lecture de la matrice rôle/permission en DB.
+    Pour les JWT : lecture de la matrice rôle/permission en DB.
     """
 
     async def _check(
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
+        from app.services.pat_service import scope_matches
+
         if current_user.auth_method == "pat":
-            if not _scope_matches(current_user.pat_scopes, permission_slug):
+            if not scope_matches(current_user.pat_scopes, permission_slug):
                 raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
             return
 

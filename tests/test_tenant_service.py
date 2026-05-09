@@ -10,7 +10,7 @@ from app.services.tenant_service import (
     TenantAlreadyProvisioned,
     provision_tenant,
 )
-from app.services.tenants.provisioning import _create_admin_user
+from app.services.tenants import create_admin_user_for_tenant
 
 # ---------------------------------------------------------------------------
 # Validation du slug
@@ -32,7 +32,7 @@ from app.services.tenants.provisioning import _create_admin_user
 )
 def test_provision_tenant_invalid_slug(slug: str) -> None:
     """Les slugs invalides doivent lever ValueError."""
-    with pytest.raises(ValueError, match="Invalid tenant_slug"):
+    with pytest.raises(ValueError, match="2-63 caractères"):
         import asyncio
 
         asyncio.run(
@@ -190,7 +190,7 @@ async def test_create_admin_user_raises_when_admin_already_exists() -> None:
     db.execute = AsyncMock(return_value=select_existing)
 
     with pytest.raises(TenantAlreadyProvisioned) as excinfo:
-        await _create_admin_user(
+        await create_admin_user_for_tenant(
             db,
             tenant_slug="lycee-test",
             admin_email="admin@lycee-test.ci",
@@ -210,16 +210,14 @@ async def test_create_admin_user_inserts_when_admin_does_not_exist() -> None:
     db = AsyncMock()
     no_existing = MagicMock()
     no_existing.scalar_one_or_none = MagicMock(return_value=None)
-    inserted_lookup = MagicMock()
-    inserted_lookup.scalar_one = MagicMock(return_value=99)
+    insert_user = MagicMock()
+    insert_user.lastrowid = 99
     role_lookup = MagicMock()
     role_lookup.scalar_one = MagicMock(return_value=1)
 
-    db.execute = AsyncMock(
-        side_effect=[no_existing, None, inserted_lookup, role_lookup, None, None]
-    )
+    db.execute = AsyncMock(side_effect=[no_existing, insert_user, role_lookup, None, None])
 
-    user_id = await _create_admin_user(
+    user_id = await create_admin_user_for_tenant(
         db,
         tenant_slug="lycee-test",
         admin_email="admin@lycee-test.ci",
@@ -228,4 +226,5 @@ async def test_create_admin_user_inserts_when_admin_does_not_exist() -> None:
     )
 
     assert user_id == 99
-    assert db.execute.await_count == 6
+    # 5 statements: SELECT existing, INSERT user, SELECT role, INSERT user_role, INSERT staff_profile
+    assert db.execute.await_count == 5

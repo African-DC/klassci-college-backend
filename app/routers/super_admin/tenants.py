@@ -1,10 +1,9 @@
 """Super-admin tenant ops: provision, list, show, slug availability check."""
 
-import re
-
 from fastapi import APIRouter, HTTPException
 
 from app.core.dependencies import require_permission
+from app.core.slug import is_valid_tenant_slug
 from app.schemas.tenant import (
     SlugCheckRequest,
     SlugCheckResponse,
@@ -24,8 +23,6 @@ from app.services.tenants import (
 )
 
 router = APIRouter(prefix="/tenants", tags=["super-admin"])
-
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$")
 
 
 @router.post(
@@ -83,7 +80,7 @@ async def get_tenant(
     slug: str,
     _: None = require_permission("super-admin:tenants:read"),
 ) -> TenantDetailResponse:
-    if not _SLUG_RE.match(slug):
+    if not is_valid_tenant_slug(slug):
         raise HTTPException(status_code=400, detail="Invalid slug format")
     summary = await get_tenant_summary(slug)
     if summary is None:
@@ -100,8 +97,7 @@ async def check_slug(
     data: SlugCheckRequest,
     _: None = require_permission("super-admin:tenants:read"),
 ) -> SlugCheckResponse:
-    valid_format = bool(_SLUG_RE.match(data.slug))
-    if not valid_format:
+    if not is_valid_tenant_slug(data.slug):
         return SlugCheckResponse(
             slug=data.slug,
             available=False,
