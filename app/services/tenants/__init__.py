@@ -12,13 +12,23 @@ from app.services.tenants.provisioning import (
     run_migrations,
     seed_tenant_data,
 )
+from app.services.tenants.query import (
+    get_tenant_summary,
+    get_tenants_overview,
+    list_tenant_slugs,
+    slug_exists,
+)
 
 __all__ = [
     "ALL_PERMISSIONS",
     "ROLE_DEFINITIONS",
     "TenantAlreadyProvisioned",
     "create_tenant_database",
+    "get_tenant_summary",
+    "get_tenants_overview",
+    "list_tenant_slugs",
     "provision_tenant",
     "run_migrations",
     "seed_tenant_data",
+    "slug_exists",
 ]
