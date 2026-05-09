@@ -2,10 +2,11 @@
 
 from fastapi import APIRouter
 
-from app.routers.super_admin import db_query, diagnose, logs, pats, tenants
+from app.routers.super_admin import db_query, diagnose, logs, pats, tenant_data, tenants
 
 router = APIRouter(prefix="/super-admin")
 router.include_router(tenants.router)
+router.include_router(tenant_data.router)
 router.include_router(pats.router)
 router.include_router(diagnose.router)
 router.include_router(logs.router)

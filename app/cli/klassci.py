@@ -10,9 +10,15 @@ import os
 
 import click
 
+from app.cli.commands.alembic_cmd import alembic_group
+from app.cli.commands.classes import class_group
+from app.cli.commands.db import db_group
 from app.cli.commands.doctor import doctor
 from app.cli.commands.login import login
+from app.cli.commands.logs import logs
 from app.cli.commands.pat import pat_group
+from app.cli.commands.student import student_group
+from app.cli.commands.teacher import teacher_group
 from app.cli.commands.tenant import tenant_group
 from app.cli.dispatcher import LocalDispatcher, RemoteDispatcher
 
@@ -75,8 +81,14 @@ def get_dispatcher(ctx: click.Context):
 
 cli.add_command(login)
 cli.add_command(tenant_group)
+cli.add_command(student_group)
+cli.add_command(teacher_group)
+cli.add_command(class_group)
 cli.add_command(pat_group)
 cli.add_command(doctor)
+cli.add_command(logs)
+cli.add_command(db_group)
+cli.add_command(alembic_group)
 
 
 def main() -> None:
