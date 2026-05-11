@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     # Tenant
     LOCAL_TENANT_ID: str = "local"  # tenant utilisé en dev local
 
+    # Public login URL template — utilisé pour générer le lien envoyé dans
+    # l'email de bienvenue tenant et l'URL affichée côté super-admin.
+    # {slug} est remplacé par le slug du tenant.
+    # Default = pattern single-domain (B-Lean) : ?c=<slug> en query param.
+    # Flip vers subdomain plus tard sans changer de code :
+    #   PUBLIC_LOGIN_URL_TEMPLATE="https://{slug}.college.klassci.com/login"
+    PUBLIC_LOGIN_URL_TEMPLATE: str = "https://college.klassci.com/login?c={slug}"
+
     # Host allowlist — protection CSRF / host header injection
     # Pattern regex matchant les hôtes acceptés en production multi-tenant.
     # Default couvre <tenant>.college.klassci.com (sous-domaines KLASSCI College).

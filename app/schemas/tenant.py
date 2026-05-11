@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, field_validator
 
-from app.core.slug import validate_tenant_slug
+from app.core.slug import validate_new_tenant_slug
 
 
 class TenantProvisionRequest(BaseModel):
@@ -20,7 +20,7 @@ class TenantProvisionRequest(BaseModel):
     @field_validator("tenant_slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
-        return validate_tenant_slug(v)
+        return validate_new_tenant_slug(v)
 
     @field_validator("admin_password")
     @classmethod
