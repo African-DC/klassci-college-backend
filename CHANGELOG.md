@@ -10,6 +10,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Création de tenant : les slugs réservés (`admin`, `api`, `auth`, `www`, `local`, `super-admin`, ...) sont désormais refusés à la création pour éviter toute collision avec un chemin plateforme *(super-admin)* (#136).
+- Lien de connexion configurable via `PUBLIC_LOGIN_URL_TEMPLATE` : par défaut `https://college.klassci.com/login?c=<slug>` (pattern single-domain), bascule vers sous-domaine sans changement de code *(devops)* (#136).
 - Provisionnement d'un nouvel établissement en libre-service : nouveau rôle « Super Administrateur », tableau de bord dédié et création de tenant en quelques clics, avec validation en direct du nom d'URL et progression visible des étapes *(super-admin)* (#134).
 - Onboarding par ligne de commande pour les agents IA : le CLI `klassci` (`tenant create`, `tenant list`, `pat create`, `doctor`, `db query`, `logs`, `alembic`, etc.) permet de provisionner et opérer la plateforme sans passer par le navigateur ni SSH *(super-admin, devops)* (#134).
 - Tokens d'accès personnels (PAT) : créer, lister, et révoquer ses propres tokens avec scopes (`super-admin:tenants:read`, `super-admin:db:execute`, …), expiration obligatoire (90 jours par défaut), et affichage du token clair une seule fois à la création *(super-admin)* (#134).

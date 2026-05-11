@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.core.dependencies import require_permission
-from app.core.slug import is_valid_tenant_slug
+from app.core.slug import is_reserved_tenant_slug, is_valid_tenant_slug
 from app.schemas.tenant import (
     SlugCheckRequest,
     SlugCheckResponse,
@@ -103,6 +103,14 @@ async def check_slug(
             available=False,
             valid_format=False,
             reason="Doit faire 2-63 caractères, minuscules + chiffres + tirets, sans tiret en début/fin",
+        )
+
+    if is_reserved_tenant_slug(data.slug):
+        return SlugCheckResponse(
+            slug=data.slug,
+            available=False,
+            valid_format=True,
+            reason="Ce slug est réservé (système ou collision plateforme). Choisir un autre identifiant.",
         )
 
     taken = await slug_exists(data.slug)

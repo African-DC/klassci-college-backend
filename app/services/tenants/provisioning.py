@@ -17,9 +17,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import settings
 from app.core.database import management_database_url, tenant_database_url
 from app.core.security import hash_password
-from app.core.slug import validate_tenant_slug
+from app.core.slug import validate_new_tenant_slug, validate_tenant_slug
 from app.models.user import UserRoleEnum
 from app.services.tenants._engine import short_lived_engine
 from app.services.tenants.exceptions import TenantAlreadyProvisioned
@@ -230,7 +231,7 @@ async def provision_tenant(
     send_welcome_email: bool = True,
 ) -> dict[str, Any]:
     """Full provisioning workflow: create DB → migrate → seed → welcome email."""
-    validate_tenant_slug(tenant_slug)
+    validate_new_tenant_slug(tenant_slug)
 
     logger.info("=== Provisioning tenant '%s' ===", tenant_slug)
 
@@ -247,6 +248,8 @@ async def provision_tenant(
         ministry_code=ministry_code,
     )
 
+    login_url = settings.PUBLIC_LOGIN_URL_TEMPLATE.format(slug=tenant_slug)
+
     email_sent = False
     if send_welcome_email:
         from app.services.email_service import send_tenant_welcome
@@ -255,7 +258,7 @@ async def provision_tenant(
             admin_email=admin_email,
             admin_first_name=admin_first_name,
             school_name=school_name,
-            tenant_slug=tenant_slug,
+            login_url=login_url,
             temp_password=admin_password,
         )
         if not email_sent:
@@ -266,7 +269,7 @@ async def provision_tenant(
         "tenant_slug": tenant_slug,
         "database": tenant_slug,
         "admin_email": seed_result["admin_email"],
-        "tenant_url": f"https://{tenant_slug}.college.klassci.com",
+        "tenant_url": login_url,
         "welcome_email_sent": email_sent,
         "status": "provisioned",
     }
