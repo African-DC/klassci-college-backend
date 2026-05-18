@@ -1,0 +1,147 @@
+"""Transitions de statut Payment : validate (pending → completed) + cancel.
+
+Cancel d'un paiement alloué à N fees cascade DELETE allocations (FK) puis
+recompute chaque fee.status. Audit log obligatoire avec breakdown
+(snapshot des allocations avant suppression) — décision Marcel #4.
+"""
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.audit import AuditAction, audit_log
+from app.core.exceptions import NotFoundError
+from app.models.fee import Payment, PaymentAllocation, PaymentStatus
+from app.repositories import payment_repository as repo
+from app.schemas.payment import PaymentResponse
+from app.services.payments._allocation import recompute_fee_status
+from app.services.payments._notification import dispatch_payment_notification
+from app.services.payments._response import payment_to_response
+from app.services.payments._state import VALID_TRANSITIONS
+
+
+async def _load_payment_for_transition(
+    db: AsyncSession, payment_id: int
+) -> Payment:
+    """Lock un Payment + ses allocations pour transition de statut."""
+    stmt = (
+        select(Payment)
+        .where(Payment.id == payment_id)
+        .options(
+            selectinload(Payment.allocations).selectinload(
+                PaymentAllocation.enrollment_fee
+            ),
+        )
+        .with_for_update(of=Payment)
+    )
+    result = await db.execute(stmt)
+    payment = result.scalar_one_or_none()
+    if payment is None:
+        raise NotFoundError("Payment", payment_id)
+    return payment
+
+
+def _ensure_transition_allowed(current: str, target: str) -> None:
+    if target not in VALID_TRANSITIONS.get(current, []):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transition invalide : impossible de passer de '{current}' à '{target}'",
+        )
+
+
+async def validate_payment(
+    db: AsyncSession,
+    payment_id: int,
+    *,
+    validated_by: int,
+) -> PaymentResponse:
+    """Transition un paiement de pending à completed + recalcul fees impactés."""
+    async with db.begin_nested():
+        payment = await _load_payment_for_transition(db, payment_id)
+        current = payment.status
+        _ensure_transition_allowed(current, "completed")
+
+        payment.status = PaymentStatus.COMPLETED.value
+        await db.flush()
+
+        for allocation in payment.allocations:
+            fee = await repo.get_enrollment_fee_for_update(
+                db, allocation.enrollment_fee_id
+            )
+            if fee is not None:
+                await recompute_fee_status(db, fee)
+        await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="payment",
+            action=AuditAction.UPDATE,
+            user_id=validated_by,
+            entity_id=payment.id,
+            old_values={"status": current},
+            new_values={"status": payment.status},
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_payment_with_allocations(db, payment.id)
+    if refreshed is None:
+        raise NotFoundError("Payment", payment.id)
+
+    await dispatch_payment_notification(db, refreshed, kind="validated")
+    return payment_to_response(refreshed)
+
+
+async def cancel_payment(
+    db: AsyncSession,
+    payment_id: int,
+    *,
+    cancelled_by: int,
+) -> PaymentResponse:
+    """Annule un paiement et recalcule les statuts de TOUS les fees alloués.
+
+    À l'annulation d'un payment alloué à N fees, cascade DELETE allocations
+    + recalcule chaque fee.status. Audit log obligatoire avec breakdown.
+    """
+    async with db.begin_nested():
+        payment = await _load_payment_for_transition(db, payment_id)
+        current = payment.status
+        _ensure_transition_allowed(current, "cancelled")
+
+        # Snapshot des allocations pour l'audit avant la transition
+        allocations_snapshot = [
+            {"enrollment_fee_id": a.enrollment_fee_id, "amount": str(a.amount)}
+            for a in payment.allocations
+        ]
+        affected_fee_ids = [a.enrollment_fee_id for a in payment.allocations]
+
+        payment.status = PaymentStatus.CANCELLED.value
+        await db.flush()
+
+        for fee_id in affected_fee_ids:
+            fee = await repo.get_enrollment_fee_for_update(db, fee_id)
+            if fee is not None:
+                await recompute_fee_status(db, fee)
+        await db.flush()
+
+        await audit_log(
+            db,
+            entity_type="payment",
+            action=AuditAction.UPDATE,
+            user_id=cancelled_by,
+            entity_id=payment.id,
+            old_values={"status": current},
+            new_values={
+                "status": payment.status,
+                "cancelled_allocations": allocations_snapshot,
+                "recomputed_fee_ids": affected_fee_ids,
+            },
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_payment_with_allocations(db, payment.id)
+    if refreshed is None:
+        raise NotFoundError("Payment", payment.id)
+    return payment_to_response(refreshed)

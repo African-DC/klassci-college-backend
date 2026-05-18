@@ -66,6 +66,7 @@ class ParentDashboardResponse(BaseModel):
     parent_name: str
     total_children: int
     children: list[ParentDashboardChild]
+    current_academic_year: str | None = None
 
 
 # ---------------------------------------------------------------------------

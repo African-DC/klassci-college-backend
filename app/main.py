@@ -19,6 +19,8 @@ from app.routers.auth import router as auth_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.dren_stats import router as dren_stats_router
+from app.routers.class_documents import router as class_documents_router
+from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
@@ -73,6 +75,8 @@ app.include_router(attendance_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(enrollments_router)
+app.include_router(enrollment_payments_router)
+app.include_router(class_documents_router)
 app.include_router(fees_router)
 app.include_router(grades_router)
 app.include_router(notifications_router)

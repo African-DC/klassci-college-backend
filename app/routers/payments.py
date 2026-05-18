@@ -1,6 +1,6 @@
-"""Router paiements — CRUD /payments."""
+"""Router paiements — CRUD /payments + bordereau journalier."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
@@ -13,7 +13,7 @@ from app.schemas.payment import (
     PaymentResponse,
     PaymentSummaryResponse,
 )
-from app.services import payment_service
+from app.services import daily_cash_book_service, payment_service
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -64,6 +64,43 @@ async def get_payments_summary(
 ) -> PaymentSummaryResponse:
     """Agrège les statistiques de paiement (total attendu, payé, en attente, annulé)."""
     return await payment_service.get_payments_summary(db, academic_year_id=academic_year_id)
+
+
+# NOTE: /daily-cash-book MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/daily-cash-book",
+    summary="Bordereau journalier (PDF) — récap des versements d'une date",
+)
+async def get_daily_cash_book(
+    target_date: date | None = Query(
+        None,
+        alias="date",
+        description="Date à imprimer (YYYY-MM-DD). Par défaut : aujourd'hui.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Génère le bordereau journalier signé pour la comptabilité.
+
+    Groupe les paiements de la date par méthode (espèces / mobile money /
+    virement / chèque), total par méthode + total général, signatures
+    Caissier / Comptabilité. Persona-first : Mme Diallo imprime ce
+    document fin de journée pour clôture.
+    """
+    target = target_date or date.today()
+    pdf_bytes = await daily_cash_book_service.get_daily_cash_book_pdf(
+        db, target, cashier_user_id=current_user.user_id
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="bordereau-{target.isoformat()}.pdf"'
+            )
+        },
+    )
 
 
 # NOTE: /student/{enrollment_id} MUST be defined BEFORE /{payment_id}

@@ -9,7 +9,7 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
 from app.models.fee import PaymentStatus
 from app.models.user import Parent, ParentStudent
-from app.repositories import parent_portal_repository as repo
+from app.repositories import admin_repository, parent_portal_repository as repo
 from app.schemas.parent_portal import (
     BulletinDetail,
     ChildBulletinsResponse,
@@ -170,10 +170,13 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardRespon
             )
         )
 
+    current_ay_name = await admin_repository.get_current_academic_year_name(db)
+
     return ParentDashboardResponse(
         parent_name=parent_name,
         total_children=len(summaries),
         children=summaries,
+        current_academic_year=current_ay_name,
     )
 
 

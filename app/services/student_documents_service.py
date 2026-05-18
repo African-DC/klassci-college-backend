@@ -20,7 +20,6 @@ from app.core.exceptions import (
     PermissionDeniedError,
     UnauthorizedError,
 )
-from app.models.academic import SchoolSettings
 from app.models.enrollment import Enrollment
 from app.models.user import Student, User, UserRoleEnum
 from app.services import parent_portal_service
@@ -33,22 +32,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-async def _get_school_settings_dict(db: AsyncSession) -> dict[str, Any]:
-    """Read SchoolSettings as full dict for official documents (logo + signature)."""
-    settings = (await db.execute(select(SchoolSettings).limit(1))).scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement"}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-        "email": settings.email,
-        "logo_url": settings.logo_url,
-        "signature_image_url": settings.signature_image_url,
-        "head_master_name": settings.head_master_name,
-        "head_master_title": settings.head_master_title,
-    }
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings_dict,
+)
 
 
 async def _get_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment:

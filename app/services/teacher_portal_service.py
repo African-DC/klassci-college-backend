@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.user import TeacherProfile
-from app.repositories import teacher_portal_repository as repo
+from app.repositories import admin_repository, teacher_portal_repository as repo
 from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     TeacherClassesListResponse,
@@ -71,6 +71,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboar
     total_students = await repo.count_total_students(db, teacher.id)
     next_course_raw = await repo.get_next_course(db, teacher.id)
     upcoming_raw = await repo.list_upcoming_evaluations(db, teacher.id, limit=5)
+    current_ay_name = await admin_repository.get_current_academic_year_name(db)
 
     return TeacherDashboardStats(
         teacher_name=f"{teacher.first_name} {teacher.last_name}".strip(),
@@ -78,6 +79,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboar
         total_students=total_students,
         next_course=TeacherNextCourse(**next_course_raw) if next_course_raw else None,
         upcoming_evaluations=[TeacherUpcomingEval(**e) for e in upcoming_raw],
+        current_academic_year=current_ay_name,
     )
 
 

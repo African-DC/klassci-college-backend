@@ -1,4 +1,8 @@
-"""Router inscriptions — CRUD /enrollments + documents."""
+"""Router inscriptions — CRUD /enrollments + documents.
+
+Les endpoints paiements `/enrollments/{id}/payments` sont dans
+`enrollment_payments.py` (séparation par sous-domaine, anti-god-code).
+"""
 
 from fastapi import APIRouter, Depends, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession

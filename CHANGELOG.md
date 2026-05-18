@@ -10,6 +10,27 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Versement caissier en 3 champs (élève, montant, méthode) : le système alloue automatiquement le montant aux frais impayés dans l'ordre Inscription, scolarité trimestre 1/2/3, COGES, tenue. Plus besoin de choisir un frais avant de saisir le montant *(admin)*.
+- Aperçu d'allocation avant validation : le caissier visualise comment le versement sera réparti aux différents frais et est averti d'un éventuel surplus avant de confirmer *(admin)*.
+- Historique détaillé des paiements d'une inscription avec le détail des allocations par frais sur chaque versement, pour la traçabilité comptable *(admin)*.
+- Ordre de priorité des frais configurable par catégorie : l'admin peut ajuster l'ordre dans lequel les paiements sont alloués aux frais (par défaut Inscription en premier, tenue en dernier) *(admin)*.
+- Reçu de paiement enrichi : quand un versement est alloué à plusieurs frais, le PDF affiche maintenant un tableau Frais / Affecté / Cumul / Statut avec pastilles de couleur, pour une traçabilité comptable claire *(admin, parent)*.
+- État individuel des frais (PDF) : document parent qui synthétise pour une inscription les KPIs (total attendu, versé, reste, % avancement), le détail par frais et l'historique des versements. Téléchargeable depuis la fiche de l'inscription *(admin, parent)*.
+- Bordereau journalier (PDF) : récap des versements d'une date par méthode (espèces, mobile money, virement, chèque) avec total général et signatures Caissier / Comptabilité. Imprimable fin de journée pour la clôture caisse *(admin)*.
+- Liste de classe (PDF) : effectif imprimable avec photos miniatures, matricule, sexe, date de naissance et téléphone parent urgence, signé par le professeur principal. Utile pour conseil de classe, sortie scolaire ou appel papier *(admin)*.
+- Fiche d'inscription officielle (PDF) : document à signer par le parent à la rentrée avec identité élève, blocs père/mère/tuteur, classe affectée et tableau des frais scolaires avec total. Bandeau République de Côte d'Ivoire + signatures Parent et Chef d'établissement *(admin, parent)*.
+
+### Fixed
+
+- Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») *(admin, parent)*.
+- Génération PDF désormais compatible avec les versions récentes de `pydyf` : pin explicite `pydyf<0.12` dans `requirements.txt` car la 0.12 a un breaking change incompatible avec WeasyPrint 62 (Stream.transform retiré → 500 silencieux au render) *(devops)*.
+- Identité visuelle de l'école désormais appliquée à TOUS les documents PDF : les bulletins, certificats de scolarité, attestations de fréquentation, emplois du temps, listes de classe, fiches d'inscription et PV de conseil reprennent maintenant les couleurs, la devise et le site web configurés. Auparavant ces 6 documents retombaient silencieusement sur la palette KLASSCI par défaut malgré la configuration tenant *(admin, parent, enseignant)*.
+- PV de conseil de classe (PDF) : génération corrigée, l'année scolaire n'était pas pré-chargée et provoquait une erreur 500 silencieuse au téléchargement *(admin)*.
+
+### Changed
+
+- Identité visuelle des PDFs personnalisable par école : chaque établissement peut configurer sa couleur principale, sa couleur d'accent, sa devise et son site web. Le logo et les couleurs apparaissent automatiquement sur tous les documents (reçus, état des frais, bordereaux, etc.). Migration `0029` *(admin, super-admin)*.
+- Tous les documents PDF officiels (bulletins, reçus, attestations, certificats, EDT, PV conseil, liste de classe, fiche d'inscription, bordereau journalier, état des frais) reprennent maintenant les couleurs et la devise de l'établissement. Composants visuels unifiés : entête République de Côte d'Ivoire avec logo, blocs signatures premium, tableaux zebra, pastilles de statut sémantiques, mentions cadrées *(tous)*.
 - Création de tenant : les slugs réservés (`admin`, `api`, `auth`, `www`, `local`, `super-admin`, ...) sont désormais refusés à la création pour éviter toute collision avec un chemin plateforme *(super-admin)* (#136).
 - Lien de connexion configurable via `PUBLIC_LOGIN_URL_TEMPLATE` : par défaut `https://college.klassci.com/login?c=<slug>` (pattern single-domain), bascule vers sous-domaine sans changement de code *(devops)* (#136).
 - Provisionnement d'un nouvel établissement en libre-service : nouveau rôle « Super Administrateur », tableau de bord dédié et création de tenant en quelques clics, avec validation en direct du nom d'URL et progression visible des étapes *(super-admin)* (#134).

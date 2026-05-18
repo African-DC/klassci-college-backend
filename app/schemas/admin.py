@@ -189,6 +189,17 @@ class TeacherResponse(BaseModel):
     updated_at: datetime
 
 
+class TeacherTaughtClass(BaseModel):
+    """One class taught by a teacher in the current AY (aggregated from timetable_slots)."""
+
+    id: int
+    name: str
+    level: str | None = None
+    subjects: list[str] = []
+    hours_per_week: float = 0
+    student_count: int = 0
+
+
 class TeacherFullResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -215,6 +226,13 @@ class TeacherFullResponse(BaseModel):
     evaluations_count: int = 0
     hours_per_week: float = 0
     availability_rate: float = 0
+    # "configured" si saisies explicites, "implicit" si dérivé des slots EDT,
+    # "none" si aucune donnée. Permet au FE d'afficher un tooltip approprié et
+    # d'éviter le faux "0% indispo" pour un prof actif sans saisie.
+    availability_source: str = "none"
+
+    # Detailed classes (current AY, aggregated from timetable_slots)
+    classes: list[TeacherTaughtClass] = []
 
 
 class TeacherListResponse(BaseModel):
@@ -232,9 +250,10 @@ class TeacherListResponse(BaseModel):
 class StaffCreate(BaseModel):
     first_name: str
     last_name: str
+    email: str
+    password: str
     position: str | None = None
     phone: str | None = None
-    user_id: int
 
 
 class StaffUpdate(BaseModel):
@@ -593,6 +612,35 @@ class EnrollmentPatternPreview(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class TrimesterDTO(BaseModel):
+    """Une période de l'année scolaire. Le contrat FE attend seulement
+    label/start_date/end_date — l'ordre est inféré par l'index dans la liste."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    start_date: date
+    end_date: date
+
+
+class TrimesterUpdateRequest(BaseModel):
+    """PUT /admin/settings/trimesters — remplace les 3 trimestres de l'AY courante."""
+
+    trimesters: list[TrimesterDTO]
+
+
+class NotificationSettingsUpdate(BaseModel):
+    """PUT /admin/settings/notifications — préférences globales école."""
+
+    notify_by_email: bool
+    notify_by_sms: bool
+    notify_grades: bool
+    notify_absences: bool
+    notify_payments: bool
+    notify_enrollment: bool
+    notify_reenrollment: bool
+
+
 class SchoolSettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -608,6 +656,18 @@ class SchoolSettingsResponse(BaseModel):
     head_master_title: str | None
     enrollment_number_pattern: str | None
     enrollment_number_counter: int
+    primary_color: str | None = None
+    accent_color: str | None = None
+    website: str | None = None
+    motto: str | None = None
+    trimesters: list[TrimesterDTO] = []
+    notify_by_email: bool = False
+    notify_by_sms: bool = False
+    notify_grades: bool = False
+    notify_absences: bool = False
+    notify_payments: bool = False
+    notify_enrollment: bool = False
+    notify_reenrollment: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -669,6 +729,22 @@ class SchoolInfoUpdate(BaseModel):
     signature_image_url: str | None = None
     head_master_name: str | None = None
     head_master_title: str | None = None
+    # Personnalisation PDF par école (migration 0029)
+    primary_color: str | None = None
+    accent_color: str | None = None
+    website: str | None = None
+    motto: str | None = None
+
+    @field_validator("primary_color", "accent_color")
+    @classmethod
+    def validate_hex_color(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        import re
+
+        if not re.match(r"^#[0-9A-Fa-f]{6}$", v):
+            raise ValueError("Format hex attendu : #RRGGBB")
+        return v.upper()
 
 
 # ---------------------------------------------------------------------------
