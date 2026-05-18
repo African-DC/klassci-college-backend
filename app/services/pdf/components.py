@@ -40,6 +40,12 @@ from app.services.pdf._chrome import (
     premium_header,
     signature_block,
 )
+from app.services.pdf._helpers import (
+    enum_value,
+    esc,
+    format_decimal,
+    image_to_datauri,
+)
 from app.services.pdf._tables import premium_table
 from app.services.pdf.theme import method_label, status_label
 
@@ -47,6 +53,10 @@ __all__ = [
     "CI_BANNER_HTML",
     "amount_box",
     "base_styles",
+    "enum_value",
+    "esc",
+    "format_decimal",
+    "image_to_datauri",
     "info_grid",
     "info_row",
     "kpi_card",
