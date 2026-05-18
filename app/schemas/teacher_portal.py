@@ -95,3 +95,4 @@ class TeacherDashboardStats(BaseModel):
     total_students: int
     next_course: TeacherNextCourse | None = None
     upcoming_evaluations: list[TeacherUpcomingEval]
+    current_academic_year: str | None = None

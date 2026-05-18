@@ -163,3 +163,4 @@ class StudentDashboardResponse(BaseModel):
     general_average: float | None = None
     fees_remaining: float
     total_absences: int
+    current_academic_year: str | None = None

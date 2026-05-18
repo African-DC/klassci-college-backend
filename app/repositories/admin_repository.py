@@ -22,6 +22,12 @@ async def get_current_academic_year_id(db: AsyncSession) -> int | None:
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
+async def get_current_academic_year_name(db: AsyncSession) -> str | None:
+    """Retourne le label ("2025-2026") de l'année courante ou None."""
+    stmt = select(AcademicYear.name).where(AcademicYear.is_current.is_(True)).limit(1)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
     """Loader options bornant `Student.enrollments` à l'année courante + status valide.
 
@@ -475,14 +481,19 @@ async def list_classes(
         base = base.where(Class.name.ilike(pattern))
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
+    # Tri par ordre pédagogique naturel : 6ème → Terminale, puis A/B/C…
+    # L'ancien tri `Class.id.desc()` exposait les classes en ordre de création,
+    # ce qui plaçait Terminale en haut dans les dropdowns (Mme Diallo inscrit
+    # majoritairement en 6ème à la rentrée — mauvais persona-fit). Bug #23.
     stmt = (
-        base.options(
+        base.outerjoin(Level, Class.level_id == Level.id)
+        .options(
             selectinload(Class.level),
             selectinload(Class.series),
         )
         .offset((page - 1) * size)
         .limit(size)
-        .order_by(Class.id.desc())
+        .order_by(Level.order.asc(), Class.name.asc())
     )
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total

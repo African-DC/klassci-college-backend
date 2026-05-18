@@ -195,13 +195,20 @@ async def list_bulletins(
 
 
 async def get_bulletin_by_id(db: AsyncSession, bulletin_id: int) -> Bulletin | None:
-    """Retourne un bulletin par ID avec ses relations."""
+    """Retourne un bulletin par ID avec ses relations.
+
+    `academic_year` est explicitement selectinload pour éviter un lazy-load
+    déclenché par `pdf_service.generate_bulletin_pdf` qui lit
+    `bulletin.academic_year.name`. Sans ça : MissingGreenlet → 500 plain text
+    sur GET /reports/bulletins/{id}/pdf.
+    """
     stmt = (
         select(Bulletin)
         .where(Bulletin.id == bulletin_id)
         .options(
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
+            selectinload(Bulletin.academic_year),
             selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
         )
     )
