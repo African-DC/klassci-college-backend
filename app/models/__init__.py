@@ -13,6 +13,7 @@ from app.models.academic import (  # noqa: F401
     SchoolSettings,
     Series,
     Subject,
+    Trimester,
 )
 
 # Présences
