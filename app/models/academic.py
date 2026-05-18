@@ -46,6 +46,39 @@ class AcademicYear(Base, TimestampMixin):
     # passe par JOIN sur Enrollment.academic_year_id côté repo, pas via cette
     # relation qui n'existe plus depuis le refactor #97.
 
+    trimesters: Mapped[list[Trimester]] = relationship(
+        back_populates="academic_year",
+        cascade="all, delete-orphan",
+        order_by="Trimester.order_no",
+    )
+
+
+class Trimester(Base, TimestampMixin):
+    """Trimestre scolaire scopé à une année académique.
+
+    Le calendrier scolaire ivoirien découpe l'année en 3 trimestres. Chaque
+    bulletin, conseil de classe et moyenne périodique se rattache à un
+    trimestre. Les dates varient légèrement d'une année à l'autre, d'où
+    le scoping par `academic_year_id`.
+    """
+
+    __tablename__ = "trimesters"
+    __table_args__ = (UniqueConstraint("academic_year_id", "order_no"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    academic_year_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("academic_years.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    label: Mapped[str] = mapped_column(String(50), nullable=False)
+    order_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    academic_year: Mapped[AcademicYear] = relationship(back_populates="trimesters")
+
 
 # ---------------------------------------------------------------------------
 # Level & Series
@@ -194,6 +227,11 @@ class SchoolSettings(Base, TimestampMixin):
     head_master_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
     enrollment_number_pattern: Mapped[str | None] = mapped_column(String(200), nullable=True)
     enrollment_number_counter: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Personnalisation PDF par tenant (migration 0029)
+    primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    motto: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Timetable generation settings
     slot_duration_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60, server_default="60"
@@ -204,3 +242,11 @@ class SchoolSettings(Base, TimestampMixin):
     day_end_hour: Mapped[int] = mapped_column(
         Integer, nullable=False, default=17, server_default="17"
     )
+    # Notification settings (canaux + types)
+    notify_by_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_by_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_grades: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_absences: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_payments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_enrollment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_reenrollment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
