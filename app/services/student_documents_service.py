@@ -48,6 +48,10 @@ async def _get_school_settings_dict(db: AsyncSession) -> dict[str, Any]:
         "signature_image_url": settings.signature_image_url,
         "head_master_name": settings.head_master_name,
         "head_master_title": settings.head_master_title,
+        "primary_color": settings.primary_color,
+        "accent_color": settings.accent_color,
+        "website": settings.website,
+        "motto": settings.motto,
     }
 
 
