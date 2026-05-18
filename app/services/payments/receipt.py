@@ -11,36 +11,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.academic import SchoolSettings
 from app.models.fee import Payment
 from app.models.user import User
 from app.repositories import payment_repository as repo
 from app.services.pdf_service import generate_receipt_pdf
 
 
-async def _get_school_settings(db: AsyncSession) -> dict:
-    """Fetch the singleton SchoolSettings row pour entête PDF."""
-    stmt = select(SchoolSettings).limit(1)
-    result = await db.execute(stmt)
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement", "ministry_code": None}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-        "email": settings.email,
-        "logo_url": settings.logo_url,
-        "signature_image_url": settings.signature_image_url,
-        "head_master_name": settings.head_master_name,
-        "head_master_title": settings.head_master_title,
-        # Personnalisation theme tenant (migration 0029)
-        "primary_color": settings.primary_color,
-        "accent_color": settings.accent_color,
-        "website": settings.website,
-        "motto": settings.motto,
-    }
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
+)
 
 
 def _fee_description(payment: Payment) -> str:

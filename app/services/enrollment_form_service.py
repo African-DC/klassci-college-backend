@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
-from app.models.academic import Class, SchoolSettings
+from app.models.academic import Class
 from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import ParentStudent
@@ -25,27 +25,9 @@ _RELATIONSHIP_LABELS = {
 }
 
 
-async def _get_school_settings_dict(db: AsyncSession) -> dict:
-    stmt = select(SchoolSettings).limit(1)
-    result = await db.execute(stmt)
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement"}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-        "email": settings.email,
-        "logo_url": settings.logo_url,
-        "signature_image_url": settings.signature_image_url,
-        "head_master_name": settings.head_master_name,
-        "head_master_title": settings.head_master_title,
-        "primary_color": settings.primary_color,
-        "accent_color": settings.accent_color,
-        "website": settings.website,
-        "motto": settings.motto,
-    }
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings_dict,
+)
 
 
 async def _load_enrollment_context(

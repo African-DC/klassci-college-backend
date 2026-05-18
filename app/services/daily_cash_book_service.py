@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import SchoolSettings
 from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
 from app.models.user import Student, User
@@ -21,28 +20,9 @@ from app.services.pdf import generate_daily_cash_book_pdf
 from app.services.pdf._helpers import enum_value
 
 
-async def _get_school_settings(db: AsyncSession) -> dict:
-    """Renvoie le singleton SchoolSettings projeté en dict."""
-    stmt = select(SchoolSettings).limit(1)
-    result = await db.execute(stmt)
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement"}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-        "email": settings.email,
-        "logo_url": settings.logo_url,
-        "signature_image_url": settings.signature_image_url,
-        "head_master_name": settings.head_master_name,
-        "head_master_title": settings.head_master_title,
-        "primary_color": settings.primary_color,
-        "accent_color": settings.accent_color,
-        "website": settings.website,
-        "motto": settings.motto,
-    }
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
+)
 
 
 async def _load_payments_for_day(

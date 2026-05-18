@@ -600,22 +600,10 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     academic_year_name = ay.name if ay else ""
 
     # Get school settings (full payload for PDF official header/footer)
+    from app.services._school_settings_helper import load_school_settings_for_pdf
+
     settings = (await db.execute(select(SchoolSettings))).scalar_one_or_none()
-    school_settings = {
-        "school_name": settings.school_name if settings else "Etablissement",
-        "ministry_code": settings.ministry_code if settings else None,
-        "address": settings.address if settings else None,
-        "phone": settings.phone if settings else None,
-        "email": settings.email if settings else None,
-        "logo_url": settings.logo_url if settings else None,
-        "signature_image_url": settings.signature_image_url if settings else None,
-        "head_master_name": settings.head_master_name if settings else None,
-        "head_master_title": settings.head_master_title if settings else None,
-        "primary_color": settings.primary_color if settings else None,
-        "accent_color": settings.accent_color if settings else None,
-        "website": settings.website if settings else None,
-        "motto": settings.motto if settings else None,
-    }
+    school_settings = await load_school_settings_for_pdf(db)
     day_start = settings.day_start_hour if settings else 7
     day_end = settings.day_end_hour if settings else 18
 

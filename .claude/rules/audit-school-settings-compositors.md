@@ -1,18 +1,42 @@
 # Rule : Audit school_settings compositors à chaque ajout de field
 
+## Statut 2026-05-18
+
+Cette rule est désormais **largement obsolète** depuis l'extraction de
+`app/services/_school_settings_helper.py::load_school_settings_for_pdf`
+qui projette automatiquement TOUTES les colonnes de `SchoolSettings`
+(hors compteurs/timestamps) via `SchoolSettings.__table__.columns`.
+
+Les 9 compositors PDF utilisent ce helper unique. Ajouter une colonne
+au modèle = la voir apparaître automatiquement dans tous les PDFs,
+sans toucher un seul fichier service.
+
+La rule reste utile pour deux cas résiduels (voir plus bas) et comme
+mémoire de l'incident fondateur 2026-05-18.
+
 ## Quand s'active
 
 Cette rule s'active automatiquement quand :
-- Tu ajoutes une colonne au model `SchoolSettings` (`app/models/academic.py`)
-- Tu crées une migration alembic qui touche la table `school_settings`
+- Tu ajoutes une colonne au model `SchoolSettings` qui doit être
+  **exclue** des PDFs (compteur interne, timestamp, secret…) →
+  l'ajouter à `_PDF_EXCLUDE` dans `_school_settings_helper.py`
+- Tu crées un **nouveau** service compositor PDF (10e+) → utilise
+  `load_school_settings_for_pdf` directement, ne réinvente pas un
+  helper local
 - Tu ajoutes un field au schema `SchoolInfoUpdate` ou `SchoolSettingsResponse`
-- Tu modifies un PDF generator pour consommer un nouveau field du `school_settings` dict
+- Tu modifies un PDF generator pour consommer un nouveau field
 
-## Règle absolue
+## Règle absolue (cas résiduels seulement)
 
-**Pour CHAQUE nouveau field ajouté à `SchoolSettings`, tu DOIS auditer manuellement les 9 service compositors PDF et ajouter ce field au dict construit par leur helper `_get_school_settings*()`.**
+**Si tu introduis un compositor qui N'UTILISE PAS** le helper unique
+(par exemple un PDF qui ne lit qu'un sous-ensemble étrange), tu DOIS
+auditer manuellement le dict que tu construis pour t'assurer qu'il
+matche les attentes des `pdf/components.py` (header, footer, theme).
 
-Pas d'exception. Le compilateur n'attrape pas le drift — un compositor oublié continue de fonctionner sans crash, mais le PDF qui en dépend ignore silencieusement le nouveau field et retombe sur le fallback hardcoded. **Bug latent invisible** sans inspection visuelle PDF par PDF.
+Pas d'exception. Le compilateur n'attrape pas le drift — un compositor
+oublié continue de fonctionner sans crash, mais le PDF qui en dépend
+ignore silencieusement le nouveau field et retombe sur le fallback
+hardcoded. **Bug latent invisible** sans inspection visuelle PDF par PDF.
 
 ## Pourquoi cette rule existe
 

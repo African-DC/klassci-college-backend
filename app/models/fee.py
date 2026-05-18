@@ -205,6 +205,8 @@ class Payment(Base, TimestampMixin):
         index=True,
     )
     # DEPRECATED — conservé pour rétrocompat. Ne plus écrire dessus.
+    # TODO(remove-after=0.3.0): drop column + index once all environments
+    # have run migration 0028 and no Payment row has enrollment_fee_id set.
     enrollment_fee_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("enrollment_fees.id", ondelete="RESTRICT"),

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.models.academic import SchoolSettings
 from app.models.grade import Bulletin, CouncilDecision, Mention
 from app.repositories import reports_repository as repo
 from app.schemas.reports import (
@@ -356,28 +355,9 @@ async def get_bulletin_response(db: AsyncSession, bulletin_id: int) -> BulletinR
 # ---------------------------------------------------------------------------
 
 
-async def _get_school_settings(db: AsyncSession) -> dict[str, Any]:
-    """Fetch the singleton SchoolSettings row."""
-    stmt = select(SchoolSettings).limit(1)
-    result = await db.execute(stmt)
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement", "ministry_code": None}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-        "email": settings.email,
-        "logo_url": settings.logo_url,
-        "signature_image_url": settings.signature_image_url,
-        "head_master_name": settings.head_master_name,
-        "head_master_title": settings.head_master_title,
-        "primary_color": settings.primary_color,
-        "accent_color": settings.accent_color,
-        "website": settings.website,
-        "motto": settings.motto,
-    }
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
+)
 
 
 async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
