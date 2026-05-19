@@ -358,7 +358,12 @@ def test_create_staff_success() -> None:
             with TestClient(app) as client:
                 resp = client.post(
                     "/admin/staff",
-                    json={"first_name": "Paul", "last_name": "Kone", "user_id": 3},
+                    json={
+                        "first_name": "Paul",
+                        "last_name": "Kone",
+                        "email": "paul.kone@klassci.local",
+                        "password": "Strong@2026",
+                    },
                 )
     finally:
         _clear_deps()
