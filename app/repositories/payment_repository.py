@@ -62,16 +62,12 @@ async def get_payment_by_id(db: AsyncSession, payment_id: int) -> Payment | None
 
     Inclut maintenant `allocations` (avec category) + `enrollment.student.user`.
     """
-    stmt = (
-        select(Payment).where(Payment.id == payment_id).options(*_payment_full_options())
-    )
+    stmt = select(Payment).where(Payment.id == payment_id).options(*_payment_full_options())
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def get_payment_with_allocations(
-    db: AsyncSession, payment_id: int
-) -> Payment | None:
+async def get_payment_with_allocations(db: AsyncSession, payment_id: int) -> Payment | None:
     """Alias explicite — même chargement que `get_payment_by_id`."""
     return await get_payment_by_id(db, payment_id)
 
@@ -119,9 +115,7 @@ async def list_payments(
     return list(rows), total
 
 
-async def get_payments_by_enrollment_id(
-    db: AsyncSession, enrollment_id: int
-) -> list[Payment]:
+async def get_payments_by_enrollment_id(db: AsyncSession, enrollment_id: int) -> list[Payment]:
     """Retourne tous les paiements d'une inscription (via Payment.enrollment_id)."""
     stmt = (
         select(Payment)
@@ -210,9 +204,7 @@ async def get_enrollment_fees_ordered_by_priority(
 # ---------------------------------------------------------------------------
 
 
-async def get_total_paid_for_enrollment_fee(
-    db: AsyncSession, enrollment_fee_id: int
-) -> Decimal:
+async def get_total_paid_for_enrollment_fee(db: AsyncSession, enrollment_fee_id: int) -> Decimal:
     """Total alloué à un fee depuis les paiements COMPLETED.
 
     Source de vérité = `payment_allocations`. Exclut les payments
@@ -230,9 +222,7 @@ async def get_total_paid_for_enrollment_fee(
     return Decimal(str(result.scalar()))
 
 
-async def get_total_paid_for_enrollment(
-    db: AsyncSession, enrollment_id: int
-) -> Decimal:
+async def get_total_paid_for_enrollment(db: AsyncSession, enrollment_id: int) -> Decimal:
     """Total versé sur une inscription (somme des Payment.amount COMPLETED)."""
     stmt = select(
         func.coalesce(func.sum(Payment.amount), 0),
@@ -249,9 +239,7 @@ async def get_total_paid_for_enrollment(
 # ---------------------------------------------------------------------------
 
 
-async def get_enrollment_for_update(
-    db: AsyncSession, enrollment_id: int
-) -> Enrollment | None:
+async def get_enrollment_for_update(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
     """Verrouille l'inscription le temps du calcul de l'allocation."""
     from app.models.user import Student
 
@@ -322,9 +310,7 @@ async def create_allocation(
     return allocation
 
 
-async def get_allocations_for_payment(
-    db: AsyncSession, payment_id: int
-) -> list[PaymentAllocation]:
+async def get_allocations_for_payment(db: AsyncSession, payment_id: int) -> list[PaymentAllocation]:
     """Toutes les allocations d'un Payment, avec category pour l'audit."""
     stmt = (
         select(PaymentAllocation)

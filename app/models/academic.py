@@ -243,10 +243,24 @@ class SchoolSettings(Base, TimestampMixin):
         Integer, nullable=False, default=17, server_default="17"
     )
     # Notification settings (canaux + types)
-    notify_by_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_by_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_grades: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_absences: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_payments: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_enrollment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    notify_reenrollment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    notify_by_email: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_by_sms: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_grades: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_absences: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_payments: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_enrollment: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    notify_reenrollment: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )

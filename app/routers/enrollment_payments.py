@@ -98,11 +98,7 @@ async def get_fee_statement_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'inline; filename="etat-frais-{enrollment_id}.pdf"'
-            )
-        },
+        headers={"Content-Disposition": (f'inline; filename="etat-frais-{enrollment_id}.pdf"')},
     )
 
 
@@ -121,15 +117,11 @@ async def get_enrollment_form_pdf(
     responsables (père/mère/tuteur) + tableau frais avec total + signatures
     Parent + Chef d'établissement.
     """
-    pdf_bytes = await enrollment_form_service.get_enrollment_form_pdf(
-        db, enrollment_id
-    )
+    pdf_bytes = await enrollment_form_service.get_enrollment_form_pdf(db, enrollment_id)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": (
-                f'inline; filename="fiche-inscription-{enrollment_id}.pdf"'
-            )
+            "Content-Disposition": (f'inline; filename="fiche-inscription-{enrollment_id}.pdf"')
         },
     )

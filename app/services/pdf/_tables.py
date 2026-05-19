@@ -46,9 +46,7 @@ def premium_table(
         if isinstance(h, dict):
             align = h.get("align", "left")
             align_style = f"text-align:{align};" if align != "left" else ""
-            head_cells.append(
-                f'<th style="{align_style}">{esc(h.get("label", ""))}</th>'
-            )
+            head_cells.append(f'<th style="{align_style}">{esc(h.get("label", ""))}</th>')
         else:
             head_cells.append(f"<th>{esc(h)}</th>")
     head_html = "<tr>" + "".join(head_cells) + "</tr>"

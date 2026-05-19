@@ -27,9 +27,7 @@ from app.services.pdf._class_roster_parts import (
 from app.services.pdf.theme import PDFTheme
 
 
-def generate_class_roster_pdf(
-    data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_class_roster_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Génère la liste de classe en PDF — theme école dynamique.
 
     data keys (composé par class_roster_service) :

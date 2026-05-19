@@ -52,9 +52,7 @@ def _status_after(fee_amount: Decimal, paid_after: Decimal, current_status: str)
     return "pending"
 
 
-async def _build_allocation_breakdown(
-    db: AsyncSession, payment: Payment
-) -> list[dict]:
+async def _build_allocation_breakdown(db: AsyncSession, payment: Payment) -> list[dict]:
     """Liste enrichie pour le tableau PDF — fee_name + amount + cumul + status."""
     breakdown: list[dict] = []
     for allocation in payment.allocations or []:

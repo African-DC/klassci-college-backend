@@ -38,9 +38,7 @@ def _subject_rows(subject_averages: list[dict[str, Any]]) -> list[list[Any]]:
     return rows
 
 
-def generate_bulletin_pdf(
-    bulletin_data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Generate a PDF bulletin for a single student.
 
     bulletin_data keys:
@@ -67,11 +65,7 @@ def generate_bulletin_pdf(
     generated_at = bulletin_data.get("generated_at")
 
     rank_display = f"{rank}/{total_students}" if rank else "—"
-    gen_date = (
-        generated_at.strftime("%d/%m/%Y")
-        if isinstance(generated_at, datetime)
-        else ""
-    )
+    gen_date = generated_at.strftime("%d/%m/%Y") if isinstance(generated_at, datetime) else ""
 
     meta_left = (
         f"<strong>Élève :</strong> {ui.esc(student_name)}<br/>"
@@ -116,7 +110,7 @@ def generate_bulletin_pdf(
         comment_block = (
             ui.section_title("Appréciation du professeur principal", theme=theme)
             + f'<div style="padding:8px 12px; border:1px solid var(--border); '
-            f'border-radius:6px; background:var(--soft-bg); font-size:11px; '
+            f"border-radius:6px; background:var(--soft-bg); font-size:11px; "
             f'line-height:1.5;">{ui.esc(teacher_comment)}</div>'
         )
 

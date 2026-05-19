@@ -32,8 +32,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-
-
 async def _get_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment:
     """Return the student's currently active (status=valide) enrollment.
 

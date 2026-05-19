@@ -21,17 +21,13 @@ from app.services.payments._response import payment_to_response
 from app.services.payments._state import VALID_TRANSITIONS
 
 
-async def _load_payment_for_transition(
-    db: AsyncSession, payment_id: int
-) -> Payment:
+async def _load_payment_for_transition(db: AsyncSession, payment_id: int) -> Payment:
     """Lock un Payment + ses allocations pour transition de statut."""
     stmt = (
         select(Payment)
         .where(Payment.id == payment_id)
         .options(
-            selectinload(Payment.allocations).selectinload(
-                PaymentAllocation.enrollment_fee
-            ),
+            selectinload(Payment.allocations).selectinload(PaymentAllocation.enrollment_fee),
         )
         .with_for_update(of=Payment)
     )
@@ -66,9 +62,7 @@ async def validate_payment(
         await db.flush()
 
         for allocation in payment.allocations:
-            fee = await repo.get_enrollment_fee_for_update(
-                db, allocation.enrollment_fee_id
-            )
+            fee = await repo.get_enrollment_fee_for_update(db, allocation.enrollment_fee_id)
             if fee is not None:
                 await recompute_fee_status(db, fee)
         await db.flush()

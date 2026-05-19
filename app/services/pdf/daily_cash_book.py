@@ -64,9 +64,7 @@ def _totals_rows(totals_by_method: dict[str, Decimal]) -> list[list[Any]]:
     return rows
 
 
-def generate_daily_cash_book_pdf(
-    data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Génère le bordereau journalier pour une date donnée.
 
     data keys :
@@ -107,9 +105,7 @@ def generate_daily_cash_book_pdf(
         f"{count_completed} versement{'s' if count_completed > 1 else ''} validé{'s' if count_completed > 1 else ''}",
     ]
     if count_cancelled:
-        counts_pieces.append(
-            f"{count_cancelled} annulé{'s' if count_cancelled > 1 else ''}"
-        )
+        counts_pieces.append(f"{count_cancelled} annulé{'s' if count_cancelled > 1 else ''}")
     counts_line = (
         '<div class="muted text-center" style="font-size:9px; margin:-8px 0 12px;">'
         + " · ".join(ui.esc(p) for p in counts_pieces)
@@ -117,36 +113,28 @@ def generate_daily_cash_book_pdf(
     )
 
     total_str = (
-        format_decimal(total_general)
-        if isinstance(total_general, Decimal)
-        else str(total_general)
+        format_decimal(total_general) if isinstance(total_general, Decimal) else str(total_general)
     )
 
-    method_section = (
-        ui.section_title("Récapitulatif par méthode", theme=theme)
-        + ui.premium_table(
-            headers=["Méthode", {"label": "Total XOF", "align": "right"}],
-            rows=_totals_rows(totals_by_method),
-            theme=theme,
-        )
+    method_section = ui.section_title("Récapitulatif par méthode", theme=theme) + ui.premium_table(
+        headers=["Méthode", {"label": "Total XOF", "align": "right"}],
+        rows=_totals_rows(totals_by_method),
+        theme=theme,
     )
 
-    detail_section = (
-        ui.section_title("Détail des versements", theme=theme)
-        + ui.premium_table(
-            headers=[
-                "N°",
-                "Heure",
-                "Élève",
-                "Méthode",
-                "Référence",
-                {"label": "Montant", "align": "right"},
-                "Statut",
-            ],
-            rows=_payment_rows(payments),
-            theme=theme,
-            empty_message="Aucun versement encaissé ce jour.",
-        )
+    detail_section = ui.section_title("Détail des versements", theme=theme) + ui.premium_table(
+        headers=[
+            "N°",
+            "Heure",
+            "Élève",
+            "Méthode",
+            "Référence",
+            {"label": "Montant", "align": "right"},
+            "Statut",
+        ],
+        rows=_payment_rows(payments),
+        theme=theme,
+        empty_message="Aucun versement encaissé ce jour.",
     )
 
     signatures = ui.signature_block(

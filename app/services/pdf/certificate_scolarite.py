@@ -78,9 +78,7 @@ def generate_certificate_scolarite_pdf(
     class_name = data.get("class_name") or ""
     academic_year_name = data.get("academic_year_name") or ""
     issued_at = data.get("issued_at") or datetime.utcnow()
-    issued_str = (
-        issued_at.strftime("%d/%m/%Y") if isinstance(issued_at, datetime) else ""
-    )
+    issued_str = issued_at.strftime("%d/%m/%Y") if isinstance(issued_at, datetime) else ""
 
     ne_form = "née" if genre == "F" else "né"
     inscrit_form = "inscrite" if genre == "F" else "inscrit"

@@ -283,9 +283,7 @@ def premium_header(
     """
 
 
-def premium_footer(
-    school: dict[str, Any], *, theme: PDFTheme, note: str | None = None
-) -> str:
+def premium_footer(school: dict[str, Any], *, theme: PDFTheme, note: str | None = None) -> str:
     """Footer : adresse école compacte à gauche + note/date à droite."""
     school = school or {}
     pieces: list[str] = []
@@ -293,11 +291,7 @@ def premium_footer(
         pieces.append(f"<strong>{esc(school['school_name'])}</strong>")
     if school.get("address"):
         pieces.append(esc(school["address"]))
-    contact = " · ".join(
-        esc(school.get(k))
-        for k in ("phone", "email", "website")
-        if school.get(k)
-    )
+    contact = " · ".join(esc(school.get(k)) for k in ("phone", "email", "website") if school.get(k))
     if contact:
         pieces.append(contact)
     school_block = "<br/>".join(pieces) if pieces else ""

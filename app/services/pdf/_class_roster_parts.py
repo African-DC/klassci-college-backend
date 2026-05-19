@@ -19,8 +19,8 @@ def photo_cell_html(student: dict[str, Any]) -> str:
     initials = esc((student.get("initials") or "")[:2])
     return (
         f'<div style="width:28px; height:28px; border-radius:50%; '
-        f'background:var(--border); color:var(--muted); display:flex; '
-        f'align-items:center; justify-content:center; font-size:9px; '
+        f"background:var(--border); color:var(--muted); display:flex; "
+        f"align-items:center; justify-content:center; font-size:9px; "
         f'font-weight:bold;">{initials}</div>'
     )
 

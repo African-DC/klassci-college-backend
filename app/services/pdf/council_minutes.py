@@ -52,11 +52,7 @@ def generate_council_minutes_pdf(
     generated_at = council_data.get("generated_at")
     decisions = council_data.get("decisions", []) or []
 
-    gen_date = (
-        generated_at.strftime("%d/%m/%Y")
-        if isinstance(generated_at, datetime)
-        else ""
-    )
+    gen_date = generated_at.strftime("%d/%m/%Y") if isinstance(generated_at, datetime) else ""
     total_students = len(decisions)
 
     meta_left = (
@@ -94,7 +90,7 @@ def generate_council_minutes_pdf(
         notes_block = (
             ui.section_title("Observations du conseil", theme=theme)
             + f'<div style="padding:8px 12px; border:1px solid var(--border); '
-            f'border-radius:6px; background:var(--soft-bg); font-size:10.5px; '
+            f"border-radius:6px; background:var(--soft-bg); font-size:10.5px; "
             f'line-height:1.5;">{ui.esc(notes)}</div>'
         )
 
