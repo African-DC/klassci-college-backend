@@ -75,6 +75,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "reports:read", "name": "View reports"},
     {"slug": "reports:generate", "name": "Generate reports"},
     {"slug": "reports:override", "name": "Override council decisions"},
+    # Teacher attendance (Phase 7b) (3)
+    {"slug": "admin:teachers:attendance", "name": "Manage teacher attendance"},
+    {"slug": "admin:teachers:attendance:read", "name": "View teacher attendance"},
+    {"slug": "teacher:attendance:self_declare", "name": "Teacher self-declare absence"},
     # Official documents (2)
     {"slug": "documents:certificate", "name": "Generate certificat de scolarite"},
     {"slug": "documents:attendance", "name": "Generate attestation de frequentation"},
@@ -132,6 +136,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "attendance:update",
             "timetable:read",
             "reports:read",
+            "teacher:attendance:self_declare",
         ],
     },
     "staff": {
@@ -148,6 +153,8 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "admin:classes:read",
             "attendance:read",
             "reports:read",
+            "admin:teachers:attendance",
+            "admin:teachers:attendance:read",
         ],
     },
     "accountant": {
