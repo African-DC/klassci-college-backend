@@ -15,7 +15,6 @@ from typing import Any
 
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import esc, format_decimal, image_to_datauri
-from app.services.pdf.theme import PDFTheme
 
 
 def student_identity_block(student: dict[str, Any]) -> str:

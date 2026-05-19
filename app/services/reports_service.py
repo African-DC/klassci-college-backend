@@ -7,7 +7,6 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
@@ -19,6 +18,9 @@ from app.schemas.reports import (
     BulletinListResponse,
     BulletinResponse,
     SubjectAverageResponse,
+)
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
 )
 from app.services.pdf_service import generate_bulletin_pdf
 
@@ -353,11 +355,6 @@ async def get_bulletin_response(db: AsyncSession, bulletin_id: int) -> BulletinR
 # ---------------------------------------------------------------------------
 # Get bulletin PDF
 # ---------------------------------------------------------------------------
-
-
-from app.services._school_settings_helper import (
-    load_school_settings_for_pdf as _get_school_settings,
-)
 
 
 async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:

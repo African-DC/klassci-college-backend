@@ -14,12 +14,10 @@ from app.core.exceptions import NotFoundError
 from app.models.fee import Payment
 from app.models.user import User
 from app.repositories import payment_repository as repo
-from app.services.pdf_service import generate_receipt_pdf
-
-
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.pdf_service import generate_receipt_pdf
 
 
 def _fee_description(payment: Payment) -> str:

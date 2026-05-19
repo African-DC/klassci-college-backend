@@ -9,7 +9,8 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
 from app.models.fee import PaymentStatus
 from app.models.user import Parent, ParentStudent
-from app.repositories import admin_repository, parent_portal_repository as repo
+from app.repositories import admin_repository
+from app.repositories import parent_portal_repository as repo
 from app.schemas.parent_portal import (
     BulletinDetail,
     ChildBulletinsResponse,

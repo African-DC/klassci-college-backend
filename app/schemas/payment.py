@@ -12,7 +12,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
 _ALLOWED_METHODS = {"cash", "mobile_money", "bank_transfer", "cheque"}
 
 

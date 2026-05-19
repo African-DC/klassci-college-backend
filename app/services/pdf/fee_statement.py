@@ -20,7 +20,7 @@ from typing import Any
 
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import enum_value, format_decimal
-from app.services.pdf.theme import PDFTheme, method_label, status_label
+from app.services.pdf.theme import PDFTheme, method_label
 
 
 def _fmt(v: Any) -> str:

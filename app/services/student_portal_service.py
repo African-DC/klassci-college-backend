@@ -11,7 +11,8 @@ from app.models.attendance import AttendanceRecord, AttendanceStatus
 from app.models.fee import PaymentStatus
 from app.models.grade import Grade
 from app.models.user import Student
-from app.repositories import admin_repository, student_portal_repository as repo
+from app.repositories import admin_repository
+from app.repositories import student_portal_repository as repo
 from app.schemas.student_portal import (
     BulletinResponse,
     EnrollmentFeeResponse,
