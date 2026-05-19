@@ -196,8 +196,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("payment_allocations")
 
-    op.drop_index("idx_payments_enrollment", table_name="payments")
+    # Order matters on MySQL: drop FK BEFORE its supporting index, otherwise
+    # 1553 "Cannot drop index: needed in a foreign key constraint".
     op.drop_constraint("fk_payments_enrollment", "payments", type_="foreignkey")
+    op.drop_index("idx_payments_enrollment", table_name="payments")
     op.drop_column("payments", "enrollment_id")
 
     # Restore enrollment_fee_id NOT NULL (les rows existantes l'ont toujours)
