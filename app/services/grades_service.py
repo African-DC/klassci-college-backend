@@ -14,7 +14,6 @@ from app.models.grade import Evaluation
 from app.models.user import TeacherProfile
 from app.repositories import grades_repository as repo
 from app.schemas.grades import (
-    BulletinGenerateResponse,
     EvaluationCreate,
     GradeBatchUpdate,
 )
@@ -191,20 +190,3 @@ async def get_summary(
         "trimester": trimester,
         **data,
     }
-
-
-async def generate_bulletins(
-    tenant_id: str,
-    class_id: int,
-    trimester: int,
-    academic_year_id: int,
-) -> BulletinGenerateResponse:
-    from app.tasks.grades_tasks import generate_bulletins_task
-
-    task = generate_bulletins_task.delay(
-        tenant_id=tenant_id,
-        class_id=class_id,
-        trimester=trimester,
-        academic_year_id=academic_year_id,
-    )
-    return BulletinGenerateResponse(task_id=task.id)

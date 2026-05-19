@@ -290,3 +290,66 @@ def test_get_enrollment_not_found() -> None:
         _clear_deps()
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /enrollments/{id}/validate
+# ---------------------------------------------------------------------------
+
+
+def test_validate_enrollment_success() -> None:
+    """POST /enrollments/1/validate → 200 + status valide."""
+    validated = SAMPLE_ENROLLMENT.model_copy(update={"status": "valide"})
+    _override_deps()
+    try:
+        with patch(
+            "app.routers.enrollments.enrollment_service.validate_enrollment",
+            new_callable=AsyncMock,
+            return_value=validated,
+        ):
+            with TestClient(app) as client:
+                resp = client.post("/enrollments/1/validate")
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "valide"
+
+
+def test_validate_enrollment_already_validated() -> None:
+    """POST /enrollments/1/validate déjà validée → 422 message FR."""
+    from app.core.exceptions import BusinessValidationError
+
+    _override_deps()
+    try:
+        with patch(
+            "app.routers.enrollments.enrollment_service.validate_enrollment",
+            new_callable=AsyncMock,
+            side_effect=BusinessValidationError("Cette inscription est déjà validée."),
+        ):
+            with TestClient(app) as client:
+                resp = client.post("/enrollments/1/validate")
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 422
+    assert "déjà validée" in resp.json()["detail"]
+
+
+def test_validate_enrollment_not_found() -> None:
+    """POST /enrollments/999/validate → 404."""
+    from app.core.exceptions import NotFoundError
+
+    _override_deps()
+    try:
+        with patch(
+            "app.routers.enrollments.enrollment_service.validate_enrollment",
+            new_callable=AsyncMock,
+            side_effect=NotFoundError("Enrollment", 999),
+        ):
+            with TestClient(app) as client:
+                resp = client.post("/enrollments/999/validate")
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 404

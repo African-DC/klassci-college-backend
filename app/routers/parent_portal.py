@@ -10,6 +10,7 @@ from app.schemas.parent_portal import (
     ChildGradesResponse,
     ChildrenListResponse,
     ChildTimetableResponse,
+    ParentDashboardResponse,
 )
 from app.services import parent_portal_service
 
@@ -18,6 +19,15 @@ router = APIRouter(
     tags=["parent-portal"],
     dependencies=[require_role("parent", "admin", "director")],
 )
+
+
+@router.get("/dashboard", response_model=ParentDashboardResponse)
+async def get_dashboard(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ParentDashboardResponse:
+    """Dashboard parent : enfants liés avec moyenne, absences, frais restants."""
+    return await parent_portal_service.get_dashboard(db, current_user.user_id)
 
 
 @router.get("/children", response_model=ChildrenListResponse)

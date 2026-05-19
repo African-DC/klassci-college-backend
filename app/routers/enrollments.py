@@ -1,4 +1,8 @@
-"""Router inscriptions — CRUD /enrollments + documents."""
+"""Router inscriptions — CRUD /enrollments + documents.
+
+Les endpoints paiements `/enrollments/{id}/payments` sont dans
+`enrollment_payments.py` (séparation par sous-domaine, anti-god-code).
+"""
 
 from fastapi import APIRouter, Depends, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,11 +95,18 @@ async def re_enroll_student(
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])
 async def get_applicable_fee_variants(
     class_id: int = Query(..., description="ID de la classe pour la resolution des frais"),
+    academic_year_id: int | None = Query(
+        None,
+        description=(
+            "AY pour le matching des frais. Si omis, l'AY courante est utilisée. "
+            "Class étant universel (refactor #97), l'AY n'est plus inférée depuis la classe."
+        ),
+    ),
     _: None = require_permission("enrollments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_service.get_applicable_fee_variants(db, class_id)
+    return await enrollment_service.get_applicable_fee_variants(db, class_id, academic_year_id)
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)
@@ -131,6 +142,28 @@ async def delete_enrollment(
 ) -> None:
     """Supprime une inscription."""
     await enrollment_service.delete_enrollment(db, enrollment_id, deleted_by=current_user.user_id)
+
+
+@router.post(
+    "/{enrollment_id}/validate",
+    response_model=EnrollmentResponse,
+    summary="Valider une inscription",
+    description=(
+        "Transitionne une inscription `prospect` ou `en_validation` vers `valide`. "
+        "Endpoint dédié pour audit log explicite et transition guard. Refuse les "
+        "autres statuts avec 422."
+    ),
+)
+async def validate_enrollment(
+    enrollment_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentResponse:
+    """Valide une inscription (transition prospect/en_validation → valide)."""
+    return await enrollment_service.validate_enrollment(
+        db, enrollment_id, validated_by=current_user.user_id
+    )
 
 
 # ---------------------------------------------------------------------------

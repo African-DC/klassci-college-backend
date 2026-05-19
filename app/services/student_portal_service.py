@@ -11,6 +11,7 @@ from app.models.attendance import AttendanceRecord, AttendanceStatus
 from app.models.fee import PaymentStatus
 from app.models.grade import Grade
 from app.models.user import Student
+from app.repositories import admin_repository
 from app.repositories import student_portal_repository as repo
 from app.schemas.student_portal import (
     BulletinResponse,
@@ -294,6 +295,8 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
     )
     total_absences = (await db.execute(abs_stmt)).scalar() or 0
 
+    current_ay_name = await admin_repository.get_current_academic_year_name(db)
+
     return StudentDashboardResponse(
         student_name=f"{student.first_name} {student.last_name}".strip(),
         class_name=class_name,
@@ -301,4 +304,5 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
         general_average=general_average,
         fees_remaining=float(fees_remaining),
         total_absences=int(total_absences),
+        current_academic_year=current_ay_name,
     )

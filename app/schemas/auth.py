@@ -13,7 +13,7 @@ class LoginRequest(BaseModel):
 class UserInToken(BaseModel):
     id: int
     email: str
-    role: Literal["admin", "staff", "teacher", "student", "parent"]
+    role: Literal["admin", "staff", "teacher", "student", "parent", "super_admin"]
     first_name: str
     last_name: str
 

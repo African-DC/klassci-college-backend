@@ -5,9 +5,10 @@ placeholder substituted to the value of the `TENANT_ID` env var, defaulting
 to `local`). All users get the same password to keep the E2E suite simple.
 
 Users seeded:
-- admin@klassci.com  → role admin, with StaffProfile
-- prof@klassci.com   → role teacher, with TeacherProfile
-- eleve@klassci.com  → role student, with Student profile (enrollment_number=E2E001)
+- admin@klassci.com       → role admin, with StaffProfile
+- prof@klassci.com        → role teacher, with TeacherProfile
+- eleve@klassci.com       → role student, with Student profile (enrollment_number=E2E001)
+- parent.kone@klassci.com → role parent, with Parent profile linked to eleve@klassci.com
 
 Run locally:
     TENANT_ID=local python scripts/seed_test_users.py
@@ -64,6 +65,21 @@ USERS: list[dict[str, Any]] = [
             "first_name": "Aminata",
             "last_name": "Traoré",
             "enrollment_number": "E2E001",
+        },
+    },
+    {
+        "email": "parent.kone@klassci.com",
+        "role": "parent",
+        "profile": {
+            "table": "parents",
+            "first_name": "Mariam",
+            "last_name": "Koné",
+            "phone": "+225 07 00 00 00 01",
+            # link_to_student_email triggers the parent_students linkage step
+            # after both rows exist (idempotent INSERT IGNORE on the unique
+            # constraint parent_id+student_id).
+            "link_to_student_email": "eleve@klassci.com",
+            "relationship_type": "guardian",
         },
     },
 ]
@@ -158,6 +174,64 @@ async def _ensure_user(db: Any, email: str, role: str, profile: dict[str, Any]) 
                     "enrollment_number": profile["enrollment_number"],
                 },
             )
+    elif table == "parents":
+        # parents.user_id is also non-UNIQUE — same guard as students.
+        existing = await db.execute(
+            text("SELECT id FROM parents WHERE user_id = :user_id LIMIT 1"),
+            {"user_id": user_id},
+        )
+        parent_id = existing.scalar_one_or_none()
+        if parent_id is None:
+            await db.execute(
+                text(
+                    "INSERT INTO parents (user_id, first_name, last_name, phone, email) "
+                    "VALUES (:user_id, :first_name, :last_name, :phone, :email)"
+                ),
+                {
+                    "user_id": user_id,
+                    "first_name": profile["first_name"],
+                    "last_name": profile["last_name"],
+                    "phone": profile.get("phone"),
+                    "email": email,
+                },
+            )
+            result = await db.execute(
+                text("SELECT id FROM parents WHERE user_id = :user_id LIMIT 1"),
+                {"user_id": user_id},
+            )
+            parent_id = result.scalar_one()
+
+        # Optional link to a student — idempotent on unique (parent_id, student_id).
+        student_email = profile.get("link_to_student_email")
+        if student_email:
+            student_lookup = await db.execute(
+                text(
+                    "SELECT s.id FROM students s "
+                    "JOIN users u ON u.id = s.user_id "
+                    "WHERE u.email = :email LIMIT 1"
+                ),
+                {"email": student_email},
+            )
+            student_id = student_lookup.scalar_one_or_none()
+            if student_id is None:
+                logger.warning(
+                    "Parent %s : student %s not found, skipping link",
+                    email,
+                    student_email,
+                )
+            else:
+                await db.execute(
+                    text(
+                        "INSERT IGNORE INTO parent_students "
+                        "(parent_id, student_id, relationship_type) "
+                        "VALUES (:parent_id, :student_id, :relationship_type)"
+                    ),
+                    {
+                        "parent_id": parent_id,
+                        "student_id": student_id,
+                        "relationship_type": profile.get("relationship_type", "guardian"),
+                    },
+                )
 
 
 async def main() -> None:

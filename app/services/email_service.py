@@ -77,23 +77,24 @@ def send_tenant_welcome(
     admin_email: str,
     admin_first_name: str,
     school_name: str,
-    tenant_slug: str,
+    login_url: str,
     temp_password: str,
-    base_domain: str = "college.klassci.com",
 ) -> bool:
     """Envoie l'email de bienvenue au nouvel admin tenant après provisioning.
 
-    Inclut URL personnalisée du tenant, identifiants temporaires, et CTA login.
-    Best-effort : si SMTP indisponible, log mais ne raise pas (le tenant existe
-    déjà en DB, on ne veut pas rollback à cause d'un email).
+    ``login_url`` est construit par l'appelant à partir de
+    ``settings.PUBLIC_LOGIN_URL_TEMPLATE`` — l'email service ne devine plus
+    le pattern d'URL (subdomain vs query param vs custom domain).
+
+    Best-effort : si SMTP indisponible, log mais ne raise pas (le tenant
+    existe déjà en DB, on ne veut pas rollback à cause d'un email).
     """
-    tenant_url = f"https://{tenant_slug}.{base_domain}"
     context = {
         "admin_first_name": admin_first_name or "Administrateur",
         "school_name": school_name,
         "admin_email": admin_email,
         "temp_password": temp_password,
-        "tenant_url": tenant_url,
+        "tenant_url": login_url,
     }
 
     html_body = _render_template("tenant_welcome.html", **context)

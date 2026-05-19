@@ -1,4 +1,4 @@
-"""Router notes — évaluations, notes et bulletins."""
+"""Router notes — évaluations et notes."""
 
 from __future__ import annotations
 
@@ -7,13 +7,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.celery_app import celery_app
 from app.core.dependencies import get_current_user, get_tenant_db, require_permission
 from app.repositories.user_repository import get_teacher_profile_id
 from app.schemas.grades import (
-    BulletinGenerateRequest,
-    BulletinGenerateResponse,
-    BulletinTaskStatusResponse,
     EvaluationCreate,
     EvaluationResponse,
     GradeBatchUpdate,
@@ -123,47 +119,3 @@ async def get_grades_summary(
         trimester=trimester,
         academic_year_id=academic_year_id,
     )
-
-
-# ---------------------------------------------------------------------------
-# Bulletins
-# ---------------------------------------------------------------------------
-
-
-@router.post("/bulletins/generate", response_model=BulletinGenerateResponse, status_code=202)
-async def generate_bulletins(
-    data: BulletinGenerateRequest,
-    request: Request,
-    _: None = require_permission("bulletins:generate"),
-) -> Any:
-    tenant_id: str = getattr(request.state, "tenant_id", "local")
-    return await service.generate_bulletins(
-        tenant_id=tenant_id,
-        class_id=data.class_id,
-        trimester=data.trimester,
-        academic_year_id=data.academic_year_id,
-    )
-
-
-@router.get("/bulletins/tasks/{task_id}", response_model=BulletinTaskStatusResponse)
-async def get_bulletin_task_status(
-    task_id: str,
-    _: None = require_permission("bulletins:generate"),
-) -> Any:
-    task_result = celery_app.AsyncResult(task_id)
-
-    status_map = {
-        "PENDING": "pending",
-        "STARTED": "running",
-        "SUCCESS": "success",
-        "FAILURE": "failed",
-        "RETRY": "running",
-        "REVOKED": "failed",
-    }
-    status = status_map.get(task_result.status, "pending")
-
-    bulletin_urls = None
-    if task_result.status == "SUCCESS" and task_result.result:
-        bulletin_urls = task_result.result.get("bulletin_urls")
-
-    return {"status": status, "bulletin_urls": bulletin_urls}

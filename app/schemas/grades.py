@@ -90,23 +90,3 @@ class GradesSummaryResponse(BaseModel):
     trimester: int
     students: list[StudentSummary]
     subjects: list[SubjectSummary]
-
-
-# ---------------------------------------------------------------------------
-# Bulletin
-# ---------------------------------------------------------------------------
-
-
-class BulletinGenerateRequest(BaseModel):
-    class_id: int
-    trimester: int = Field(ge=1, le=3)
-    academic_year_id: int
-
-
-class BulletinGenerateResponse(BaseModel):
-    task_id: str
-
-
-class BulletinTaskStatusResponse(BaseModel):
-    status: str  # "pending" | "running" | "success" | "failed"
-    bulletin_urls: list[str] | None = None

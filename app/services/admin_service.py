@@ -4,14 +4,15 @@ import logging
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, func, select, text, update
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, SchoolSettings
+from app.models.academic import AcademicYear, SchoolSettings, Trimester
 from app.models.user import (
     Parent,
     ParentStudent,
@@ -31,6 +32,7 @@ from app.schemas.admin import (
     ClassListResponse,
     ClassResponse,
     ClassUpdate,
+    CurrentEnrollmentInfo,
     EnrollmentPatternUpdate,
     LevelCreate,
     LevelListResponse,
@@ -59,7 +61,6 @@ from app.schemas.admin import (
     StaffListResponse,
     StaffResponse,
     StaffUpdate,
-    CurrentEnrollmentInfo,
     StudentClassFilterCount,
     StudentCreate,
     StudentEnrollmentFeeListResponse,
@@ -177,6 +178,7 @@ async def create_student(
         )
         db.add(user)
         await db.flush()
+        await _ensure_default_user_role(db, user.id, "student")
 
         # Create student profile linked to user
         profile_data = data.model_dump(exclude={"email", "password"})
@@ -455,6 +457,33 @@ async def get_teacher(db: AsyncSession, teacher_id: int) -> TeacherResponse:
     return _teacher_to_response(teacher)
 
 
+async def _ensure_default_user_role(db: AsyncSession, user_id: int, role_name: str) -> None:
+    """Attache un user à son rôle par défaut dans user_roles (idempotent).
+
+    Indispensable pour que les endpoints qui font `require_permission(slug)`
+    voient les permissions héritées du rôle. Sans cet INSERT, l'utilisateur
+    a son `users.role` enum (qui sert au portal routing JWT) mais aucune
+    permission granulaire → 403 sur tout `/admin/*`.
+
+    Voir [[feedback_user_roles_on_create]] et task #17.
+    """
+    role_id_row = await db.execute(
+        text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}
+    )
+    role_id = role_id_row.scalar_one_or_none()
+    if role_id is None:
+        logger.warning(
+            "Role '%s' not seeded in tenant; user_id=%d created without user_roles entry",
+            role_name,
+            user_id,
+        )
+        return
+    await db.execute(
+        text("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (:u, :r)"),
+        {"u": user_id, "r": role_id},
+    )
+
+
 async def create_teacher(
     db: AsyncSession, data: TeacherCreate, *, created_by: int
 ) -> TeacherResponse:
@@ -472,6 +501,7 @@ async def create_teacher(
         )
         db.add(user)
         await db.flush()
+        await _ensure_default_user_role(db, user.id, "teacher")
 
         # Create teacher profile linked to user
         profile_data = data.model_dump(exclude={"email", "password"})
@@ -592,11 +622,11 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     result["students_count"] = students_count
     result["evaluations_count"] = evaluations_count
 
-    # Hours per week (sum of subject hours_per_week via SubjectInstance)
-    from app.models.academic import SubjectInstance
+    # Hours per week (sum of subject hours_per_week via Subject assigned to teacher)
+    from app.models.academic import Subject
 
-    hours_stmt = select(func.coalesce(func.sum(SubjectInstance.hours_per_week), 0)).where(
-        SubjectInstance.teacher_id == teacher_id
+    hours_stmt = select(func.coalesce(func.sum(Subject.hours_per_week), 0)).where(
+        Subject.teacher_id == teacher_id
     )
     result["hours_per_week"] = float((await db.execute(hours_stmt)).scalar() or 0)
 
@@ -618,12 +648,107 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     )
     total_avail = (await db.execute(total_avail_stmt)).scalar() or 0
     available_count = (await db.execute(available_stmt)).scalar() or 0
-    result["availability_rate"] = round(
-        (available_count / total_avail * 100) if total_avail > 0 else 0, 1
-    )
+
+    # Availability rate — 3 cases :
+    #  - "configured" : saisies présentes → rate = available / total
+    #  - "implicit"  : pas de saisie mais slots EDT existants → rate proxy depuis
+    #                  les slots (le prof EST par définition disponible quand il
+    #                  est déjà affecté à un cours). Évite le faux "0% indispo
+    #                  partout" alarmant pour un prof actif.
+    #  - "none"      : aucune saisie ET aucun slot → "—" côté UI.
+    #
+    # MAX_SLOTS = 6 jours × 11 heures (cf. FE grid 7h–18h).
+    MAX_SLOTS_PER_WEEK = 66
+    if total_avail > 0:
+        result["availability_rate"] = round(available_count / total_avail * 100, 1)
+        result["availability_source"] = "configured"
+    else:
+        slots_count_stmt = (
+            select(func.count())
+            .select_from(TimetableSlot)
+            .where(TimetableSlot.teacher_id == teacher_id)
+        )
+        slots_count = (await db.execute(slots_count_stmt)).scalar() or 0
+        if slots_count > 0:
+            result["availability_rate"] = round(min(slots_count / MAX_SLOTS_PER_WEEK * 100, 100), 1)
+            result["availability_source"] = "implicit"
+        else:
+            result["availability_rate"] = 0
+            result["availability_source"] = "none"
 
     # Include photo_url
     result["photo_url"] = teacher.photo_url
+
+    # Detailed classes taught by this teacher in the current AY.
+    # Aggregated from timetable_slots (the canonical source for the
+    # teacher↔class relationship — there is no dedicated class_teachers
+    # table). Each entry exposes the subjects taught in that class by this
+    # teacher, the weekly hours invested, and the student count enrolled in
+    # the current AY.
+    from app.models.academic import Class as ClassModel
+    from app.models.academic import Level
+    from app.models.enrollment import EnrollmentStatus
+
+    ay_id = await repo.get_current_academic_year_id(db)
+    classes_detail: list[dict] = []
+    if ay_id is not None:
+        slot_rows_stmt = (
+            select(
+                ClassModel.id.label("class_id"),
+                ClassModel.name.label("class_name"),
+                Level.name.label("level_name"),
+                Subject.name.label("subject_name"),
+                TimetableSlot.start_time,
+                TimetableSlot.end_time,
+            )
+            .select_from(TimetableSlot)
+            .join(ClassModel, ClassModel.id == TimetableSlot.class_id)
+            .outerjoin(Level, Level.id == ClassModel.level_id)
+            .join(Subject, Subject.id == TimetableSlot.subject_id)
+            .where(TimetableSlot.teacher_id == teacher_id)
+            .where(TimetableSlot.academic_year_id == ay_id)
+        )
+        slot_rows = (await db.execute(slot_rows_stmt)).all()
+
+        agg: dict[int, dict] = {}
+        for row in slot_rows:
+            entry = agg.setdefault(
+                row.class_id,
+                {
+                    "id": row.class_id,
+                    "name": row.class_name,
+                    "level": row.level_name,
+                    "subjects": set(),
+                    "minutes": 0,
+                },
+            )
+            entry["subjects"].add(row.subject_name)
+            start_min = row.start_time.hour * 60 + row.start_time.minute
+            end_min = row.end_time.hour * 60 + row.end_time.minute
+            entry["minutes"] += max(0, end_min - start_min)
+
+        for class_id, entry in agg.items():
+            student_count = (
+                await db.execute(
+                    select(func.count(Enrollment.id))
+                    .where(Enrollment.class_id == class_id)
+                    .where(Enrollment.academic_year_id == ay_id)
+                    .where(Enrollment.status == EnrollmentStatus.VALIDE)
+                )
+            ).scalar() or 0
+            classes_detail.append(
+                {
+                    "id": entry["id"],
+                    "name": entry["name"],
+                    "level": entry["level"],
+                    "subjects": sorted(entry["subjects"]),
+                    "hours_per_week": round(entry["minutes"] / 60, 1),
+                    "student_count": int(student_count),
+                }
+            )
+
+    classes_detail.sort(key=lambda c: c["name"])
+    result["classes"] = classes_detail
 
     return result
 
@@ -661,15 +786,33 @@ async def get_staff(db: AsyncSession, staff_id: int) -> StaffResponse:
 
 
 async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) -> StaffResponse:
+    # Aligné sur create_teacher : un staff est avant tout un User auth-able,
+    # le profil StaffProfile en est le contenu métier. On crée les deux en
+    # une seule transaction pour éviter les comptes orphelins.
+    existing = (await db.execute(select(User).where(User.email == data.email))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
+
     async with db.begin_nested():
-        staff = await repo.create_staff(db, **data.model_dump())
+        user = User(
+            email=data.email,
+            hashed_password=hash_password(data.password),
+            role=UserRoleEnum.STAFF,
+        )
+        db.add(user)
+        await db.flush()
+        await _ensure_default_user_role(db, user.id, "staff")
+
+        profile_data = data.model_dump(exclude={"email", "password"})
+        profile_data["user_id"] = user.id
+        staff = await repo.create_staff(db, **profile_data)
         await audit_log(
             db,
             entity_type="staff",
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=staff.id,
-            new_values=data.model_dump(mode="json"),
+            new_values={**data.model_dump(mode="json", exclude={"password"}), "user_id": user.id},
         )
     await db.commit()
     refreshed = await repo.get_staff_by_id(db, staff.id)
@@ -1066,24 +1209,19 @@ async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
 def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     level_name = None
     series_name = None
-    academic_year_name = None
     if hasattr(c, "level") and c.level is not None:
         level_name = c.level.name
     if hasattr(c, "series") and c.series is not None:
         series_name = c.series.name
-    if hasattr(c, "academic_year") and c.academic_year is not None:
-        academic_year_name = c.academic_year.name
     return ClassResponse(
         id=c.id,
         name=c.name,
         level_id=c.level_id,
         series_id=c.series_id,
-        academic_year_id=c.academic_year_id,
         room_id=c.room_id,
         max_students=c.max_students,
         level_name=level_name,
         series_name=series_name,
-        academic_year_name=academic_year_name,
         enrolled_count=enrolled_count,
         created_at=c.created_at,
         updated_at=c.updated_at,
@@ -1115,7 +1253,6 @@ async def list_classes(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
-    academic_year_id: int | None = None,
     search: str | None = None,
 ) -> ClassListResponse:
     classes, total = await repo.list_classes(
@@ -1123,7 +1260,6 @@ async def list_classes(
         page=page,
         size=size,
         level_id=level_id,
-        academic_year_id=academic_year_id,
         search=search,
     )
     counts = await _get_enrolled_counts(db, [c.id for c in classes])
@@ -1601,13 +1737,113 @@ async def delete_level(db: AsyncSession, level_id: int, *, deleted_by: int) -> N
 
 
 async def get_school_settings(db: AsyncSession) -> SchoolSettings:
-    """Get the school settings singleton. Raises NotFoundError if not provisioned."""
+    """Get the school settings singleton.
+
+    Lazily provisions a placeholder row on the first call so a fresh tenant
+    can land on /admin/settings without a 404 — the admin then fills the
+    real name/address/etc via the UI form.
+    """
     stmt = select(SchoolSettings).limit(1)
     result = await db.execute(stmt)
     school = result.scalar_one_or_none()
     if school is None:
-        raise NotFoundError("SchoolSettings", 0)
+        school = SchoolSettings(school_name="Mon établissement")
+        db.add(school)
+        await db.flush()
+        await db.commit()
     return school
+
+
+async def get_trimesters_for_current_year(db: AsyncSession) -> list[Trimester]:
+    """Retourne les trimestres de l'année académique courante (vide si aucune)."""
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        return []
+    stmt = (
+        select(Trimester).where(Trimester.academic_year_id == year_id).order_by(Trimester.order_no)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def update_notification_settings(
+    db: AsyncSession, data: dict, *, updated_by: int
+) -> SchoolSettings:
+    """Met à jour les 7 préférences de notification du tenant."""
+    school = await get_school_settings(db)
+    fields = (
+        "notify_by_email",
+        "notify_by_sms",
+        "notify_grades",
+        "notify_absences",
+        "notify_payments",
+        "notify_enrollment",
+        "notify_reenrollment",
+    )
+    async with db.begin_nested():
+        for f in fields:
+            if f in data:
+                setattr(school, f, bool(data[f]))
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_settings",
+            entity_id=school.id,
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            new_values={k: data.get(k) for k in fields if k in data},
+        )
+    await db.commit()
+    return school
+
+
+async def upsert_trimesters_for_current_year(
+    db: AsyncSession, items: list[dict], *, updated_by: int
+) -> list[Trimester]:
+    """Remplace les trimestres de l'AY courante (delete + insert).
+
+    Les items reçus suivent le format `{label, start_date, end_date}`.
+    L'ordre est déterminé par l'index dans la liste (order_no = i + 1).
+    """
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        raise NotFoundError("AcademicYear", 0)
+
+    async with db.begin_nested():
+        await db.execute(sa_delete(Trimester).where(Trimester.academic_year_id == year_id))
+        await db.flush()
+        for i, item in enumerate(items, start=1):
+            db.add(
+                Trimester(
+                    academic_year_id=year_id,
+                    label=item["label"],
+                    order_no=i,
+                    start_date=item["start_date"],
+                    end_date=item["end_date"],
+                )
+            )
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="trimesters",
+            entity_id=year_id,
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            new_values={
+                "items": [
+                    {
+                        "label": it["label"],
+                        "start_date": str(it["start_date"]),
+                        "end_date": str(it["end_date"]),
+                    }
+                    for it in items
+                ]
+            },
+        )
+    await db.commit()
+    stmt = (
+        select(Trimester).where(Trimester.academic_year_id == year_id).order_by(Trimester.order_no)
+    )
+    return list((await db.execute(stmt)).scalars().all())
 
 
 async def update_school_info(
@@ -1632,6 +1868,26 @@ async def update_school_info(
         )
     await db.commit()
     # Re-fetch to get updated timestamps
+    return await get_school_settings(db)
+
+
+async def clear_school_signature(db: AsyncSession, *, updated_by: int) -> SchoolSettings:
+    """Clear the school official signature URL (DELETE flow)."""
+    school = await get_school_settings(db)
+    if school.signature_image_url is None:
+        return school
+    async with db.begin_nested():
+        school.signature_image_url = None
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_settings",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=school.id,
+            new_values={"signature_image_url": None},
+        )
+    await db.commit()
     return await get_school_settings(db)
 
 
@@ -2131,8 +2387,9 @@ async def create_room(
         new_values=data.model_dump(),
     )
     await db.commit()
-    await db.refresh(room, ["classes"])
-    return _room_to_response(room)
+    fresh = await repo.get_room_by_id(db, room.id)
+    assert fresh is not None
+    return _room_to_response(fresh)
 
 
 async def update_room(

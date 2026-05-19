@@ -6,7 +6,16 @@ import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Numeric,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -57,6 +66,11 @@ class FeeCategory(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Ordre d'allocation des paiements automatiques. Lower = paid first.
+    # Convention : 10 Inscription, 20/30/40 T1/T2/T3, 50 COGES, 60 Tenue, 100 reste.
+    priority: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=100, server_default="100"
+    )
 
     variants: Mapped[list[FeeVariant]] = relationship(back_populates="category")
     options: Mapped[list[OptionalFeeOption]] = relationship(back_populates="category")
@@ -168,15 +182,35 @@ class EnrollmentFee(Base, TimestampMixin):
 
 
 class Payment(Base, TimestampMixin):
-    """Paiement d'un frais d'inscription."""
+    """Acte caissier — un versement physique par un parent/élève.
+
+    Modèle métier (Côte d'Ivoire) : le caissier saisit un montant sur
+    l'INSCRIPTION de l'élève. Le système alloue automatiquement aux
+    frais impayés par ordre de priorité (Inscription → T1 → T2 → T3 →
+    COGES → Tenue → reste). Les splits sont matérialisés dans
+    `PaymentAllocation` pour la traçabilité comptable.
+
+    `enrollment_fee_id` est DEPRECATED depuis le refactor 2026-05-17
+    (migration 0028). Conservé nullable 1 release pour rollback. Tout
+    nouveau code doit utiliser `enrollment_id` + parcourir `allocations`.
+    """
 
     __tablename__ = "payments"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    enrollment_fee_id: Mapped[int] = mapped_column(
+    enrollment_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("enrollments.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # DEPRECATED — conservé pour rétrocompat. Ne plus écrire dessus.
+    # TODO(remove-after=0.3.0): drop column + index once all environments
+    # have run migration 0028 and no Payment row has enrollment_fee_id set.
+    enrollment_fee_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("enrollment_fees.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
@@ -195,4 +229,44 @@ class Payment(Base, TimestampMixin):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    enrollment_fee: Mapped[EnrollmentFee] = relationship(back_populates="payments")
+    enrollment: Mapped[Enrollment] = relationship(back_populates="payments")
+    enrollment_fee: Mapped[EnrollmentFee | None] = relationship(back_populates="payments")
+    allocations: Mapped[list[PaymentAllocation]] = relationship(
+        back_populates="payment",
+        cascade="all, delete-orphan",
+    )
+
+
+# ---------------------------------------------------------------------------
+# PaymentAllocation — splits d'un paiement vers les frais individuels
+# ---------------------------------------------------------------------------
+
+
+class PaymentAllocation(Base, TimestampMixin):
+    """Split d'un Payment vers un EnrollmentFee spécifique.
+
+    Un Payment de 50 000 XOF peut être alloué automatiquement à plusieurs
+    frais (ex : 20 000 sur T1 + 10 000 sur T2 + 20 000 sur T3). Chaque
+    split est une row PaymentAllocation. La somme des allocations.amount
+    DOIT toujours égaler payment.amount (invariant comptable).
+    """
+
+    __tablename__ = "payment_allocations"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    payment_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("payments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    enrollment_fee_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("enrollment_fees.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+
+    payment: Mapped[Payment] = relationship(back_populates="allocations")
+    enrollment_fee: Mapped[EnrollmentFee] = relationship()

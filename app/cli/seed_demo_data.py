@@ -104,10 +104,8 @@ async def seed_demo_data(tenant_slug: str) -> None:
                         "current": True,
                     },
                 )
-                ay_row = await db.execute(
-                    text("SELECT id FROM academic_years WHERE name = '2025-2026'")
-                )
-                academic_year_id = ay_row.scalar_one()
+                # AY 2025-2026 créée. Refactor #97 : Class est universel,
+                # plus besoin de propager academic_year_id aux INSERT classes.
                 counts["academic_years"] = 1
 
                 # 2. Levels
@@ -134,6 +132,8 @@ async def seed_demo_data(tenant_slug: str) -> None:
                 counts["series"] = len(SERIES)
 
                 # 4. Classes (2 per level)
+                # Refactor #97 : Class est universel — pas de academic_year_id.
+                # UniqueConstraint(name) suffit, INSERT IGNORE skip les répétitions.
                 class_count = 0
                 for lvl in LEVELS:
                     level_row = await db.execute(
@@ -147,13 +147,12 @@ async def seed_demo_data(tenant_slug: str) -> None:
                         await db.execute(
                             text(
                                 "INSERT IGNORE INTO classes "
-                                "(name, level_id, academic_year_id, max_students) "
-                                "VALUES (:name, :level_id, :ay_id, :max)"
+                                "(name, level_id, max_students) "
+                                "VALUES (:name, :level_id, :max)"
                             ),
                             {
                                 "name": class_name,
                                 "level_id": level_id,
-                                "ay_id": academic_year_id,
                                 "max": 50,
                             },
                         )

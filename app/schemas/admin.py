@@ -189,6 +189,17 @@ class TeacherResponse(BaseModel):
     updated_at: datetime
 
 
+class TeacherTaughtClass(BaseModel):
+    """One class taught by a teacher in the current AY (aggregated from timetable_slots)."""
+
+    id: int
+    name: str
+    level: str | None = None
+    subjects: list[str] = []
+    hours_per_week: float = 0
+    student_count: int = 0
+
+
 class TeacherFullResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -215,6 +226,13 @@ class TeacherFullResponse(BaseModel):
     evaluations_count: int = 0
     hours_per_week: float = 0
     availability_rate: float = 0
+    # "configured" si saisies explicites, "implicit" si dérivé des slots EDT,
+    # "none" si aucune donnée. Permet au FE d'afficher un tooltip approprié et
+    # d'éviter le faux "0% indispo" pour un prof actif sans saisie.
+    availability_source: str = "none"
+
+    # Detailed classes (current AY, aggregated from timetable_slots)
+    classes: list[TeacherTaughtClass] = []
 
 
 class TeacherListResponse(BaseModel):
@@ -232,9 +250,10 @@ class TeacherListResponse(BaseModel):
 class StaffCreate(BaseModel):
     first_name: str
     last_name: str
+    email: str
+    password: str
     position: str | None = None
     phone: str | None = None
-    user_id: int
 
 
 class StaffUpdate(BaseModel):
@@ -363,10 +382,15 @@ class ParentListResponse(BaseModel):
 
 
 class ClassCreate(BaseModel):
+    """Schéma création de classe.
+
+    Refactor #97 : Class est universel, pas de academic_year_id. L'année est
+    portée par Enrollment lors de l'inscription.
+    """
+
     name: str
     level_id: int
     series_id: int | None = None
-    academic_year_id: int
     room_id: int | None = None
     max_students: int = 40
 
@@ -382,7 +406,6 @@ class ClassUpdate(BaseModel):
     name: str | None = None
     level_id: int | None = None
     series_id: int | None = None
-    academic_year_id: int | None = None
     room_id: int | None = None
     max_students: int | None = None
 
@@ -401,12 +424,10 @@ class ClassResponse(BaseModel):
     name: str
     level_id: int
     series_id: int | None
-    academic_year_id: int
     room_id: int | None
     max_students: int
     level_name: str | None = None
     series_name: str | None = None
-    academic_year_name: str | None = None
     enrolled_count: int = 0
     created_at: datetime
     updated_at: datetime
@@ -591,6 +612,35 @@ class EnrollmentPatternPreview(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class TrimesterDTO(BaseModel):
+    """Une période de l'année scolaire. Le contrat FE attend seulement
+    label/start_date/end_date — l'ordre est inféré par l'index dans la liste."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    start_date: date
+    end_date: date
+
+
+class TrimesterUpdateRequest(BaseModel):
+    """PUT /admin/settings/trimesters — remplace les 3 trimestres de l'AY courante."""
+
+    trimesters: list[TrimesterDTO]
+
+
+class NotificationSettingsUpdate(BaseModel):
+    """PUT /admin/settings/notifications — préférences globales école."""
+
+    notify_by_email: bool
+    notify_by_sms: bool
+    notify_grades: bool
+    notify_absences: bool
+    notify_payments: bool
+    notify_enrollment: bool
+    notify_reenrollment: bool
+
+
 class SchoolSettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -601,8 +651,23 @@ class SchoolSettingsResponse(BaseModel):
     email: str | None
     logo_url: str | None
     ministry_code: str | None
+    signature_image_url: str | None
+    head_master_name: str | None
+    head_master_title: str | None
     enrollment_number_pattern: str | None
     enrollment_number_counter: int
+    primary_color: str | None = None
+    accent_color: str | None = None
+    website: str | None = None
+    motto: str | None = None
+    trimesters: list[TrimesterDTO] = []
+    notify_by_email: bool = False
+    notify_by_sms: bool = False
+    notify_grades: bool = False
+    notify_absences: bool = False
+    notify_payments: bool = False
+    notify_enrollment: bool = False
+    notify_reenrollment: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -661,6 +726,25 @@ class SchoolInfoUpdate(BaseModel):
     email: str | None = None
     logo_url: str | None = None
     ministry_code: str | None = None
+    signature_image_url: str | None = None
+    head_master_name: str | None = None
+    head_master_title: str | None = None
+    # Personnalisation PDF par école (migration 0029)
+    primary_color: str | None = None
+    accent_color: str | None = None
+    website: str | None = None
+    motto: str | None = None
+
+    @field_validator("primary_color", "accent_color")
+    @classmethod
+    def validate_hex_color(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        import re
+
+        if not re.match(r"^#[0-9A-Fa-f]{6}$", v):
+            raise ValueError("Format hex attendu : #RRGGBB")
+        return v.upper()
 
 
 # ---------------------------------------------------------------------------
@@ -808,3 +892,84 @@ class RoomListResponse(BaseModel):
 class RoomBatchCreateResponse(BaseModel):
     created: int
     rooms: list[RoomResponse]
+
+
+# ---------------------------------------------------------------------------
+# Promotions (mass year rollover) — cycle 3 plan B
+# ---------------------------------------------------------------------------
+
+
+class PromotionPreviewRequest(BaseModel):
+    """Demande de pre-flight pour une promotion bulk d'année.
+
+    Le `class_mapping` est explicite : `{source_class_id: target_class_id}`.
+    Aucun parsing automatique de nom de classe — décision design pour éviter
+    les fragilités de naming convention entre tenants.
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    class_mapping: dict[int, int]
+
+
+class SourceClassSummary(BaseModel):
+    source_class_id: int
+    target_class_id: int
+    target_class_name: str
+    students_to_promote: int
+    target_capacity: int
+    target_remaining: int
+
+
+class PromotionCapacityWarning(BaseModel):
+    source_class_id: int
+    target_class_id: int
+    target_class_name: str
+    requested: int
+    available: int
+    overflow: int
+
+
+class PromotionPreviewResponse(BaseModel):
+    """Résumé pre-flight : nb d'élèves promotables par classe + warnings capacité.
+
+    Les warnings ne bloquent pas l'execute (l'admin peut décider de couper la
+    sélection) — ils informent. Seuls les erreurs structurelles (classes
+    inexistantes, AY identiques) bloquent et lèvent une 422 dès le preview.
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    source_classes: list[SourceClassSummary]
+    capacity_warnings: list[PromotionCapacityWarning]
+    promotable_count: int
+
+
+class PromotionExecuteRequest(PromotionPreviewRequest):
+    """Identique au preview, dans une route séparée pour clarté HTTP."""
+
+    pass
+
+
+class PromotionExecuteError(BaseModel):
+    student_id: int
+    source_enrollment_id: int
+    reason: str
+
+
+class PromotionExecuteResponse(BaseModel):
+    """Réponse partial-success-with-reporting (pattern fintech 2024+).
+
+    `promoted_count` = nouvelles inscriptions créées dans cette exécution.
+    `skipped_count` = élèves déjà inscrits dans target_ay (idempotency safe).
+    `error_count` + `errors[]` = échecs explicites (capacité dépassée,
+    classes non mappées, validations métier).
+    """
+
+    source_ay_id: int
+    target_ay_id: int
+    promoted_count: int
+    promoted_enrollment_ids: list[int]
+    skipped_count: int
+    error_count: int
+    errors: list[PromotionExecuteError]

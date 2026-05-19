@@ -13,6 +13,7 @@ from app.models.academic import (  # noqa: F401
     SchoolSettings,
     Series,
     Subject,
+    Trimester,
 )
 
 # Présences
@@ -79,6 +80,9 @@ from app.models.permission import (  # noqa: F401
     RolePermission,
     UserRole,
 )
+
+# Personal Access Tokens (CLI / agents)
+from app.models.personal_access_token import PersonalAccessToken  # noqa: F401
 
 # Emploi du temps
 from app.models.timetable import (  # noqa: F401

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
     AcademicYearListResponse,
@@ -22,6 +23,7 @@ from app.schemas.admin import (
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
+    NotificationSettingsUpdate,
     ParentCreate,
     ParentFullResponse,
     ParentLinkBody,
@@ -66,6 +68,8 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
+    TrimesterDTO,
+    TrimesterUpdateRequest,
     UserAccountCreate,
     UserAccountUpdate,
 )
@@ -74,6 +78,7 @@ from app.services import admin_service, enrollment_service, matricule_service
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 UPLOAD_DIR = "/tmp/klassci-uploads/photos"
+SIGNATURE_UPLOAD_DIR = "/tmp/klassci-uploads/signatures"
 
 
 # ---------------------------------------------------------------------------
@@ -525,20 +530,21 @@ async def delete_staff_photo(
 @router.get("/classes", response_model=ClassListResponse)
 async def list_classes(
     level_id: int | None = Query(None),
-    academic_year_id: int | None = Query(None),
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("admin:classes:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassListResponse:
-    """Liste paginee des classes avec filtres."""
+    """Liste paginee des classes avec filtres.
+
+    Refactor #97 : Class est universel, plus de filtre par academic_year_id.
+    """
     return await admin_service.list_classes(
         db,
         page=page,
         size=size,
         level_id=level_id,
-        academic_year_id=academic_year_id,
         search=search,
     )
 
@@ -835,14 +841,24 @@ async def delete_level(
 # ---------------------------------------------------------------------------
 
 
+async def _build_settings_response(
+    db: AsyncSession, school: SchoolSettings
+) -> SchoolSettingsResponse:
+    """Assemble le payload settings + trimestres de l'AY courante."""
+    trimesters = await admin_service.get_trimesters_for_current_year(db)
+    payload = SchoolSettingsResponse.model_validate(school)
+    payload.trimesters = [TrimesterDTO.model_validate(t) for t in trimesters]
+    return payload
+
+
 @router.get("/settings", response_model=SchoolSettingsResponse)
 async def get_settings(
     _: None = require_permission("admin:academic-years:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SchoolSettingsResponse:
-    """Retourne les parametres de l'etablissement."""
+    """Retourne les parametres de l'etablissement + trimestres."""
     school = await admin_service.get_school_settings(db)
-    return SchoolSettingsResponse.model_validate(school)
+    return await _build_settings_response(db, school)
 
 
 @router.put("/settings/school-info", response_model=SchoolSettingsResponse)
@@ -854,7 +870,84 @@ async def update_school_info(
 ) -> SchoolSettingsResponse:
     """Met a jour les informations generales de l'etablissement."""
     school = await admin_service.update_school_info(db, data, updated_by=current_user.user_id)
-    return SchoolSettingsResponse.model_validate(school)
+    return await _build_settings_response(db, school)
+
+
+@router.put("/settings/notifications", response_model=SchoolSettingsResponse)
+async def update_notifications(
+    data: NotificationSettingsUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Met à jour les préférences de notification de l'établissement."""
+    await admin_service.update_notification_settings(
+        db, data.model_dump(), updated_by=current_user.user_id
+    )
+    school = await admin_service.get_school_settings(db)
+    return await _build_settings_response(db, school)
+
+
+@router.put("/settings/trimesters", response_model=SchoolSettingsResponse)
+async def update_trimesters(
+    data: TrimesterUpdateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Remplace les trimestres de l'année académique courante."""
+    items = [t.model_dump() for t in data.trimesters]
+    await admin_service.upsert_trimesters_for_current_year(
+        db, items, updated_by=current_user.user_id
+    )
+    school = await admin_service.get_school_settings(db)
+    return await _build_settings_response(db, school)
+
+
+@router.post("/settings/signature")
+async def upload_school_signature(
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload la signature/tampon officiel pour les documents administratifs.
+
+    Reutilise le pattern d'upload des photos eleves : MIME whitelist,
+    5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
+    """
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+
+    os.makedirs(SIGNATURE_UPLOAD_DIR, exist_ok=True)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png"
+    filename = f"signature_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(SIGNATURE_UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    signature_url = f"/uploads/signatures/{filename}"
+    school = await admin_service.update_school_info(
+        db,
+        SchoolInfoUpdate(signature_image_url=signature_url),
+        updated_by=current_user.user_id,
+    )
+    return {"signature_image_url": school.signature_image_url}
+
+
+@router.delete("/settings/signature", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_school_signature(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Retire la signature officielle de l'etablissement."""
+    await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------

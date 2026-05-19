@@ -165,13 +165,22 @@ async def get_class_by_id_for_update(db: AsyncSession, class_id: int) -> Class |
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
-async def count_active_enrollments_for_class(db: AsyncSession, class_id: int) -> int:
-    """Compte les inscriptions non-terminées dans une classe (capacity guard)."""
+async def count_active_enrollments_for_class(
+    db: AsyncSession,
+    class_id: int,
+    academic_year_id: int,
+) -> int:
+    """Compte les inscriptions non-terminées dans une classe pour une AY donnée.
+
+    Refactor #97 : Class est universel, donc le compte par-classe doit être
+    scopé à l'AY pour ne pas additionner les cohortes des années précédentes.
+    """
     stmt = (
         select(func.count())
         .select_from(Enrollment)
         .where(
             Enrollment.class_id == class_id,
+            Enrollment.academic_year_id == academic_year_id,
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
         )
     )

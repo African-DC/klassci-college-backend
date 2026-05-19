@@ -269,3 +269,69 @@ async def get_class_stats(
         attendance_rate=round(overall_rate, 2),
         students=summaries,
     )
+
+
+# ---------------------------------------------------------------------------
+# Student attendance summary (used by attestation de frequentation PDF)
+# ---------------------------------------------------------------------------
+
+
+async def get_student_attendance_summary(
+    db: AsyncSession,
+    student_id: int,
+    academic_year_id: int | None = None,
+) -> dict[str, int | float]:
+    """Aggregate the student's presence records by status for a given academic year.
+
+    If ``academic_year_id`` is None, aggregates across all years (rare; mostly
+    useful for legacy data). Returns a dict with the counts and the
+    attendance_rate (percentage of present + late over total, rounded to 2
+    decimals).
+
+    Used by the attestation de frequentation PDF (#109).
+    """
+    from sqlalchemy import func, select
+
+    from app.models.attendance import (
+        AttendanceContext,
+        AttendanceRecord,
+        AttendanceStatus,
+    )
+
+    stmt = (
+        select(AttendanceRecord.status, func.count(AttendanceRecord.id))
+        .join(AttendanceContext, AttendanceRecord.context_id == AttendanceContext.id)
+        .where(AttendanceRecord.student_id == student_id)
+    )
+    if academic_year_id is not None:
+        stmt = stmt.where(AttendanceContext.academic_year_id == academic_year_id)
+    stmt = stmt.group_by(AttendanceRecord.status)
+
+    rows = (await db.execute(stmt)).all()
+    counts: dict[str, int] = {
+        AttendanceStatus.PRESENT.value: 0,
+        AttendanceStatus.ABSENT.value: 0,
+        AttendanceStatus.LATE.value: 0,
+        AttendanceStatus.EXCUSED.value: 0,
+    }
+    for status, count in rows:
+        key = status.value if hasattr(status, "value") else str(status)
+        counts[key] = int(count)
+
+    total = sum(counts.values())
+    rate = (
+        (counts[AttendanceStatus.PRESENT.value] + counts[AttendanceStatus.LATE.value])
+        / total
+        * 100.0
+        if total > 0
+        else 0.0
+    )
+
+    return {
+        "total": total,
+        "present": counts[AttendanceStatus.PRESENT.value],
+        "absent": counts[AttendanceStatus.ABSENT.value],
+        "late": counts[AttendanceStatus.LATE.value],
+        "excused": counts[AttendanceStatus.EXCUSED.value],
+        "attendance_rate": round(rate, 2),
+    }

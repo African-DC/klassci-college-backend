@@ -1,10 +1,10 @@
-"""Tests des endpoints /evaluations, /grades et /bulletins."""
+"""Tests des endpoints /evaluations et /grades."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -331,78 +331,5 @@ def test_get_summary_success() -> None:
         _clear_deps()
 
 
-# ---------------------------------------------------------------------------
-# POST /bulletins/generate
-# ---------------------------------------------------------------------------
-
-
-def test_generate_bulletins_success() -> None:
-    """POST /bulletins/generate → 202 + task_id."""
-    _override_deps()
-    try:
-        mock_response = MagicMock()
-        mock_response.task_id = "celery-uuid-123"
-
-        with patch(
-            "app.services.grades_service.generate_bulletins",
-            new=AsyncMock(return_value={"task_id": "celery-uuid-123"}),
-        ):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/bulletins/generate",
-                    json={"class_id": 3, "trimester": 1, "academic_year_id": 1},
-                )
-        assert resp.status_code == 202
-        data = resp.json()
-        assert "task_id" in data
-    finally:
-        _clear_deps()
-
-
-# ---------------------------------------------------------------------------
-# GET /bulletins/tasks/{task_id}
-# ---------------------------------------------------------------------------
-
-
-def test_get_bulletin_task_status_success() -> None:
-    """GET /bulletins/tasks/xxx → 200 + status."""
-    _override_deps()
-    try:
-        mock_result = MagicMock()
-        mock_result.status = "SUCCESS"
-        mock_result.result = {"bulletin_urls": ["https://example.com/bulletin.pdf"]}
-
-        with patch(
-            "app.routers.grades.celery_app.AsyncResult",
-            return_value=mock_result,
-        ):
-            with TestClient(app) as client:
-                resp = client.get("/bulletins/tasks/celery-uuid-123")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "success"
-        assert data["bulletin_urls"] == ["https://example.com/bulletin.pdf"]
-    finally:
-        _clear_deps()
-
-
-def test_get_bulletin_task_status_pending() -> None:
-    """GET /bulletins/tasks/xxx → status=pending."""
-    _override_deps()
-    try:
-        mock_result = MagicMock()
-        mock_result.status = "PENDING"
-        mock_result.result = None
-
-        with patch(
-            "app.routers.grades.celery_app.AsyncResult",
-            return_value=mock_result,
-        ):
-            with TestClient(app) as client:
-                resp = client.get("/bulletins/tasks/celery-uuid-456")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "pending"
-        assert data["bulletin_urls"] is None
-    finally:
-        _clear_deps()
+# Bulletin endpoints removed from grades router (#103) — Celery Puppeteer flow
+# replaced by sync WeasyPrint via /reports/bulletins/* (see tests/routers/test_reports.py).

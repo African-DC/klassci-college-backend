@@ -16,16 +16,20 @@ from app.core.sentry import init_sentry
 from app.routers.admin import router as admin_router
 from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
+from app.routers.class_documents import router as class_documents_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.dren_stats import router as dren_stats_router
+from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
 from app.routers.notifications import router as notifications_router
 from app.routers.parent_portal import router as parent_portal_router
 from app.routers.payments import router as payments_router
+from app.routers.promotions import router as promotions_router
 from app.routers.reports import router as reports_router
+from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.super_admin import router as super_admin_router
 from app.routers.teacher_portal import router as teacher_portal_router
@@ -71,14 +75,18 @@ app.include_router(attendance_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(enrollments_router)
+app.include_router(enrollment_payments_router)
+app.include_router(class_documents_router)
 app.include_router(fees_router)
 app.include_router(grades_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)
+app.include_router(promotions_router)
 app.include_router(student_portal_router)
 app.include_router(parent_portal_router)
 app.include_router(teacher_portal_router)
 app.include_router(reports_router)
+app.include_router(student_documents_router)
 app.include_router(council_router)
 app.include_router(dren_stats_router)
 app.include_router(super_admin_router)

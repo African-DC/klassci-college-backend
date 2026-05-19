@@ -157,39 +157,58 @@ async def create_subject_average(
     return sa_record
 
 
-async def list_bulletins_for_class(
+async def list_bulletins(
     db: AsyncSession,
-    class_id: int,
-    trimester: int,
-    academic_year_id: int,
+    *,
+    class_id: int | None = None,
+    trimester: int | None = None,
+    academic_year_id: int | None = None,
+    is_published: bool | None = None,
 ) -> list[Bulletin]:
-    """Retourne tous les bulletins d'une classe pour un trimestre."""
+    """Retourne les bulletins selon filtres optionnels."""
     stmt = (
         select(Bulletin)
-        .where(
-            Bulletin.class_id == class_id,
-            Bulletin.trimester == trimester,
-            Bulletin.academic_year_id == academic_year_id,
-        )
         .options(
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
             selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
         )
-        .order_by(Bulletin.rank.asc().nullslast())
+        .order_by(
+            Bulletin.academic_year_id.desc(),
+            Bulletin.trimester.desc(),
+            # MySQL doesn't support `NULLS LAST`. The `IS NULL` trick puts NULLs at
+            # the end (booleans cast to 0=non-null, 1=null in ORDER BY context).
+            Bulletin.rank.is_(None),
+            Bulletin.rank.asc(),
+        )
     )
+    if class_id is not None:
+        stmt = stmt.where(Bulletin.class_id == class_id)
+    if trimester is not None:
+        stmt = stmt.where(Bulletin.trimester == trimester)
+    if academic_year_id is not None:
+        stmt = stmt.where(Bulletin.academic_year_id == academic_year_id)
+    if is_published is not None:
+        stmt = stmt.where(Bulletin.is_published.is_(is_published))
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
 async def get_bulletin_by_id(db: AsyncSession, bulletin_id: int) -> Bulletin | None:
-    """Retourne un bulletin par ID avec ses relations."""
+    """Retourne un bulletin par ID avec ses relations.
+
+    `academic_year` est explicitement selectinload pour éviter un lazy-load
+    déclenché par `pdf_service.generate_bulletin_pdf` qui lit
+    `bulletin.academic_year.name`. Sans ça : MissingGreenlet → 500 plain text
+    sur GET /reports/bulletins/{id}/pdf.
+    """
     stmt = (
         select(Bulletin)
         .where(Bulletin.id == bulletin_id)
         .options(
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
+            selectinload(Bulletin.academic_year),
             selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
         )
     )

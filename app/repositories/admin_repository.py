@@ -16,14 +16,52 @@ from app.utils.fuzzy_search import fuzzy_filter_by_name
 # ---------------------------------------------------------------------------
 
 
-async def get_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
-    stmt = select(Student).where(Student.id == student_id)
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
 async def get_current_academic_year_id(db: AsyncSession) -> int | None:
     """Retourne l'id de l'année scolaire courante (`is_current = true`) ou None."""
     stmt = select(AcademicYear.id).where(AcademicYear.is_current.is_(True)).limit(1)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_current_academic_year_name(db: AsyncSession) -> str | None:
+    """Retourne le label ("2025-2026") de l'année courante ou None."""
+    stmt = select(AcademicYear.name).where(AcademicYear.is_current.is_(True)).limit(1)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
+    """Loader options bornant `Student.enrollments` à l'année courante + status valide.
+
+    Single source of truth partagée entre `list_students` et `get_student_by_id` :
+    sans ce eager-load, `_student_to_response` plante avec `MissingGreenlet` quand
+    il lit `s.enrollments` (lazy-load implicite hors greenlet async).
+    """
+    options: list = [selectinload(Student.enrollments).options(selectinload(Enrollment.class_))]
+    if current_ay_id is not None:
+        options.append(
+            with_loader_criteria(
+                Enrollment,
+                and_(
+                    Enrollment.academic_year_id == current_ay_id,
+                    Enrollment.status == EnrollmentStatus.VALIDE,
+                ),
+                include_aliases=True,
+            )
+        )
+    return options
+
+
+async def get_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
+    """Charge un Student avec son inscription année courante eager-loaded.
+
+    Eager-load obligatoire : tous les callers passent par `_student_to_response`
+    qui lit `s.enrollments` — sans options, MissingGreenlet → 500.
+    """
+    current_ay_id = await get_current_academic_year_id(db)
+    stmt = (
+        select(Student)
+        .where(Student.id == student_id)
+        .options(*_student_with_current_enrollment_options(current_ay_id))
+    )
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
@@ -91,21 +129,7 @@ async def list_students(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
 
-    # `with_loader_criteria` borne le selectinload de Student.enrollments aux
-    # enrollments valide de l'année courante. Single source of truth pour
-    # "current_enrollment" partagée par list_students et tout futur consumer.
-    options: list = [selectinload(Student.enrollments).options(selectinload(Enrollment.class_))]
-    if current_ay_id is not None:
-        options.append(
-            with_loader_criteria(
-                Enrollment,
-                and_(
-                    Enrollment.academic_year_id == current_ay_id,
-                    Enrollment.status == EnrollmentStatus.VALIDE,
-                ),
-                include_aliases=True,
-            )
-        )
+    options = _student_with_current_enrollment_options(current_ay_id)
 
     stmt = (
         base.options(*options)
@@ -435,7 +459,6 @@ async def get_class_by_id(db: AsyncSession, class_id: int) -> Class | None:
         .options(
             selectinload(Class.level),
             selectinload(Class.series),
-            selectinload(Class.academic_year),
         )
         .where(Class.id == class_id)
     )
@@ -448,28 +471,29 @@ async def list_classes(
     page: int = 1,
     size: int = 20,
     level_id: int | None = None,
-    academic_year_id: int | None = None,
     search: str | None = None,
 ) -> tuple[list[Class], int]:
     base = select(Class)
     if level_id is not None:
         base = base.where(Class.level_id == level_id)
-    if academic_year_id is not None:
-        base = base.where(Class.academic_year_id == academic_year_id)
     if search:
         pattern = f"%{search}%"
         base = base.where(Class.name.ilike(pattern))
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
+    # Tri par ordre pédagogique naturel : 6ème → Terminale, puis A/B/C…
+    # L'ancien tri `Class.id.desc()` exposait les classes en ordre de création,
+    # ce qui plaçait Terminale en haut dans les dropdowns (Mme Diallo inscrit
+    # majoritairement en 6ème à la rentrée — mauvais persona-fit). Bug #23.
     stmt = (
-        base.options(
+        base.outerjoin(Level, Class.level_id == Level.id)
+        .options(
             selectinload(Class.level),
             selectinload(Class.series),
-            selectinload(Class.academic_year),
         )
         .offset((page - 1) * size)
         .limit(size)
-        .order_by(Class.id.desc())
+        .order_by(Level.order.asc(), Class.name.asc())
     )
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total

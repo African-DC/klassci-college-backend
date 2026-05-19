@@ -7,12 +7,10 @@ from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.models.academic import SchoolSettings
 from app.models.grade import Bulletin, CouncilDecision, Mention
 from app.repositories import reports_repository as repo
 from app.schemas.reports import (
@@ -20,6 +18,9 @@ from app.schemas.reports import (
     BulletinListResponse,
     BulletinResponse,
     SubjectAverageResponse,
+)
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
 )
 from app.services.pdf_service import generate_bulletin_pdf
 
@@ -295,7 +296,9 @@ async def generate_bulletins(
     await db.commit()
 
     # 9. Reload bulletins with relations for response
-    bulletins = await repo.list_bulletins_for_class(db, class_id, trimester, academic_year_id)
+    bulletins = await repo.list_bulletins(
+        db, class_id=class_id, trimester=trimester, academic_year_id=academic_year_id
+    )
     return BulletinGenerateResponse(
         message=f"Generated {len(bulletins)} bulletins for trimester {trimester}",
         generated=len(bulletins),
@@ -310,37 +313,48 @@ async def generate_bulletins(
 
 async def list_bulletins(
     db: AsyncSession,
-    class_id: int,
-    trimester: int,
-    academic_year_id: int,
+    *,
+    class_id: int | None = None,
+    trimester: int | None = None,
+    academic_year_id: int | None = None,
+    is_published: bool | None = None,
 ) -> BulletinListResponse:
-    """Liste les bulletins generes pour une classe/trimestre."""
-    bulletins = await repo.list_bulletins_for_class(db, class_id, trimester, academic_year_id)
-    total_students = await repo.count_enrolled_students(db, class_id, academic_year_id)
+    """Liste les bulletins, filtrables. Tous les filtres sont optionnels."""
+    bulletins = await repo.list_bulletins(
+        db,
+        class_id=class_id,
+        trimester=trimester,
+        academic_year_id=academic_year_id,
+        is_published=is_published,
+    )
+    # Cache total_students per unique (class_id, academic_year_id) pair to avoid N+1
+    counts: dict[tuple[int, int], int] = {}
+    for b in bulletins:
+        key = (b.class_id, b.academic_year_id)
+        if key not in counts:
+            counts[key] = await repo.count_enrolled_students(db, b.class_id, b.academic_year_id)
     return BulletinListResponse(
-        items=[_bulletin_to_response(b, total_students) for b in bulletins],
+        items=[
+            _bulletin_to_response(b, counts[(b.class_id, b.academic_year_id)]) for b in bulletins
+        ],
         total=len(bulletins),
     )
+
+
+async def get_bulletin_response(db: AsyncSession, bulletin_id: int) -> BulletinResponse | None:
+    """Retourne un bulletin complet par identifiant ou None si introuvable."""
+    bulletin = await repo.get_bulletin_by_id(db, bulletin_id)
+    if bulletin is None:
+        return None
+    total_students = await repo.count_enrolled_students(
+        db, bulletin.class_id, bulletin.academic_year_id
+    )
+    return _bulletin_to_response(bulletin, total_students)
 
 
 # ---------------------------------------------------------------------------
 # Get bulletin PDF
 # ---------------------------------------------------------------------------
-
-
-async def _get_school_settings(db: AsyncSession) -> dict[str, Any]:
-    """Fetch the singleton SchoolSettings row."""
-    stmt = select(SchoolSettings).limit(1)
-    result = await db.execute(stmt)
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        return {"school_name": "Etablissement", "ministry_code": None}
-    return {
-        "school_name": settings.school_name,
-        "ministry_code": settings.ministry_code,
-        "address": settings.address,
-        "phone": settings.phone,
-    }
 
 
 async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
@@ -403,7 +417,7 @@ async def publish_bulletins(
             Bulletin.class_id == class_id,
             Bulletin.trimester == trimester,
             Bulletin.academic_year_id == academic_year_id,
-            not Bulletin.is_published,
+            Bulletin.is_published.is_(False),
         )
         .values(is_published=True)
     )
@@ -417,8 +431,8 @@ async def publish_bulletins(
             from app.models.notification import NotificationType
             from app.services import notification_dispatch_service as notif
 
-            bulletins = await repo.list_bulletins_for_class(
-                db, class_id, trimester, academic_year_id
+            bulletins = await repo.list_bulletins(
+                db, class_id=class_id, trimester=trimester, academic_year_id=academic_year_id
             )
             for b in bulletins:
                 if b.student and b.student.user_id:

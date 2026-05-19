@@ -382,7 +382,7 @@ async def auto_generate(
     """
     from sqlalchemy import delete, or_, select
 
-    from app.models.academic import Class, Subject
+    from app.models.academic import AcademicYear, Class, Subject
     from app.models.timetable import DayOfWeek
 
     # 1. Settings
@@ -392,6 +392,14 @@ async def auto_generate(
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
+
+    # Refactor #97 : Class est universel, l'AY pour le timetable est l'AY courante.
+    current_ay = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
+    if current_ay is None:
+        raise BusinessValidationError("Aucune année académique courante configurée.")
+    academic_year_id = current_ay.id
 
     # 3. Get subjects for this level
     subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
@@ -498,7 +506,7 @@ async def auto_generate(
     task = generate_timetable_task.delay(
         tenant_id,
         class_id,
-        cls.academic_year_id,
+        academic_year_id,
         assignments_data,
         day_names,
         day_start,
@@ -591,12 +599,11 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     ).scalar_one_or_none()
     academic_year_name = ay.name if ay else ""
 
-    # Get school settings
+    # Get school settings (full payload for PDF official header/footer)
+    from app.services._school_settings_helper import load_school_settings_for_pdf
+
     settings = (await db.execute(select(SchoolSettings))).scalar_one_or_none()
-    school_settings = {
-        "school_name": settings.school_name if settings else "Etablissement",
-        "ministry_code": settings.ministry_code if settings else None,
-    }
+    school_settings = await load_school_settings_for_pdf(db)
     day_start = settings.day_start_hour if settings else 7
     day_end = settings.day_end_hour if settings else 18
 

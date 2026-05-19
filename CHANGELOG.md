@@ -10,23 +10,81 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Versement caissier en 3 champs (élève, montant, méthode) : le système alloue automatiquement le montant aux frais impayés dans l'ordre Inscription, scolarité trimestre 1/2/3, COGES, tenue. Plus besoin de choisir un frais avant de saisir le montant *(admin)*.
+- Aperçu d'allocation avant validation : le caissier visualise comment le versement sera réparti aux différents frais et est averti d'un éventuel surplus avant de confirmer *(admin)*.
+- Historique détaillé des paiements d'une inscription avec le détail des allocations par frais sur chaque versement, pour la traçabilité comptable *(admin)*.
+- Ordre de priorité des frais configurable par catégorie : l'admin peut ajuster l'ordre dans lequel les paiements sont alloués aux frais (par défaut Inscription en premier, tenue en dernier) *(admin)*.
+- Reçu de paiement enrichi : quand un versement est alloué à plusieurs frais, le PDF affiche maintenant un tableau Frais / Affecté / Cumul / Statut avec pastilles de couleur, pour une traçabilité comptable claire *(admin, parent)*.
+- État individuel des frais (PDF) : document parent qui synthétise pour une inscription les KPIs (total attendu, versé, reste, % avancement), le détail par frais et l'historique des versements. Téléchargeable depuis la fiche de l'inscription *(admin, parent)*.
+- Bordereau journalier (PDF) : récap des versements d'une date par méthode (espèces, mobile money, virement, chèque) avec total général et signatures Caissier / Comptabilité. Imprimable fin de journée pour la clôture caisse *(admin)*.
+- Liste de classe (PDF) : effectif imprimable avec photos miniatures, matricule, sexe, date de naissance et téléphone parent urgence, signé par le professeur principal. Utile pour conseil de classe, sortie scolaire ou appel papier *(admin)*.
+- Fiche d'inscription officielle (PDF) : document à signer par le parent à la rentrée avec identité élève, blocs père/mère/tuteur, classe affectée et tableau des frais scolaires avec total. Bandeau République de Côte d'Ivoire + signatures Parent et Chef d'établissement *(admin, parent)*.
+
+### Fixed
+
+- Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») *(admin, parent)*.
+- Génération PDF désormais compatible avec les versions récentes de `pydyf` : pin explicite `pydyf<0.12` dans `requirements.txt` car la 0.12 a un breaking change incompatible avec WeasyPrint 62 (Stream.transform retiré → 500 silencieux au render) *(devops)*.
+- Identité visuelle de l'école désormais appliquée à TOUS les documents PDF : les bulletins, certificats de scolarité, attestations de fréquentation, emplois du temps, listes de classe, fiches d'inscription et PV de conseil reprennent maintenant les couleurs, la devise et le site web configurés. Auparavant ces 6 documents retombaient silencieusement sur la palette KLASSCI par défaut malgré la configuration tenant *(admin, parent, enseignant)*.
+- PV de conseil de classe (PDF) : génération corrigée, l'année scolaire n'était pas pré-chargée et provoquait une erreur 500 silencieuse au téléchargement *(admin)*.
+
+### Changed
+
+- Identité visuelle des PDFs personnalisable par école : chaque établissement peut configurer sa couleur principale, sa couleur d'accent, sa devise et son site web. Le logo et les couleurs apparaissent automatiquement sur tous les documents (reçus, état des frais, bordereaux, etc.). Migration `0029` *(admin, super-admin)*.
+- Tous les documents PDF officiels (bulletins, reçus, attestations, certificats, EDT, PV conseil, liste de classe, fiche d'inscription, bordereau journalier, état des frais) reprennent maintenant les couleurs et la devise de l'établissement. Composants visuels unifiés : entête République de Côte d'Ivoire avec logo, blocs signatures premium, tableaux zebra, pastilles de statut sémantiques, mentions cadrées *(tous)*.
+- Création de tenant : les slugs réservés (`admin`, `api`, `auth`, `www`, `local`, `super-admin`, ...) sont désormais refusés à la création pour éviter toute collision avec un chemin plateforme *(super-admin)* (#136).
+- Lien de connexion configurable via `PUBLIC_LOGIN_URL_TEMPLATE` : par défaut `https://college.klassci.com/login?c=<slug>` (pattern single-domain), bascule vers sous-domaine sans changement de code *(devops)* (#136).
+- Provisionnement d'un nouvel établissement en libre-service : nouveau rôle « Super Administrateur », tableau de bord dédié et création de tenant en quelques clics, avec validation en direct du nom d'URL et progression visible des étapes *(super-admin)* (#134).
+- Onboarding par ligne de commande pour les agents IA : le CLI `klassci` (`tenant create`, `tenant list`, `pat create`, `doctor`, `db query`, `logs`, `alembic`, etc.) permet de provisionner et opérer la plateforme sans passer par le navigateur ni SSH *(super-admin, devops)* (#134).
+- Tokens d'accès personnels (PAT) : créer, lister, et révoquer ses propres tokens avec scopes (`super-admin:tenants:read`, `super-admin:db:execute`, …), expiration obligatoire (90 jours par défaut), et affichage du token clair une seule fois à la création *(super-admin)* (#134).
+- Diagnostic de plateforme : vue temps réel de l'état du backend, de la base, de Redis et de la configuration SMTP avec rafraîchissement automatique toutes les 30 secondes *(super-admin)* (#134).
+- Lecture des logs système avec masquage automatique des secrets : les en-têtes Authorization, mots de passe, tokens PAT, JWT et adresses email sont remplacés par `[REDACTED]` à la volée. Pause / reprise automatique toutes les 5 secondes *(super-admin)* (#134).
+- Exécution de requêtes SQL ad-hoc sur n'importe quel tenant via une page dédiée ou en CLI, avec mode aperçu (`dry_run`) qui détecte les `DROP / TRUNCATE / DELETE sans WHERE` avant exécution et trace l'identité de l'exécutant dans les logs d'audit *(super-admin)* (#134).
+- Navigation cross-tenant en lecture seule : `klassci student list --tenant=lycee-x`, `klassci teacher list`, `klassci class list` listent les entités d'une école depuis n'importe quel poste *(super-admin)* (#134).
+- Re-provisionner un tenant déjà bootstrapped renvoie maintenant une erreur claire (HTTP 409) au lieu de planter avec une duplicate-email — l'admin existant garde son mot de passe et n'est jamais écrasé silencieusement *(super-admin)* (#134).
+- Tableau de bord parent : un seul appel retourne pour chaque enfant la classe, la moyenne générale, le nombre d'absences et le solde restant à payer, sans avoir à ouvrir chaque fiche *(parent)* (#120).
+- **Attestation de fréquentation officielle** : PDF République de Côte d'Ivoire signé par le chef d'établissement avec un tableau des statistiques de présence (présent / retard / absence excusée / absence non excusée) et un taux de fréquentation calculé sur l'année scolaire en cours. Endpoint `GET /students/{id}/documents/attestation-frequentation.pdf` avec les mêmes gardes d'accès que le certificat *(admin, parent, élève)* (#109).
+- **Certificat de scolarité officiel** : l'admin (et le parent en self-service) peut télécharger un PDF République de Côte d'Ivoire signé par le chef d'établissement, avec corps formel "Le soussigné certifie que [élève], né(e) le ... à ..., est régulièrement inscrit(e) en classe de [...] au titre de l'année scolaire [...]". Endpoint `GET /students/{id}/documents/certificat-scolarite.pdf` avec garde d'accès parent (lien parent_student) et étudiant (compte propre) *(admin, parent, élève)* (#107).
+- Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents *(admin)* (#105).
+- Le logo de l'établissement et la signature officielle sont désormais embarqués dans tous les PDFs (bulletin, PV de conseil, reçu de paiement, emploi du temps) lorsqu'ils sont configurés. L'absence de configuration ne casse rien, le PDF se génère sans logo *(admin)* (#105).
+- Promotion en masse de fin d'année : l'admin choisit la classe de destination de chaque classe source et obtient en un appel un aperçu des élèves promus, des avertissements de capacité, et un rapport de promotions appliquées avec les exceptions *(admin)* (#95).
+- Validation d'inscription en un appel dédié : l'admin peut désormais passer un prospect ou une inscription en attente directement à l'état validé, avec audit traçable et message clair si la transition est refusée *(admin)* (#93).
 - Liste des élèves côté admin enrichie de la classe et du statut d'inscription pour l'année courante : un seul appel API au lieu de cliquer chaque fiche pour savoir où l'élève est *(admin)* (#82).
 - Filtres par classe et liste des élèves « à inscrire » exposés en un endpoint dédié, prêt à alimenter les chips de la liste élèves *(admin)* (#82).
 - Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit *(admin, enseignant)*.
 - Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées *(tous)*.
-- Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève des scénarios E2E *(devops)*.
+- Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève / parent des scénarios E2E. Le compte parent est lié à un élève seedé pour exercer les flows portail parent *(devops)* (#118).
 - Tableau de bord élève : nom, classe, prochain cours, moyenne générale, frais restants et total d'absences, en un seul appel *(élève)* (#75).
 - Liste exhaustive des évaluations de l'enseignant connecté pour alimenter la page « Mes évaluations » côté portail *(enseignant)* (#75).
 
 ### Changed
 
+- Les classes (6ème A, Terminale C, …) deviennent permanentes : on ne crée plus une nouvelle classe à chaque rentrée. À chaque changement d'année, la classe reste, on réinscrit ou on promeut les élèves, et la promotion devient un simple choix de destination *(admin)* (#97).
 - Audit des changements de permissions de rôle : on garde désormais l'état avant et après pour reconstruire le diff de chaque modification *(admin, super-admin)*.
 - Tableau de bord enseignant repensé : nom, prochain cours, totaux et liste des évaluations à venir avec progression de saisie, en cohérence avec ce qu'affiche le portail *(enseignant)* (#75).
 - Création d'évaluation : la matière doit être enseignée dans la classe sélectionnée. Toute combinaison incohérente est refusée avec un message clair en français *(admin, enseignant)* (#76).
 - Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée *(admin)* (#76).
 
+### Removed
+
+- Génération asynchrone des bulletins via Celery + Puppeteer : flow orphelin depuis le pivot architectural d'avril 2026. La génération sync via WeasyPrint reste seule porte d'entrée *(devops, super-admin)* (#103).
+- Endpoints `POST /bulletins/generate` et `GET /bulletins/tasks/{task_id}` exposés à la racine : remplacés par les endpoints `/reports/bulletins/*` qui retournent directement les bulletins générés sans détour Celery (#103).
+
+### Added
+
+- Endpoint `GET /reports/bulletins` avec filtres optionnels (`class_id`, `trimester`, `academic_year_id`, `is_published`) pour la consultation transverse côté admin (#103).
+- Endpoint `GET /reports/bulletins/{bulletin_id}` pour récupérer un bulletin précis par identifiant (utilisé par la modale de prévisualisation côté admin) (#103).
+
+### Changed
+
+- Publication des bulletins : la réponse expose désormais un message lisible et un compteur (`{message, count}`) au lieu d'un objet brut, pour cohérence avec le contrat utilisé côté front *(admin)* (#103).
+
 ### Fixed
 
+- Fiche enseignant : la vue d'ensemble (nombre de classes, d'élèves, d'évaluations, heures par semaine) restait à zéro à cause d'une 500 silencieuse sur le profil enrichi. Tous les indicateurs s'affichent désormais correctement *(admin)* (#114).
+- Liste des bulletins (`GET /reports/bulletins`) qui renvoyait une 500 « Internal Server Error » à cause d'un `NULLS LAST` dans le tri par rang non supporté par MySQL. Remplacé par l'astuce portable `IS NULL` qui place les bulletins sans rang en queue *(admin)* (#113).
+- Publication des bulletins : la mise à `publié` ne s'appliquait à aucune ligne (les notifications aux parents n'étaient jamais envoyées). Bug silencieux d'un `not` Python évalué au chargement du module au lieu d'un filtre SQL (#101).
+- Frais optionnels (cantine, transport, activités) qui n'étaient jamais récupérés automatiquement à l'inscription d'un élève : seuls les frais obligatoires apparaissaient. Même bug `not` Python sur la colonne SQLAlchemy *(admin)* (#101).
+- Fiche élève, création, modification et upload de photo qui renvoyaient « Connexion au serveur impossible » depuis l'enrichissement de la liste : restaurés en eager-loadant l'inscription année courante au chargement d'un élève *(admin)*.
 - Création d'évaluation qui échouait silencieusement avec « Erreur serveur » : l'audit serveur sait désormais sérialiser correctement la date *(admin, enseignant)* (#76).
 - Permissions de gestion des rôles, des salles et des séries désormais seedées par défaut. Auparavant, les pages correspondantes côté portail étaient inaccessibles en silence (#73).
 - Démontage propre de la migration ajoutant la traçabilité de saisie des notes (l'ordre de suppression de l'index et de la contrainte cassait la rétrogradation sur MySQL).

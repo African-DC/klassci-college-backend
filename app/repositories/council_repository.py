@@ -40,6 +40,7 @@ async def get_council_minutes(
         .options(
             selectinload(CouncilMinutes.decisions).selectinload(CouncilStudentDecision.student),
             selectinload(CouncilMinutes.class_),
+            selectinload(CouncilMinutes.academic_year),
         )
     )
     result = await db.execute(stmt)
@@ -56,6 +57,7 @@ async def get_council_minutes_by_id(
         .options(
             selectinload(CouncilMinutes.decisions).selectinload(CouncilStudentDecision.student),
             selectinload(CouncilMinutes.class_),
+            selectinload(CouncilMinutes.academic_year),
         )
     )
     result = await db.execute(stmt)

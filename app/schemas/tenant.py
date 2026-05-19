@@ -1,8 +1,10 @@
-"""Schémas Pydantic pour le provisioning de tenants."""
+"""Schémas Pydantic pour les opérations super-admin sur les tenants."""
 
-import re
+from typing import Any
 
 from pydantic import BaseModel, EmailStr, field_validator
+
+from app.core.slug import validate_new_tenant_slug
 
 
 class TenantProvisionRequest(BaseModel):
@@ -18,9 +20,7 @@ class TenantProvisionRequest(BaseModel):
     @field_validator("tenant_slug")
     @classmethod
     def validate_slug(cls, v: str) -> str:
-        if not re.match(r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$", v):
-            raise ValueError("Must be 2-63 chars, lowercase alphanumeric + hyphens")
-        return v
+        return validate_new_tenant_slug(v)
 
     @field_validator("admin_password")
     @classmethod
@@ -36,3 +36,60 @@ class TenantProvisionResponse(BaseModel):
     admin_email: str
     status: str
     url: str
+
+
+class TenantListItem(BaseModel):
+    slug: str
+    url: str
+    db_size_bytes: int
+
+
+class TenantListResponse(BaseModel):
+    items: list[TenantListItem]
+    total: int
+
+
+class TenantSchoolSettings(BaseModel):
+    school_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    email: str | None = None
+    ministry_code: str | None = None
+
+
+class TenantCounts(BaseModel):
+    users: int
+    students: int
+    teachers: int
+    staff: int
+    enrollments: int
+    payments: int
+
+
+class TenantDetailResponse(BaseModel):
+    slug: str
+    url: str
+    school_settings: TenantSchoolSettings | None = None
+    counts: TenantCounts
+    alembic_head: str | None = None
+    db_size_bytes: int
+
+
+class SlugCheckRequest(BaseModel):
+    slug: str
+
+    @field_validator("slug")
+    @classmethod
+    def normalise(cls, v: str) -> str:
+        return v.strip().lower()
+
+
+class SlugCheckResponse(BaseModel):
+    slug: str
+    available: bool
+    valid_format: bool
+    reason: str | None = None
+
+
+def to_detail_response(payload: dict[str, Any]) -> TenantDetailResponse:
+    return TenantDetailResponse.model_validate(payload)

@@ -13,7 +13,7 @@ from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class
-    from app.models.fee import EnrollmentFee, OptionalFeeOption
+    from app.models.fee import EnrollmentFee, OptionalFeeOption, Payment
     from app.models.user import Student
 
 
@@ -60,6 +60,7 @@ class Enrollment(Base, TimestampMixin):
     documents: Mapped[list[Document]] = relationship(back_populates="enrollment")
     student_options: Mapped[list[StudentOption]] = relationship(back_populates="enrollment")
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="enrollment")
+    payments: Mapped[list[Payment]] = relationship(back_populates="enrollment")
 
 
 class Document(Base, TimestampMixin):
