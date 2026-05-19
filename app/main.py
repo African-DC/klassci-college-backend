@@ -16,10 +16,10 @@ from app.core.sentry import init_sentry
 from app.routers.admin import router as admin_router
 from app.routers.attendance import router as attendance_router
 from app.routers.auth import router as auth_router
+from app.routers.class_documents import router as class_documents_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.dren_stats import router as dren_stats_router
-from app.routers.class_documents import router as class_documents_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router

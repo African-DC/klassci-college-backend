@@ -13,9 +13,11 @@ from app.models.academic import Class
 from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import ParentStudent
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings_dict,
+)
 from app.services.pdf import generate_enrollment_form_pdf
 from app.services.pdf._helpers import enum_value
-
 
 _RELATIONSHIP_LABELS = {
     "father": "Père",
@@ -23,11 +25,6 @@ _RELATIONSHIP_LABELS = {
     "guardian": "Tuteur",
     "other": "Autre",
 }
-
-
-from app.services._school_settings_helper import (
-    load_school_settings_for_pdf as _get_school_settings_dict,
-)
 
 
 async def _load_enrollment_context(

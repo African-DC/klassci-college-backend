@@ -26,7 +26,6 @@ from app.models.fee import (
     PaymentStatus,
 )
 
-
 # ---------------------------------------------------------------------------
 # Loaders communs (selectinload exhaustif — voir preload-relations-after-commit)
 # ---------------------------------------------------------------------------

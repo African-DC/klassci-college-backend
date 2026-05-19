@@ -15,14 +15,12 @@ from sqlalchemy.orm import selectinload
 
 from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
-from app.models.user import Student, User
-from app.services.pdf import generate_daily_cash_book_pdf
-from app.services.pdf._helpers import enum_value
-
-
+from app.models.user import User
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.pdf import generate_daily_cash_book_pdf
+from app.services.pdf._helpers import enum_value
 
 
 async def _load_payments_for_day(

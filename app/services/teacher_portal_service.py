@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.user import TeacherProfile
-from app.repositories import admin_repository, teacher_portal_repository as repo
+from app.repositories import admin_repository
+from app.repositories import teacher_portal_repository as repo
 from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     TeacherClassesListResponse,

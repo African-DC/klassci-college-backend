@@ -36,7 +36,7 @@ from app.services.pdf.daily_cash_book import generate_daily_cash_book_pdf
 from app.services.pdf.enrollment_form import generate_enrollment_form_pdf
 from app.services.pdf.fee_statement import generate_fee_statement_pdf
 from app.services.pdf.receipt import generate_receipt_pdf
-from app.services.pdf.theme import PDFTheme, _ACCENT, _PRIMARY, method_label, status_label
+from app.services.pdf.theme import _ACCENT, _PRIMARY, PDFTheme, method_label, status_label
 from app.services.pdf.timetable import generate_timetable_pdf
 
 __all__ = [
@@ -49,6 +49,9 @@ __all__ = [
     "_image_to_datauri",
     "_official_footer_html",
     "_school_header_html",
+    "PDFTheme",
+    "components",
+    "enum_value",
     "generate_attendance_certificate_pdf",
     "generate_bulletin_pdf",
     "generate_certificate_scolarite_pdf",
@@ -59,4 +62,6 @@ __all__ = [
     "generate_fee_statement_pdf",
     "generate_receipt_pdf",
     "generate_timetable_pdf",
+    "method_label",
+    "status_label",
 ]

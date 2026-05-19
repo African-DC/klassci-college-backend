@@ -15,7 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Palette KLASSCI par défaut (fallback si school.primary_color is NULL)
 # ---------------------------------------------------------------------------

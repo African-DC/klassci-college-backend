@@ -3,7 +3,6 @@
 import logging
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
@@ -14,6 +13,9 @@ from app.schemas.council import (
     CouncilMinutesResponse,
     CouncilStudentDecisionResponse,
     DecisionOverrideRequest,
+)
+from app.services._school_settings_helper import (
+    load_school_settings_for_pdf as _get_school_settings,
 )
 from app.services.pdf_service import generate_council_minutes_pdf
 
@@ -185,11 +187,6 @@ async def get_council_minutes(
 # ---------------------------------------------------------------------------
 # PDF
 # ---------------------------------------------------------------------------
-
-
-from app.services._school_settings_helper import (
-    load_school_settings_for_pdf as _get_school_settings,
-)
 
 
 async def get_council_minutes_pdf(

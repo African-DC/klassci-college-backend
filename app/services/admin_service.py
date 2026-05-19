@@ -4,7 +4,8 @@ import logging
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import case, delete as sa_delete, func, select, text, update
+from sqlalchemy import case, func, select, text, update
+from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 

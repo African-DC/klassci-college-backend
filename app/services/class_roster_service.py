@@ -12,12 +12,10 @@ from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import ParentStudent
-from app.services.pdf import generate_class_roster_pdf
-
-
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )
+from app.services.pdf import generate_class_roster_pdf
 
 
 async def _load_class_with_room(db: AsyncSession, class_id: int) -> Class:

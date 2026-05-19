@@ -211,7 +211,7 @@ def premium_header(
     if contact_pieces:
         contact_lines.append(" · ".join(contact_pieces))
     contact_html = (
-        f'<div style="font-size:9px; color:var(--muted); margin-top:2px;">'
+        '<div style="font-size:9px; color:var(--muted); margin-top:2px;">'
         + "<br/>".join(contact_lines)
         + "</div>"
         if contact_lines

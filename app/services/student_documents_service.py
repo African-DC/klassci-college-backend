@@ -32,9 +32,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-from app.services._school_settings_helper import (
-    load_school_settings_for_pdf as _get_school_settings_dict,
-)
 
 
 async def _get_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment:

@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import SchoolSettings
 
-
 # Champs jamais exposés au PDF (compteurs internes, timestamps, etc.).
 # Tout le reste passe automatiquement.
 _PDF_EXCLUDE = {

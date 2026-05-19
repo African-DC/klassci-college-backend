@@ -20,13 +20,11 @@ from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 from app.repositories import payment_repository as repo
-from app.services.pdf import generate_fee_statement_pdf
-from app.services.pdf._helpers import enum_value
-
-
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.pdf import generate_fee_statement_pdf
+from app.services.pdf._helpers import enum_value
 
 
 async def _load_enrollment_context(

@@ -17,7 +17,6 @@ from app.services.pdf import components as ui
 from app.services.pdf._helpers import esc
 from app.services.pdf.theme import PDFTheme
 
-
 _DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
 _DAYS_FR = {
     "monday": "Lundi",
