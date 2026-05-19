@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.services import student_documents_service
+from app.services._school_settings_helper import load_school_settings_for_pdf
 from app.services.pdf_service import (
     generate_attendance_certificate_pdf,
     generate_certificate_scolarite_pdf,
@@ -39,7 +40,7 @@ async def get_certificat_scolarite(
     )
 
     data = await student_documents_service.compose_certificate_data(db, student_id)
-    settings = await student_documents_service._get_school_settings_dict(db)
+    settings = await load_school_settings_for_pdf(db)
     pdf_bytes = generate_certificate_scolarite_pdf(data, settings)
 
     last_name = data["student"]["last_name"]
@@ -76,7 +77,7 @@ async def get_attestation_frequentation(
     )
 
     data = await student_documents_service.compose_attendance_certificate_data(db, student_id)
-    settings = await student_documents_service._get_school_settings_dict(db)
+    settings = await load_school_settings_for_pdf(db)
     pdf_bytes = generate_attendance_certificate_pdf(data, settings)
 
     last_name = data["student"]["last_name"]
