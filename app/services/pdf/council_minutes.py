@@ -106,14 +106,18 @@ def generate_council_minutes_pdf(
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
-    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size='A4 landscape', margin='12mm')}</head>
+    <head><meta charset="UTF-8">{
+        ui.base_styles(theme, page_size="A4 landscape", margin="12mm")
+    }</head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             doc_type=f"PROCÈS-VERBAL DU CONSEIL DE CLASSE — TRIMESTRE {trimester}",
             doc_subtitle=class_name if class_name else None,
-        )}
+        )
+    }
 
         {ui.meta_banner(meta_left, meta_right, theme=theme)}
 
@@ -126,11 +130,13 @@ def generate_council_minutes_pdf(
 
         {signatures}
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note="Document officiel — à archiver dans le registre des conseils de classe.",
-        )}
+        )
+    }
     </body>
     </html>
     """

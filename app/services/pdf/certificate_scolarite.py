@@ -130,15 +130,17 @@ def generate_certificate_scolarite_pdf(
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-        {ui.base_styles(theme, page_size='A4', margin='18mm')}
+        {ui.base_styles(theme, page_size="A4", margin="18mm")}
         {serif_style}
     </head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             show_ci_banner=True,
-        )}
+        )
+    }
 
         <h1 class="pdf-cert-title">CERTIFICAT DE SCOLARITÉ</h1>
 
@@ -152,11 +154,13 @@ def generate_certificate_scolarite_pdf(
 
         {signatures}
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note="Document officiel — toute falsification est passible de poursuites.",
-        )}
+        )
+    }
     </body>
     </html>
     """

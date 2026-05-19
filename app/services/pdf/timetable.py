@@ -156,16 +156,18 @@ def generate_timetable_pdf(
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-        {ui.base_styles(theme, page_size='A4 landscape', margin='10mm')}
+        {ui.base_styles(theme, page_size="A4 landscape", margin="10mm")}
         {grid_style}
     </head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             doc_type="EMPLOI DU TEMPS",
             doc_subtitle=f"{class_name} — {academic_year}",
-        )}
+        )
+    }
 
         <table class="pdf-timetable">
             <thead>
@@ -183,11 +185,13 @@ def generate_timetable_pdf(
             </tbody>
         </table>
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note=f"Imprimé le {now_str}",
-        )}
+        )
+    }
     </body>
     </html>
     """

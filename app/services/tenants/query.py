@@ -25,10 +25,7 @@ async def list_tenant_slugs() -> list[str]:
     ) as engine:
         async with engine.begin() as conn:
             result = await conn.execute(
-                text(
-                    "SELECT schema_name FROM information_schema.schemata "
-                    "ORDER BY schema_name ASC"
-                )
+                text("SELECT schema_name FROM information_schema.schemata ORDER BY schema_name ASC")
             )
             rows = result.fetchall()
     return [row[0] for row in rows if row[0] not in SYSTEM_DATABASES]
@@ -40,9 +37,7 @@ async def slug_exists(slug: str) -> bool:
     ) as engine:
         async with engine.begin() as conn:
             result = await conn.execute(
-                text(
-                    "SELECT 1 FROM information_schema.schemata " "WHERE schema_name = :slug LIMIT 1"
-                ),
+                text("SELECT 1 FROM information_schema.schemata WHERE schema_name = :slug LIMIT 1"),
                 {"slug": slug},
             )
             return result.scalar_one_or_none() is not None

@@ -140,14 +140,16 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
-    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size='A5', margin='12mm')}</head>
+    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A5", margin="12mm")}</head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             doc_type="REÇU DE VERSEMENT",
             doc_number=f"N° {payment_id} · {pay_date}",
-        )}
+        )
+    }
 
         {ui.amount_box(amount_str, theme=theme, label="Montant versé", currency="XOF")}
 
@@ -157,11 +159,13 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
 
         {signatures_html}
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note="Ce reçu fait foi de paiement. À conserver précieusement.",
-        )}
+        )
+    }
     </body>
     </html>
     """
