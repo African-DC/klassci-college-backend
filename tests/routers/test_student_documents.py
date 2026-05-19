@@ -65,7 +65,7 @@ def test_get_certificat_success() -> None:
                 ),
             ),
             patch(
-                "app.services.student_documents_service._get_school_settings_dict",
+                "app.services._school_settings_helper.load_school_settings_for_pdf",
                 new=AsyncMock(return_value={"school_name": "Ecole Test"}),
             ),
             patch(
