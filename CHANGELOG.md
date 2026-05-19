@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Pointage de présence des enseignants par créneau d'emploi du temps : l'admin saisit l'absence (excusée / non excusée / retard avec minutes), l'enseignant peut s'auto-déclarer absent (en attente de validation admin). Statistiques par année scolaire (taux de présence, retards cumulés, déclarations en attente) sur la fiche enseignant *(admin, enseignant)* (#146).
 - Versement caissier en 3 champs (élève, montant, méthode) : le système alloue automatiquement le montant aux frais impayés dans l'ordre Inscription, scolarité trimestre 1/2/3, COGES, tenue. Plus besoin de choisir un frais avant de saisir le montant *(admin)*.
 - Aperçu d'allocation avant validation : le caissier visualise comment le versement sera réparti aux différents frais et est averti d'un éventuel surplus avant de confirmer *(admin)*.
 - Historique détaillé des paiements d'une inscription avec le détail des allocations par frais sur chaque versement, pour la traçabilité comptable *(admin)*.
