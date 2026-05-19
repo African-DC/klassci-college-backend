@@ -20,7 +20,7 @@ weasyprint==62.3
 # (Stream.transform retiré → AttributeError au PDF render). Pinning explicite.
 pydyf>=0.10.0,<0.12
 rapidfuzz==3.12.2
-sentry-sdk[fastapi]==2.18.0
+sentry-sdk[fastapi]==2.60.0
 click==8.1.7
 keyring==25.5.0
 keyrings.alt==5.0.2
