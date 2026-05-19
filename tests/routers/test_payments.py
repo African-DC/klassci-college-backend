@@ -19,6 +19,7 @@ NOW = datetime.now(UTC)
 
 SAMPLE_PAYMENT = PaymentResponse(
     id=1,
+    enrollment_id=4,
     enrollment_fee_id=10,
     amount=Decimal("50000.00"),
     method="cash",
@@ -28,6 +29,7 @@ SAMPLE_PAYMENT = PaymentResponse(
     notes=None,
     created_at=NOW,
     updated_at=NOW,
+    allocations=[],
 )
 
 SAMPLE_LIST = PaymentListResponse(
