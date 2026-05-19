@@ -32,6 +32,8 @@ from app.routers.reports import router as reports_router
 from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.super_admin import router as super_admin_router
+from app.routers.teacher_attendance import admin_router as teacher_attendance_admin_router
+from app.routers.teacher_attendance import teacher_router as teacher_attendance_teacher_router
 from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
@@ -93,6 +95,8 @@ app.include_router(super_admin_router)
 app.include_router(timetable_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
+app.include_router(teacher_attendance_admin_router)
+app.include_router(teacher_attendance_teacher_router)
 
 
 # ---------------------------------------------------------------------------
