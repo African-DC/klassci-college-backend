@@ -299,7 +299,7 @@ def premium_footer(school: dict[str, Any], *, theme: PDFTheme, note: str | None 
     return f"""
     <div class="pdf-footer">
         <div class="pdf-footer-school">{school_block}</div>
-        <div class="pdf-footer-meta">{esc(note or '')}</div>
+        <div class="pdf-footer-meta">{esc(note or "")}</div>
     </div>
     """
 
@@ -317,7 +317,7 @@ def signature_block(roles: list[dict[str, Any]], *, theme: PDFTheme) -> str:
             f"""
             <div class="pdf-signature">
                 <div class="pdf-signature-role">{role_label}</div>
-                <div class="pdf-signature-line">{name}{(' — ' + subline) if subline else ''}</div>
+                <div class="pdf-signature-line">{name}{(" — " + subline) if subline else ""}</div>
             </div>
             """
         )

@@ -96,14 +96,16 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
-    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size='A4', margin='14mm')}</head>
+    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A4", margin="14mm")}</head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             doc_type="FICHE D'INSCRIPTION",
             doc_subtitle=f"{class_name} — {academic_year}" if class_name else None,
-        )}
+        )
+    }
 
         {ui.meta_banner(meta_left, meta_right, theme=theme)}
 
@@ -118,11 +120,13 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
 
         {signatures}
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note="Conserver précieusement — à présenter au secrétariat sur demande.",
-        )}
+        )
+    }
     </body>
     </html>
     """

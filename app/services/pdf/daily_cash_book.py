@@ -148,14 +148,16 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
-    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size='A4', margin='14mm')}</head>
+    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A4", margin="14mm")}</head>
     <body>
-        {ui.premium_header(
+        {
+        ui.premium_header(
             school_settings,
             theme=theme,
             doc_type="BORDEREAU JOURNALIER",
             doc_subtitle=date_str,
-        )}
+        )
+    }
 
         {ui.meta_banner(meta_left, meta_right, theme=theme)}
 
@@ -168,11 +170,13 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
 
         {signatures}
 
-        {ui.premium_footer(
+        {
+        ui.premium_footer(
             school_settings,
             theme=theme,
             note="À conserver pour la comptabilité de l'établissement.",
-        )}
+        )
+    }
     </body>
     </html>
     """

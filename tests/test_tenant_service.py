@@ -171,9 +171,9 @@ def test_admin_role_does_not_carry_super_admin_perms() -> None:
     """admin / director are tenant-scoped — they must NOT carry cross-tenant powers."""
     for role_name in ("admin", "director"):
         perms = ROLE_DEFINITIONS[role_name]["permissions"]
-        assert not any(
-            p.startswith("super-admin:") for p in perms
-        ), f"Role '{role_name}' must not include super-admin:* permissions"
+        assert not any(p.startswith("super-admin:") for p in perms), (
+            f"Role '{role_name}' must not include super-admin:* permissions"
+        )
 
 
 # ---------------------------------------------------------------------------
