@@ -27,9 +27,7 @@ from app.services.pdf import generate_fee_statement_pdf
 from app.services.pdf._helpers import enum_value
 
 
-async def _load_enrollment_context(
-    db: AsyncSession, enrollment_id: int
-) -> Enrollment:
+async def _load_enrollment_context(db: AsyncSession, enrollment_id: int) -> Enrollment:
     """Charge l'inscription avec student + class + academic_year + fees.
 
     Selectinload exhaustif pour éviter MissingGreenlet pendant la compose.
@@ -66,9 +64,7 @@ async def _build_fees_section(
     # Tri stable par priorité catégorie ASC puis id
     fees.sort(
         key=lambda f: (
-            f.fee_variant.category.priority
-            if f.fee_variant and f.fee_variant.category
-            else 100,
+            f.fee_variant.category.priority if f.fee_variant and f.fee_variant.category else 100,
             f.id,
         )
     )
@@ -96,9 +92,7 @@ async def _build_fees_section(
     return rows, total_expected, total_paid_all
 
 
-async def _build_payments_section(
-    db: AsyncSession, enrollment_id: int
-) -> list[dict]:
+async def _build_payments_section(db: AsyncSession, enrollment_id: int) -> list[dict]:
     """Compose l'historique des versements (Payment.enrollment_id direct)."""
     payments = await repo.get_payments_by_enrollment_id(db, enrollment_id)
     rows: list[dict] = []
@@ -124,9 +118,7 @@ async def get_fee_statement_pdf(db: AsyncSession, enrollment_id: int) -> bytes:
     payments_rows = await _build_payments_section(db, enrollment_id)
 
     total_remaining = max(total_expected - total_paid, Decimal("0"))
-    completion_rate = (
-        float(total_paid / total_expected * 100) if total_expected > 0 else 0.0
-    )
+    completion_rate = float(total_paid / total_expected * 100) if total_expected > 0 else 0.0
 
     student = enrollment.student
     klass = enrollment.class_

@@ -81,9 +81,7 @@ def _payment_rows(payments: list[dict[str, Any]]) -> list[list[Any]]:
     return rows
 
 
-def generate_fee_statement_pdf(
-    data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Génère un état des frais individuel pour une inscription.
 
     data keys :
@@ -131,37 +129,33 @@ def generate_fee_statement_pdf(
         theme=theme,
     )
 
-    fees_section = (
-        ui.section_title("Détail des frais", theme=theme)
-        + ui.premium_table(
-            headers=[
-                "Catégorie",
-                {"label": "Montant", "align": "right"},
-                {"label": "Versé", "align": "right"},
-                {"label": "Reste", "align": "right"},
-                "Statut",
-            ],
-            rows=_fee_rows(fees),
-            theme=theme,
-            empty_message="Aucun frais configuré pour cette inscription.",
-        )
+    fees_section = ui.section_title("Détail des frais", theme=theme) + ui.premium_table(
+        headers=[
+            "Catégorie",
+            {"label": "Montant", "align": "right"},
+            {"label": "Versé", "align": "right"},
+            {"label": "Reste", "align": "right"},
+            "Statut",
+        ],
+        rows=_fee_rows(fees),
+        theme=theme,
+        empty_message="Aucun frais configuré pour cette inscription.",
     )
 
-    payments_section = (
-        ui.section_title("Historique des versements", theme=theme)
-        + ui.premium_table(
-            headers=[
-                "N°",
-                "Date",
-                "Méthode",
-                "Référence",
-                {"label": "Montant", "align": "right"},
-                "Statut",
-            ],
-            rows=_payment_rows(payments),
-            theme=theme,
-            empty_message="Aucun versement enregistré à ce jour.",
-        )
+    payments_section = ui.section_title(
+        "Historique des versements", theme=theme
+    ) + ui.premium_table(
+        headers=[
+            "N°",
+            "Date",
+            "Méthode",
+            "Référence",
+            {"label": "Montant", "align": "right"},
+            "Statut",
+        ],
+        rows=_payment_rows(payments),
+        theme=theme,
+        empty_message="Aucun versement enregistré à ce jour.",
     )
 
     html = f"""

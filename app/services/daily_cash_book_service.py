@@ -23,9 +23,7 @@ from app.services.pdf import generate_daily_cash_book_pdf
 from app.services.pdf._helpers import enum_value
 
 
-async def _load_payments_for_day(
-    db: AsyncSession, target_date: date
-) -> list[Payment]:
+async def _load_payments_for_day(db: AsyncSession, target_date: date) -> list[Payment]:
     """Charge tous les paiements de la journée avec student name pour PDF."""
     day_start = datetime.combine(target_date, time.min)
     day_end = day_start + timedelta(days=1)
@@ -33,8 +31,7 @@ async def _load_payments_for_day(
         select(Payment)
         .where(Payment.created_at >= day_start, Payment.created_at < day_end)
         .options(
-            selectinload(Payment.enrollment)
-            .selectinload(Enrollment.student),
+            selectinload(Payment.enrollment).selectinload(Enrollment.student),
         )
         .order_by(Payment.created_at.asc())
     )

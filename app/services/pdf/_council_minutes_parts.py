@@ -10,9 +10,7 @@ from app.services.pdf._helpers import format_decimal
 def count_decisions(decisions: list[dict[str, Any]], target: str) -> int:
     """Compte les décisions finales (ou auto à défaut) correspondant à `target`."""
     return sum(
-        1
-        for d in decisions
-        if (d.get("final_decision") or d.get("auto_decision")) == target
+        1 for d in decisions if (d.get("final_decision") or d.get("auto_decision")) == target
     )
 
 

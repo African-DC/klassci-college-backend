@@ -40,9 +40,7 @@ async def _current_academic_year(db: AsyncSession) -> AcademicYear | None:
     return result.scalar_one_or_none()
 
 
-async def _load_students(
-    db: AsyncSession, class_id: int, academic_year_id: int
-) -> list[dict]:
+async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int) -> list[dict]:
     """Charge les étudiants inscrits VALIDES dans la classe pour l'AY courante."""
     stmt = (
         select(Enrollment)

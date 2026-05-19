@@ -457,9 +457,7 @@ async def get_teacher(db: AsyncSession, teacher_id: int) -> TeacherResponse:
     return _teacher_to_response(teacher)
 
 
-async def _ensure_default_user_role(
-    db: AsyncSession, user_id: int, role_name: str
-) -> None:
+async def _ensure_default_user_role(db: AsyncSession, user_id: int, role_name: str) -> None:
     """Attache un user à son rôle par défaut dans user_roles (idempotent).
 
     Indispensable pour que les endpoints qui font `require_permission(slug)`
@@ -672,9 +670,7 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
         )
         slots_count = (await db.execute(slots_count_stmt)).scalar() or 0
         if slots_count > 0:
-            result["availability_rate"] = round(
-                min(slots_count / MAX_SLOTS_PER_WEEK * 100, 100), 1
-            )
+            result["availability_rate"] = round(min(slots_count / MAX_SLOTS_PER_WEEK * 100, 100), 1)
             result["availability_source"] = "implicit"
         else:
             result["availability_rate"] = 0
@@ -1764,9 +1760,7 @@ async def get_trimesters_for_current_year(db: AsyncSession) -> list[Trimester]:
     if year_id is None:
         return []
     stmt = (
-        select(Trimester)
-        .where(Trimester.academic_year_id == year_id)
-        .order_by(Trimester.order_no)
+        select(Trimester).where(Trimester.academic_year_id == year_id).order_by(Trimester.order_no)
     )
     return list((await db.execute(stmt)).scalars().all())
 
@@ -1815,9 +1809,7 @@ async def upsert_trimesters_for_current_year(
         raise NotFoundError("AcademicYear", 0)
 
     async with db.begin_nested():
-        await db.execute(
-            sa_delete(Trimester).where(Trimester.academic_year_id == year_id)
-        )
+        await db.execute(sa_delete(Trimester).where(Trimester.academic_year_id == year_id))
         await db.flush()
         for i, item in enumerate(items, start=1):
             db.add(
@@ -1836,16 +1828,20 @@ async def upsert_trimesters_for_current_year(
             entity_id=year_id,
             action=AuditAction.UPDATE,
             user_id=updated_by,
-            new_values={"items": [
-                {"label": it["label"], "start_date": str(it["start_date"]),
-                 "end_date": str(it["end_date"])} for it in items
-            ]},
+            new_values={
+                "items": [
+                    {
+                        "label": it["label"],
+                        "start_date": str(it["start_date"]),
+                        "end_date": str(it["end_date"]),
+                    }
+                    for it in items
+                ]
+            },
         )
     await db.commit()
     stmt = (
-        select(Trimester)
-        .where(Trimester.academic_year_id == year_id)
-        .order_by(Trimester.order_no)
+        select(Trimester).where(Trimester.academic_year_id == year_id).order_by(Trimester.order_no)
     )
     return list((await db.execute(stmt)).scalars().all())
 

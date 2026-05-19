@@ -67,7 +67,11 @@ async def preview_allocation(
         fees_with_paid.append((fee, paid))
 
     total_remaining_before = sum(
-        (f.amount - paid for f, paid in fees_with_paid if f.status != EnrollmentFeeStatus.WAIVED.value),
+        (
+            f.amount - paid
+            for f, paid in fees_with_paid
+            if f.status != EnrollmentFeeStatus.WAIVED.value
+        ),
         Decimal("0"),
     )
     total_remaining_before = max(total_remaining_before, Decimal("0"))

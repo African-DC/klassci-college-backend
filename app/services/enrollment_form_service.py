@@ -27,9 +27,7 @@ _RELATIONSHIP_LABELS = {
 }
 
 
-async def _load_enrollment_context(
-    db: AsyncSession, enrollment_id: int
-) -> Enrollment:
+async def _load_enrollment_context(db: AsyncSession, enrollment_id: int) -> Enrollment:
     """Charge l'inscription avec tout ce qu'il faut pour la fiche."""
     stmt = (
         select(Enrollment)
@@ -100,9 +98,7 @@ def _fees_dict(enrollment: Enrollment) -> list[dict]:
     fees = list(enrollment.enrollment_fees or [])
     fees.sort(
         key=lambda f: (
-            f.fee_variant.category.priority
-            if f.fee_variant and f.fee_variant.category
-            else 100,
+            f.fee_variant.category.priority if f.fee_variant and f.fee_variant.category else 100,
             f.id,
         )
     )
@@ -122,11 +118,7 @@ def _fees_dict(enrollment: Enrollment) -> list[dict]:
 async def get_enrollment_form_pdf(db: AsyncSession, enrollment_id: int) -> bytes:
     """Génère la fiche d'inscription en PDF."""
     enrollment = await _load_enrollment_context(db, enrollment_id)
-    parents = (
-        await _load_parents(db, enrollment.student.id)
-        if enrollment.student
-        else []
-    )
+    parents = await _load_parents(db, enrollment.student.id) if enrollment.student else []
 
     klass = enrollment.class_
     ay = enrollment.academic_year
@@ -137,11 +129,7 @@ async def get_enrollment_form_pdf(db: AsyncSession, enrollment_id: int) -> bytes
         "status": enum_value(enrollment.status),
         "student": _student_dict(enrollment),
         "class_name": getattr(klass, "name", "") if klass else "",
-        "level_name": (
-            getattr(klass.level, "name", "")
-            if klass and klass.level
-            else ""
-        ),
+        "level_name": (getattr(klass.level, "name", "") if klass and klass.level else ""),
         "academic_year_name": getattr(ay, "name", "") if ay else "",
         "parents": parents,
         "fees": _fees_dict(enrollment),

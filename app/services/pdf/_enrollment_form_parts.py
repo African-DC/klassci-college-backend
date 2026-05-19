@@ -23,10 +23,7 @@ def student_identity_block(student: dict[str, Any]) -> str:
     first_name = esc(student.get("first_name", ""))
     full_name = f"{last_name} {first_name}".strip() or "—"
     genre_raw = student.get("genre") or ""
-    genre_label = (
-        "Masculin" if genre_raw == "M"
-        else ("Féminin" if genre_raw == "F" else "—")
-    )
+    genre_label = "Masculin" if genre_raw == "M" else ("Féminin" if genre_raw == "F" else "—")
     birth_date = student.get("birth_date")
     birth_str = birth_date.strftime("%d/%m/%Y") if birth_date else "—"
     birthplace = student.get("birthplace") or student.get("city") or "—"
@@ -42,8 +39,8 @@ def student_identity_block(student: dict[str, Any]) -> str:
         if photo_data
         else (
             '<div style="width:90px; height:110px; background:var(--soft-bg); '
-            'border:1px solid var(--border); border-radius:4px; '
-            'display:flex; align-items:center; justify-content:center; '
+            "border:1px solid var(--border); border-radius:4px; "
+            "display:flex; align-items:center; justify-content:center; "
             'color:var(--muted); font-size:10px;">Photo</div>'
         )
     )
@@ -83,10 +80,7 @@ def parent_card(label: str, parent: dict[str, Any] | None) -> str:
             </div>
         </div>
         """
-    name = (
-        esc(f"{parent.get('last_name', '')} {parent.get('first_name', '')}".strip())
-        or "—"
-    )
+    name = esc(f"{parent.get('last_name', '')} {parent.get('first_name', '')}".strip()) or "—"
     phone = esc(parent.get("phone") or "—")
     email = esc(parent.get("email") or "—")
     relationship = esc(parent.get("relationship_label") or "")
@@ -139,9 +133,7 @@ def fee_rows_and_total(
         name = f.get("category_name", "")
         amount = f.get("amount")
         mandatory = f.get("is_mandatory", True)
-        amount_str = (
-            format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
-        )
+        amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
         kind = "Obligatoire" if mandatory else "Optionnel"
         rows.append(
             [

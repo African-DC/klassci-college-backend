@@ -95,11 +95,7 @@ async def get_daily_cash_book(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'inline; filename="bordereau-{target.isoformat()}.pdf"'
-            )
-        },
+        headers={"Content-Disposition": (f'inline; filename="bordereau-{target.isoformat()}.pdf"')},
     )
 
 

@@ -38,9 +38,7 @@ def amount_box(
     currency: str = "XOF",
 ) -> str:
     """Box gros montant centré gradient KLASSCI."""
-    amount_str = (
-        format_decimal(amount) if isinstance(amount, Decimal) else esc(str(amount))
-    )
+    amount_str = format_decimal(amount) if isinstance(amount, Decimal) else esc(str(amount))
     return f"""
     <div class="pdf-amount-box">
         <div class="pdf-amount-label">{esc(label)}</div>
@@ -58,9 +56,7 @@ def kpi_card(
 ) -> str:
     """KPI card unique. `tone` parmi primary/accent/success/warn."""
     value_class = (
-        f"pdf-kpi-value pdf-kpi-value-{esc(tone)}"
-        if tone != "primary"
-        else "pdf-kpi-value"
+        f"pdf-kpi-value pdf-kpi-value-{esc(tone)}" if tone != "primary" else "pdf-kpi-value"
     )
     return f"""
     <div class="pdf-kpi">
@@ -119,9 +115,7 @@ def info_grid(items: list[tuple[str, Any]], *, columns: int = 2) -> str:
 def meta_banner(left: str, right: str = "", *, theme: PDFTheme) -> str:
     """Panneau gradient compact entre header et content principal."""
     right_html = (
-        f'<div style="text-align:right; color:var(--muted);">{right}</div>'
-        if right
-        else ""
+        f'<div style="text-align:right; color:var(--muted);">{right}</div>' if right else ""
     )
     return f"""
     <div style="background:linear-gradient(135deg, var(--soft-bg), #eef2ff);

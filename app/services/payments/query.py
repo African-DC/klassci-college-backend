@@ -57,9 +57,7 @@ async def get_payment(db: AsyncSession, payment_id: int) -> PaymentResponse:
     return payment_to_response(payment)
 
 
-async def get_student_payments(
-    db: AsyncSession, enrollment_id: int
-) -> list[PaymentResponse]:
+async def get_student_payments(db: AsyncSession, enrollment_id: int) -> list[PaymentResponse]:
     """Retourne tous les paiements liés à une inscription."""
     payments = await repo.get_payments_by_enrollment_id(db, enrollment_id)
     return [payment_to_response(p) for p in payments]
@@ -113,9 +111,9 @@ async def get_payments_summary(
         ).label("total_cancelled"),
     )
     if academic_year_id is not None:
-        pay_stmt = pay_stmt.join(
-            Enrollment, Payment.enrollment_id == Enrollment.id
-        ).where(Enrollment.academic_year_id == academic_year_id)
+        pay_stmt = pay_stmt.join(Enrollment, Payment.enrollment_id == Enrollment.id).where(
+            Enrollment.academic_year_id == academic_year_id
+        )
 
     pay_row = (await db.execute(pay_stmt)).one()
 
@@ -123,9 +121,7 @@ async def get_payments_summary(
     total_pending = float(pay_row.total_pending)
     total_cancelled = float(pay_row.total_cancelled)
     payment_count = pay_row.payment_count
-    completion_rate = (
-        round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
-    )
+    completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
 
     return PaymentSummaryResponse(
         total_expected=total_expected,

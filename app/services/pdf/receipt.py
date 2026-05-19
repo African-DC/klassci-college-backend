@@ -25,21 +25,19 @@ def _allocations_rows(allocations: list[dict[str, Any]]) -> list[list[Any]]:
         amount_str = (
             format_decimal(amount)
             if isinstance(amount, Decimal)
-            else str(amount) if amount is not None else "—"
+            else str(amount)
+            if amount is not None
+            else "—"
         )
         paid_after = a.get("fee_paid_after")
         fee_total = a.get("fee_total")
         cumul = ""
         if paid_after is not None and fee_total is not None:
             paid_str = (
-                format_decimal(paid_after)
-                if isinstance(paid_after, Decimal)
-                else str(paid_after)
+                format_decimal(paid_after) if isinstance(paid_after, Decimal) else str(paid_after)
             )
             total_str = (
-                format_decimal(fee_total)
-                if isinstance(fee_total, Decimal)
-                else str(fee_total)
+                format_decimal(fee_total) if isinstance(fee_total, Decimal) else str(fee_total)
             )
             cumul = f"{paid_str} / {total_str}"
         status_key = a.get("status_after", "")
@@ -54,9 +52,7 @@ def _allocations_rows(allocations: list[dict[str, Any]]) -> list[list[Any]]:
     return rows
 
 
-def generate_receipt_pdf(
-    payment_data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Generate a payment receipt PDF — premium template + theme école dynamique.
 
     payment_data keys: payment_id, amount, method, reference, status, notes,
@@ -81,9 +77,7 @@ def generate_receipt_pdf(
     received_by = payment_data.get("received_by_name") or "—"
     allocations = payment_data.get("allocations") or []
 
-    amount_str = (
-        format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
-    )
+    amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
     pay_date = (
         created_at.strftime("%d/%m/%Y à %H:%M")
         if isinstance(created_at, datetime)
@@ -109,7 +103,8 @@ def generate_receipt_pdf(
     info_html = (
         '<div class="pdf-info-grid" style="grid-template-columns:1fr;">'
         + "".join(
-            ui.info_row(lbl, val) if not (isinstance(val, str) and val.startswith("<span"))
+            ui.info_row(lbl, val)
+            if not (isinstance(val, str) and val.startswith("<span"))
             else f'<div class="pdf-info-row"><span class="pdf-info-label">{esc(lbl)}</span><span class="pdf-info-value">{val}</span></div>'
             for lbl, val in info_items
         )
@@ -120,18 +115,17 @@ def generate_receipt_pdf(
     allocations_section = ""
     if allocations:
         rows = _allocations_rows(allocations)
-        allocations_section = (
-            ui.section_title("Détail de l'allocation", theme=theme)
-            + ui.premium_table(
-                headers=[
-                    "Frais",
-                    {"label": "Affecté", "align": "right"},
-                    {"label": "Cumul après", "align": "right"},
-                    "Statut",
-                ],
-                rows=rows,
-                theme=theme,
-            )
+        allocations_section = ui.section_title(
+            "Détail de l'allocation", theme=theme
+        ) + ui.premium_table(
+            headers=[
+                "Frais",
+                {"label": "Affecté", "align": "right"},
+                {"label": "Cumul après", "align": "right"},
+                "Statut",
+            ],
+            rows=rows,
+            theme=theme,
         )
 
     # Signatures

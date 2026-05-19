@@ -30,9 +30,7 @@ from app.services.pdf._helpers import enum_value
 from app.services.pdf.theme import PDFTheme, status_label
 
 
-def generate_enrollment_form_pdf(
-    data: dict[str, Any], school_settings: dict[str, Any]
-) -> bytes:
+def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Génère la fiche d'inscription officielle en PDF.
 
     data keys (composé par enrollment_form_service) :

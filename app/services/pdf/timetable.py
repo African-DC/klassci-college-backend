@@ -61,12 +61,10 @@ def _cell_for_hour(
             teacher = esc(s.get("teacher_name", ""))
             room = esc(s.get("room", ""))
             time_str = f"{s['start_time']}-{s['end_time']}"
-            room_div = (
-                f'<div style="color:var(--muted);">{room}</div>' if room else ""
-            )
+            room_div = f'<div style="color:var(--muted);">{room}</div>' if room else ""
             return (
                 f'<td rowspan="{span}" style="background:{bg}; vertical-align:top; '
-                f'padding:4px; border:1px solid var(--border); font-size:8px; '
+                f"padding:4px; border:1px solid var(--border); font-size:8px; "
                 f'line-height:1.3;">'
                 f'<div style="font-weight:bold; font-size:9px; color:var(--primary);">'
                 f"{subject}</div>"
@@ -122,8 +120,7 @@ def generate_timetable_pdf(
     table_rows = ""
     for hour in hours:
         cells = "".join(
-            _cell_for_hour(slots_by_day[day], hour, subject_colors)
-            for day in _DAYS_ORDER
+            _cell_for_hour(slots_by_day[day], hour, subject_colors) for day in _DAYS_ORDER
         )
         table_rows += f"""
         <tr>

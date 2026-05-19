@@ -19,8 +19,8 @@ from typing import Any
 # Palette KLASSCI par défaut (fallback si school.primary_color is NULL)
 # ---------------------------------------------------------------------------
 
-DEFAULT_PRIMARY = "#0F3F8C"   # Bleu KLASSCI
-DEFAULT_ACCENT = "#F58220"    # Orange KLASSCI
+DEFAULT_PRIMARY = "#0F3F8C"  # Bleu KLASSCI
+DEFAULT_ACCENT = "#F58220"  # Orange KLASSCI
 
 
 @dataclass(frozen=True)
@@ -34,14 +34,14 @@ class PDFTheme:
 
     primary: str = DEFAULT_PRIMARY
     accent: str = DEFAULT_ACCENT
-    ink: str = "#0F172A"          # texte principal
-    muted: str = "#64748B"        # texte secondaire
-    border: str = "#E2E8F0"       # lignes neutres
-    soft_bg: str = "#F8FAFC"      # fond zebra
-    success: str = "#10B981"      # paiement OK
-    warn: str = "#F59E0B"         # partial / warning
-    danger: str = "#EF4444"       # erreur
-    info: str = "#3B82F6"         # info neutre
+    ink: str = "#0F172A"  # texte principal
+    muted: str = "#64748B"  # texte secondaire
+    border: str = "#E2E8F0"  # lignes neutres
+    soft_bg: str = "#F8FAFC"  # fond zebra
+    success: str = "#10B981"  # paiement OK
+    warn: str = "#F59E0B"  # partial / warning
+    danger: str = "#EF4444"  # erreur
+    info: str = "#3B82F6"  # info neutre
     font_family: str = "'Helvetica', 'Arial', sans-serif"
     font_serif: str = "'Georgia', 'Times New Roman', serif"
 
