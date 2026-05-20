@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
     PaymentCreate,
     PaymentListResponse,
@@ -89,13 +90,12 @@ async def get_daily_cash_book(
     document fin de journée pour clôture.
     """
     target = target_date or date.today()
-    pdf_bytes = await daily_cash_book_service.get_daily_cash_book_pdf(
-        db, target, cashier_user_id=current_user.user_id
-    )
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": (f'inline; filename="bordereau-{target.isoformat()}.pdf"')},
+    return await pdf_response(
+        lambda: daily_cash_book_service.get_daily_cash_book_pdf(
+            db, target, cashier_user_id=current_user.user_id
+        ),
+        filename=f"bordereau-{target.isoformat()}.pdf",
+        error_context=f"bordereau journalier {target.isoformat()}",
     )
 
 
@@ -123,11 +123,10 @@ async def get_payment_receipt(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere et retourne le recu de paiement en PDF."""
-    pdf_bytes = await payment_service.get_payment_receipt_pdf(db, payment_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="recu_{payment_id}.pdf"'},
+    return await pdf_response(
+        lambda: payment_service.get_payment_receipt_pdf(db, payment_id),
+        filename=f"recu_{payment_id}.pdf",
+        error_context=f"reçu paiement {payment_id}",
     )
 
 

@@ -41,6 +41,8 @@ class BulletinResponse(BaseModel):
     id: int
     student_id: int
     student_name: str
+    student_photo_url: str | None = None
+    student_enrollment_number: str | None = None
     class_id: int
     class_name: str
     academic_year_id: int

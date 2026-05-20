@@ -23,6 +23,8 @@ from app.models.attendance import (  # noqa: F401
     AttendanceRecord,
     AttendanceSource,
     AttendanceStatus,
+    TeacherAttendanceStatus,
+    TeacherSessionAttendance,
 )
 
 # Audit log (défini dans app.core.audit, re-exporté ici)

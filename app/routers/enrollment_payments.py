@@ -12,6 +12,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
     AllocationPreviewResponse,
     EnrollmentPaymentCreate,
@@ -94,11 +95,10 @@ async def get_fee_statement_pdf(
     l'année scolaire de son enfant (total dû, total versé, reste à payer,
     breakdown par catégorie + historique des versements).
     """
-    pdf_bytes = await fee_statement_service.get_fee_statement_pdf(db, enrollment_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": (f'inline; filename="etat-frais-{enrollment_id}.pdf"')},
+    return await pdf_response(
+        lambda: fee_statement_service.get_fee_statement_pdf(db, enrollment_id),
+        filename=f"etat-frais-{enrollment_id}.pdf",
+        error_context=f"état des frais (inscription {enrollment_id})",
     )
 
 
@@ -117,11 +117,8 @@ async def get_enrollment_form_pdf(
     responsables (père/mère/tuteur) + tableau frais avec total + signatures
     Parent + Chef d'établissement.
     """
-    pdf_bytes = await enrollment_form_service.get_enrollment_form_pdf(db, enrollment_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (f'inline; filename="fiche-inscription-{enrollment_id}.pdf"')
-        },
+    return await pdf_response(
+        lambda: enrollment_form_service.get_enrollment_form_pdf(db, enrollment_id),
+        filename=f"fiche-inscription-{enrollment_id}.pdf",
+        error_context=f"fiche d'inscription {enrollment_id}",
     )
