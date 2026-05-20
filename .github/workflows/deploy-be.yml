@@ -51,15 +51,21 @@ jobs:
           mkdir -p ~/.ssh
           echo "$EC2_SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          # ssh-keyscan en best-effort : si l'host est down (instance stoppée, IP
+          # changée, network down), le workflow continue. Le scp/ssh suivants
+          # utilisent StrictHostKeyChecking=accept-new pour TOFU et lèveront
+          # l'erreur réelle (connection refused, timeout) si le host est down.
+          ssh-keyscan -H -T 10 ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || \
+            echo "ssh-keyscan failed (host unreachable?), falling back to accept-new"
 
       - name: Ship + install (no compile) + alembic + restart + health + rollback
         env:
           HOST: ${{ secrets.EC2_HOST }}
         run: |
           set -e
-          scp -i ~/.ssh/id_deploy wheels.tgz code.tgz ubuntu@$HOST:/tmp/
-          ssh -i ~/.ssh/id_deploy ubuntu@$HOST 'bash -se' <<'REMOTE'
+          SSH_OPTS="-i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+          scp $SSH_OPTS wheels.tgz code.tgz ubuntu@$HOST:/tmp/
+          ssh $SSH_OPTS ubuntu@$HOST 'bash -se' <<'REMOTE'
           set -euo pipefail
           APP=/home/ubuntu/klassci/klassci-backend
           cd "$APP"
