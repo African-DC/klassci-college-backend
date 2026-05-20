@@ -60,6 +60,7 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "enrollments:promote", "name": "Mass-promote enrollments year over year"},
     {"slug": "grades:read", "name": "View grades"},
     {"slug": "grades:write", "name": "Write grades"},
+    {"slug": "grades:edit", "name": "Modify already-recorded grades"},
     {"slug": "bulletins:generate", "name": "Generate bulletins"},
     # Timetable (3)
     {"slug": "timetable:read", "name": "View timetable"},
@@ -130,6 +131,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "permissions": [
             "grades:read",
             "grades:write",
+            "grades:edit",
             "bulletins:generate",
             "attendance:read",
             "attendance:create",

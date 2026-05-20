@@ -151,6 +151,31 @@ async def batch_update_grades(
 
         raise BusinessValidationError(f"Student IDs not enrolled in this evaluation: {invalid_ids}")
 
+    # Permission fine-grained : grades:write couvre la saisie initiale (slot
+    # vide ou jamais noté), grades:edit couvre la modification d'une note
+    # déjà enregistrée. L'endpoint exige déjà grades:write comme garde
+    # grossière ; ici on vérifie en plus grades:edit pour toute entrée qui
+    # change une valeur existante. Workflow strict possible : une école peut
+    # révoquer grades:edit aux teachers pour empêcher la révision sans aval.
+    existing_by_student: dict[int, Any] = {
+        g.student_id: g.value for g in (evaluation.grades or [])
+    }
+    has_real_edits = any(
+        existing_by_student.get(e["student_id"]) is not None
+        and e["value"] is not None
+        and float(e["value"]) != float(existing_by_student[e["student_id"]])
+        for e in entries
+    )
+    if has_real_edits:
+        from app.core.exceptions import PermissionDeniedError
+        from app.repositories.permission_repository import check_user_permission
+
+        can_edit = await check_user_permission(db, current_user_id, "grades:edit")
+        if not can_edit:
+            raise PermissionDeniedError(
+                "grades:edit requise pour modifier une note déjà enregistrée"
+            )
+
     grades = await repo.batch_update_grades(
         db, eval_id, entries, entered_by_user_id=current_user_id
     )
