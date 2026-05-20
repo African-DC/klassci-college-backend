@@ -40,14 +40,14 @@ SERIES = [
 ]
 
 SUBJECTS = [
-    {"name": "Mathematiques", "coefficient": 4, "hours_per_week": 5},
-    {"name": "Francais", "coefficient": 4, "hours_per_week": 5},
+    {"name": "Mathématiques", "coefficient": 4, "hours_per_week": 5},
+    {"name": "Français", "coefficient": 4, "hours_per_week": 5},
     {"name": "Anglais", "coefficient": 2, "hours_per_week": 3},
     {"name": "Sciences Physiques", "coefficient": 3, "hours_per_week": 4},
     {"name": "Sciences de la Vie et de la Terre", "coefficient": 2, "hours_per_week": 3},
-    {"name": "Histoire-Geographie", "coefficient": 2, "hours_per_week": 3},
-    {"name": "Education Civique et Morale", "coefficient": 1, "hours_per_week": 1},
-    {"name": "Education Physique et Sportive", "coefficient": 1, "hours_per_week": 2},
+    {"name": "Histoire-Géographie", "coefficient": 2, "hours_per_week": 3},
+    {"name": "Éducation Civique et Morale", "coefficient": 1, "hours_per_week": 1},
+    {"name": "Éducation Physique et Sportive", "coefficient": 1, "hours_per_week": 2},
     {"name": "Dessin / Arts Plastiques", "coefficient": 1, "hours_per_week": 1},
     {"name": "Musique", "coefficient": 1, "hours_per_week": 1},
     {"name": "Philosophie", "coefficient": 3, "hours_per_week": 4},

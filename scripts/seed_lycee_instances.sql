@@ -19,52 +19,52 @@ SET NAMES utf8mb4;
 
 INSERT INTO subjects (name, coefficient, hours_per_week, level_id, series_id, teacher_id, color, created_at, updated_at) VALUES
 -- 2nde A (tronc commun littéraire) — series_id=1, level_id=5
-('Mathematiques',                  2, 4, 5, 1, NULL, NULL, NOW(), NOW()),
-('Francais',                       4, 5, 5, 1, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  2, 4, 5, 1, NULL, NULL, NOW(), NOW()),
+('Français',                       4, 5, 5, 1, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        2, 3, 5, 1, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            2, 3, 5, 1, NULL, NULL, NOW(), NOW()),
+('Histoire-Géographie',            2, 3, 5, 1, NULL, NULL, NOW(), NOW()),
 ('Sciences de la Vie et de la Terre', 2, 3, 5, 1, NULL, NULL, NOW(), NOW()),
-('Education Physique et Sportive', 1, 2, 5, 1, NULL, NULL, NOW(), NOW()),
+('Éducation Physique et Sportive', 1, 2, 5, 1, NULL, NULL, NOW(), NOW()),
 
 -- 1ère C (sciences-maths) — series_id=2, level_id=6
-('Mathematiques',                  5, 7, 6, 2, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  5, 7, 6, 2, NULL, NULL, NOW(), NOW()),
 ('Sciences Physiques',             5, 5, 6, 2, NULL, NULL, NOW(), NOW()),
 ('Sciences de la Vie et de la Terre', 3, 2, 6, 2, NULL, NULL, NOW(), NOW()),
-('Francais',                       4, 4, 6, 2, NULL, NULL, NOW(), NOW()),
+('Français',                       4, 4, 6, 2, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        3, 3, 6, 2, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            3, 3, 6, 2, NULL, NULL, NOW(), NOW()),
+('Histoire-Géographie',            3, 3, 6, 2, NULL, NULL, NOW(), NOW()),
 
 -- 1ère D (sciences-SVT) — series_id=3, level_id=6
-('Mathematiques',                  4, 5, 6, 3, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  4, 5, 6, 3, NULL, NULL, NOW(), NOW()),
 ('Sciences de la Vie et de la Terre', 6, 4, 6, 3, NULL, NULL, NOW(), NOW()),
 ('Sciences Physiques',             4, 4, 6, 3, NULL, NULL, NOW(), NOW()),
-('Francais',                       4, 4, 6, 3, NULL, NULL, NOW(), NOW()),
+('Français',                       4, 4, 6, 3, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        3, 3, 6, 3, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            3, 3, 6, 3, NULL, NULL, NOW(), NOW()),
+('Histoire-Géographie',            3, 3, 6, 3, NULL, NULL, NOW(), NOW()),
 
 -- Terminale A (littéraire) — series_id=4, level_id=7
 ('Philosophie',                    4, 8, 7, 4, NULL, NULL, NOW(), NOW()),
-('Francais',                       4, 4, 7, 4, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            4, 4, 7, 4, NULL, NULL, NOW(), NOW()),
-('Mathematiques',                  3, 3, 7, 4, NULL, NULL, NOW(), NOW()),
+('Français',                       4, 4, 7, 4, NULL, NULL, NOW(), NOW()),
+('Histoire-Géographie',            4, 4, 7, 4, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  3, 3, 7, 4, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        4, 4, 7, 4, NULL, NULL, NOW(), NOW()),
-('Education Physique et Sportive', 2, 2, 7, 4, NULL, NULL, NOW(), NOW()),
+('Éducation Physique et Sportive', 2, 2, 7, 4, NULL, NULL, NOW(), NOW()),
 
 -- Terminale C (sciences-maths) — series_id=5, level_id=7
-('Mathematiques',                  5, 7, 7, 5, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  5, 7, 7, 5, NULL, NULL, NOW(), NOW()),
 ('Sciences Physiques',             5, 5, 7, 5, NULL, NULL, NOW(), NOW()),
 ('Philosophie',                    4, 2, 7, 5, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        3, 3, 7, 5, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            3, 3, 7, 5, NULL, NULL, NOW(), NOW()),
+('Histoire-Géographie',            3, 3, 7, 5, NULL, NULL, NOW(), NOW()),
 ('Sciences de la Vie et de la Terre', 3, 2, 7, 5, NULL, NULL, NOW(), NOW()),
 
 -- Terminale D (sciences-SVT) — series_id=6, level_id=7
 ('Sciences de la Vie et de la Terre', 6, 4, 7, 6, NULL, NULL, NOW(), NOW()),
-('Mathematiques',                  4, 5, 7, 6, NULL, NULL, NOW(), NOW()),
+('Mathématiques',                  4, 5, 7, 6, NULL, NULL, NOW(), NOW()),
 ('Sciences Physiques',             4, 4, 7, 6, NULL, NULL, NOW(), NOW()),
 ('Philosophie',                    4, 2, 7, 6, NULL, NULL, NOW(), NOW()),
 ('Anglais',                        3, 3, 7, 6, NULL, NULL, NOW(), NOW()),
-('Histoire-Geographie',            3, 3, 7, 6, NULL, NULL, NOW(), NOW());
+('Histoire-Géographie',            3, 3, 7, 6, NULL, NULL, NOW(), NOW());
 
 -- Validation : count by (level, series) — doit retourner 6 lignes × 6 matières
 SELECT level_id, series_id, COUNT(*) AS instances_count, SUM(coefficient) AS total_coef, SUM(hours_per_week) AS total_hours
