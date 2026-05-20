@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Changed
 
+- Noms des matières seedés avec les accents officiels : Mathématiques, Français, Histoire-Géographie, Éducation Civique et Morale, Éducation Physique et Sportive. Affichage cohérent partout (bulletins, EDT, kanban, liste des notes). Un script SQL one-shot met à jour les tenants existants *(admin, enseignant, parent)*.
 - Niveaux du tronc commun seedés avec les accents officiels : 6ème, 5ème, 4ème, 3ème et 1ère affichent désormais les bons accents partout (kanban, table, bulletins, EDT). Les anciens tenants gardent leur orthographe existante tant qu'une mise à jour explicite n'est pas appliquée *(admin)*.
 
 ### Added
