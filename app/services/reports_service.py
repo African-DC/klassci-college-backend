@@ -81,6 +81,10 @@ def _bulletin_to_response(bulletin: Bulletin, total_students: int) -> BulletinRe
         id=bulletin.id,
         student_id=bulletin.student_id,
         student_name=_student_full_name(bulletin.student) if bulletin.student else "",
+        student_photo_url=bulletin.student.photo_url if bulletin.student else None,
+        student_enrollment_number=(
+            bulletin.student.enrollment_number if bulletin.student else None
+        ),
         class_id=bulletin.class_id,
         class_name=bulletin.class_.name if bulletin.class_ else "",
         academic_year_id=bulletin.academic_year_id,

@@ -1,7 +1,8 @@
 """Service admin — logique métier CRUD pour les entités de base."""
 
+import asyncio
 import logging
-from typing import Any
+from typing import Any, Final
 
 from fastapi import HTTPException
 from sqlalchemy import case, func, select, text, update
@@ -337,7 +338,112 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     result["fees_remaining"] = expected - paid
     result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
 
+    # Trimester breakdowns — alimentent les charts du tab Parcours.
+    current_ay_id = enrollment.academic_year_id if enrollment else None
+    grades, absences = await asyncio.gather(
+        _student_trimester_grades(db, student_id=student_id, academic_year_id=current_ay_id),
+        _student_trimester_absences(db, student_id=student_id, academic_year_id=current_ay_id),
+    )
+    result["trimester_grades"] = grades
+    result["trimester_absences"] = absences
+
     return result
+
+
+TRIMESTERS: Final[tuple[int, int, int]] = (1, 2, 3)
+
+
+async def _student_trimester_grades(
+    db: AsyncSession, *, student_id: int, academic_year_id: int | None
+) -> list[dict]:
+    """Moyenne générale + min/max matière par trimestre pour l'année courante."""
+    if academic_year_id is None:
+        return [{"trimester": t, "general": None, "best": None, "worst": None} for t in TRIMESTERS]
+
+    from app.models.grade import Bulletin, SubjectAverage
+
+    bulletin_stmt = select(Bulletin.trimester, Bulletin.average).where(
+        Bulletin.student_id == student_id, Bulletin.academic_year_id == academic_year_id
+    )
+    sa_stmt = (
+        select(
+            SubjectAverage.trimester,
+            func.min(SubjectAverage.average).label("worst"),
+            func.max(SubjectAverage.average).label("best"),
+        )
+        .join(Bulletin, SubjectAverage.bulletin_id == Bulletin.id)
+        .where(
+            SubjectAverage.student_id == student_id,
+            Bulletin.academic_year_id == academic_year_id,
+        )
+        .group_by(SubjectAverage.trimester)
+    )
+    bulletin_res, sa_res = await asyncio.gather(db.execute(bulletin_stmt), db.execute(sa_stmt))
+
+    by_trim: dict[int, dict[str, float | None]] = {
+        t: {"general": None, "best": None, "worst": None} for t in TRIMESTERS
+    }
+    for row in bulletin_res.all():
+        if row.trimester in by_trim:
+            by_trim[row.trimester]["general"] = (
+                float(row.average) if row.average is not None else None
+            )
+    for row in sa_res.all():
+        if row.trimester in by_trim:
+            by_trim[row.trimester]["best"] = float(row.best) if row.best is not None else None
+            by_trim[row.trimester]["worst"] = float(row.worst) if row.worst is not None else None
+
+    return [{"trimester": t, **by_trim[t]} for t in TRIMESTERS]
+
+
+async def _student_trimester_absences(
+    db: AsyncSession, *, student_id: int, academic_year_id: int | None
+) -> list[dict]:
+    """Absences justifiées (EXCUSED) vs non justifiées (ABSENT) par trimestre.
+
+    LATE n'est pas compté ici (ni absence ni justifié).
+    """
+    if academic_year_id is None:
+        return [{"trimester": t, "justifiees": 0, "non_justifiees": 0} for t in TRIMESTERS]
+
+    from app.models.academic import Trimester as TrimesterModel
+    from app.models.attendance import AttendanceContext, AttendanceRecord, AttendanceStatus
+
+    abs_stmt = (
+        select(
+            TrimesterModel.order_no.label("trimester"),
+            func.sum(
+                case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)
+            ).label("justifiees"),
+            func.sum(
+                case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)
+            ).label("non_justifiees"),
+        )
+        .select_from(AttendanceRecord)
+        .join(AttendanceContext, AttendanceRecord.context_id == AttendanceContext.id)
+        .join(
+            TrimesterModel,
+            (TrimesterModel.academic_year_id == AttendanceContext.academic_year_id)
+            & (AttendanceContext.date >= TrimesterModel.start_date)
+            & (AttendanceContext.date <= TrimesterModel.end_date),
+        )
+        .where(
+            AttendanceRecord.student_id == student_id,
+            AttendanceContext.academic_year_id == academic_year_id,
+            AttendanceRecord.status.in_([AttendanceStatus.ABSENT, AttendanceStatus.EXCUSED]),
+        )
+        .group_by(TrimesterModel.order_no)
+    )
+
+    by_trim: dict[int, dict[str, int]] = {
+        t: {"justifiees": 0, "non_justifiees": 0} for t in TRIMESTERS
+    }
+    for row in (await db.execute(abs_stmt)).all():
+        if row.trimester in by_trim:
+            by_trim[row.trimester]["justifiees"] = int(row.justifiees or 0)
+            by_trim[row.trimester]["non_justifiees"] = int(row.non_justifiees or 0)
+
+    return [{"trimester": t, **by_trim[t]} for t in TRIMESTERS]
 
 
 async def create_student_user_account(

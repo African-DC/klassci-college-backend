@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+from app.routers._pdf_helpers import pdf_response
 from app.services import student_documents_service
 from app.services._school_settings_helper import load_school_settings_for_pdf
 from app.services.pdf_service import (
@@ -41,16 +42,18 @@ async def get_certificat_scolarite(
 
     data = await student_documents_service.compose_certificate_data(db, student_id)
     settings = await load_school_settings_for_pdf(db)
-    pdf_bytes = generate_certificate_scolarite_pdf(data, settings)
 
     last_name = data["student"]["last_name"]
     safe_year = data["academic_year_name"].replace(" ", "_").replace("/", "-")
     filename = f"certificat_scolarite_{last_name}_{safe_year}.pdf"
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    async def _generate() -> bytes:
+        return generate_certificate_scolarite_pdf(data, settings)
+
+    return await pdf_response(
+        _generate,
+        filename=filename,
+        error_context=f"certificat de scolarité élève {student_id}",
     )
 
 
@@ -78,14 +81,16 @@ async def get_attestation_frequentation(
 
     data = await student_documents_service.compose_attendance_certificate_data(db, student_id)
     settings = await load_school_settings_for_pdf(db)
-    pdf_bytes = generate_attendance_certificate_pdf(data, settings)
 
     last_name = data["student"]["last_name"]
     safe_year = data["academic_year_name"].replace(" ", "_").replace("/", "-")
     filename = f"attestation_frequentation_{last_name}_{safe_year}.pdf"
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    async def _generate() -> bytes:
+        return generate_attendance_certificate_pdf(data, settings)
+
+    return await pdf_response(
+        _generate,
+        filename=filename,
+        error_context=f"attestation fréquentation élève {student_id}",
     )
