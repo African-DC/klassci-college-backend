@@ -104,6 +104,19 @@ class StudentFiltersResponse(BaseModel):
     current_academic_year_id: int | None = None
 
 
+class StudentTrimesterGrades(BaseModel):
+    trimester: int
+    general: float | None = None
+    best: float | None = None
+    worst: float | None = None
+
+
+class StudentTrimesterAbsences(BaseModel):
+    trimester: int
+    justifiees: int = 0
+    non_justifiees: int = 0
+
+
 class StudentFullResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -145,6 +158,11 @@ class StudentFullResponse(BaseModel):
     fees_paid: float = 0.0
     fees_remaining: float = 0.0
     fees_rate: float = 0.0
+
+    # Trimester breakdowns (current academic year)
+    # Toujours 3 entrées (T1/T2/T3) padded avec null/0 si pas de données.
+    trimester_grades: list[StudentTrimesterGrades] = []
+    trimester_absences: list[StudentTrimesterAbsences] = []
 
 
 class StudentListResponse(BaseModel):

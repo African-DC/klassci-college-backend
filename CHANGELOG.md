@@ -23,6 +23,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 
+- Téléchargement d'un PDF en erreur : le serveur renvoie maintenant un message JSON explicite (« Génération PDF impossible pour … ») au lieu d'une réponse vide générique. Bulletin, reçu, EDT, certificat, fiche d'inscription, PV de conseil, bordereau, état des frais et liste de classe sont protégés *(admin, parent, enseignant)*.
+- Fiche élève : les graphes « Moyennes par trimestre » et « Absences par trimestre » du tab Parcours affichent désormais les vraies données (trimestre 1 : moyenne générale, meilleure et plus faible matière) au lieu d'un message « Pas encore de notes » trompeur *(admin)*.
+- Bulletin scolaire : la liste des élèves affiche le nom complet, le matricule et un avatar à initiales au lieu d'un identifiant technique `#3`. La fenêtre de détail montre le détail par matière avec coefficient et moyenne *(admin)*.
 - Chaîne de migrations Alembic réparée : la migration de présence enseignant pointait vers un ancêtre nommé `0029_school_pdf_customization` qui n'existe pas (le vrai id étant juste `0029`). Toute installation d'établissement échouait avec une erreur cryptique avant cette correction *(devops)*.
 - Pointage de présence des enseignants désormais accessible : les permissions des 3 nouveaux endpoints (admin saisit, lecture, prof auto-déclare) sont maintenant attribuées aux rôles correspondants (admin, director, staff, teacher). Auparavant tous les appels retournaient 403, ce qui rendait la feature inopérante *(admin, enseignant)* (#148).
 - Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») *(admin, parent)*.

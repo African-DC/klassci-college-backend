@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.services import class_roster_service
 
 router = APIRouter(prefix="/admin/classes", tags=["admin", "class-documents"])
@@ -28,9 +29,8 @@ async def get_class_roster_pdf(
     Usage : conseil de classe, sortie scolaire, appel papier secrétariat.
     Tri par nom de famille puis prénom. Photo miniature ou initiales.
     """
-    pdf_bytes = await class_roster_service.get_class_roster_pdf(db, class_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": (f'inline; filename="liste-classe-{class_id}.pdf"')},
+    return await pdf_response(
+        lambda: class_roster_service.get_class_roster_pdf(db, class_id),
+        filename=f"liste-classe-{class_id}.pdf",
+        error_context=f"liste de classe {class_id}",
     )

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.core.exceptions import NotFoundError
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.reports import (
     BulletinGenerateRequest,
     BulletinGenerateResponse,
@@ -84,11 +85,10 @@ async def get_bulletin_pdf(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere et retourne le PDF d'un bulletin."""
-    pdf_bytes = await service.get_bulletin_pdf(db, bulletin_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="bulletin_{bulletin_id}.pdf"'},
+    return await pdf_response(
+        lambda: service.get_bulletin_pdf(db, bulletin_id),
+        filename=f"bulletin_{bulletin_id}.pdf",
+        error_context=f"bulletin {bulletin_id}",
     )
 
 

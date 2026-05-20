@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.council import (
     CouncilMinutesGenerateRequest,
     CouncilMinutesResponse,
@@ -52,13 +53,10 @@ async def get_council_minutes_pdf(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere et retourne le PDF du PV du conseil de classe."""
-    pdf_bytes = await service.get_council_minutes_pdf(db, class_id, trimester, academic_year_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": (f'inline; filename="pv_conseil_{class_id}_T{trimester}.pdf"')
-        },
+    return await pdf_response(
+        lambda: service.get_council_minutes_pdf(db, class_id, trimester, academic_year_id),
+        filename=f"pv_conseil_{class_id}_T{trimester}.pdf",
+        error_context=f"PV conseil classe {class_id} T{trimester}",
     )
 
 

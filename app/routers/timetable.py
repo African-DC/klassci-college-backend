@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.timetable import (
     GenerateTimetableRequest,
     GenerateTimetableResponse,
@@ -101,13 +102,11 @@ async def export_timetable_pdf(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Export emploi du temps en PDF (A4 paysage)."""
-    pdf_bytes = await timetable_service.export_timetable_pdf(db, class_id)
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=emploi-du-temps-classe-{class_id}.pdf"
-        },
+    return await pdf_response(
+        lambda: timetable_service.export_timetable_pdf(db, class_id),
+        filename=f"emploi-du-temps-classe-{class_id}.pdf",
+        error_context=f"emploi du temps classe {class_id}",
+        disposition="attachment",
     )
 
 
