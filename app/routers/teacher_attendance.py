@@ -7,9 +7,13 @@ Endpoints :
 - PATCH  /admin/teacher-attendance/{attendance_id}/validate — valide auto-décl
 - DELETE /admin/teacher-attendance/{attendance_id}       — annulation admin
 - POST   /teacher/attendance/self-declare                — prof se déclare
-"""
 
-from __future__ import annotations
+Note: NO `from __future__ import annotations` here — under PEP 563, FastAPI
+0.115.6 misinterprets `-> None` on the 204 DELETE endpoint as a response
+body and raises `AssertionError: Status code 204 must not have a response
+body`. Python 3.12 supports PEP 604 unions natively, so the file is fine
+without the future import.
+"""
 
 from datetime import date as date_type
 from typing import Any
