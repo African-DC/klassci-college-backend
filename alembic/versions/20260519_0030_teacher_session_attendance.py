@@ -6,7 +6,7 @@ Phase 7b (KLASSCI College 2026-05-19) — Marcel a tranché :
 - Retards : compteur minutes (int précis pour calcul salaire DREN)
 
 Revision ID: 0030_teacher_attendance
-Revises: 0029_school_pdf_customization
+Revises: 0029
 Create Date: 2026-05-19
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0030_teacher_attendance"
-down_revision = "0029_school_pdf_customization"
+down_revision = "0029"
 branch_labels = None
 depends_on = None
 

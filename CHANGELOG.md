@@ -23,6 +23,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 
+- Chaîne de migrations Alembic réparée : la migration de présence enseignant pointait vers un ancêtre nommé `0029_school_pdf_customization` qui n'existe pas (le vrai id étant juste `0029`). Toute installation d'établissement échouait avec une erreur cryptique avant cette correction *(devops)*.
 - Pointage de présence des enseignants désormais accessible : les permissions des 3 nouveaux endpoints (admin saisit, lecture, prof auto-déclare) sont maintenant attribuées aux rôles correspondants (admin, director, staff, teacher). Auparavant tous les appels retournaient 403, ce qui rendait la feature inopérante *(admin, enseignant)* (#148).
 - Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») *(admin, parent)*.
 - Génération PDF désormais compatible avec les versions récentes de `pydyf` : pin explicite `pydyf<0.12` dans `requirements.txt` car la 0.12 a un breaking change incompatible avec WeasyPrint 62 (Stream.transform retiré → 500 silencieux au render) *(devops)*.
