@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 # ---------------------------------------------------------------------------
 # Student
@@ -696,20 +696,23 @@ class SchoolSettingsResponse(BaseModel):
 
 
 class UserAccountCreate(BaseModel):
-    email: str
+    """Create a user account for an existing profile (student/parent/teacher/staff).
+
+    Uses Pydantic ``EmailStr`` so validation is consistent with ``/auth/login``
+    (both rely on ``email-validator`` and reject special-use TLDs like
+    ``.local`` or ``.test``). Previously this used plain ``str`` and accepted
+    e-mails that could never log in — caught during the e2e regression on
+    2026-05-20 when ``foo@bar.local`` was accepted at creation but rejected at
+    login with HTTP 422.
+    """
+
+    email: EmailStr
     password: str
 
 
 class UserAccountUpdate(BaseModel):
-    email: str | None = None
+    email: EmailStr | None = None
     password: str | None = None
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str | None) -> str | None:
-        if v is not None and "@" not in v:
-            raise ValueError("Email invalide")
-        return v
 
     @field_validator("password")
     @classmethod
