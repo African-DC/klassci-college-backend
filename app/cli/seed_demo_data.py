@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 LEVELS = [
-    {"name": "6eme", "order": 1},
-    {"name": "5eme", "order": 2},
-    {"name": "4eme", "order": 3},
-    {"name": "3eme", "order": 4},
+    {"name": "6ème", "order": 1},
+    {"name": "5ème", "order": 2},
+    {"name": "4ème", "order": 3},
+    {"name": "3ème", "order": 4},
     {"name": "2nde", "order": 5},
-    {"name": "1ere", "order": 6},
+    {"name": "1ère", "order": 6},
     {"name": "Terminale", "order": 7},
 ]
 

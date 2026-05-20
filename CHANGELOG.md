@@ -8,8 +8,13 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+
+- Niveaux du tronc commun seedés avec les accents officiels : 6ème, 5ème, 4ème, 3ème et 1ère affichent désormais les bons accents partout (kanban, table, bulletins, EDT). Les anciens tenants gardent leur orthographe existante tant qu'une mise à jour explicite n'est pas appliquée *(admin)*.
+
 ### Added
 
+- Script SQL one-shot pour seeder les 36 matières de référence du lycée selon la grille officielle MENA-CI / DECO : 2nde A, 1ère C/D, Terminale A/C/D avec coefficients BAC officiels (SVT coef 6 en série D, Mathématiques et Sciences physiques coef 5 en série C, Philosophie coef 4 partout au Terminal) *(admin)*.
 - Pointage de présence des enseignants par créneau d'emploi du temps : l'admin saisit l'absence (excusée / non excusée / retard avec minutes), l'enseignant peut s'auto-déclarer absent (en attente de validation admin). Statistiques par année scolaire (taux de présence, retards cumulés, déclarations en attente) sur la fiche enseignant *(admin, enseignant)* (#146).
 - Versement caissier en 3 champs (élève, montant, méthode) : le système alloue automatiquement le montant aux frais impayés dans l'ordre Inscription, scolarité trimestre 1/2/3, COGES, tenue. Plus besoin de choisir un frais avant de saisir le montant *(admin)*.
 - Aperçu d'allocation avant validation : le caissier visualise comment le versement sera réparti aux différents frais et est averti d'un éventuel surplus avant de confirmer *(admin)*.
