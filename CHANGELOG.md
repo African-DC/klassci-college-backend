@@ -8,6 +8,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+
+- Permission `grades:edit` distincte de `grades:write` : la première autorise à saisir une note pour la première fois, la seconde à modifier une note déjà enregistrée. Une école peut désormais autoriser un enseignant à saisir sans pouvoir réviser, ou inversement. Attribuée par défaut à admin, directeur et enseignant ; révocable depuis Rôles & Permissions *(admin)*.
+
 ### Changed
 
 - Noms des matières seedés avec les accents officiels : Mathématiques, Français, Histoire-Géographie, Éducation Civique et Morale, Éducation Physique et Sportive. Affichage cohérent partout (bulletins, EDT, kanban, liste des notes). Un script SQL one-shot met à jour les tenants existants *(admin, enseignant, parent)*.
