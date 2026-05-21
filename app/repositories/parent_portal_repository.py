@@ -74,6 +74,8 @@ async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> En
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
         )
         .options(
+            selectinload(Enrollment.class_),
+            selectinload(Enrollment.academic_year),
             selectinload(Enrollment.enrollment_fees)
             .selectinload(EnrollmentFee.fee_variant)
             .selectinload(FeeVariant.category),

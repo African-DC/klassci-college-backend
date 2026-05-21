@@ -12,8 +12,12 @@ from app.models.user import Student
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
-    """Retourne le profil eleve lie a un user_id."""
-    stmt = select(Student).where(Student.user_id == user_id)
+    """Retourne le profil eleve lie a un user_id, avec User selectinload pour /student/profile."""
+    stmt = (
+        select(Student)
+        .where(Student.user_id == user_id)
+        .options(selectinload(Student.user))
+    )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
