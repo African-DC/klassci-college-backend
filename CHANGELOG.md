@@ -8,6 +8,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Profil élève (`/student/profile`) accessible sans erreur serveur : Aminata, Bertrand et Fatou voient désormais leur fiche au lieu d'une page blanche *(élève)*.
+- Emploi du temps de l'enfant côté parent (`/parent/children/{id}/timetable`) charge sans erreur serveur : Mariam voit l'EDT d'Aminata au lieu d'une page blanche *(parent)*.
+- Année scolaire courante (`/admin/academic-years/current`) accessible sans erreur de validation : le dashboard admin affiche désormais l'année active sans bug *(admin)*.
+
 ### Added
 
 - Permission `grades:edit` distincte de `grades:write` : la première autorise à saisir une note pour la première fois, la seconde à modifier une note déjà enregistrée. Une école peut désormais autoriser un enseignant à saisir sans pouvoir réviser, ou inversement. Attribuée par défaut à admin, directeur et enseignant ; révocable depuis Rôles & Permissions *(admin)*.
