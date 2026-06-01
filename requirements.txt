@@ -23,5 +23,4 @@ rapidfuzz==3.12.2
 sentry-sdk[fastapi]==2.18.0
 click==8.1.7
 keyring==25.5.0
-keyrings.alt==5.0.2
 tabulate==0.9.0
