@@ -422,12 +422,12 @@ async def _student_trimester_absences(
     abs_stmt = (
         select(
             TrimesterModel.order_no.label("trimester"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)
-            ).label("justifiees"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)
-            ).label("non_justifiees"),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)).label(
+                "justifiees"
+            ),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)).label(
+                "non_justifiees"
+            ),
         )
         .select_from(AttendanceRecord)
         .join(AttendanceContext, AttendanceRecord.context_id == AttendanceContext.id)

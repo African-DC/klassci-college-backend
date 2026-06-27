@@ -310,9 +310,7 @@ async def get_admin_summary(db: AsyncSession) -> dict:
     parents = {
         "total": parents_total,
         "with_account": parents_with_account,
-        "with_email": await _scalar(
-            select(func.count(Parent.id)).where(_nonempty(Parent.email))
-        ),
+        "with_email": await _scalar(select(func.count(Parent.id)).where(_nonempty(Parent.email))),
         "without_account": parents_total - parents_with_account,
     }
 
