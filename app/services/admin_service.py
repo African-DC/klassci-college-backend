@@ -29,6 +29,7 @@ from app.schemas.admin import (
     AcademicYearListResponse,
     AcademicYearResponse,
     AcademicYearUpdate,
+    AdminSummaryResponse,
     ClassCreate,
     ClassListResponse,
     ClassResponse,
@@ -135,6 +136,15 @@ async def list_students(
         page=page,
         size=size,
     )
+
+
+async def get_admin_summary(db: AsyncSession) -> AdminSummaryResponse:
+    """Agrégats KPI (classes, acteurs, salles, matières, inscriptions).
+
+    Délègue le calcul SQL au repo ; le dict retourné mappe 1:1 le schéma.
+    """
+    data = await repo.get_admin_summary(db)
+    return AdminSummaryResponse(**data)
 
 
 async def get_students_filters(db: AsyncSession) -> StudentFiltersResponse:
@@ -412,12 +422,12 @@ async def _student_trimester_absences(
     abs_stmt = (
         select(
             TrimesterModel.order_no.label("trimester"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)
-            ).label("justifiees"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)
-            ).label("non_justifiees"),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)).label(
+                "justifiees"
+            ),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)).label(
+                "non_justifiees"
+            ),
         )
         .select_from(AttendanceRecord)
         .join(AttendanceContext, AttendanceRecord.context_id == AttendanceContext.id)

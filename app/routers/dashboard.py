@@ -14,6 +14,8 @@ from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
 from app.models.grade import Evaluation, Grade
 from app.models.timetable import DayOfWeek, TimetableSlot
 from app.models.user import StaffProfile, Student, TeacherProfile, User
+from app.schemas.admin import AdminSummaryResponse
+from app.services import admin_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -34,6 +36,16 @@ class DashboardStatsResponse(BaseModel):
     enrollment_validated: int
     enrollment_prospect: int
     enrollment_pending: int
+
+
+@router.get("/summary", response_model=AdminSummaryResponse)
+async def get_admin_summary(
+    _: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AdminSummaryResponse:
+    """Agrégats KPI (classes, acteurs, salles, matières, inscriptions) calculés
+    en SQL — corrects quelle que soit la volumétrie (pas de cap pagination)."""
+    return await admin_service.get_admin_summary(db)
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)

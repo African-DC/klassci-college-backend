@@ -104,6 +104,72 @@ class StudentFiltersResponse(BaseModel):
     current_academic_year_id: int | None = None
 
 
+# ---------------------------------------------------------------------------
+# Admin summary (KPI aggregates) — computed server-side, scale-independent
+# ---------------------------------------------------------------------------
+
+
+class ClassesSummary(BaseModel):
+    total: int
+    enrolled: int
+    capacity: int
+    full: int
+
+
+class TeachersSummary(BaseModel):
+    total: int
+    with_speciality: int
+    with_phone: int
+    without_speciality: int
+
+
+class StaffSummary(BaseModel):
+    total: int
+    distinct_positions: int
+    with_phone: int
+    without_position: int
+
+
+class ParentsSummary(BaseModel):
+    total: int
+    with_account: int
+    with_email: int
+    without_account: int
+
+
+class RoomsSummary(BaseModel):
+    total: int
+    capacity: int
+    classrooms: int
+    classes_without_room: int
+
+
+class SubjectsSummary(BaseModel):
+    unique_names: int
+    instances: int
+    without_teacher: int
+    total_hours: int
+
+
+class EnrollmentsSummary(BaseModel):
+    total: int
+    valid: int
+    pending: int
+    closed: int
+
+
+class AdminSummaryResponse(BaseModel):
+    """Agrégats KPI pour le dashboard et les pages de gestion admin."""
+
+    classes: ClassesSummary
+    teachers: TeachersSummary
+    staff: StaffSummary
+    parents: ParentsSummary
+    rooms: RoomsSummary
+    subjects: SubjectsSummary
+    enrollments: EnrollmentsSummary
+
+
 class StudentTrimesterGrades(BaseModel):
     trimester: int
     general: float | None = None
