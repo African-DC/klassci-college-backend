@@ -157,9 +157,7 @@ async def batch_update_grades(
     # grossière ; ici on vérifie en plus grades:edit pour toute entrée qui
     # change une valeur existante. Workflow strict possible : une école peut
     # révoquer grades:edit aux teachers pour empêcher la révision sans aval.
-    existing_by_student: dict[int, Any] = {
-        g.student_id: g.value for g in (evaluation.grades or [])
-    }
+    existing_by_student: dict[int, Any] = {g.student_id: g.value for g in (evaluation.grades or [])}
     has_real_edits = any(
         existing_by_student.get(e["student_id"]) is not None
         and e["value"] is not None
