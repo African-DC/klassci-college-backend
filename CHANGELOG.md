@@ -8,6 +8,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+
+- Indicateurs clés du tableau de bord et des pages de gestion (élèves, classes, enseignants, personnel, parents, salles, matières, inscriptions) calculés directement côté serveur : les chiffres restent justes même pour les grands établissements, là où l'ancien comptage se limitait aux 100 premières lignes *(admin)*.
+
 ### Fixed
 
 - Profil élève (`/student/profile`) accessible sans erreur serveur : Aminata, Bertrand et Fatou voient désormais leur fiche au lieu d'une page blanche *(élève)*.

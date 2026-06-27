@@ -220,6 +220,161 @@ async def get_students_filters(db: AsyncSession) -> dict:
     }
 
 
+_ACTIVE_ENROLLMENT = (
+    EnrollmentStatus.PROSPECT,
+    EnrollmentStatus.EN_VALIDATION,
+    EnrollmentStatus.VALIDE,
+)
+
+
+def _nonempty(col: object) -> object:
+    """Prédicat 'colonne texte renseignée' (non NULL et non vide)."""
+    return and_(col.isnot(None), col != "")  # type: ignore[union-attr]
+
+
+async def get_admin_summary(db: AsyncSession) -> dict:
+    """Agrégats serveur pour les bandeaux KPI admin.
+
+    Calculés en SQL (COUNT/SUM/GROUP BY) — corrects quelle que soit la
+    volumétrie, contrairement à un comptage côté client borné par la
+    pagination (`size<=100`).
+    """
+
+    async def _scalar(stmt: object) -> int:
+        return int((await db.execute(stmt)).scalar() or 0)  # type: ignore[arg-type]
+
+    # --- Classes : total, places, inscrits (statuts actifs), classes pleines ---
+    enrolled_subq = (
+        select(
+            Enrollment.class_id.label("class_id"),
+            func.count(Enrollment.id).label("ec"),
+        )
+        .where(Enrollment.status.in_(_ACTIVE_ENROLLMENT))
+        .group_by(Enrollment.class_id)
+        .subquery()
+    )
+    classes = {
+        "total": await _scalar(select(func.count(Class.id))),
+        "capacity": await _scalar(select(func.coalesce(func.sum(Class.max_students), 0))),
+        "enrolled": await _scalar(
+            select(func.count(Enrollment.id)).where(Enrollment.status.in_(_ACTIVE_ENROLLMENT))
+        ),
+        "full": await _scalar(
+            select(func.count(Class.id))
+            .select_from(Class)
+            .join(enrolled_subq, enrolled_subq.c.class_id == Class.id)
+            .where(
+                Class.max_students > 0,
+                enrolled_subq.c.ec > 0.95 * Class.max_students,
+            )
+        ),
+    }
+
+    # --- Enseignants ---
+    teachers_total = await _scalar(select(func.count(TeacherProfile.id)))
+    teachers_with_spec = await _scalar(
+        select(func.count(TeacherProfile.id)).where(_nonempty(TeacherProfile.speciality))
+    )
+    teachers = {
+        "total": teachers_total,
+        "with_speciality": teachers_with_spec,
+        "with_phone": await _scalar(
+            select(func.count(TeacherProfile.id)).where(_nonempty(TeacherProfile.phone))
+        ),
+        "without_speciality": teachers_total - teachers_with_spec,
+    }
+
+    # --- Personnel ---
+    staff_total = await _scalar(select(func.count(StaffProfile.id)))
+    staff_with_position = await _scalar(
+        select(func.count(StaffProfile.id)).where(_nonempty(StaffProfile.position))
+    )
+    staff = {
+        "total": staff_total,
+        "distinct_positions": await _scalar(
+            select(func.count(func.distinct(StaffProfile.position))).where(
+                _nonempty(StaffProfile.position)
+            )
+        ),
+        "with_phone": await _scalar(
+            select(func.count(StaffProfile.id)).where(_nonempty(StaffProfile.phone))
+        ),
+        "without_position": staff_total - staff_with_position,
+    }
+
+    # --- Parents ---
+    parents_total = await _scalar(select(func.count(Parent.id)))
+    parents_with_account = await _scalar(
+        select(func.count(Parent.id)).where(Parent.user_id.isnot(None))
+    )
+    parents = {
+        "total": parents_total,
+        "with_account": parents_with_account,
+        "with_email": await _scalar(
+            select(func.count(Parent.id)).where(_nonempty(Parent.email))
+        ),
+        "without_account": parents_total - parents_with_account,
+    }
+
+    # --- Salles ---
+    rooms = {
+        "total": await _scalar(select(func.count(Room.id))),
+        "capacity": await _scalar(select(func.coalesce(func.sum(Room.capacity), 0))),
+        "classrooms": await _scalar(
+            select(func.count(Room.id)).where(Room.room_type == "classroom")
+        ),
+        "classes_without_room": await _scalar(
+            select(func.count(Class.id)).where(Class.room_id.is_(None))
+        ),
+    }
+
+    # --- Matières : catalogue (level_id NULL) vs instances (level_id renseigné) ---
+    subjects = {
+        "unique_names": await _scalar(select(func.count(func.distinct(Subject.name)))),
+        "instances": await _scalar(
+            select(func.count(Subject.id)).where(Subject.level_id.isnot(None))
+        ),
+        "without_teacher": await _scalar(
+            select(func.count(Subject.id)).where(
+                Subject.level_id.isnot(None), Subject.teacher_id.is_(None)
+            )
+        ),
+        "total_hours": await _scalar(
+            select(func.coalesce(func.sum(Subject.hours_per_week), 0)).where(
+                Subject.level_id.isnot(None)
+            )
+        ),
+    }
+
+    # --- Inscriptions (toutes années, comme la liste paginée) ---
+    enrollments = {
+        "total": await _scalar(select(func.count(Enrollment.id))),
+        "valid": await _scalar(
+            select(func.count(Enrollment.id)).where(Enrollment.status == EnrollmentStatus.VALIDE)
+        ),
+        "pending": await _scalar(
+            select(func.count(Enrollment.id)).where(
+                Enrollment.status.in_((EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION))
+            )
+        ),
+        "closed": await _scalar(
+            select(func.count(Enrollment.id)).where(
+                Enrollment.status.in_((EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE))
+            )
+        ),
+    }
+
+    return {
+        "classes": classes,
+        "teachers": teachers,
+        "staff": staff,
+        "parents": parents,
+        "rooms": rooms,
+        "subjects": subjects,
+        "enrollments": enrollments,
+    }
+
+
 async def create_student(db: AsyncSession, **kwargs: object) -> Student:
     student = Student(**kwargs)
     db.add(student)
