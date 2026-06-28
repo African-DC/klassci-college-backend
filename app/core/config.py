@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     #   PUBLIC_LOGIN_URL_TEMPLATE="https://{slug}.college.klassci.com/login"
     PUBLIC_LOGIN_URL_TEMPLATE: str = "https://college.klassci.com/login?c={slug}"
 
+    # Base URL publique du frontend — sert à construire l'URL de vérification
+    # encodée dans le QR code des documents officiels :
+    #   {PUBLIC_BASE_URL}/verifier/{tenant}/{token}
+    # À surcharger via env sur le serveur de démo (ex: http://94.72.96.119).
+    PUBLIC_BASE_URL: str = "https://college.klassci.com"
+
     # Host allowlist — protection CSRF / host header injection
     # Pattern regex matchant les hôtes acceptés en production multi-tenant.
     # Default couvre <tenant>.college.klassci.com (sous-domaines KLASSCI College).

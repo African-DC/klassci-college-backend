@@ -110,6 +110,49 @@ async def verify_document_access(
 
 
 # ---------------------------------------------------------------------------
+# CEV — émission du cachet électronique visible
+# ---------------------------------------------------------------------------
+
+
+async def _issue_verification(
+    db: AsyncSession,
+    *,
+    document_type: str,
+    ref_prefix: str,
+    student: Student,
+    class_name: str,
+    academic_year_name: str,
+    student_id: int,
+    issued_at: datetime,
+) -> dict[str, Any]:
+    """Enregistre l'émission et renvoie le bloc CEV prêt pour le PDF.
+
+    La référence (CS-AAAA-MATRICULE / AF-AAAA-MATRICULE) est calculée ici pour
+    qu'elle corresponde exactement à ce qui est signé et imprimé.
+    """
+    from app.services._document_verification_helper import build_verification
+
+    matricule = (student.enrollment_number or "").strip()
+    reference = (
+        f"{ref_prefix}-{issued_at.year}-{matricule}"
+        if matricule
+        else f"{ref_prefix}-{issued_at.year}"
+    )
+    student_name = f"{student.first_name} {student.last_name}".strip()
+
+    return await build_verification(
+        db,
+        document_type=document_type,
+        reference=reference,
+        student_name=student_name,
+        class_name=class_name,
+        academic_year=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Document data composers
 # ---------------------------------------------------------------------------
 
@@ -129,6 +172,20 @@ async def compose_certificate_data(
         raise NotFoundError("Student", student_id)
 
     enrollment = await _get_active_enrollment(db, student_id)
+    issued_at = datetime.utcnow()
+    class_name = enrollment.class_.name if enrollment.class_ else ""
+    academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+
+    verification = await _issue_verification(
+        db,
+        document_type="certificat_scolarite",
+        ref_prefix="CS",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+    )
 
     return {
         "student": {
@@ -140,9 +197,11 @@ async def compose_certificate_data(
             "city": student.city,
             "commune": student.commune,
         },
-        "class_name": enrollment.class_.name if enrollment.class_ else "",
-        "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
-        "issued_at": datetime.utcnow(),
+        "class_name": class_name,
+        "academic_year_name": academic_year_name,
+        "issued_at": issued_at,
+        "reference": verification["reference"],
+        "verification": verification,
     }
 
 
@@ -166,6 +225,20 @@ async def compose_attendance_certificate_data(
     summary = await get_student_attendance_summary(
         db, student_id, academic_year_id=enrollment.academic_year_id
     )
+    issued_at = datetime.utcnow()
+    class_name = enrollment.class_.name if enrollment.class_ else ""
+    academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+
+    verification = await _issue_verification(
+        db,
+        document_type="attestation_frequentation",
+        ref_prefix="AF",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+    )
 
     return {
         "student": {
@@ -177,8 +250,10 @@ async def compose_attendance_certificate_data(
             "city": student.city,
             "commune": student.commune,
         },
-        "class_name": enrollment.class_.name if enrollment.class_ else "",
-        "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
+        "class_name": class_name,
+        "academic_year_name": academic_year_name,
         "attendance": summary,
-        "issued_at": datetime.utcnow(),
+        "issued_at": issued_at,
+        "reference": verification["reference"],
+        "verification": verification,
     }

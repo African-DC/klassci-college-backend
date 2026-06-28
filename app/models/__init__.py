@@ -30,6 +30,9 @@ from app.models.attendance import (  # noqa: F401
 # Audit log (défini dans app.core.audit, re-exporté ici)
 from app.models.audit import AuditAction, AuditLog  # noqa: F401
 
+# Émissions de documents officiels (vérification publique)
+from app.models.document_issuance import DocumentIssuance  # noqa: F401
+
 # Inscriptions
 from app.models.enrollment import (  # noqa: F401
     Document,

@@ -19,6 +19,7 @@ from app.schemas.reports import (
     BulletinResponse,
     SubjectAverageResponse,
 )
+from app.services._document_verification_helper import build_verification
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
@@ -381,11 +382,31 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
         for sa in (bulletin.subject_averages or [])
     ]
 
+    student_name = _student_full_name(bulletin.student) if bulletin.student else ""
+    class_name = bulletin.class_.name if bulletin.class_ else ""
+    academic_year_name = bulletin.academic_year.name if bulletin.academic_year else ""
+
+    matricule = (
+        (getattr(bulletin.student, "enrollment_number", None) or "") if bulletin.student else ""
+    ).strip()
+    issued_at = bulletin.generated_at or datetime.utcnow()
+    suffix = matricule or str(bulletin.id)
+    verification = await build_verification(
+        db,
+        document_type="bulletin",
+        reference=f"BUL-{issued_at.year}-T{bulletin.trimester}-{suffix}",
+        student_name=student_name,
+        class_name=class_name,
+        academic_year=academic_year_name,
+        student_id=bulletin.student_id,
+        issued_at=issued_at,
+    )
+
     bulletin_data = {
-        "student_name": _student_full_name(bulletin.student) if bulletin.student else "",
-        "class_name": bulletin.class_.name if bulletin.class_ else "",
+        "student_name": student_name,
+        "class_name": class_name,
         "trimester": bulletin.trimester,
-        "academic_year_name": bulletin.academic_year.name if bulletin.academic_year else "",
+        "academic_year_name": academic_year_name,
         "average": bulletin.average,
         "rank": bulletin.rank,
         "total_students": total_students,
@@ -394,6 +415,8 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
         "teacher_comment": bulletin.teacher_comment,
         "subject_averages": subject_averages,
         "generated_at": bulletin.generated_at,
+        "reference": verification["reference"],
+        "verification": verification,
     }
 
     return generate_bulletin_pdf(bulletin_data, school)

@@ -104,12 +104,12 @@ def generate_certificate_scolarite_pdf(
         academic_year_name=academic_year_name,
     )
 
-    # Numéro de référence officialisant (déterministe, sans table — un vrai
-    # jeton d'émission + QR arriveront en Phase 5).
+    # Référence + Cachet Électronique Visible émis par le service (signé).
     ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
-    reference = (
+    reference = data.get("reference") or (
         f"CS-{ref_year}-{matricule}" if matricule and matricule != "..." else f"CS-{ref_year}"
     )
+    verification = data.get("verification") or {}
 
     school_name = school_settings.get("school_name") or ""
 
@@ -173,6 +173,9 @@ def generate_certificate_scolarite_pdf(
             theme=theme,
             reference=reference,
             note="Document officiel — toute falsification est passible de poursuites.",
+            cev_svg=verification.get("cev_svg"),
+            cev_code=verification.get("cev_code"),
+            verify_url=verification.get("verify_url"),
         )
     }
     """

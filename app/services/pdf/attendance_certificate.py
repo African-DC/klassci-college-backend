@@ -110,9 +110,10 @@ def generate_attendance_certificate_pdf(
     )
 
     ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
-    reference = (
+    reference = data.get("reference") or (
         f"AF-{ref_year}-{matricule}" if matricule and matricule != "..." else f"AF-{ref_year}"
     )
+    verification = data.get("verification") or {}
 
     school_name = school_settings.get("school_name") or ""
     acro_words = [w for w in school_name.split() if w and w[0].isalpha()]
@@ -181,6 +182,9 @@ def generate_attendance_certificate_pdf(
             theme=theme,
             reference=reference,
             note="Document officiel — toute falsification est passible de poursuites.",
+            cev_svg=verification.get("cev_svg"),
+            cev_code=verification.get("cev_code"),
+            verify_url=verification.get("verify_url"),
         )
     }
     """
