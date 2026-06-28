@@ -8,6 +8,14 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+
+- Certificat de scolarité repensé en document officiel premium : cadre aux couleurs de l'établissement, en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), cachet et zone de signature ancrés en bas de page, numéro de référence, et mise en page qui remplit toute la page au lieu de la laisser à moitié vide *(admin, parent, élève)*.
+
+### Fixed
+
+- Certificat de scolarité : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre *(admin)*.
+
 ### Added
 
 - Indicateurs clés du tableau de bord et des pages de gestion (élèves, classes, enseignants, personnel, parents, salles, matières, inscriptions) calculés directement côté serveur : les chiffres restent justes même pour les grands établissements, là où l'ancien comptage se limitait aux 100 premières lignes *(admin)*.

@@ -36,8 +36,10 @@ from app.services.pdf._blocks import (
 from app.services.pdf._chrome import (
     CI_BANNER_HTML,
     base_styles,
+    document_frame,
     premium_footer,
     premium_header,
+    seal_block,
     signature_block,
 )
 from app.services.pdf._helpers import (
@@ -53,6 +55,7 @@ __all__ = [
     "CI_BANNER_HTML",
     "amount_box",
     "base_styles",
+    "document_frame",
     "enum_value",
     "esc",
     "format_decimal",
@@ -67,6 +70,7 @@ __all__ = [
     "premium_header",
     "premium_table",
     "progress_bar",
+    "seal_block",
     "section_title",
     "signature_block",
     "status_label",

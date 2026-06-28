@@ -18,6 +18,7 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
     return f"""
     <style>
         @page {{ size: {page_size}; margin: {margin}; }}
+        html {{ height: 100%; }}
         :root {{
             --primary: {theme.primary};
             --accent: {theme.accent};
@@ -34,6 +35,8 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
             font-size: 11px;
             color: var(--ink);
             line-height: 1.45;
+            height: 100%;
+            margin: 0;
         }}
         h1, h2, h3 {{ margin: 0; }}
         a {{ color: var(--primary); text-decoration: none; }}
@@ -157,6 +160,57 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
         }}
         .pdf-footer-school {{ flex: 1; }}
         .pdf-footer-meta {{ text-align: right; }}
+        .pdf-ref {{
+            font-family: 'Courier New', monospace; font-size: 8.5px;
+            letter-spacing: 0.5px; color: var(--muted);
+        }}
+        /* ============ Cadre document officiel (opt-in via document_frame) ===== */
+        .pdf-doc {{
+            position: relative; box-sizing: border-box;
+            border: 2.5px solid var(--primary); border-radius: 4px;
+            padding: 13mm 12mm 9mm; height: 100%;
+            display: flex; flex-direction: column; overflow: hidden;
+        }}
+        .pdf-doc::after {{
+            content: ""; position: absolute; top: 4px; left: 4px;
+            right: 4px; bottom: 4px; border: 0.8px solid var(--primary);
+            opacity: 0.35; pointer-events: none;
+        }}
+        .pdf-doc-header, .pdf-doc-body, .pdf-doc-bottom {{ position: relative; z-index: 1; }}
+        .pdf-doc-body {{ flex: 1; }}
+        .pdf-doc-bottom {{ margin-top: auto; }}
+        /* Filigrane diagonal discret (nom de l'école) */
+        .pdf-watermark {{
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-32deg);
+            font-family: var(--font-serif, Georgia, serif);
+            font-size: 56px; font-weight: 700; letter-spacing: 4px;
+            color: var(--primary); opacity: 0.07; white-space: nowrap;
+            text-transform: uppercase; text-align: center; z-index: 0;
+        }}
+        /* Sceau / cachet circulaire (placeholder officiel) */
+        .pdf-seal {{
+            width: 92px; height: 92px; border: 1.5px solid var(--primary);
+            border-radius: 50%; display: flex; align-items: center;
+            justify-content: center; text-align: center; color: var(--primary);
+            opacity: 0.6; position: relative;
+        }}
+        .pdf-seal::before {{
+            content: ""; position: absolute; inset: 4px;
+            border: 0.8px solid var(--primary); border-radius: 50%;
+        }}
+        .pdf-seal-text {{
+            font-size: 8px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1px; line-height: 1.3; padding: 0 8px;
+        }}
+        /* Monogramme (fallback identité si pas de logo) */
+        .pdf-monogram {{
+            width: 64px; height: 64px; border-radius: 50%;
+            background: var(--primary); color: #fff; display: flex;
+            align-items: center; justify-content: center; font-size: 22px;
+            font-weight: 700; letter-spacing: 1px;
+            font-family: var(--font-serif, Georgia, serif);
+        }}
     </style>
     """
 
@@ -197,12 +251,17 @@ def premium_header(
 
     ci = CI_BANNER_HTML if show_ci_banner else ""
 
-    logo_html = (
-        f'<img src="{logo_data}" alt="Logo" '
-        f'style="max-height:72px; max-width:160px; object-fit:contain;" />'
-        if logo_data
-        else ""
-    )
+    if logo_data:
+        logo_html = (
+            f'<img src="{logo_data}" alt="Logo" '
+            f'style="max-height:72px; max-width:160px; object-fit:contain;" />'
+        )
+    else:
+        # Fallback identité : monogramme circulaire avec les initiales de l'école
+        # (évite un en-tête nu quand le tenant n'a pas encore uploadé son logo).
+        words = [w for w in (school.get("school_name") or "E").split() if w]
+        initials = "".join(w[0] for w in words[:2]).upper() or "E"
+        logo_html = f'<div class="pdf-monogram">{esc(initials)}</div>'
 
     contact_lines: list[str] = []
     if address:
@@ -283,8 +342,18 @@ def premium_header(
     """
 
 
-def premium_footer(school: dict[str, Any], *, theme: PDFTheme, note: str | None = None) -> str:
-    """Footer : adresse école compacte à gauche + note/date à droite."""
+def premium_footer(
+    school: dict[str, Any],
+    *,
+    theme: PDFTheme,
+    note: str | None = None,
+    reference: str | None = None,
+) -> str:
+    """Footer : adresse école compacte à gauche + note/réf/date à droite.
+
+    `reference` : numéro de référence du document (officialisant, affiché en
+    mono au-dessus de la note légale).
+    """
     school = school or {}
     pieces: list[str] = []
     if school.get("school_name"):
@@ -296,12 +365,53 @@ def premium_footer(school: dict[str, Any], *, theme: PDFTheme, note: str | None 
         pieces.append(contact)
     school_block = "<br/>".join(pieces) if pieces else ""
 
+    meta_parts: list[str] = []
+    if reference:
+        meta_parts.append(f'<div class="pdf-ref">Réf. {esc(reference)}</div>')
+    if note:
+        meta_parts.append(esc(note))
+    meta_block = "<br/>".join(meta_parts)
+
     return f"""
     <div class="pdf-footer">
         <div class="pdf-footer-school">{school_block}</div>
-        <div class="pdf-footer-meta">{esc(note or "")}</div>
+        <div class="pdf-footer-meta">{meta_block}</div>
     </div>
     """
+
+
+def document_frame(
+    *,
+    theme: PDFTheme,
+    header_html: str,
+    body_html: str,
+    bottom_html: str,
+    watermark_text: str | None = None,
+) -> str:
+    """Cadre de document officiel : bordure double + filigrane + remplir-la-page.
+
+    Structure en 3 zones (flex column) : en-tête, corps (flex:1) et bas de page
+    (poussé au pied via margin-top:auto). Évite la moitié de page vide des docs
+    d'une page (certificat, attestation). Le filigrane (nom de l'école) est en
+    fond, faible opacité. Thémé par les couleurs du tenant via les CSS variables
+    de `base_styles`. Réutilisable par tous les générateurs.
+    """
+    watermark = (
+        f'<div class="pdf-watermark">{esc(watermark_text)}</div>' if watermark_text else ""
+    )
+    return f"""
+    <div class="pdf-doc">
+        {watermark}
+        <div class="pdf-doc-header">{header_html}</div>
+        <div class="pdf-doc-body">{body_html}</div>
+        <div class="pdf-doc-bottom">{bottom_html}</div>
+    </div>
+    """
+
+
+def seal_block(*, theme: PDFTheme, label: str = "Cachet de l'établissement") -> str:
+    """Sceau/cachet circulaire (placeholder officiel, thémé couleur primaire)."""
+    return f'<div class="pdf-seal"><span class="pdf-seal-text">{esc(label)}</span></div>'
 
 
 def signature_block(roles: list[dict[str, Any]], *, theme: PDFTheme) -> str:
