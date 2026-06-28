@@ -11,7 +11,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Changed
 
 - Documents officiels repensés en documents premium aux couleurs de chaque établissement : certificat de scolarité, attestation de fréquentation, liste de classe, emploi du temps, bordereau de caisse, procès-verbal de conseil, reçu de paiement, état des frais et fiche d'inscription reçoivent désormais un cadre officiel, un filigrane discret au nom de l'école, un en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), un cachet et une zone de signature, un numéro de référence, et une mise en page qui remplit la page (le cadre se répète sur chaque page des documents qui en comptent plusieurs) *(admin, enseignant, parent, élève)*.
-- Bulletin de notes habillé du cadre officiel aux couleurs de l'établissement, avec une colonne « Moyenne coefficientée » et une « Appréciation » par matière (Excellent, Très bien, Bien, Assez bien, Passable, Insuffisant) déduite de la moyenne *(enseignant, parent, élève)*.
+- Bulletin de notes habillé du cadre officiel aux couleurs de l'établissement, enrichi pour chaque matière du professeur, du rang de l'élève, de la moyenne de la classe et d'une appréciation (Excellent, Très bien, Bien, Assez bien, Passable, Insuffisant), plus un bandeau de synthèse (moyenne et écart de la classe, absences, retards) *(enseignant, parent, élève)*.
 
 ### Fixed
 
