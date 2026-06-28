@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.academic import Subject
 from app.models.enrollment import Enrollment
 from app.models.grade import (
     Bulletin,
@@ -209,7 +210,9 @@ async def get_bulletin_by_id(db: AsyncSession, bulletin_id: int) -> Bulletin | N
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
             selectinload(Bulletin.academic_year),
-            selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
+            selectinload(Bulletin.subject_averages)
+            .selectinload(SubjectAverage.subject)
+            .selectinload(Subject.teacher),
         )
     )
     result = await db.execute(stmt)

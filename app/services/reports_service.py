@@ -23,7 +23,13 @@ from app.services._document_verification_helper import build_verification
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.attendance_service import get_student_attendance_summary
 from app.services.pdf_service import generate_bulletin_pdf
+from app.services.reports_subject_stats import (
+    compute_general_stats,
+    compute_subject_stats,
+    enrich_subject_rows,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -373,14 +379,19 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
     )
     school = await _get_school_settings(db)
 
-    subject_averages = [
-        {
-            "subject_name": sa.subject.name if sa.subject else "",
-            "average": sa.average,
-            "coefficient": sa.coefficient,
-        }
-        for sa in (bulletin.subject_averages or [])
-    ]
+    # Statistiques de classe (rang par matière, moyenne classe) + absences.
+    class_bulletins = await repo.list_bulletins(
+        db,
+        class_id=bulletin.class_id,
+        trimester=bulletin.trimester,
+        academic_year_id=bulletin.academic_year_id,
+    )
+    subject_stats = compute_subject_stats(class_bulletins)
+    class_stats = compute_general_stats(class_bulletins)
+    subject_averages = enrich_subject_rows(bulletin, subject_stats)
+    absences = await get_student_attendance_summary(
+        db, bulletin.student_id, academic_year_id=bulletin.academic_year_id
+    )
 
     student_name = _student_full_name(bulletin.student) if bulletin.student else ""
     class_name = bulletin.class_.name if bulletin.class_ else ""
@@ -414,6 +425,8 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
         "council_decision": bulletin.council_decision,
         "teacher_comment": bulletin.teacher_comment,
         "subject_averages": subject_averages,
+        "class_stats": class_stats,
+        "absences": absences,
         "generated_at": bulletin.generated_at,
         "reference": verification["reference"],
         "verification": verification,

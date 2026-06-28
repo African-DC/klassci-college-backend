@@ -22,24 +22,60 @@ from app.services.pdf.theme import PDFTheme
 
 
 def _subject_rows(subject_averages: list[dict[str, Any]]) -> list[list[Any]]:
-    """Rows : Matière / Moyenne / Coefficient / Moy. coef. / Appréciation."""
+    """Rows : Matière (+prof) / Moy. / Coef / Rang / Moy. classe / Appréciation."""
     rows: list[list[Any]] = []
     for sa in subject_averages:
-        subject_name = sa.get("subject_name", "")
+        name_cell = f"<strong>{ui.esc(sa.get('subject_name', ''))}</strong>"
+        teacher = sa.get("teacher_name")
+        if teacher:
+            name_cell += (
+                f"<br/><span style='font-size:8px;color:var(--muted);'>{ui.esc(teacher)}</span>"
+            )
         raw_avg = sa.get("average")
-        avg = format_decimal(raw_avg)
         coef = sa.get("coefficient", 1) or 1
-        weighted = format_decimal(float(raw_avg) * coef) if raw_avg is not None else "—"
+        rank = sa.get("rank")
+        class_avg = sa.get("class_avg")
         rows.append(
             [
-                subject_name,
-                {"value": avg, "type": "num"},
+                {"value": name_cell, "type": "html"},
+                {"value": format_decimal(raw_avg), "type": "num"},
                 {"value": str(coef), "type": "num"},
-                {"value": weighted, "type": "num"},
+                {"value": str(rank) if rank else "—", "type": "num"},
+                {
+                    "value": format_decimal(class_avg) if class_avg is not None else "—",
+                    "type": "muted",
+                },
                 {"value": ui.appreciation_label(raw_avg), "type": "muted"},
             ]
         )
     return rows
+
+
+def _synthesis_block(
+    class_stats: dict[str, Any], absences: dict[str, Any], *, theme: PDFTheme
+) -> str:
+    """Bandeau synthèse : moyenne de classe, écart, absences, retards."""
+    class_avg = class_stats.get("class_avg")
+    class_min = class_stats.get("class_min")
+    class_max = class_stats.get("class_max")
+    parts: list[str] = []
+    if class_avg is not None:
+        parts.append(f"<strong>Moyenne de la classe :</strong> {format_decimal(class_avg)} / 20")
+    if class_min is not None and class_max is not None:
+        parts.append(
+            f"<strong>Écart de la classe :</strong> "
+            f"{format_decimal(class_min)} – {format_decimal(class_max)}"
+        )
+    parts.append(f"<strong>Absences :</strong> {int(absences.get('absent', 0) or 0)}")
+    late = int(absences.get("late", 0) or 0)
+    if late:
+        parts.append(f"<strong>Retards :</strong> {late}")
+    inner = " &nbsp;·&nbsp; ".join(parts)
+    return (
+        f'<div style="margin:10px 0; padding:8px 12px; border:1px solid var(--border); '
+        f'border-radius:6px; background:var(--soft-bg); font-size:10px; color:var(--ink);">'
+        f"{inner}</div>"
+    )
 
 
 def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
@@ -70,6 +106,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     generated_at = bulletin_data.get("generated_at")
     reference = bulletin_data.get("reference")
     verification = bulletin_data.get("verification") or {}
+    class_stats = bulletin_data.get("class_stats") or {}
+    absences = bulletin_data.get("absences") or {}
 
     rank_display = f"{rank}/{total_students}" if rank else "—"
     gen_date = generated_at.strftime("%d/%m/%Y") if isinstance(generated_at, datetime) else ""
@@ -86,9 +124,10 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     table_section = ui.premium_table(
         headers=[
             "Matière",
-            {"label": "Moyenne / 20", "align": "right"},
+            {"label": "Moy. / 20", "align": "right"},
             {"label": "Coef.", "align": "right"},
-            {"label": "Moy. coef.", "align": "right"},
+            {"label": "Rang", "align": "right"},
+            {"label": "Moy. classe", "align": "right"},
             "Appréciation",
         ],
         rows=_subject_rows(subject_averages),
@@ -108,6 +147,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         ],
         theme=theme,
     )
+
+    synthesis = _synthesis_block(class_stats, absences, theme=theme)
 
     decision_block = ""
     if council_decision:
@@ -157,6 +198,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         {table_section}
 
         {kpis}
+
+        {synthesis}
 
         {decision_block}
 
