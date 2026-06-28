@@ -91,7 +91,11 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         cards=[
             {"label": "Moyenne générale", "value": f"{average} / 20", "tone": "primary"},
             {"label": "Rang", "value": rank_display, "tone": "accent"},
-            {"label": "Mention", "value": mention or "—", "tone": "success"},
+            {
+                "label": "Mention",
+                "value": ui.mention_label(mention) if mention else "—",
+                "tone": "success",
+            },
         ],
         theme=theme,
     )

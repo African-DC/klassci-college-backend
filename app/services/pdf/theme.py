@@ -118,6 +118,22 @@ PAYMENT_METHOD_LABELS_FR: dict[str, str] = {
 }
 
 
+MENTION_LABELS_FR: dict[str, str] = {
+    # Noms de membres d'enum
+    "TRES_BIEN": "Très Bien",
+    "BIEN": "Bien",
+    "ASSEZ_BIEN": "Assez Bien",
+    "PASSABLE": "Passable",
+    "MEDIOCRE": "Médiocre",
+    # Valeurs d'enum
+    "TB": "Très Bien",
+    "B": "Bien",
+    "AB": "Assez Bien",
+    "P": "Passable",
+    "M": "Médiocre",
+}
+
+
 def status_label(key: str) -> str:
     """Renvoie le label FR d'un status (paid → Payé). Fallback sur la clé."""
     return STATUS_LABELS_FR.get(key, key)
@@ -126,3 +142,16 @@ def status_label(key: str) -> str:
 def method_label(key: str) -> str:
     """Renvoie le label FR d'une méthode (cash → Espèces). Fallback sur la clé."""
     return PAYMENT_METHOD_LABELS_FR.get(key, key)
+
+
+def mention_label(value: Any) -> str:
+    """Renvoie le label FR d'une mention.
+
+    Accepte un enum `Mention`, sa `.value` (ex: "TB"), ou une chaîne brute
+    comme "Mention.TRES_BIEN". Nettoie le préfixe enum puis cherche le label
+    en l'état et en majuscules. Fallback sur la chaîne nettoyée.
+    """
+    cleaned = str(value).split(".")[-1].strip()
+    if not cleaned:
+        return ""
+    return MENTION_LABELS_FR.get(cleaned) or MENTION_LABELS_FR.get(cleaned.upper()) or cleaned

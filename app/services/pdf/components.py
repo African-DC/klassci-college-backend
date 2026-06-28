@@ -51,7 +51,7 @@ from app.services.pdf._helpers import (
     image_to_datauri,
 )
 from app.services.pdf._tables import premium_table
-from app.services.pdf.theme import method_label, status_label
+from app.services.pdf.theme import mention_label, method_label, status_label
 
 __all__ = [
     "CI_BANNER_HTML",
@@ -66,6 +66,7 @@ __all__ = [
     "info_row",
     "kpi_card",
     "kpis_row",
+    "mention_label",
     "meta_banner",
     "method_label",
     "page_decoration",
