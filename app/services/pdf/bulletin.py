@@ -22,17 +22,21 @@ from app.services.pdf.theme import PDFTheme
 
 
 def _subject_rows(subject_averages: list[dict[str, Any]]) -> list[list[Any]]:
-    """Rows : Matière / Moyenne / Coefficient."""
+    """Rows : Matière / Moyenne / Coefficient / Moy. coef. / Appréciation."""
     rows: list[list[Any]] = []
     for sa in subject_averages:
         subject_name = sa.get("subject_name", "")
-        avg = format_decimal(sa.get("average"))
-        coef = sa.get("coefficient", 1)
+        raw_avg = sa.get("average")
+        avg = format_decimal(raw_avg)
+        coef = sa.get("coefficient", 1) or 1
+        weighted = format_decimal(float(raw_avg) * coef) if raw_avg is not None else "—"
         rows.append(
             [
                 subject_name,
                 {"value": avg, "type": "num"},
                 {"value": str(coef), "type": "num"},
+                {"value": weighted, "type": "num"},
+                {"value": ui.appreciation_label(raw_avg), "type": "muted"},
             ]
         )
     return rows
@@ -50,6 +54,7 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     from weasyprint import HTML  # lazy import
 
     theme = PDFTheme.from_school(school_settings)
+    school_name = school_settings.get("school_name") or ""
 
     student_name = bulletin_data.get("student_name", "")
     class_name = bulletin_data.get("class_name", "")
@@ -80,7 +85,9 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         headers=[
             "Matière",
             {"label": "Moyenne / 20", "align": "right"},
-            {"label": "Coefficient", "align": "right"},
+            {"label": "Coef.", "align": "right"},
+            {"label": "Moy. coef.", "align": "right"},
+            "Appréciation",
         ],
         rows=_subject_rows(subject_averages),
         theme=theme,
@@ -132,6 +139,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     <html lang="fr">
     <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A4", margin="15mm")}</head>
     <body>
+        {ui.page_decoration(theme=theme, watermark_text=school_name)}
+        <div class="pdf-page-body">
         {
         ui.premium_header(
             school_settings,
@@ -160,6 +169,7 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
             note="Document officiel — à conserver précieusement.",
         )
     }
+        </div>
     </body>
     </html>
     """

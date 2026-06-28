@@ -79,7 +79,7 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
         initials = f"{(s.first_name or '?')[:1]}{(s.last_name or '?')[:1]}".upper()
         rows.append(
             {
-                "enrollment_number": getattr(e, "enrollment_number", None) or "",
+                "enrollment_number": getattr(s, "enrollment_number", None) or "",
                 "first_name": s.first_name,
                 "last_name": s.last_name,
                 "genre": getattr(s, "genre", None),

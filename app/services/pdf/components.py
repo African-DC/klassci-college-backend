@@ -51,11 +51,17 @@ from app.services.pdf._helpers import (
     image_to_datauri,
 )
 from app.services.pdf._tables import premium_table
-from app.services.pdf.theme import mention_label, method_label, status_label
+from app.services.pdf.theme import (
+    appreciation_label,
+    mention_label,
+    method_label,
+    status_label,
+)
 
 __all__ = [
     "CI_BANNER_HTML",
     "amount_box",
+    "appreciation_label",
     "base_styles",
     "document_frame",
     "enum_value",
