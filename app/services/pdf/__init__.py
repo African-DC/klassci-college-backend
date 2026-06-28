@@ -31,6 +31,7 @@ from app.services.pdf.attendance_certificate import generate_attendance_certific
 from app.services.pdf.bulletin import generate_bulletin_pdf
 from app.services.pdf.certificate_scolarite import generate_certificate_scolarite_pdf
 from app.services.pdf.class_roster import generate_class_roster_pdf
+from app.services.pdf.class_synthesis import generate_class_synthesis_pdf
 from app.services.pdf.council_minutes import generate_council_minutes_pdf
 from app.services.pdf.daily_cash_book import generate_daily_cash_book_pdf
 from app.services.pdf.enrollment_form import generate_enrollment_form_pdf
@@ -56,6 +57,7 @@ __all__ = [
     "generate_bulletin_pdf",
     "generate_certificate_scolarite_pdf",
     "generate_class_roster_pdf",
+    "generate_class_synthesis_pdf",
     "generate_council_minutes_pdf",
     "generate_daily_cash_book_pdf",
     "generate_enrollment_form_pdf",

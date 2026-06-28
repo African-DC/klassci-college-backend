@@ -172,7 +172,9 @@ async def list_bulletins(
         .options(
             selectinload(Bulletin.student),
             selectinload(Bulletin.class_),
-            selectinload(Bulletin.subject_averages).selectinload(SubjectAverage.subject),
+            selectinload(Bulletin.subject_averages)
+            .selectinload(SubjectAverage.subject)
+            .selectinload(Subject.teacher),
         )
         .order_by(
             Bulletin.academic_year_id.desc(),
