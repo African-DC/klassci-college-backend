@@ -17,6 +17,7 @@ from app.schemas.reports import (
     BulletinListResponse,
     BulletinResponse,
 )
+from app.services import class_synthesis_service
 from app.services import reports_service as service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -89,6 +90,24 @@ async def get_bulletin_pdf(
         lambda: service.get_bulletin_pdf(db, bulletin_id),
         filename=f"bulletin_{bulletin_id}.pdf",
         error_context=f"bulletin {bulletin_id}",
+    )
+
+
+@router.get("/classes/{class_id}/synthesis")
+async def get_class_synthesis_pdf(
+    class_id: int,
+    trimester: int = Query(..., ge=1, le=3),
+    academic_year_id: int = Query(...),
+    _: None = require_permission("reports:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Génère le rapport de synthèse d'une classe pour un trimestre (conseil de classe)."""
+    return await pdf_response(
+        lambda: class_synthesis_service.get_class_synthesis_pdf(
+            db, class_id, trimester=trimester, academic_year_id=academic_year_id
+        ),
+        filename=f"synthese_classe_{class_id}_T{trimester}.pdf",
+        error_context=f"class synthesis {class_id}",
     )
 
 
