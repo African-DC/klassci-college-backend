@@ -155,3 +155,29 @@ def mention_label(value: Any) -> str:
     if not cleaned:
         return ""
     return MENTION_LABELS_FR.get(cleaned) or MENTION_LABELS_FR.get(cleaned.upper()) or cleaned
+
+
+def appreciation_label(average: Any) -> str:
+    """Appréciation par matière déduite de la moyenne /20 (échelle scolaire CI).
+
+    Distincte de la mention générale : qualifie le niveau dans UNE matière.
+    Accepte un nombre, un Decimal ou une chaîne numérique ; renvoie "—" si
+    la moyenne est absente ou non interprétable.
+    """
+    if average is None or average == "":
+        return "—"
+    try:
+        value = float(average)
+    except (TypeError, ValueError):
+        return "—"
+    if value >= 16:
+        return "Excellent"
+    if value >= 14:
+        return "Très bien"
+    if value >= 12:
+        return "Bien"
+    if value >= 10:
+        return "Assez bien"
+    if value >= 8:
+        return "Passable"
+    return "Insuffisant"
