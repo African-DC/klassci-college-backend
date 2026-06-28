@@ -41,6 +41,7 @@ def generate_council_minutes_pdf(
     from weasyprint import HTML  # lazy import — voir module docstring
 
     theme = PDFTheme.from_school(school_settings)
+    school_name = school_settings.get("school_name") or ""
 
     class_name = council_data.get("class_name", "") or ""
     trimester = council_data.get("trimester", "") or ""
@@ -110,6 +111,8 @@ def generate_council_minutes_pdf(
         ui.base_styles(theme, page_size="A4 landscape", margin="12mm")
     }</head>
     <body>
+        {ui.page_decoration(theme=theme, watermark_text=school_name)}
+        <div class="pdf-page-body">
         {
         ui.premium_header(
             school_settings,
@@ -137,6 +140,7 @@ def generate_council_minutes_pdf(
             note="Document officiel — à archiver dans le registre des conseils de classe.",
         )
     }
+        </div>
     </body>
     </html>
     """

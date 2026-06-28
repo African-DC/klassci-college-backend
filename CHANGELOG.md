@@ -10,11 +10,11 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Changed
 
-- Certificat de scolarité repensé en document officiel premium : cadre aux couleurs de l'établissement, en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), cachet et zone de signature ancrés en bas de page, numéro de référence, et mise en page qui remplit toute la page au lieu de la laisser à moitié vide *(admin, parent, élève)*.
+- Documents officiels repensés en documents premium aux couleurs de chaque établissement : certificat de scolarité, attestation de fréquentation, liste de classe, emploi du temps, bordereau de caisse et procès-verbal de conseil reçoivent désormais un cadre officiel, un filigrane discret au nom de l'école, un en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), un cachet et une zone de signature, un numéro de référence, et une mise en page qui remplit la page (le cadre se répète sur chaque page des documents qui en comptent plusieurs) *(admin, enseignant, parent, élève)*.
 
 ### Fixed
 
-- Certificat de scolarité : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre *(admin)*.
+- Documents officiels (certificat, attestation) : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre *(admin)*.
 
 ### Added
 

@@ -18,20 +18,6 @@ from app.services.pdf._helpers import esc
 from app.services.pdf.theme import PDFTheme
 
 
-def _signatory_clause(head_master_name: str, head_master_title: str) -> str:
-    """« Je soussigné(e), <Nom>, <Titre> » — sans doublon si nom == titre.
-
-    Quand l'admin laisse le nom du chef d'établissement vide, le BE retombe sur
-    le titre pour les deux champs : on n'affiche alors qu'une seule fois le
-    titre (au lieu de « Le Chef d'Établissement, Le Chef d'Établissement »).
-    """
-    name = (head_master_name or "").strip()
-    title = (head_master_title or "").strip() or "Le Chef d'Établissement"
-    if name and name != title:
-        return f"Je soussigné(e), <strong>{esc(name)}</strong>, {esc(title)}"
-    return f"Je soussigné(e), <strong>{esc(title)}</strong>"
-
-
 def _body_paragraph(
     *,
     signatory_html: str,
@@ -107,7 +93,7 @@ def generate_certificate_scolarite_pdf(
     name_distinct = bool(head_master_name.strip()) and head_master_name != head_master_title
 
     body_html = _body_paragraph(
-        signatory_html=_signatory_clause(head_master_name, head_master_title),
+        signatory_html=ui.signatory_clause(head_master_name, head_master_title),
         full_name=full_name,
         ne_form=ne_form,
         birth_date_str=birth_date_str,
