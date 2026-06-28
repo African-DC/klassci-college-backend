@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -149,6 +150,13 @@ async def issue_document(
     )
     cev_code = _cev_code_from_signature(signature)
 
+    # Idempotent : le cachet est déterministe (signature des mêmes données). Un
+    # même document re-généré (ex: bulletin retéléchargé) doit porter le MÊME
+    # cachet, pas en créer un nouveau — sinon collision sur l'unicité du cev_code.
+    existing = await get_issuance_by_cev_code(db, cev_code)
+    if existing is not None:
+        return _to_verification(existing, tenant)
+
     issuance = DocumentIssuance(
         token=token,
         cev_code=cev_code,
@@ -161,14 +169,26 @@ async def issue_document(
         issued_at=issued,
     )
     db.add(issuance)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Race : un autre appel concurrent a inséré le même cachet entre-temps.
+        await db.rollback()
+        existing = await get_issuance_by_cev_code(db, cev_code)
+        if existing is not None:
+            return _to_verification(existing, tenant)
+        raise
 
-    url = _verify_url(token, tenant)
+    return _to_verification(issuance, tenant)
+
+
+def _to_verification(issuance: DocumentIssuance, tenant: str) -> IssuedVerification:
+    url = _verify_url(issuance.token, tenant)
     return IssuedVerification(
-        token=token,
-        reference=reference,
+        token=issuance.token,
+        reference=issuance.reference,
         verify_url=url,
-        cev_code=cev_code,
+        cev_code=issuance.cev_code,
         datamatrix_svg=datamatrix_svg(url),
     )
 
