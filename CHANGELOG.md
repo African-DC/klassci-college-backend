@@ -8,6 +8,14 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+
+- Documents officiels repensés en documents premium aux couleurs de chaque établissement : certificat de scolarité, attestation de fréquentation, liste de classe, emploi du temps, bordereau de caisse et procès-verbal de conseil reçoivent désormais un cadre officiel, un filigrane discret au nom de l'école, un en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), un cachet et une zone de signature, un numéro de référence, et une mise en page qui remplit la page (le cadre se répète sur chaque page des documents qui en comptent plusieurs) *(admin, enseignant, parent, élève)*.
+
+### Fixed
+
+- Documents officiels (certificat, attestation) : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre *(admin)*.
+
 ### Added
 
 - Indicateurs clés du tableau de bord et des pages de gestion (élèves, classes, enseignants, personnel, parents, salles, matières, inscriptions) calculés directement côté serveur : les chiffres restent justes même pour les grands établissements, là où l'ancien comptage se limitait aux 100 premières lignes *(admin)*.

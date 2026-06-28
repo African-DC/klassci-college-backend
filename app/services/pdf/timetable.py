@@ -94,6 +94,7 @@ def generate_timetable_pdf(
     from weasyprint import HTML  # lazy import — voir module docstring
 
     theme = PDFTheme.from_school(school_settings)
+    school_name = school_settings.get("school_name") or ""
 
     hours = list(range(day_start, day_end))
 
@@ -160,6 +161,8 @@ def generate_timetable_pdf(
         {grid_style}
     </head>
     <body>
+        {ui.page_decoration(theme=theme, watermark_text=school_name)}
+        <div class="pdf-page-body">
         {
         ui.premium_header(
             school_settings,
@@ -192,6 +195,7 @@ def generate_timetable_pdf(
             note=f"Imprimé le {now_str}",
         )
     }
+        </div>
     </body>
     </html>
     """

@@ -20,8 +20,7 @@ from app.services.pdf.theme import PDFTheme
 
 def _body_paragraph(
     *,
-    head_master_name: str,
-    head_master_title: str,
+    signatory_html: str,
     full_name: str,
     matricule: str,
     inscrit_form: str,
@@ -33,9 +32,8 @@ def _body_paragraph(
 ) -> str:
     """Compose le corps officiel de l'attestation."""
     return (
-        f"<p>Je soussigné(e), <strong>{esc(head_master_name)}</strong>, "
-        f"{esc(head_master_title)}, atteste que :</p>"
-        f"<p style='text-align:center; font-size:14px; margin:16px 0; "
+        f"<p>{signatory_html}, atteste que :</p>"
+        f"<p style='text-align:center; font-size:15px; margin:18px 0; "
         f"font-family:var(--font-serif,Georgia,serif); color:var(--primary);'>"
         f"<strong>{esc(full_name)}</strong></p>"
         f"<p>matricule <strong>{esc(matricule)}</strong>, est régulièrement "
@@ -87,10 +85,10 @@ def generate_attendance_certificate_pdf(
 
     head_master_name = school_settings.get("head_master_name") or "Le Chef d'Établissement"
     head_master_title = school_settings.get("head_master_title") or "Le Chef d'Établissement"
+    name_distinct = bool(head_master_name.strip()) and head_master_name != head_master_title
 
     body_html = _body_paragraph(
-        head_master_name=head_master_name,
-        head_master_title=head_master_title,
+        signatory_html=ui.signatory_clause(head_master_name, head_master_title),
         full_name=full_name,
         matricule=matricule,
         inscrit_form=inscrit_form,
@@ -111,68 +109,97 @@ def generate_attendance_certificate_pdf(
         theme=theme,
     )
 
+    ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
+    reference = (
+        f"AF-{ref_year}-{matricule}" if matricule and matricule != "..." else f"AF-{ref_year}"
+    )
+
+    school_name = school_settings.get("school_name") or ""
+    acro_words = [w for w in school_name.split() if w and w[0].isalpha()]
+    acronym = "".join(w[0] for w in acro_words[:4]).upper() or "CACHET"
+
     serif_style = f"""
     <style>
         :root {{ --font-serif: {theme.font_serif}; }}
         .pdf-cert-title {{
             text-align:center; font-family: var(--font-serif);
-            font-size: 20px; letter-spacing: 3px; color: var(--primary);
-            margin: 18px 0 8px;
+            font-size: 21px; letter-spacing: 4px; color: var(--primary);
+            margin: 18px 0 6px;
+        }}
+        .pdf-cert-rule {{
+            width: 120px; height: 2px; background: var(--accent);
+            margin: 0 auto 4px; border: 0;
         }}
         .pdf-cert-body {{
-            line-height: 1.7; font-size: 12px; margin: 14px 0;
-            font-family: var(--font-serif); color: var(--ink);
+            line-height: 1.9; font-size: 12.5px; margin: 22px 6mm 0;
+            font-family: var(--font-serif); color: var(--ink); text-align: justify;
         }}
         .pdf-cert-date {{
             text-align:right; font-style:italic; font-size: 11px;
-            margin: 18px 0 8px; color: var(--muted);
+            margin: 0 0 4px; color: var(--muted);
+        }}
+        .pdf-cert-seal-caption {{
+            text-align:center; font-size: 8px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;
         }}
     </style>
     """
 
     signatures = ui.signature_block(
         roles=[
-            {"role": head_master_title, "name": head_master_name},
+            {"role": head_master_title, "name": head_master_name if name_distinct else ""},
         ],
         theme=theme,
     )
+
+    header_html = ui.premium_header(school_settings, theme=theme, show_ci_banner=True)
+
+    body_region = f"""
+        <h1 class="pdf-cert-title">ATTESTATION DE FRÉQUENTATION</h1>
+        <hr class="pdf-cert-rule" />
+        <div class="pdf-cert-body">{body_html}</div>
+        <div style="margin: 22px 6mm 0;">
+            {ui.section_title("Détail des séances", theme=theme)}
+            {kpis}
+        </div>
+    """
+
+    seal_html = ui.seal_block(theme=theme, label=acronym)
+    bottom_html = f"""
+        <div class="pdf-cert-date">Fait le {esc(issued_str)}</div>
+        <div style="display:flex; align-items:flex-end; justify-content:space-between;
+                    gap:24px; margin-top:6px;">
+            <div style="flex:0 0 auto; text-align:center; padding-bottom:8px;">
+                {seal_html}
+                <div class="pdf-cert-seal-caption">Cachet &amp; signature</div>
+            </div>
+            <div style="flex:0 0 320px; max-width:340px;">{signatures}</div>
+        </div>
+        {
+        ui.premium_footer(
+            school_settings,
+            theme=theme,
+            reference=reference,
+            note="Document officiel — toute falsification est passible de poursuites.",
+        )
+    }
+    """
 
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-        {ui.base_styles(theme, page_size="A4", margin="18mm")}
+        {ui.base_styles(theme, page_size="A4", margin="14mm")}
         {serif_style}
     </head>
     <body>
         {
-        ui.premium_header(
-            school_settings,
+        ui.document_frame(
             theme=theme,
-            show_ci_banner=True,
-        )
-    }
-
-        <h1 class="pdf-cert-title">ATTESTATION DE FRÉQUENTATION</h1>
-
-        <div class="pdf-cert-body">
-            {body_html}
-        </div>
-
-        {ui.section_title("Détail des séances", theme=theme)}
-        {kpis}
-
-        <div class="pdf-cert-date">
-            Fait le {esc(issued_str)}
-        </div>
-
-        {signatures}
-
-        {
-        ui.premium_footer(
-            school_settings,
-            theme=theme,
-            note="Document officiel — toute falsification est passible de poursuites.",
+            header_html=header_html,
+            body_html=body_region,
+            bottom_html=bottom_html,
+            watermark_text=school_name,
         )
     }
     </body>
