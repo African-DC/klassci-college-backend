@@ -422,9 +422,7 @@ def document_frame(
     # Filigrane en position:fixed (au niveau de la page) — plus fiable que
     # absolute dans le flex container (et non rogné par overflow:hidden).
     watermark = (
-        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>'
-        if watermark_text
-        else ""
+        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>' if watermark_text else ""
     )
     return f"""
     {watermark}
@@ -467,9 +465,7 @@ def page_decoration(*, theme: PDFTheme, watermark_text: str | None = None) -> st
     Thémé par la couleur primaire du tenant.
     """
     watermark = (
-        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>'
-        if watermark_text
-        else ""
+        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>' if watermark_text else ""
     )
     return f'<div class="pdf-page-frame"></div>{watermark}'
 

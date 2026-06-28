@@ -107,7 +107,9 @@ def generate_certificate_scolarite_pdf(
     # Numéro de référence officialisant (déterministe, sans table — un vrai
     # jeton d'émission + QR arriveront en Phase 5).
     ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
-    reference = f"CS-{ref_year}-{matricule}" if matricule and matricule != "..." else f"CS-{ref_year}"
+    reference = (
+        f"CS-{ref_year}-{matricule}" if matricule and matricule != "..." else f"CS-{ref_year}"
+    )
 
     school_name = school_settings.get("school_name") or ""
 

@@ -110,7 +110,9 @@ def generate_attendance_certificate_pdf(
     )
 
     ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
-    reference = f"AF-{ref_year}-{matricule}" if matricule and matricule != "..." else f"AF-{ref_year}"
+    reference = (
+        f"AF-{ref_year}-{matricule}" if matricule and matricule != "..." else f"AF-{ref_year}"
+    )
 
     school_name = school_settings.get("school_name") or ""
     acro_words = [w for w in school_name.split() if w and w[0].isalpha()]
