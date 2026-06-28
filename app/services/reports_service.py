@@ -389,8 +389,15 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
     subject_stats = compute_subject_stats(class_bulletins)
     class_stats = compute_general_stats(class_bulletins)
     subject_averages = enrich_subject_rows(bulletin, subject_stats)
+    # Absences scopées au trimestre du bulletin si ses dates sont connues,
+    # sinon repli sur l'année entière.
+    trimester = await repo.get_trimester(db, bulletin.academic_year_id, bulletin.trimester)
     absences = await get_student_attendance_summary(
-        db, bulletin.student_id, academic_year_id=bulletin.academic_year_id
+        db,
+        bulletin.student_id,
+        academic_year_id=bulletin.academic_year_id,
+        start_date=trimester.start_date if trimester else None,
+        end_date=trimester.end_date if trimester else None,
     )
 
     student_name = _student_full_name(bulletin.student) if bulletin.student else ""

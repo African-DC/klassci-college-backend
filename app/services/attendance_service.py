@@ -2,6 +2,7 @@
 
 import logging
 from collections import defaultdict
+from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -280,15 +281,19 @@ async def get_student_attendance_summary(
     db: AsyncSession,
     student_id: int,
     academic_year_id: int | None = None,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> dict[str, int | float]:
     """Aggregate the student's presence records by status for a given academic year.
 
     If ``academic_year_id`` is None, aggregates across all years (rare; mostly
-    useful for legacy data). Returns a dict with the counts and the
-    attendance_rate (percentage of present + late over total, rounded to 2
-    decimals).
+    useful for legacy data). When ``start_date``/``end_date`` are provided, the
+    aggregation is restricted to that range (used to scope a bulletin's absences
+    to its trimester). Returns a dict with the counts and the attendance_rate
+    (percentage of present + late over total, rounded to 2 decimals).
 
-    Used by the attestation de frequentation PDF (#109).
+    Used by the attestation de frequentation PDF (#109) and the bulletin.
     """
     from sqlalchemy import func, select
 
@@ -305,6 +310,10 @@ async def get_student_attendance_summary(
     )
     if academic_year_id is not None:
         stmt = stmt.where(AttendanceContext.academic_year_id == academic_year_id)
+    if start_date is not None:
+        stmt = stmt.where(AttendanceContext.date >= start_date)
+    if end_date is not None:
+        stmt = stmt.where(AttendanceContext.date <= end_date)
     stmt = stmt.group_by(AttendanceRecord.status)
 
     rows = (await db.execute(stmt)).all()
