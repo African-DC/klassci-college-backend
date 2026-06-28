@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import Subject
+from app.models.academic import Subject, Trimester
 from app.models.enrollment import Enrollment
 from app.models.grade import (
     Bulletin,
@@ -195,6 +195,15 @@ async def list_bulletins(
         stmt = stmt.where(Bulletin.is_published.is_(is_published))
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_trimester(db: AsyncSession, academic_year_id: int, order_no: int) -> Trimester | None:
+    """Trimestre d'une année par son numéro (1/2/3) — pour scoper les absences."""
+    stmt = select(Trimester).where(
+        Trimester.academic_year_id == academic_year_id,
+        Trimester.order_no == order_no,
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def get_bulletin_by_id(db: AsyncSession, bulletin_id: int) -> Bulletin | None:
