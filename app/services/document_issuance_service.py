@@ -130,7 +130,10 @@ async def issue_document(
 ) -> IssuedVerification:
     """Enregistre une émission et renvoie le bloc CEV (Datamatrix + code signé)."""
     tenant = current_tenant_id.get() or settings.LOCAL_TENANT_ID
-    issued = issued_at or datetime.utcnow()
+    # Tronquer à la seconde : MySQL DATETIME(0) ARRONDIT les fractions de seconde,
+    # ce qui décalerait la valeur stockée par rapport à celle signée et casserait
+    # la revérification de signature. On signe et stocke exactement la même seconde.
+    issued = (issued_at or datetime.utcnow()).replace(microsecond=0)
     token = secrets.token_urlsafe(32)
 
     signature = _signing_key().sign(
