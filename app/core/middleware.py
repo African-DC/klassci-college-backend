@@ -131,13 +131,31 @@ def _tenant_from_subdomain(hostname: str) -> str | None:
     return None
 
 
+def _tenant_from_public_path(path: str) -> str | None:
+    """Extrait le tenant du path des routes publiques de vérification.
+
+    Ces routes (`/public/verify/{tenant}/...`, `/public/verify-code/{tenant}/...`)
+    n'ont pas de JWT : le tenant est porté par l'URL pour scoper la bonne DB.
+    """
+    for prefix in ("/public/verify/", "/public/verify-code/"):
+        if path.startswith(prefix):
+            seg = path[len(prefix) :].split("/", 1)[0].strip().lower()
+            if seg == settings.LOCAL_TENANT_ID or _TENANT_SLUG_RE.match(seg):
+                return seg
+    return None
+
+
 def _resolve_tenant(request: Request) -> str:
     """Résout le tenant_id selon l'ordre :
+    0. Path public de vérification (/public/verify/{tenant}/...)
     1. JWT claim tenant_id (Authorization header)
     2. Header X-Tenant-Slug (login flow, avant JWT)
     3. Subdomain (rétrocompat multi-subdomain)
     4. Host local → LOCAL_TENANT_ID
     """
+    if tenant := _tenant_from_public_path(request.url.path):
+        return tenant
+
     auth_header = request.headers.get("authorization", "")
     if tenant := _tenant_from_jwt(auth_header):
         return tenant

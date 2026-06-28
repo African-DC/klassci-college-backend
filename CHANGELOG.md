@@ -21,6 +21,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Cachet Électronique Visible (CEV) sur le certificat de scolarité, l'attestation de fréquentation et le bulletin : un cachet 2D (Datamatrix) signé cryptographiquement plus un code lisible « CEV-XXXX-XXXX-XXXX ». Un parent ou un employeur scanne le cachet ou saisit le code sur la page publique pour confirmer l'authenticité du document, sans aucun compte *(admin, parent, élève)*.
+- Page de vérification publique des documents : confirme l'authenticité (établissement, type, élève, classe, année, date, référence) et détecte toute falsification grâce à la signature. La falsification d'un document imprimé est ainsi immédiatement repérable *(transverse)*.
 - Indicateurs clés du tableau de bord et des pages de gestion (élèves, classes, enseignants, personnel, parents, salles, matières, inscriptions) calculés directement côté serveur : les chiffres restent justes même pour les grands établissements, là où l'ancien comptage se limitait aux 100 premières lignes *(admin)*.
 
 ### Fixed

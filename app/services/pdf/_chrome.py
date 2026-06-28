@@ -164,6 +164,31 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
             font-family: 'Courier New', monospace; font-size: 8.5px;
             letter-spacing: 0.5px; color: var(--muted);
         }}
+        /* Cachet Électronique Visible (Datamatrix + code CEV) — docs officiels */
+        .pdf-verify {{
+            margin-top: 18px; padding: 8px 12px;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: var(--soft-bg);
+            display: flex; align-items: center; gap: 12px;
+        }}
+        .pdf-verify-cev {{
+            width: 72px; height: 72px; flex: 0 0 72px;
+            border: 1px solid var(--border); border-radius: 4px; background: #fff;
+            padding: 2px; box-sizing: border-box;
+        }}
+        .pdf-verify-cev svg {{ width: 100%; height: 100%; display: block; }}
+        .pdf-verify-text {{
+            font-size: 9px; color: var(--muted); line-height: 1.5;
+        }}
+        .pdf-verify-text strong {{ color: var(--primary); font-size: 9.5px; }}
+        .pdf-verify-url {{
+            font-family: 'Courier New', monospace; font-size: 8px;
+            color: var(--ink); word-break: break-all;
+        }}
+        .pdf-verify-code {{
+            font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
+            letter-spacing: 1px; color: var(--primary); margin-top: 3px;
+        }}
         /* ============ Cadre document officiel (opt-in via document_frame) ===== */
         .pdf-doc {{
             position: relative; box-sizing: border-box;
@@ -371,11 +396,17 @@ def premium_footer(
     theme: PDFTheme,
     note: str | None = None,
     reference: str | None = None,
+    cev_svg: str | None = None,
+    cev_code: str | None = None,
+    verify_url: str | None = None,
 ) -> str:
     """Footer : adresse école compacte à gauche + note/réf/date à droite.
 
     `reference` : numéro de référence du document (officialisant, affiché en
     mono au-dessus de la note légale).
+    `cev_svg` + `cev_code` + `verify_url` : si fournis, ajoute le **Cachet
+    Électronique Visible** (Datamatrix + code CEV lisible + URL publique)
+    au-dessus du pied de page — pour les documents officiels vérifiables.
     """
     school = school or {}
     pieces: list[str] = []
@@ -395,7 +426,21 @@ def premium_footer(
         meta_parts.append(esc(note))
     meta_block = "<br/>".join(meta_parts)
 
+    verify_block = ""
+    if cev_svg:
+        verify_block = f"""
+    <div class="pdf-verify">
+        <div class="pdf-verify-cev">{cev_svg}</div>
+        <div class="pdf-verify-text">
+            <strong>Cachet Électronique Visible (CEV)</strong><br/>
+            Scannez le cachet ou vérifiez sur <span class="pdf-verify-url">{esc(verify_url or "")}</span>
+            en saisissant le code&nbsp;:
+            <div class="pdf-verify-code">{esc(cev_code or "")}</div>
+        </div>
+    </div>"""
+
     return f"""
+    {verify_block}
     <div class="pdf-footer">
         <div class="pdf-footer-school">{school_block}</div>
         <div class="pdf-footer-meta">{meta_block}</div>

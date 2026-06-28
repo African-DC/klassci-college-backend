@@ -68,6 +68,8 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     teacher_comment = bulletin_data.get("teacher_comment", "")
     subject_averages = bulletin_data.get("subject_averages", []) or []
     generated_at = bulletin_data.get("generated_at")
+    reference = bulletin_data.get("reference")
+    verification = bulletin_data.get("verification") or {}
 
     rank_display = f"{rank}/{total_students}" if rank else "—"
     gen_date = generated_at.strftime("%d/%m/%Y") if isinstance(generated_at, datetime) else ""
@@ -166,7 +168,11 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         ui.premium_footer(
             school_settings,
             theme=theme,
+            reference=reference,
             note="Document officiel — à conserver précieusement.",
+            cev_svg=verification.get("cev_svg"),
+            cev_code=verification.get("cev_code"),
+            verify_url=verification.get("verify_url"),
         )
     }
         </div>
