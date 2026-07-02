@@ -51,6 +51,31 @@ def _subject_rows(subject_averages: list[dict[str, Any]]) -> list[list[Any]]:
     return rows
 
 
+def _keyfigures_band(average: str, rank: Any, total_students: Any, mention: str) -> str:
+    """Bande compacte 3 chiffres-clés : Moyenne / Rang / Mention (focale accent)."""
+    avg_display = (
+        f'{average}<span style="font-size:11px">/20</span>' if average not in ("-", "") else "—"
+    )
+    if rank:
+        rank_display = f'{rank}<span style="font-size:11px">/{total_students}</span>'
+    else:
+        rank_display = "—"
+    mention_display = ui.mention_label(mention) if mention else "—"
+    return (
+        '<div class="pdf-keyfigures">'
+        '<div class="pdf-keyfigure">'
+        '<div class="pdf-keyfigure-label">Moyenne générale</div>'
+        f'<div class="pdf-keyfigure-value">{avg_display}</div></div>'
+        '<div class="pdf-keyfigure">'
+        '<div class="pdf-keyfigure-label">Rang</div>'
+        f'<div class="pdf-keyfigure-value">{rank_display}</div></div>'
+        '<div class="pdf-keyfigure">'
+        '<div class="pdf-keyfigure-label">Mention</div>'
+        f'<div class="pdf-keyfigure-value is-focal">{ui.esc(mention_display)}</div></div>'
+        "</div>"
+    )
+
+
 def _synthesis_block(
     class_stats: dict[str, Any], absences: dict[str, Any], *, theme: PDFTheme
 ) -> str:
@@ -109,7 +134,6 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     class_stats = bulletin_data.get("class_stats") or {}
     absences = bulletin_data.get("absences") or {}
 
-    rank_display = f"{rank}/{total_students}" if rank else "—"
     gen_date = generated_at.strftime("%d/%m/%Y") if isinstance(generated_at, datetime) else ""
 
     meta_left = (
@@ -133,20 +157,10 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
         rows=_subject_rows(subject_averages),
         theme=theme,
         empty_message="Aucune note saisie pour ce trimestre.",
+        col_widths=["34%", "11%", "9%", "9%", "14%", "23%"],
     )
 
-    kpis = ui.kpis_row(
-        cards=[
-            {"label": "Moyenne générale", "value": f"{average} / 20", "tone": "primary"},
-            {"label": "Rang", "value": rank_display, "tone": "accent"},
-            {
-                "label": "Mention",
-                "value": ui.mention_label(mention) if mention else "—",
-                "tone": "success",
-            },
-        ],
-        theme=theme,
-    )
+    keyfigures = _keyfigures_band(average, rank, total_students, mention)
 
     synthesis = _synthesis_block(class_stats, absences, theme=theme)
 
@@ -195,9 +209,9 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
 
         {ui.meta_banner(meta_left, meta_right, theme=theme)}
 
-        {table_section}
+        {keyfigures}
 
-        {kpis}
+        {table_section}
 
         {synthesis}
 

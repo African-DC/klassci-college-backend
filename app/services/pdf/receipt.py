@@ -127,6 +127,7 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
             ],
             rows=rows,
             theme=theme,
+            col_widths=["40%", "20%", "22%", "18%"],
         )
 
     # Signatures

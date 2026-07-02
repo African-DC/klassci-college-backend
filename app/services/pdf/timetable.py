@@ -126,7 +126,7 @@ def generate_timetable_pdf(
         table_rows += f"""
         <tr>
             <td style="background:var(--soft-bg); font-weight:bold; text-align:center;
-                       font-size:9px; border:1px solid var(--border); width:50px;
+                       font-size:9px; border:1px solid var(--border);
                        color:var(--primary);">
                 {hour:02d}:00
             </td>
@@ -139,6 +139,14 @@ def generate_timetable_pdf(
         f'padding:6px; font-size:10px; border:1px solid var(--primary);">'
         f"{_DAYS_FR.get(d, d)}</th>"
         for d in _DAYS_ORDER
+    )
+
+    # Colonne heure étroite + jours de largeur égale (table-layout fixe)
+    day_col_width = 93.0 / len(_DAYS_ORDER)
+    colgroup = (
+        '<colgroup><col style="width:7%;"/>'
+        + f'<col style="width:{day_col_width:.2f}%;"/>' * len(_DAYS_ORDER)
+        + "</colgroup>"
     )
 
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -173,11 +181,12 @@ def generate_timetable_pdf(
     }
 
         <table class="pdf-timetable">
+            {colgroup}
             <thead>
                 <tr>
                     <th style="background:var(--primary); color:white; text-align:center;
                                 padding:6px; font-size:10px;
-                                border:1px solid var(--primary); width:50px;">
+                                border:1px solid var(--primary);">
                         Heure
                     </th>
                     {day_headers}

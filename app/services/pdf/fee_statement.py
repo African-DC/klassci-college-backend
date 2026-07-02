@@ -124,11 +124,22 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         cards=[
             {"label": "Total attendu", "value": f"{_fmt(total_expected)} XOF"},
             {"label": "Total versé", "value": f"{_fmt(total_paid)} XOF", "tone": "success"},
-            {"label": "Reste à payer", "value": f"{_fmt(total_remaining)} XOF", "tone": "accent"},
             {"label": "Avancement", "value": f"{completion_rate:.1f}%"},
         ],
         theme=theme,
     )
+
+    balance_box = ui.amount_box(
+        total_remaining, theme=theme, label="Solde restant dû", currency="XOF"
+    )
+
+    fees_total_row = [
+        {"value": "Total", "type": "emphasis"},
+        {"value": _fmt(total_expected), "type": "num"},
+        {"value": _fmt(total_paid), "type": "num"},
+        {"value": _fmt(total_remaining), "type": "num-emphasis"},
+        "",
+    ]
 
     fees_section = ui.section_title("Détail des frais", theme=theme) + ui.premium_table(
         headers=[
@@ -141,6 +152,8 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         rows=_fee_rows(fees),
         theme=theme,
         empty_message="Aucun frais configuré pour cette inscription.",
+        total_row=fees_total_row if fees else None,
+        col_widths=["34%", "17%", "17%", "17%", "15%"],
     )
 
     payments_section = ui.section_title(
@@ -157,6 +170,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         rows=_payment_rows(payments),
         theme=theme,
         empty_message="Aucun versement enregistré à ce jour.",
+        col_widths=["8%", "14%", "18%", "24%", "18%", "18%"],
     )
 
     html = f"""
@@ -179,6 +193,8 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
 
         {kpis}
         {ui.progress_bar(completion_rate, theme=theme)}
+
+        {balance_box}
 
         {fees_section}
 
