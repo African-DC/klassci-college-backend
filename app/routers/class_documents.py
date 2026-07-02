@@ -4,13 +4,15 @@ Séparé d'`admin.py` (1300+ LOC) et de `enrollments.py` pour rester
 sous la limite no-god-code. Pattern miroir de `student_documents.py`.
 """
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_tenant_db, require_permission
 from app.routers._pdf_helpers import pdf_response
-from app.services import class_roster_service, class_sheets_service
+from app.services import cahier_texte_service, class_roster_service, class_sheets_service
 
 router = APIRouter(prefix="/admin/classes", tags=["admin", "class-documents"])
 
@@ -77,4 +79,28 @@ async def get_grade_sheet_pdf(
         lambda: class_sheets_service.get_grade_sheet_pdf(db, class_id, columns),
         filename=f"feuille-notes-{class_id}.pdf",
         error_context=f"feuille de notes {class_id}",
+    )
+
+
+@router.get(
+    "/{class_id}/cahier-texte",
+    summary="Cahier de texte (PDF) — séances datées depuis l'EDT, contenu à remplir",
+)
+async def get_cahier_texte_pdf(
+    class_id: int,
+    start: date | None = Query(None, description="Début de période (défaut : semaine courante)"),
+    end: date | None = Query(None, description="Fin de période (défaut : semaine courante)"),
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Cahier de texte structuré depuis l'emploi du temps (AY courante).
+
+    Développe les créneaux EDT sur les dates réelles de la période. Colonnes
+    Contenu / Travail à faire laissées vides pour l'écriture manuscrite. Paysage
+    A4. Pas de document officiel (ni CEV ni signature).
+    """
+    return await pdf_response(
+        lambda: cahier_texte_service.get_cahier_texte_pdf(db, class_id, start, end),
+        filename=f"cahier-texte-{class_id}.pdf",
+        error_context=f"cahier de texte {class_id}",
     )

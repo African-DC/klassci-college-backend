@@ -17,7 +17,7 @@ from app.schemas.reports import (
     BulletinListResponse,
     BulletinResponse,
 )
-from app.services import class_synthesis_service
+from app.services import class_synthesis_service, grade_report_service
 from app.services import reports_service as service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -108,6 +108,25 @@ async def get_class_synthesis_pdf(
         ),
         filename=f"synthese_classe_{class_id}_T{trimester}.pdf",
         error_context=f"class synthesis {class_id}",
+    )
+
+
+@router.get("/classes/{class_id}/grade-report")
+async def get_class_grade_report_pdf(
+    class_id: int,
+    subject_id: int = Query(...),
+    trimester: int = Query(..., ge=1, le=3),
+    academic_year_id: int = Query(...),
+    _: None = require_permission("reports:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Relevé de notes rempli d'une (classe, matière, trimestre) — moyennes + rangs."""
+    return await pdf_response(
+        lambda: grade_report_service.get_grade_report_pdf(
+            db, class_id, subject_id, trimester, academic_year_id
+        ),
+        filename=f"releve-notes-{class_id}-S{subject_id}-T{trimester}.pdf",
+        error_context=f"relevé de notes classe {class_id}",
     )
 
 
