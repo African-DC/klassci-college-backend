@@ -82,6 +82,7 @@ def generate_class_roster_pdf(data: dict[str, Any], school_settings: dict[str, A
         rows=student_rows(students),
         theme=theme,
         empty_message="Aucun élève inscrit dans cette classe pour l'année courante.",
+        col_widths=["5%", "8%", "14%", "30%", "7%", "14%", "22%"],
     )
 
     signatures = ui.signature_block(

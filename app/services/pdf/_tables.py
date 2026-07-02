@@ -22,6 +22,7 @@ def premium_table(
     theme: PDFTheme,
     empty_message: str = "Aucune donnée.",
     total_row: list[Any] | None = None,
+    col_widths: list[str] | None = None,
 ) -> str:
     """Tableau zebra + header primary + cellules typées.
 
@@ -31,11 +32,24 @@ def premium_table(
       - string / number → rendue telle quelle (escaped)
       - dict {"value": str, "type": "num|pill|muted|emphasis|html"} → rendu typé
     `total_row` : ligne récap (mise en valeur orange/primary). Optionnelle.
+    `col_widths` : largeurs fixes des colonnes (ex: ["34%", "11%", ...]) rendues
+        via un `<colgroup>` pour caler l'alignement (table-layout est fixe).
     """
+    colgroup_html = ""
+    if col_widths:
+        colgroup_html = (
+            "<colgroup>"
+            + "".join(f'<col style="width:{esc(w)};"/>' for w in col_widths)
+            + "</colgroup>"
+        )
+
     if not rows:
+        colspan = len(headers) if headers else 1
         return f"""
         <table class="pdf-table">
-            <tbody><tr><td style="text-align:center; padding:14px; color:var(--muted);">
+            {colgroup_html}
+            <tbody><tr><td colspan="{colspan}"
+                style="text-align:center; padding:14px; color:var(--muted);">
                 {esc(empty_message)}
             </td></tr></tbody>
         </table>
@@ -63,6 +77,7 @@ def premium_table(
 
     return f"""
     <table class="pdf-table">
+        {colgroup_html}
         <thead>{head_html}</thead>
         <tbody>{"".join(body_rows)}{total_html}</tbody>
     </table>
