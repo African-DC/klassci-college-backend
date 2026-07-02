@@ -24,6 +24,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Feuilles de travail vierges à imprimer pour une classe, en PDF paysage : une **feuille d'appel** (colonnes de présence numérotées à cocher au stylo, avec légende P/A/R/E) et une **feuille de notes** (colonnes de notes et colonne moyenne à remplir à la main). Les deux reprennent l'en-tête institutionnel de l'établissement mais restent de simples feuilles de travail (ni cachet électronique ni signature), avec un nombre de colonnes paramétrable *(admin, enseignant)*.
 - Rapport de synthèse de classe par trimestre, en PDF officiel aux couleurs de l'établissement : palmarès des élèves (rang, moyenne, mention), statistiques par matière (moyenne de la classe, min, max) et indicateurs clés (effectif, moyenne de classe, taux de réussite), prêt pour le conseil de classe *(admin, enseignant)*.
 - Cachet Électronique Visible (CEV) sur le certificat de scolarité, l'attestation de fréquentation et le bulletin : un cachet 2D (Datamatrix) signé cryptographiquement plus un code lisible « CEV-XXXX-XXXX-XXXX ». Un parent ou un employeur scanne le cachet ou saisit le code sur la page publique pour confirmer l'authenticité du document, sans aucun compte *(admin, parent, élève)*.
 - Page de vérification publique des documents : confirme l'authenticité (établissement, type, élève, classe, année, date, référence) et détecte toute falsification grâce à la signature. La falsification d'un document imprimé est ainsi immédiatement repérable *(transverse)*.
