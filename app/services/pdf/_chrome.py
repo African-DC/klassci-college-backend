@@ -1,4 +1,10 @@
-"""Chrome PDF — base styles + RCI banner + premium header + footer + signatures.
+"""Chrome PDF — socle sobre « document officiel » (2026-refonte).
+
+Direction : institutionnel sobre. La typo (Spectral display + Inter corps) et
+la hiérarchie portent l'autorité ; la couleur primaire est STRUCTURELLE (filet,
+titres, chiffres-clés) et l'accent est réservé à UN point focal par document.
+Pas de double cadre, pas de filigrane bruyant, pas de sceau décoratif : le
+Cachet Électronique Visible (CEV) est l'élément signature.
 
 Exporté via `components.py` (aggregator). Ne pas importer ce module
 directement depuis les generators : utiliser
@@ -10,15 +16,15 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.pdf._helpers import esc, image_to_datauri
-from app.services.pdf.theme import PDFTheme
+from app.services.pdf.theme import PDFTheme, font_face_css
 
 
-def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm") -> str:
-    """Bloc <style> avec CSS variables + classes utilitaires globales."""
+def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 15mm") -> str:
+    """Bloc <style> : @font-face + CSS variables + classes utilitaires globales."""
     return f"""
     <style>
+        {font_face_css()}
         @page {{ size: {page_size}; margin: {margin}; }}
-        html {{ height: 100%; }}
         :root {{
             --primary: {theme.primary};
             --accent: {theme.accent};
@@ -29,17 +35,19 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
             --success: {theme.success};
             --warn: {theme.warn};
             --danger: {theme.danger};
+            --font-display: {theme.font_serif};
+            --font-body: {theme.font_family};
         }}
         body {{
-            font-family: {theme.font_family};
-            font-size: 11px;
+            font-family: var(--font-body);
+            font-size: 10.5px;
             color: var(--ink);
             line-height: 1.45;
-            height: 100%;
             margin: 0;
         }}
-        h1, h2, h3 {{ margin: 0; }}
+        h1, h2, h3 {{ margin: 0; font-family: var(--font-display); font-weight: 700; }}
         a {{ color: var(--primary); text-decoration: none; }}
+        strong {{ font-weight: 600; }}
         /* Utilities */
         .text-center {{ text-align: center; }}
         .text-right {{ text-align: right; }}
@@ -48,72 +56,150 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
         .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
         .emphasis {{ font-weight: 600; color: var(--primary); }}
         .mono {{ font-family: 'Courier New', monospace; font-size: 9px; }}
-        /* Section title : border-bottom primary + uppercase */
-        .pdf-section-title {{
-            font-size: 12px; font-weight: 700; color: var(--primary);
-            text-transform: uppercase; letter-spacing: 0.4px;
-            border-bottom: 2px solid var(--primary); padding-bottom: 3px;
-            margin: 16px 0 10px;
+
+        /* ============ En-tête : eyebrow RCI + masthead + filet ============ */
+        .doc-eyebrow {{
+            text-align: center; font-size: 8px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
         }}
-        /* Premium table — zebra + accent header */
-        .pdf-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+        .masthead {{
+            display: flex; align-items: center; gap: 13px;
+            padding-bottom: 9px;
+        }}
+        .masthead-logo {{ flex: 0 0 auto; }}
+        .masthead-id {{ flex: 1; }}
+        .masthead-name {{
+            font-family: var(--font-display); font-weight: 700;
+            font-size: 17px; color: var(--primary); line-height: 1.15;
+            letter-spacing: 0.2px;
+        }}
+        .masthead-meta {{
+            font-size: 8.5px; color: var(--muted); margin-top: 3px; line-height: 1.5;
+        }}
+        .doc-filet {{
+            height: 0; border-bottom: 1.5px solid var(--primary); margin: 0;
+        }}
+        .doc-filet-soft {{ height: 0; border-bottom: 0.75px solid var(--border); }}
+
+        /* Titre de document */
+        .doc-title-block {{ text-align: center; margin: 15px 0 4px; }}
+        .doc-title {{
+            font-family: var(--font-display); font-weight: 700;
+            font-size: 19px; color: var(--ink); letter-spacing: 0.6px;
+        }}
+        .doc-subtitle {{
+            font-size: 11px; color: var(--muted); margin-top: 3px;
+        }}
+        .doc-number {{
+            text-align: right; font-family: 'Courier New', monospace;
+            font-size: 8.5px; color: var(--muted); margin-top: 2px;
+        }}
+
+        /* Bandeau identité (élève / méta) — filet léger, pas de boîte */
+        .pdf-meta-strip {{
+            display: flex; justify-content: space-between; gap: 18px;
+            padding: 8px 0; margin: 10px 0;
+            border-top: 0.75px solid var(--border);
+            border-bottom: 0.75px solid var(--border);
+            font-size: 10px;
+        }}
+
+        /* Titre de section : Inter 600, filet primaire court */
+        .pdf-section-title {{
+            font-size: 10.5px; font-weight: 600; color: var(--primary);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            padding-bottom: 4px; margin: 16px 0 9px;
+            border-bottom: 1px solid var(--border);
+        }}
+
+        /* ============ Tableaux — calmes : en-tête texte + filet primaire ==== */
+        .pdf-table {{
+            width: 100%; border-collapse: collapse; font-size: 9.5px;
+            table-layout: fixed;
+        }}
         .pdf-table thead th {{
-            background: var(--primary); color: white; padding: 6px 8px;
-            text-align: left; text-transform: uppercase; font-size: 9px;
-            letter-spacing: 0.3px; font-weight: 600;
+            background: var(--soft-bg); color: var(--ink);
+            padding: 6px 8px; text-align: left; text-transform: uppercase;
+            font-size: 8px; letter-spacing: 0.4px; font-weight: 600;
+            border-bottom: 1.5px solid var(--primary);
         }}
         .pdf-table tbody td {{
-            padding: 6px 8px; border-bottom: 1px solid var(--border);
+            padding: 5px 8px; border-bottom: 0.75px solid var(--border);
+            vertical-align: top; word-wrap: break-word;
         }}
         .pdf-table tbody tr:nth-child(even) td {{ background: var(--soft-bg); }}
         .pdf-table tbody tr.total-row td {{
-            background: rgba(245, 130, 32, 0.08);
-            border-top: 2px solid var(--accent);
-            font-weight: 700; color: var(--primary);
+            background: transparent; border-top: 1.5px solid var(--accent);
+            border-bottom: none; font-weight: 700; color: var(--primary);
         }}
-        /* Status pills (sémantiques cohérentes FE Tailwind) */
+        .pdf-table .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+
+        /* Status pills (sémantiques — surtout finance) */
         .pdf-pill {{
-            display: inline-block; padding: 2px 8px; border-radius: 999px;
-            font-size: 9px; font-weight: 600; text-transform: uppercase;
+            display: inline-block; padding: 1.5px 7px; border-radius: 999px;
+            font-size: 8.5px; font-weight: 600; text-transform: uppercase;
             letter-spacing: 0.3px; white-space: nowrap;
         }}
         .pdf-pill-paid, .pdf-pill-completed, .pdf-pill-valide {{ background: #d1fae5; color: #065f46; }}
         .pdf-pill-partial {{ background: #fef3c7; color: #92400e; }}
-        .pdf-pill-pending, .pdf-pill-prospect {{ background: #e2e8f0; color: #475569; }}
+        .pdf-pill-pending, .pdf-pill-prospect {{ background: #eef2f6; color: #475569; }}
         .pdf-pill-waived {{ background: #f3e8ff; color: #6b21a8; }}
         .pdf-pill-cancelled, .pdf-pill-rejete, .pdf-pill-failed {{ background: #fee2e2; color: #991b1b; }}
         .pdf-pill-en_validation, .pdf-pill-refunded {{ background: #dbeafe; color: #1e40af; }}
-        /* KPI cards */
+
+        /* Chiffres-clés : bande compacte plutôt que grosses boîtes KPI */
+        .pdf-keyfigures {{
+            display: flex; gap: 0; margin: 12px 0;
+            border: 0.75px solid var(--border); border-radius: 5px; overflow: hidden;
+        }}
+        .pdf-keyfigure {{
+            flex: 1; padding: 9px 12px; text-align: center;
+            border-right: 0.75px solid var(--border);
+        }}
+        .pdf-keyfigure:last-child {{ border-right: none; }}
+        .pdf-keyfigure-label {{
+            font-size: 8px; color: var(--muted); text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }}
+        .pdf-keyfigure-value {{
+            font-family: var(--font-display); font-size: 18px; font-weight: 700;
+            color: var(--primary); margin-top: 3px; font-variant-numeric: tabular-nums;
+        }}
+        .pdf-keyfigure-value.is-focal {{ color: var(--accent); }}
+
+        /* KPI cards (rétrocompat generators) — allégées */
         .pdf-kpis {{ display: flex; gap: 10px; margin: 8px 0 14px; }}
         .pdf-kpi {{
-            flex: 1; padding: 10px 12px; border: 1px solid var(--border);
-            border-radius: 6px; background: var(--soft-bg); text-align: center;
+            flex: 1; padding: 9px 12px; border: 0.75px solid var(--border);
+            border-radius: 5px; text-align: center;
         }}
         .pdf-kpi-label {{
-            font-size: 9px; color: var(--muted);
+            font-size: 8px; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.3px;
         }}
         .pdf-kpi-value {{
-            font-size: 16px; font-weight: 700; color: var(--primary);
-            margin-top: 4px; font-variant-numeric: tabular-nums;
+            font-family: var(--font-display); font-size: 16px; font-weight: 700;
+            color: var(--primary); margin-top: 3px; font-variant-numeric: tabular-nums;
         }}
         .pdf-kpi-value-accent {{ color: var(--accent); }}
         .pdf-kpi-value-success {{ color: var(--success); }}
         .pdf-kpi-value-warn {{ color: var(--warn); }}
-        /* Amount box (montant principal premium gradient) */
+
+        /* Amount box — sobre : filet accent à gauche, pas de dégradé */
         .pdf-amount-box {{
-            text-align: center; padding: 14px; margin: 10px 0;
-            border: 2px solid var(--primary); border-radius: 8px;
-            background: linear-gradient(135deg, var(--soft-bg) 0%, #eef2ff 100%);
+            padding: 12px 16px; margin: 12px 0;
+            border: 0.75px solid var(--border); border-left: 3px solid var(--accent);
+            border-radius: 4px; background: var(--soft-bg);
         }}
         .pdf-amount-label {{
-            font-size: 10px; color: var(--muted);
+            font-size: 9px; color: var(--muted);
             text-transform: uppercase; letter-spacing: 0.4px;
         }}
         .pdf-amount-value {{
-            font-size: 22px; font-weight: 700; color: var(--primary);
-            margin-top: 4px; font-variant-numeric: tabular-nums;
+            font-family: var(--font-display); font-size: 22px; font-weight: 700;
+            color: var(--primary); margin-top: 3px; font-variant-numeric: tabular-nums;
         }}
+
         /* Info grid */
         .pdf-info-grid {{
             display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;
@@ -122,160 +208,116 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "15mm")
         .pdf-info-row {{ display: flex; gap: 8px; padding: 2px 0; }}
         .pdf-info-label {{
             color: var(--muted); width: 130px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.2px; font-size: 9px;
+            text-transform: uppercase; letter-spacing: 0.2px; font-size: 8.5px;
         }}
         .pdf-info-value {{ flex: 1; color: var(--ink); }}
+
         /* Progress bar */
         .pdf-progress {{
-            width: 100%; height: 10px; background: var(--border);
-            border-radius: 5px; overflow: hidden; margin: 6px 0 12px;
+            width: 100%; height: 8px; background: var(--border);
+            border-radius: 4px; overflow: hidden; margin: 6px 0 12px;
         }}
-        .pdf-progress-fill {{
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
-        }}
-        /* Signatures (premium dashed cards) */
+        .pdf-progress-fill {{ height: 100%; background: var(--primary); }}
+
+        /* Signatures — colonnes sobres (pas de boîte pointillée) */
         .pdf-signatures {{
-            display: flex; justify-content: space-between; gap: 14px;
-            margin-top: 28px;
+            display: flex; justify-content: space-between; gap: 18px;
+            margin-top: 26px;
         }}
-        .pdf-signature {{
-            flex: 1; text-align: center; padding: 12px;
-            border: 1px dashed var(--border); border-radius: 6px;
-        }}
+        .pdf-signature {{ flex: 1; text-align: center; }}
         .pdf-signature-role {{
-            color: var(--muted); font-size: 10px; font-weight: 600;
+            color: var(--ink); font-size: 9.5px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.3px;
         }}
         .pdf-signature-line {{
-            border-top: 1px solid var(--ink); margin-top: 44px;
-            padding-top: 4px; font-size: 9px; color: var(--muted);
+            border-top: 0.75px solid var(--ink); margin-top: 42px;
+            padding-top: 4px; font-size: 8.5px; color: var(--muted);
         }}
-        /* Footer note */
+
+        /* Footer */
         .pdf-footer {{
-            margin-top: 22px; padding-top: 10px;
-            border-top: 1px solid var(--border);
-            font-size: 8.5px; color: var(--muted);
-            display: flex; justify-content: space-between; gap: 10px;
+            margin-top: 20px; padding-top: 9px;
+            border-top: 0.75px solid var(--border);
+            font-size: 8px; color: var(--muted);
+            display: flex; justify-content: space-between; gap: 12px;
         }}
         .pdf-footer-school {{ flex: 1; }}
         .pdf-footer-meta {{ text-align: right; }}
         .pdf-ref {{
-            font-family: 'Courier New', monospace; font-size: 8.5px;
+            font-family: 'Courier New', monospace; font-size: 8px;
             letter-spacing: 0.5px; color: var(--muted);
         }}
-        /* Cachet Électronique Visible (Datamatrix + code CEV) — docs officiels */
+
+        /* ============ Cachet Électronique Visible (élément signature) ======= */
         .pdf-verify {{
-            margin-top: 18px; padding: 8px 12px;
-            border: 1px solid var(--border); border-radius: 6px;
+            margin-top: 16px; padding: 9px 12px;
+            border: 0.75px solid var(--border); border-radius: 5px;
             background: var(--soft-bg);
             display: flex; align-items: center; gap: 12px;
         }}
         .pdf-verify-cev {{
-            width: 72px; height: 72px; flex: 0 0 72px;
-            border: 1px solid var(--border); border-radius: 4px; background: #fff;
+            width: 62px; height: 62px; flex: 0 0 62px;
+            border: 0.75px solid var(--border); border-radius: 3px; background: #fff;
             padding: 2px; box-sizing: border-box;
         }}
         .pdf-verify-cev svg {{ width: 100%; height: 100%; display: block; }}
-        .pdf-verify-text {{
-            font-size: 9px; color: var(--muted); line-height: 1.5;
-        }}
-        .pdf-verify-text strong {{ color: var(--primary); font-size: 9.5px; }}
+        .pdf-verify-text {{ font-size: 8.5px; color: var(--muted); line-height: 1.5; }}
+        .pdf-verify-text strong {{ color: var(--primary); font-size: 9px; }}
         .pdf-verify-url {{
-            font-family: 'Courier New', monospace; font-size: 8px;
+            font-family: 'Courier New', monospace; font-size: 7.5px;
             color: var(--ink); word-break: break-all;
         }}
         .pdf-verify-code {{
             font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
             letter-spacing: 1px; color: var(--primary); margin-top: 3px;
         }}
-        /* ============ Cadre document officiel (opt-in via document_frame) ===== */
-        .pdf-doc {{
-            position: relative; box-sizing: border-box;
-            border: 2.5px solid var(--primary); border-radius: 4px;
-            padding: 13mm 12mm 9mm; height: 100%;
-            display: flex; flex-direction: column; overflow: hidden;
-        }}
-        .pdf-doc::after {{
-            content: ""; position: absolute; top: 4px; left: 4px;
-            right: 4px; bottom: 4px; border: 0.8px solid var(--primary);
-            opacity: 0.35; pointer-events: none;
-        }}
-        .pdf-doc-header, .pdf-doc-body, .pdf-doc-bottom {{ position: relative; z-index: 1; }}
-        .pdf-doc-body {{ flex: 1; }}
-        .pdf-doc-bottom {{ margin-top: auto; }}
-        /* Filigrane diagonal discret (nom de l'école) */
-        .pdf-watermark {{
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%) rotate(-32deg);
-            font-family: var(--font-serif, Georgia, serif);
-            font-size: 30px; font-weight: 700; letter-spacing: 1px;
-            color: var(--primary); opacity: 0.13; white-space: nowrap;
-            text-transform: uppercase; text-align: center; z-index: 0;
-        }}
-        /* Décoration de page répétée (cadre + filigrane FIXES) — pour les
-           documents multi-pages (liste de classe, bordereau, EDT, PV). Se
-           répète automatiquement sur chaque page sans rogner le contenu. */
-        .pdf-page-frame {{
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            border: 2.5px solid var(--primary); border-radius: 4px;
-            pointer-events: none; z-index: 0;
-        }}
-        .pdf-page-frame::after {{
-            content: ""; position: absolute; top: 4px; left: 4px;
-            right: 4px; bottom: 4px; border: 0.8px solid var(--primary);
-            opacity: 0.35;
-        }}
-        .pdf-page-watermark {{
-            position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -50%) rotate(-32deg);
-            font-family: var(--font-serif, Georgia, serif);
-            font-size: 30px; font-weight: 700; letter-spacing: 1px;
-            color: var(--primary); opacity: 0.13; white-space: nowrap;
-            text-transform: uppercase; text-align: center; z-index: 0;
-        }}
-        /* Contenu au-dessus de la décoration fixe */
-        .pdf-page-body {{ position: relative; z-index: 1; padding: 4mm 3mm; }}
-        /* Sceau / cachet circulaire (placeholder officiel) */
+
+        /* ============ Structure document (sans cadre lourd) ================= */
+        .pdf-doc {{ position: relative; }}
+        .pdf-doc-header, .pdf-doc-body, .pdf-doc-bottom {{ position: relative; }}
+        .pdf-doc-bottom {{ margin-top: 18px; }}
+        .pdf-page-body {{ position: relative; }}
+
+        /* Sceau / cachet circulaire (placeholder — opt-in, non utilisé par défaut) */
         .pdf-seal {{
-            width: 92px; height: 92px; border: 1.5px solid var(--primary);
+            width: 84px; height: 84px; border: 1.2px solid var(--primary);
             border-radius: 50%; display: flex; align-items: center;
             justify-content: center; text-align: center; color: var(--primary);
-            opacity: 0.6; position: relative;
-        }}
-        .pdf-seal::before {{
-            content: ""; position: absolute; inset: 4px;
-            border: 0.8px solid var(--primary); border-radius: 50%;
+            opacity: 0.65;
         }}
         .pdf-seal-text {{
-            font-size: 8px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: 1px; line-height: 1.3; padding: 0 8px;
+            font-size: 7.5px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.8px; line-height: 1.3; padding: 0 8px;
         }}
+
         /* Monogramme (fallback identité si pas de logo) */
         .pdf-monogram {{
-            width: 64px; height: 64px; border-radius: 50%;
+            width: 58px; height: 58px; border-radius: 5px;
             background: var(--primary); color: #fff; display: flex;
-            align-items: center; justify-content: center; font-size: 22px;
+            align-items: center; justify-content: center; font-size: 20px;
             font-weight: 700; letter-spacing: 1px;
-            font-family: var(--font-serif, Georgia, serif);
+            font-family: var(--font-display);
         }}
     </style>
     """
 
 
+# Conservé pour rétrocompat (imports externes éventuels). Non utilisé par le
+# nouvel en-tête, qui condense la mention RCI en une seule ligne « eyebrow ».
 CI_BANNER_HTML = """
-<div style="text-align:center; margin-bottom:8px; color:#334155;">
-    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.4px;">
-        République de Côte d'Ivoire
-    </div>
-    <div style="font-size:9px; font-style:italic; margin-bottom:3px;">
-        Union &mdash; Discipline &mdash; Travail
-    </div>
-    <div style="font-size:9px;">
-        Ministère de l'Éducation Nationale et de l'Alphabétisation
-    </div>
+<div class="doc-eyebrow">
+    République de Côte d'Ivoire · Union — Discipline — Travail · MENA
 </div>
 """
+
+
+def _eyebrow_html() -> str:
+    """Ligne unique RCI/MENA (remplace le bandeau 3 lignes)."""
+    return (
+        '<div class="doc-eyebrow">République de Côte d\'Ivoire'
+        " · Union — Discipline — Travail"
+        " · Ministère de l'Éducation Nationale et de l'Alphabétisation</div>"
+    )
 
 
 def premium_header(
@@ -287,105 +329,72 @@ def premium_header(
     doc_number: str | None = None,
     show_ci_banner: bool = True,
 ) -> str:
-    """Bandeau premium : banner RCI + logo + nom + code + adresse + doc type."""
+    """En-tête sobre : eyebrow RCI (1 ligne) + masthead + filet + titre document."""
     school = school or {}
     school_name = esc(school.get("school_name", "Établissement"))
     ministry_code = esc(school.get("ministry_code") or "")
     address = esc(school.get("address") or "")
     phone = esc(school.get("phone") or "")
     email = esc(school.get("email") or "")
-    motto = esc(school.get("motto") or "")
     logo_data = image_to_datauri(school.get("logo_url"))
 
-    ci = CI_BANNER_HTML if show_ci_banner else ""
+    eyebrow = _eyebrow_html() if show_ci_banner else ""
 
     if logo_data:
         logo_html = (
             f'<img src="{logo_data}" alt="Logo" '
-            f'style="max-height:72px; max-width:160px; object-fit:contain;" />'
+            f'style="max-height:58px; max-width:150px; object-fit:contain;" />'
         )
     else:
-        # Fallback identité : monogramme circulaire avec les initiales de l'école
-        # (évite un en-tête nu quand le tenant n'a pas encore uploadé son logo).
         words = [w for w in (school.get("school_name") or "E").split() if w]
         initials = "".join(w[0] for w in words[:2]).upper() or "E"
         logo_html = f'<div class="pdf-monogram">{esc(initials)}</div>'
 
-    contact_lines: list[str] = []
+    # Méta condensée : 2 lignes max (adresse ; code · contact)
+    meta_lines: list[str] = []
     if address:
-        contact_lines.append(esc(address))
-    contact_pieces = [p for p in (phone, email) if p]
-    if contact_pieces:
-        contact_lines.append(" · ".join(contact_pieces))
-    contact_html = (
-        '<div style="font-size:9px; color:var(--muted); margin-top:2px;">'
-        + "<br/>".join(contact_lines)
-        + "</div>"
-        if contact_lines
-        else ""
+        meta_lines.append(address)
+    line2 = " · ".join(
+        p
+        for p in (
+            f"Code MENA : {ministry_code}" if ministry_code else "",
+            phone,
+            email,
+        )
+        if p
     )
+    if line2:
+        meta_lines.append(line2)
+    meta_html = f'<div class="masthead-meta">{"<br/>".join(meta_lines)}</div>' if meta_lines else ""
 
-    code_html = (
-        f'<div style="font-size:9px; color:var(--muted); margin-top:2px;">'
-        f"Code MENA : <strong>{ministry_code}</strong></div>"
-        if ministry_code
-        else ""
-    )
-
-    motto_html = (
-        f'<div style="font-size:9px; font-style:italic; color:var(--accent); '
-        f'margin-top:3px;">« {motto} »</div>'
-        if motto
-        else ""
-    )
-
-    header_block = f"""
-    <div style="display:flex; align-items:center; gap:14px; margin-bottom:6px;
-                padding-bottom:8px; border-bottom:1px solid var(--border);">
-        <div style="flex:0 0 auto;">{logo_html}</div>
-        <div style="flex:1; text-align:center;">
-            <div style="font-size:15px; font-weight:700; color:var(--primary);
-                        letter-spacing:0.3px;">
-                {school_name}
-            </div>
-            {code_html}
-            {contact_html}
-            {motto_html}
+    masthead = f"""
+    <div class="masthead">
+        <div class="masthead-logo">{logo_html}</div>
+        <div class="masthead-id">
+            <div class="masthead-name">{school_name}</div>
+            {meta_html}
         </div>
     </div>
+    <div class="doc-filet"></div>
     """
 
     title_block = ""
-    if doc_type or doc_number:
-        type_html = (
-            f'<h1 style="font-size:17px; color:var(--primary); '
-            f'letter-spacing:0.8px; margin:8px 0 2px;">{esc(doc_type)}</h1>'
-            if doc_type
-            else ""
-        )
+    if doc_type:
         subtitle_html = (
-            f'<div style="font-size:11px; color:var(--accent); '
-            f'font-weight:600; margin-bottom:6px;">{esc(doc_subtitle)}</div>'
-            if doc_subtitle
-            else ""
+            f'<div class="doc-subtitle">{esc(doc_subtitle)}</div>' if doc_subtitle else ""
         )
-        number_html = (
-            f'<div style="text-align:right; font-size:9px; '
-            f'color:var(--muted); margin-bottom:6px;">{esc(doc_number)}</div>'
-            if doc_number
-            else ""
-        )
-        title_block = f"""
-        <div style="text-align:center; margin: 6px 0 10px;">
-            {type_html}
+        title_block += f"""
+        <div class="doc-title-block">
+            <div class="doc-title">{esc(doc_type)}</div>
             {subtitle_html}
         </div>
-        {number_html}
         """
+    if doc_number:
+        title_block += f'<div class="doc-number">{esc(doc_number)}</div>'
 
     return f"""
-    {ci}
-    {header_block}
+    {eyebrow}
+    {masthead}
     {title_block}
     """
 
@@ -400,13 +409,11 @@ def premium_footer(
     cev_code: str | None = None,
     verify_url: str | None = None,
 ) -> str:
-    """Footer : adresse école compacte à gauche + note/réf/date à droite.
+    """Footer : école compacte à gauche + réf/note à droite, précédé du CEV.
 
-    `reference` : numéro de référence du document (officialisant, affiché en
-    mono au-dessus de la note légale).
-    `cev_svg` + `cev_code` + `verify_url` : si fournis, ajoute le **Cachet
-    Électronique Visible** (Datamatrix + code CEV lisible + URL publique)
-    au-dessus du pied de page — pour les documents officiels vérifiables.
+    `reference` : numéro de référence (officialisant, en mono).
+    `cev_svg` + `cev_code` + `verify_url` : ajoute le Cachet Électronique Visible
+    (Datamatrix + code + URL publique) — l'élément signature des docs vérifiables.
     """
     school = school or {}
     pieces: list[str] = []
@@ -456,21 +463,15 @@ def document_frame(
     bottom_html: str,
     watermark_text: str | None = None,
 ) -> str:
-    """Cadre de document officiel : bordure double + filigrane + remplir-la-page.
+    """Assemble un document en 3 zones (en-tête / corps / bas), sobre.
 
-    Structure en 3 zones (flex column) : en-tête, corps (flex:1) et bas de page
-    (poussé au pied via margin-top:auto). Évite la moitié de page vide des docs
-    d'une page (certificat, attestation). Le filigrane (nom de l'école) est en
-    fond, faible opacité. Thémé par les couleurs du tenant via les CSS variables
-    de `base_styles`. Réutilisable par tous les générateurs.
+    Refonte 2026 : plus de cadre double ni de filigrane (ils créaient du fouillis
+    et une moitié de page encadrée vide). Le bas suit le corps naturellement ;
+    l'espace restant en pied est du blanc franc, pas une zone encadrée vide.
+    `watermark_text` conservé pour compat mais volontairement ignoré.
     """
-    # Filigrane en position:fixed (au niveau de la page) — plus fiable que
-    # absolute dans le flex container (et non rogné par overflow:hidden).
-    watermark = (
-        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>' if watermark_text else ""
-    )
+    _ = watermark_text  # compat de signature — filigrane retiré (direction sobre)
     return f"""
-    {watermark}
     <div class="pdf-doc">
         <div class="pdf-doc-header">{header_html}</div>
         <div class="pdf-doc-body">{body_html}</div>
@@ -485,13 +486,7 @@ def seal_block(*, theme: PDFTheme, label: str = "Cachet de l'établissement") ->
 
 
 def signatory_clause(head_master_name: str, head_master_title: str) -> str:
-    """« Je soussigné(e), <Nom>, <Titre> » — sans doublon si nom == titre.
-
-    Partagé par les documents officiels signés (certificat, attestation…).
-    Quand le nom du chef d'établissement n'est pas renseigné, le BE retombe sur
-    le titre pour les deux champs : on n'affiche alors qu'une seule fois le
-    titre au lieu de le répéter.
-    """
+    """« Je soussigné(e), <Nom>, <Titre> » — sans doublon si nom == titre."""
     name = (head_master_name or "").strip()
     title = (head_master_title or "").strip() or "Le Chef d'Établissement"
     if name and name != title:
@@ -500,23 +495,19 @@ def signatory_clause(head_master_name: str, head_master_title: str) -> str:
 
 
 def page_decoration(*, theme: PDFTheme, watermark_text: str | None = None) -> str:
-    """Cadre + filigrane FIXES, répétés sur chaque page (documents multi-pages).
+    """Décoration de page pour les documents multi-pages.
 
-    À placer en tout début de `<body>`, AVANT le contenu. Contrairement à
-    `document_frame` (cadre plein-page mono-page qui rogne le débordement), ces
-    éléments `position: fixed` se répètent sur chaque page sans clipper le
-    contenu qui s'étale sur plusieurs pages. Enrober le contenu dans
-    `<div class="pdf-page-body">…</div>` pour qu'il passe au-dessus.
-    Thémé par la couleur primaire du tenant.
+    Refonte 2026 : plus de cadre fixe ni de filigrane répétés (source du fouillis
+    sur les grandes tables). Les `<thead>` se répètent nativement sous WeasyPrint,
+    le footer et le masthead suffisent à cadrer. Renvoie "" (aucune décoration) ;
+    conservé pour compat de signature avec les generators multi-pages.
     """
-    watermark = (
-        f'<div class="pdf-page-watermark">{esc(watermark_text)}</div>' if watermark_text else ""
-    )
-    return f'<div class="pdf-page-frame"></div>{watermark}'
+    _ = (theme, watermark_text)
+    return ""
 
 
 def signature_block(roles: list[dict[str, Any]], *, theme: PDFTheme) -> str:
-    """Bloc signatures dashed cards (1 à 4 rôles)."""
+    """Bloc signatures (1 à 4 rôles), colonnes sobres."""
     if not roles:
         return ""
     cards: list[str] = []
