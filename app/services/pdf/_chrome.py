@@ -63,10 +63,10 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
         }}
         .masthead {{
-            display: flex; align-items: center; gap: 13px;
-            padding-bottom: 9px;
+            display: flex; align-items: center; gap: 20px;
+            padding-bottom: 10px;
         }}
-        .masthead-logo {{ flex: 0 0 auto; }}
+        .masthead-logo {{ flex: 0 0 auto; padding-right: 4px; }}
         .masthead-id {{ flex: 1; }}
         .masthead-name {{
             font-family: var(--font-display); font-weight: 700;
@@ -250,10 +250,10 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* ============ Cachet Électronique Visible (élément signature) ======= */
         .pdf-verify {{
-            margin-top: 16px; padding: 9px 12px;
+            margin-top: 18px; padding: 12px 15px;
             border: 0.75px solid var(--border); border-radius: 5px;
             background: var(--soft-bg);
-            display: flex; align-items: center; gap: 12px;
+            display: flex; align-items: center; gap: 16px;
         }}
         .pdf-verify-cev {{
             width: 62px; height: 62px; flex: 0 0 62px;
@@ -261,15 +261,18 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             padding: 2px; box-sizing: border-box;
         }}
         .pdf-verify-cev svg {{ width: 100%; height: 100%; display: block; }}
-        .pdf-verify-text {{ font-size: 8.5px; color: var(--muted); line-height: 1.5; }}
-        .pdf-verify-text strong {{ color: var(--primary); font-size: 9px; }}
+        .pdf-verify-text {{ font-size: 8.5px; color: var(--muted); line-height: 1.65; }}
+        .pdf-verify-text strong {{
+            color: var(--primary); font-size: 9px;
+            display: inline-block; margin-bottom: 3px;
+        }}
         .pdf-verify-url {{
             font-family: 'Courier New', monospace; font-size: 7.5px;
             color: var(--ink); word-break: break-all;
         }}
         .pdf-verify-code {{
             font-family: 'Courier New', monospace; font-size: 12px; font-weight: 700;
-            letter-spacing: 1px; color: var(--primary); margin-top: 3px;
+            letter-spacing: 1px; color: var(--primary); margin-top: 6px;
         }}
 
         /* ============ Structure document (sans cadre lourd) ================= */
