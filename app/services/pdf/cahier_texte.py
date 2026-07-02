@@ -66,8 +66,8 @@ def _tbody(sessions: list[dict[str, Any]]) -> str:
             f'<td class="cell-date">{ui.esc(s.get("date_str", ""))}</td>'
             f'<td class="cell-day">{ui.esc(s.get("jour", ""))}</td>'
             f'<td class="cell-time">{ui.esc(s.get("horaire", ""))}</td>'
-            f'<td><strong>{ui.esc(s.get("matiere", ""))}</strong></td>'
-            f'<td>{ui.esc(s.get("enseignant", ""))}</td>'
+            f"<td><strong>{ui.esc(s.get('matiere', ''))}</strong></td>"
+            f"<td>{ui.esc(s.get('enseignant', ''))}</td>"
             '<td class="cell-fill">&nbsp;</td>'
             '<td class="cell-fill">&nbsp;</td>'
             "</tr>"
@@ -96,9 +96,7 @@ def generate_cahier_texte_pdf(
     subtitle = " · ".join(ui.esc(p) for p in parts)
 
     table = (
-        '<table class="pdf-table cahier-table">'
-        f"{_colgroup()}{_thead()}{_tbody(sessions)}"
-        "</table>"
+        f'<table class="pdf-table cahier-table">{_colgroup()}{_thead()}{_tbody(sessions)}</table>'
     )
 
     issued_str = datetime.utcnow().strftime("%d/%m/%Y")
