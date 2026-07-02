@@ -13,6 +13,7 @@ Architecture (refactor 2026-05-18) :
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -21,6 +22,44 @@ from typing import Any
 
 DEFAULT_PRIMARY = "#0F3F8C"  # Bleu KLASSCI
 DEFAULT_ACCENT = "#F58220"  # Orange KLASSCI
+
+# ---------------------------------------------------------------------------
+# Polices embarquées (rendu identique sur tout serveur — les .ttf sont dans
+# le repo). Spectral = display (titres, nom d'école) ; Inter = corps + données.
+# ---------------------------------------------------------------------------
+
+FONTS_DIR = Path(__file__).resolve().parent / "fonts"
+
+
+def _font_uri(filename: str) -> str:
+    return (FONTS_DIR / filename).as_uri()
+
+
+def font_face_css() -> str:
+    """Bloc `@font-face` pour Spectral (statique) + Inter (variable, axe wght).
+
+    Injecté en tête de `base_styles`. Si un fichier manque, renvoie "" et les
+    fallbacks système (`Georgia`/`Arial`) prennent le relais sans casser le PDF.
+    """
+    try:
+        inter = _font_uri("Inter-Var.ttf")
+        reg = _font_uri("Spectral-Regular.ttf")
+        semibold = _font_uri("Spectral-SemiBold.ttf")
+        bold = _font_uri("Spectral-Bold.ttf")
+    except (OSError, ValueError):
+        return ""
+    if not FONTS_DIR.exists():
+        return ""
+    return f"""
+        @font-face {{ font-family: 'Inter'; src: url('{inter}') format('truetype');
+            font-weight: 100 900; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{reg}') format('truetype');
+            font-weight: 400; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{semibold}') format('truetype');
+            font-weight: 600; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{bold}') format('truetype');
+            font-weight: 700; font-style: normal; }}
+    """
 
 
 @dataclass(frozen=True)
@@ -42,8 +81,8 @@ class PDFTheme:
     warn: str = "#F59E0B"  # partial / warning
     danger: str = "#EF4444"  # erreur
     info: str = "#3B82F6"  # info neutre
-    font_family: str = "'Helvetica', 'Arial', sans-serif"
-    font_serif: str = "'Georgia', 'Times New Roman', serif"
+    font_family: str = "'Inter', 'Helvetica Neue', 'Arial', sans-serif"
+    font_serif: str = "'Spectral', 'Georgia', 'Times New Roman', serif"
 
     @classmethod
     def from_school(cls, school: dict[str, Any] | None) -> PDFTheme:
