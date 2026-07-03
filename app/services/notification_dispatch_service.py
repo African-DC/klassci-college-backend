@@ -110,6 +110,14 @@ async def dispatch_notification(
         for ch in channels:
             requested_channels.add(ch.value if isinstance(ch, NotificationChannel) else ch)
 
+    # Respecte les préférences de canaux de l'utilisateur (l'in-app reste toujours actif).
+    from app.services import notification_pref_service
+
+    enabled = await notification_pref_service.get_enabled_channels(db, user_id)
+    requested_channels = {
+        c for c in requested_channels if c == NotificationChannel.IN_APP.value or c in enabled
+    }
+
     # ── Charger l'utilisateur avec profils ──
     user = await _get_user_with_profiles(db, user_id)
     if user is None:

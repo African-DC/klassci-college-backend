@@ -28,3 +28,13 @@ class MyProfileUpdate(BaseModel):
 
 class PhotoUrlResponse(BaseModel):
     photo_url: str | None = None
+
+
+class NotificationPrefsResponse(BaseModel):
+    email: bool
+    sms: bool
+
+
+class NotificationPrefsUpdate(BaseModel):
+    email: bool | None = None
+    sms: bool | None = None
