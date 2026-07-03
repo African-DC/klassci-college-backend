@@ -51,12 +51,21 @@ def _thead() -> str:
     )
 
 
-def _tbody(sessions: list[dict[str, Any]]) -> str:
+def _tbody(sessions: list[dict[str, Any]], calendar_notice: str | None = None) -> str:
     if not sessions:
+        if calendar_notice:
+            inner = (
+                f'<strong style="font-size:12px; color:var(--ink);">{ui.esc(calendar_notice)}</strong>'
+                '<br><span style="color:var(--muted);">'
+                "Aucune séance : l'emploi du temps ne s'applique pas à cette période."
+                "</span>"
+            )
+        else:
+            inner = "Aucune séance planifiée sur cette période."
         return (
             "<tbody><tr>"
-            '<td colspan="7" style="text-align:center; padding:18px; color:var(--muted);">'
-            "Aucune séance planifiée sur cette période."
+            f'<td colspan="7" style="text-align:center; padding:22px; color:var(--muted);">'
+            f"{inner}"
             "</td></tr></tbody>"
         )
     rows: list[str] = []
@@ -80,12 +89,15 @@ def generate_cahier_texte_pdf(
     class_info: dict[str, Any],
     period_label: str,
     sessions: list[dict[str, Any]],
+    calendar_notice: str | None = None,
 ) -> bytes:
     """Génère le cahier de texte (paysage A4) — theme école dynamique.
 
     `class_info` : {class_name, level_name}
     `period_label` : ex. « Semaine du 02/03 au 07/03 2026 »
     `sessions` : [{date_str, jour, horaire, matiere, enseignant}] triées.
+    `calendar_notice` : message affiché si la période est en vacances / hors
+        calendrier scolaire (None sinon).
     """
     from weasyprint import HTML  # lazy import — GTK requis au runtime
 
@@ -96,7 +108,8 @@ def generate_cahier_texte_pdf(
     subtitle = " · ".join(ui.esc(p) for p in parts)
 
     table = (
-        f'<table class="pdf-table cahier-table">{_colgroup()}{_thead()}{_tbody(sessions)}</table>'
+        f'<table class="pdf-table cahier-table">'
+        f"{_colgroup()}{_thead()}{_tbody(sessions, calendar_notice)}</table>"
     )
 
     issued_str = datetime.utcnow().strftime("%d/%m/%Y")

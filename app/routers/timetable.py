@@ -32,7 +32,6 @@ async def list_slots(
     class_id: int | None = Query(None),
     teacher_id: int | None = Query(None),
     academic_year_id: int | None = Query(None),
-    week_offset: int = Query(0),
     _: None = require_permission("timetable:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[TimetableSlotResponse]:
@@ -97,7 +96,6 @@ async def auto_generate_timetable(
 @router.get("/export-pdf")
 async def export_timetable_pdf(
     class_id: int = Query(...),
-    week_offset: int = Query(0),
     _: None = require_permission("timetable:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
