@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Rôle d'accès du personnel choisi à la création et modifiable (Personnel, Comptable, Directeur) : il détermine les droits d'accès dans KLASSCI et est renvoyé partout où le personnel est affiché, sans jamais permettre d'attribuer un rôle d'administrateur *(admin)*.
 - Fiche parent enrichie : pour chaque enfant, sa classe, son statut d'inscription et son solde de frais restant, plus un récapitulatif financier global (total dû, payé, reste à payer sur l'année) pour voir d'un coup d'œil la situation du foyer *(admin)*.
 - Fiche personnel enrichie d'un aperçu d'activité de l'année : versements encaissés (nombre et montant), inscriptions traitées et dernière connexion *(admin)*.
 

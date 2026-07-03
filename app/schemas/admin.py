@@ -338,6 +338,9 @@ class StaffCreate(BaseModel):
     password: str
     position: str | None = None
     phone: str | None = None
+    # Rôle d'accès RBAC (personnel / comptable / directeur). Pilote les
+    # permissions. Whitelist validée côté service, jamais admin/super_admin.
+    role: str | None = None
 
 
 class StaffUpdate(BaseModel):
@@ -345,6 +348,7 @@ class StaffUpdate(BaseModel):
     last_name: str | None = None
     position: str | None = None
     phone: str | None = None
+    role: str | None = None
 
 
 class StaffResponse(BaseModel):
@@ -357,6 +361,8 @@ class StaffResponse(BaseModel):
     position: str | None
     phone: str | None
     photo_url: str | None = None
+    # Rôle d'accès RBAC résolu depuis user_roles (staff / accountant / director)
+    role: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -372,6 +378,7 @@ class StaffFullResponse(BaseModel):
     position: str | None
     phone: str | None
     photo_url: str | None = None
+    role: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -14,6 +14,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
+from app.models.permission import UserRole
 from app.models.user import (
     Parent,
     ParentStudent,
@@ -873,9 +874,61 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
 # StaffProfile
 # ---------------------------------------------------------------------------
 
+# Rôles d'accès assignables à un membre du personnel. Volontairement restreint :
+# jamais `admin` ni `super_admin` (pas d'escalade de privilèges via ce formulaire).
+STAFF_ASSIGNABLE_ROLES: Final[tuple[str, ...]] = ("staff", "accountant", "director")
+
+
+def _extract_staff_role(user: object | None) -> str | None:
+    """Résout le rôle d'accès RBAC du staff depuis user.roles (selectinloaded)."""
+    if user is None:
+        return None
+    roles = getattr(user, "roles", None) or []
+    names = {ur.role.name for ur in roles if getattr(ur, "role", None) is not None}
+    for preferred in ("director", "accountant", "staff"):
+        if preferred in names:
+            return preferred
+    return next(iter(names), None)
+
+
+def _validate_staff_role(role: str | None) -> str:
+    """Valide le rôle demandé contre la whitelist, défaut `staff`."""
+    if role is None or role == "":
+        return "staff"
+    if role not in STAFF_ASSIGNABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rôle invalide. Valeurs autorisées : {', '.join(STAFF_ASSIGNABLE_ROLES)}",
+        )
+    return role
+
+
+async def _set_staff_role(db: AsyncSession, user_id: int, role_name: str) -> None:
+    """Remplace le rôle d'accès du staff (retire les anciens rôles staff, pose le nouveau)."""
+    role_id = (
+        await db.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name})
+    ).scalar_one_or_none()
+    if role_id is None:
+        logger.warning("Role '%s' not seeded; user_id=%d role unchanged", role_name, user_id)
+        return
+    placeholders = ", ".join(f"'{r}'" for r in STAFF_ASSIGNABLE_ROLES)
+    await db.execute(
+        text(
+            "DELETE FROM user_roles WHERE user_id = :u "
+            f"AND role_id IN (SELECT id FROM roles WHERE name IN ({placeholders}))"
+        ),
+        {"u": user_id},
+    )
+    await db.execute(
+        text("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (:u, :r)"),
+        {"u": user_id, "r": role_id},
+    )
+
 
 def _staff_to_response(s: object) -> StaffResponse:
-    return StaffResponse.model_validate(s)
+    resp = StaffResponse.model_validate(s)
+    resp.role = _extract_staff_role(getattr(s, "user", None))
+    return resp
 
 
 async def list_staff(
@@ -909,6 +962,8 @@ async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) 
     if existing:
         raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
 
+    role_name = _validate_staff_role(data.role)
+
     async with db.begin_nested():
         user = User(
             email=data.email,
@@ -917,9 +972,9 @@ async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) 
         )
         db.add(user)
         await db.flush()
-        await _ensure_default_user_role(db, user.id, "staff")
+        await _ensure_default_user_role(db, user.id, role_name)
 
-        profile_data = data.model_dump(exclude={"email", "password"})
+        profile_data = data.model_dump(exclude={"email", "password", "role"})
         profile_data["user_id"] = user.id
         staff = await repo.create_staff(db, **profile_data)
         await audit_log(
@@ -944,17 +999,24 @@ async def update_staff(
     if staff is None:
         raise NotFoundError("Staff", staff_id)
     changes = data.model_dump(exclude_none=True, mode="json")
-    if not changes:
+    # Le rôle d'accès n'est pas une colonne StaffProfile : on le traite à part.
+    new_role = changes.pop("role", None)
+    if new_role is not None:
+        new_role = _validate_staff_role(new_role)
+    if not changes and new_role is None:
         return _staff_to_response(staff)
     async with db.begin_nested():
-        await repo.update_staff(db, staff, **changes)
+        if changes:
+            await repo.update_staff(db, staff, **changes)
+        if new_role is not None and staff.user_id is not None:
+            await _set_staff_role(db, staff.user_id, new_role)
         await audit_log(
             db,
             entity_type="staff",
             action=AuditAction.UPDATE,
             user_id=updated_by,
             entity_id=staff_id,
-            new_values=changes,
+            new_values={**changes, **({"role": new_role} if new_role else {})},
         )
     await db.commit()
     refreshed = await repo.get_staff_by_id(db, staff_id)
@@ -986,7 +1048,7 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     stmt = (
         select(StaffProfile)
         .where(StaffProfile.id == staff_id)
-        .options(selectinload(StaffProfile.user))
+        .options(selectinload(StaffProfile.user).selectinload(User.roles).selectinload(UserRole.role))
     )
     staff = (await db.execute(stmt)).scalar_one_or_none()
     if staff is None:
@@ -999,6 +1061,7 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
         "last_name": staff.last_name,
         "position": staff.position,
         "phone": staff.phone,
+        "role": _extract_staff_role(staff.user),
         "created_at": staff.created_at,
         "updated_at": staff.updated_at,
     }

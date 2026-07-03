@@ -7,8 +7,8 @@ from sqlalchemy.orm import selectinload, with_loader_criteria
 
 from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.models.permission import Permission, Role, RolePermission
-from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile
+from app.models.permission import Permission, Role, RolePermission, UserRole
+from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile, User
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
 # ---------------------------------------------------------------------------
@@ -467,8 +467,18 @@ async def delete_teacher(db: AsyncSession, teacher: TeacherProfile) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _staff_role_load_options():
+    """selectinload user + user_roles + role pour résoudre le rôle RBAC du staff
+    sans MissingGreenlet lors de la sérialisation post-commit."""
+    return selectinload(StaffProfile.user).selectinload(User.roles).selectinload(UserRole.role)
+
+
 async def get_staff_by_id(db: AsyncSession, staff_id: int) -> StaffProfile | None:
-    stmt = select(StaffProfile).where(StaffProfile.id == staff_id)
+    stmt = (
+        select(StaffProfile)
+        .where(StaffProfile.id == staff_id)
+        .options(_staff_role_load_options())
+    )
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
@@ -489,11 +499,20 @@ async def list_staff(
             )
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
-    stmt = base.offset((page - 1) * size).limit(size).order_by(StaffProfile.id.desc())
+    stmt = (
+        base.options(_staff_role_load_options())
+        .offset((page - 1) * size)
+        .limit(size)
+        .order_by(StaffProfile.id.desc())
+    )
     rows = list((await db.execute(stmt)).scalars().all())
 
     if search and total == 0:
-        all_stmt = select(StaffProfile).order_by(StaffProfile.id.desc())
+        all_stmt = (
+            select(StaffProfile)
+            .options(_staff_role_load_options())
+            .order_by(StaffProfile.id.desc())
+        )
         all_rows = list((await db.execute(all_stmt)).scalars().all())
         fuzzy_results = fuzzy_filter_by_name(
             all_rows,
