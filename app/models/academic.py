@@ -103,7 +103,6 @@ class SchoolHoliday(Base, TimestampMixin):
         BigInteger,
         ForeignKey("academic_years.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)

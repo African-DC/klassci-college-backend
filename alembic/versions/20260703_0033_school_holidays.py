@@ -41,14 +41,10 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["academic_year_id"], ["academic_years.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
-        "ix_school_holidays_academic_year_id",
-        "school_holidays",
-        ["academic_year_id"],
-    )
+    # Pas d'index explicite : MySQL crée automatiquement l'index requis par la
+    # contrainte de clé étrangère sur academic_year_id.
 
 
 def downgrade() -> None:
-    # DROP TABLE supprime aussi ses index. Ne pas DROP INDEX avant : en MySQL
-    # l'index de la colonne FK est requis par la contrainte et son retrait échoue.
+    # DROP TABLE supprime la table et son index de FK d'un coup.
     op.drop_table("school_holidays")
