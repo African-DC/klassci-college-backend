@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.leave import LeaveRequest, LeaveStatus
-from app.models.user import User
+from app.models.user import TeacherProfile, User
 from app.repositories.user_repository import get_user_full_name
 from app.schemas.leave import LeaveRequestCreate
 
@@ -26,12 +26,21 @@ def _base_dict(req: LeaveRequest) -> dict:
         "reviewed_by": req.reviewed_by,
         "reviewed_at": req.reviewed_at,
         "review_comment": req.review_comment,
+        "interim_teacher_id": req.interim_teacher_id,
         "created_at": req.created_at,
     }
 
 
 async def _enrich_rows(db: AsyncSession, rows: list[LeaveRequest]) -> list[dict]:
     uids = {r.user_id for r in rows}
+    tids = {r.interim_teacher_id for r in rows if r.interim_teacher_id}
+    interim_names: dict[int, str] = {}
+    if tids:
+        tres = (
+            await db.execute(select(TeacherProfile).where(TeacherProfile.id.in_(tids)))
+        ).scalars().all()
+        interim_names = {t.id: f"{t.last_name} {t.first_name}".strip() for t in tres}
+
     users: dict[int, User] = {}
     if uids:
         res = (
@@ -59,6 +68,9 @@ async def _enrich_rows(db: AsyncSession, rows: list[LeaveRequest]) -> list[dict]
         else:
             d["requester_name"] = None
             d["requester_role"] = None
+        d["interim_teacher_name"] = (
+            interim_names.get(r.interim_teacher_id) if r.interim_teacher_id else None
+        )
         out.append(d)
     return out
 
@@ -132,6 +144,25 @@ async def review_request(
     req.reviewed_by = reviewer_id
     req.reviewed_at = datetime.now(UTC)
     req.review_comment = comment.strip() if comment else None
+    await db.commit()
+    row = await _get(db, req_id)
+    return (await _enrich_rows(db, [row]))[0]
+
+
+async def set_interim(db: AsyncSession, req_id: int, teacher_id: int | None) -> dict:
+    """Assigne (ou retire) le remplaçant d'un congé approuvé."""
+    req = await _get(db, req_id)
+    if req.status != LeaveStatus.APPROVED.value:
+        raise HTTPException(
+            status_code=400, detail="Le remplaçant ne s'assigne que sur un congé approuvé"
+        )
+    if teacher_id is not None:
+        exists = (
+            await db.execute(select(TeacherProfile.id).where(TeacherProfile.id == teacher_id))
+        ).scalar_one_or_none()
+        if exists is None:
+            raise NotFoundError("Teacher", teacher_id)
+    req.interim_teacher_id = teacher_id
     await db.commit()
     row = await _get(db, req_id)
     return (await _enrich_rows(db, [row]))[0]

@@ -33,6 +33,10 @@ class LeaveReviewRequest(BaseModel):
     comment: str | None = None
 
 
+class LeaveInterimAssign(BaseModel):
+    teacher_id: int | None = None
+
+
 class LeaveRequestResponse(BaseModel):
     id: int
     user_id: int
@@ -44,6 +48,8 @@ class LeaveRequestResponse(BaseModel):
     reviewed_by: int | None = None
     reviewed_at: datetime | None = None
     review_comment: str | None = None
+    interim_teacher_id: int | None = None
+    interim_teacher_name: str | None = None
     created_at: datetime
     requester_name: str | None = None
     requester_role: str | None = None
