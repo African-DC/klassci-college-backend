@@ -49,5 +49,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_school_holidays_academic_year_id", table_name="school_holidays")
+    # DROP TABLE supprime aussi ses index. Ne pas DROP INDEX avant : en MySQL
+    # l'index de la colonne FK est requis par la contrainte et son retrait échoue.
     op.drop_table("school_holidays")
