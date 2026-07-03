@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Demandes de congé : les enseignants et le personnel posent leurs congés (type, dates, motif) et suivent leur statut ; la direction consulte, approuve ou refuse avec un commentaire *(enseignant, personnel, admin)*.
 - Documents de l'élève : l'administration téléverse des pièces (extrait de naissance, certificat médical, etc.) sur la fiche d'un élève, avec un type choisi dans un catalogue ou créé à la volée *(admin)*.
 - Préférences de notifications : chaque utilisateur choisit, depuis son profil, de recevoir en plus les notifications par email et/ou SMS ; ces choix sont respectés à l'envoi. La notification dans l'application reste toujours active *(tous)*.
 - Espace profil personnel : chaque utilisateur consulte ses informations (nom, contact, rôle) et met à jour son téléphone ; l'enseignant et le personnel téléversent ou retirent eux-mêmes leur photo, l'élève restant géré par l'administration *(tous)*.

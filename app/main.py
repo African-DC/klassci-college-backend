@@ -25,6 +25,8 @@ from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
+from app.routers.leave import admin_router as leave_admin_router
+from app.routers.leave import self_router as leave_self_router
 from app.routers.notifications import router as notifications_router
 from app.routers.parent_portal import router as parent_portal_router
 from app.routers.payments import router as payments_router
@@ -87,6 +89,8 @@ app.include_router(enrollment_payments_router)
 app.include_router(class_documents_router)
 app.include_router(fees_router)
 app.include_router(grades_router)
+app.include_router(leave_self_router)
+app.include_router(leave_admin_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)
 app.include_router(promotions_router)
