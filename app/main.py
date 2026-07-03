@@ -29,6 +29,7 @@ from app.routers.parent_portal import router as parent_portal_router
 from app.routers.payments import router as payments_router
 from app.routers.performance import admin_router as performance_admin_router
 from app.routers.performance import teacher_router as performance_teacher_router
+from app.routers.profile import router as profile_router
 from app.routers.promotions import router as promotions_router
 from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
@@ -103,6 +104,7 @@ app.include_router(teacher_attendance_admin_router)
 app.include_router(teacher_attendance_teacher_router)
 app.include_router(performance_admin_router)
 app.include_router(performance_teacher_router)
+app.include_router(profile_router)
 
 
 # ---------------------------------------------------------------------------
