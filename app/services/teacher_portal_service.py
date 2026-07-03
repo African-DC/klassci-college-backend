@@ -8,14 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.user import TeacherProfile
-from app.repositories import admin_repository
+from app.repositories import admin_repository, reports_repository
 from app.repositories import teacher_portal_repository as repo
 from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     TeacherClassesListResponse,
     TeacherClassResponse,
+    TeacherClassRosterResponse,
     TeacherDashboardStats,
     TeacherNextCourse,
+    TeacherRosterStudent,
     TeacherScheduleResponse,
     TeacherScheduleSlot,
     TeacherUpcomingEval,
@@ -113,4 +115,36 @@ async def get_class_attendance(
         academic_year_id=academic_year_id,
         date_from=date_from,
         date_to=date_to,
+    )
+
+
+async def get_class_roster(
+    db: AsyncSession, user_id: int, class_id: int
+) -> TeacherClassRosterResponse:
+    """Liste des élèves inscrits d'une classe assignée à l'enseignant (pour l'appel)."""
+    teacher = await _get_teacher_for_user(db, user_id)
+    classes = await repo.get_teacher_classes(db, teacher.id)
+    match = next((c for c in classes if c["class_id"] == class_id), None)
+    if match is None:
+        raise HTTPException(status_code=403, detail="Vous n'etes pas assigne a cette classe")
+
+    ay_id = await admin_repository.get_current_academic_year_id(db)
+    if ay_id is None:
+        raise HTTPException(status_code=400, detail="Aucune annee scolaire active")
+
+    students = await reports_repository.get_enrolled_students(db, class_id, ay_id)
+    return TeacherClassRosterResponse(
+        class_id=class_id,
+        class_name=match["class_name"],
+        academic_year_id=ay_id,
+        students=[
+            TeacherRosterStudent(
+                student_id=s.id,
+                first_name=s.first_name,
+                last_name=s.last_name,
+                matricule=s.enrollment_number,
+                photo_url=s.photo_url,
+            )
+            for s in students
+        ],
     )
