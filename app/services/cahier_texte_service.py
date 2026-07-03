@@ -68,7 +68,7 @@ async def _resolve_academic_year(
     """
     stmt = (
         select(AcademicYear)
-        .options(selectinload(AcademicYear.trimesters))
+        .options(selectinload(AcademicYear.trimesters), selectinload(AcademicYear.holidays))
         .where(AcademicYear.start_date <= period_end, AcademicYear.end_date >= period_start)
         .order_by(AcademicYear.start_date.desc())
     )
@@ -80,7 +80,7 @@ async def _resolve_academic_year(
         return candidates[0]
     stmt_current = (
         select(AcademicYear)
-        .options(selectinload(AcademicYear.trimesters))
+        .options(selectinload(AcademicYear.trimesters), selectinload(AcademicYear.holidays))
         .where(AcademicYear.is_current.is_(True))
         .limit(1)
     )
@@ -106,8 +106,13 @@ def _period_label(start: date, end: date, is_default_week: bool) -> str:
 
 
 def _in_session(day: date, trimesters: list[Any]) -> bool:
-    """True si la date tombe dans un trimestre (jour d'école, pas vacances)."""
+    """True si la date tombe dans un trimestre (période d'enseignement)."""
     return any(t.start_date <= day <= t.end_date for t in trimesters)
+
+
+def _in_holiday(day: date, holidays: list[Any]) -> bool:
+    """True si la date tombe dans un congé / jour férié."""
+    return any(h.start_date <= day <= h.end_date for h in holidays)
 
 
 def _teacher_name(slot: Any) -> str:
@@ -118,13 +123,14 @@ def _teacher_name(slot: Any) -> str:
 
 
 def _expand_sessions(
-    slots: list[Any], start: date, end: date, trimesters: list[Any]
+    slots: list[Any], start: date, end: date, trimesters: list[Any], holidays: list[Any]
 ) -> list[dict[str, Any]]:
     """Développe les créneaux EDT sur chaque date de l'intervalle.
 
-    Si des trimestres sont configurés, seules les dates en cours (dans un
-    trimestre) produisent des séances ; les dates de vacances sont ignorées.
-    Sans trimestre configuré, toutes les dates de l'intervalle sont retenues.
+    Si des trimestres sont configurés, une date produit des séances seulement
+    si elle est en période d'enseignement (dans un trimestre) ET n'est pas un
+    congé / jour férié. Sans trimestre configuré, toutes les dates de
+    l'intervalle sont retenues (fallback).
     """
     slots_by_day: dict[str, list[Any]] = {}
     for slot in slots:
@@ -134,9 +140,12 @@ def _expand_sessions(
     sessions: list[tuple[date, Any, dict[str, Any]]] = []
     current = start
     while current <= end:
-        skip_holiday = bool(trimesters) and not _in_session(current, trimesters)
+        if trimesters:
+            teaching = _in_session(current, trimesters) and not _in_holiday(current, holidays)
+        else:
+            teaching = True
         day_value = _DAY_VALUE_BY_WEEKDAY.get(current.weekday())
-        if day_value and not skip_holiday:
+        if day_value and teaching:
             for slot in slots_by_day.get(day_value, []):
                 horaire = f"{slot.start_time.strftime('%H:%M')} - {slot.end_time.strftime('%H:%M')}"
                 subject = getattr(slot, "subject", None)
@@ -162,18 +171,22 @@ def _expand_sessions(
 def _calendar_notice(
     ay: AcademicYear | None,
     trimesters: list[Any],
+    holidays: list[Any],
     has_slots: bool,
     sessions: list[dict[str, Any]],
     period_start: date,
     period_end: date,
 ) -> str | None:
-    """Message expliquant l'absence de séances (vacances vs hors-calendrier).
+    """Message expliquant l'absence de séances (congé nommé, vacances, hors-calendrier).
 
     Retourne None quand il y a des séances, ou quand l'absence tient à un EDT
     non renseigné (message générique géré par le générateur).
     """
     if sessions or not has_slots or not trimesters:
         return None
+    for holiday in holidays:
+        if holiday.start_date <= period_start <= holiday.end_date:
+            return holiday.label
     if ay is not None and period_start <= ay.end_date and period_end >= ay.start_date:
         return "Vacances scolaires"
     return "Période hors de l'année scolaire"
@@ -191,15 +204,16 @@ async def get_cahier_texte_pdf(
 
     ay = await _resolve_academic_year(db, period_start, period_end)
     trimesters = list(ay.trimesters) if ay is not None else []
+    holidays = list(ay.holidays) if ay is not None else []
     slots = await timetable_repository.list_slots(
         db,
         class_id=class_id,
         academic_year_id=ay.id if ay else None,
     )
 
-    sessions = _expand_sessions(slots, period_start, period_end, trimesters)
+    sessions = _expand_sessions(slots, period_start, period_end, trimesters, holidays)
     calendar_notice = _calendar_notice(
-        ay, trimesters, bool(slots), sessions, period_start, period_end
+        ay, trimesters, holidays, bool(slots), sessions, period_start, period_end
     )
 
     class_info = {

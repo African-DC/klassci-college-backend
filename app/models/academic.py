@@ -51,6 +51,11 @@ class AcademicYear(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="Trimester.order_no",
     )
+    holidays: Mapped[list[SchoolHoliday]] = relationship(
+        back_populates="academic_year",
+        cascade="all, delete-orphan",
+        order_by="SchoolHoliday.start_date",
+    )
 
 
 class Trimester(Base, TimestampMixin):
@@ -78,6 +83,32 @@ class Trimester(Base, TimestampMixin):
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
 
     academic_year: Mapped[AcademicYear] = relationship(back_populates="trimesters")
+
+
+class SchoolHoliday(Base, TimestampMixin):
+    """Période de congé ou jour férié scopée à une année académique.
+
+    Contrairement aux trimestres (qui délimitent les périodes d'enseignement),
+    un `SchoolHoliday` marque une plage de jours *non travaillés* à l'intérieur
+    (ou en marge) de l'année : congés de Toussaint, fêtes religieuses mobiles,
+    jour férié isolé (1er mai, fête de l'Indépendance…). Un jour unique se
+    représente avec `start_date == end_date`. Les fêtes mobiles variant chaque
+    année, ces plages sont saisies par l'établissement, pas figées dans le code.
+    """
+
+    __tablename__ = "school_holidays"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    academic_year_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("academic_years.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    academic_year: Mapped[AcademicYear] = relationship(back_populates="holidays")
 
 
 # ---------------------------------------------------------------------------
