@@ -1009,6 +1009,25 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
         result["user_last_login"] = staff.user.last_login
         result["user_created_at"] = staff.user.created_at
 
+    # Activité de l'année courante (versements encaissés, inscriptions traitées)
+    from app.repositories import performance_repository as perf_repo
+
+    ay = await perf_repo.get_current_year_with_calendar(db)
+    activity: dict = {
+        "payments_count": 0,
+        "payments_amount": 0.0,
+        "enrollments_count": 0,
+        "academic_year_name": ay.name if ay else None,
+    }
+    if ay is not None and staff.user_id is not None:
+        payments = await perf_repo.payment_activity_by_user(db, ay.start_date)
+        enrollments = await perf_repo.enrollment_activity_by_user(db, ay.start_date)
+        count, amount = payments.get(staff.user_id, (0, 0))
+        activity["payments_count"] = count
+        activity["payments_amount"] = float(amount)
+        activity["enrollments_count"] = enrollments.get(staff.user_id, 0)
+    result["activity"] = activity
+
     return result
 
 
@@ -1044,8 +1063,73 @@ async def get_parent(db: AsyncSession, parent_id: int) -> ParentResponse:
     return _parent_to_response(parent)
 
 
+async def _child_financial_context(
+    db: AsyncSession, student_id: int, academic_year_id: int | None
+) -> dict:
+    """Classe + statut d'inscription + solde (frais) de l'élève pour l'AY courante.
+
+    Un parent règle la scolarité de ses enfants : le solde par enfant est
+    l'information la plus utile au secrétariat sur une fiche parent.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
+
+    ctx = {
+        "class_name": None,
+        "enrollment_status": None,
+        "is_enrolled": False,
+        "fees_expected": 0.0,
+        "fees_paid": 0.0,
+        "fees_balance": 0.0,
+    }
+    if academic_year_id is None:
+        return ctx
+
+    enr = (
+        await db.execute(
+            select(Enrollment)
+            .where(
+                Enrollment.student_id == student_id,
+                Enrollment.academic_year_id == academic_year_id,
+            )
+            .options(selectinload(Enrollment.class_))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if enr is None:
+        return ctx
+
+    ctx["class_name"] = enr.class_.name if enr.class_ else None
+    ctx["enrollment_status"] = enr.status
+    ctx["is_enrolled"] = enr.status == "valide"
+
+    expected = (
+        await db.execute(
+            select(func.coalesce(func.sum(EnrollmentFee.amount), 0)).where(
+                EnrollmentFee.enrollment_id == enr.id
+            )
+        )
+    ).scalar() or 0
+    paid = (
+        await db.execute(
+            select(func.coalesce(func.sum(Payment.amount), 0)).where(
+                Payment.enrollment_id == enr.id,
+                Payment.status == PaymentStatus.COMPLETED,
+            )
+        )
+    ).scalar() or 0
+    ctx["fees_expected"] = float(expected)
+    ctx["fees_paid"] = float(paid)
+    ctx["fees_balance"] = float(expected) - float(paid)
+    return ctx
+
+
 async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
-    """Enriched parent profile with user account and children list."""
+    """Enriched parent profile with user account and children list.
+
+    Chaque enfant est enrichi (classe, statut d'inscription, solde des frais)
+    et un récapitulatif financier agrégé est calculé pour l'AY courante.
+    """
     stmt = (
         select(Parent)
         .where(Parent.id == parent_id)
@@ -1065,6 +1149,8 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
         "last_name": parent.last_name,
         "phone": parent.phone,
         "email": parent.email,
+        "city": parent.city,
+        "commune": parent.commune,
         "created_at": parent.created_at,
         "updated_at": parent.updated_at,
     }
@@ -1072,18 +1158,42 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
     if parent.user:
         result["user_email"] = parent.user.email
         result["user_is_active"] = parent.user.is_active
+        result["user_last_login"] = parent.user.last_login
+
+    ay_id = await repo.get_current_academic_year_id(db)
+    ay_name = await repo.get_current_academic_year_name(db)
 
     children = []
+    total_expected = total_paid = 0.0
+    enrolled_count = 0
     for link in parent.children:
         s = link.student
+        ctx = await _child_financial_context(db, s.id, ay_id)
         children.append(
             {
                 "student_id": s.id,
+                "first_name": s.first_name,
+                "last_name": s.last_name,
                 "student_name": f"{s.first_name} {s.last_name}",
+                "matricule": s.enrollment_number,
+                "photo_url": s.photo_url,
                 "relationship_type": link.relationship_type,
+                **ctx,
             }
         )
+        total_expected += ctx["fees_expected"]
+        total_paid += ctx["fees_paid"]
+        if ctx["is_enrolled"]:
+            enrolled_count += 1
     result["children"] = children
+    result["summary"] = {
+        "children_count": len(children),
+        "enrolled_count": enrolled_count,
+        "total_expected": total_expected,
+        "total_paid": total_paid,
+        "total_balance": total_expected - total_paid,
+        "academic_year_name": ay_name,
+    }
 
     return result
 
