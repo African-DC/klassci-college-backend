@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Préférences de notifications : chaque utilisateur choisit, depuis son profil, de recevoir en plus les notifications par email et/ou SMS ; ces choix sont respectés à l'envoi. La notification dans l'application reste toujours active *(tous)*.
 - Espace profil personnel : chaque utilisateur consulte ses informations (nom, contact, rôle) et met à jour son téléphone ; l'enseignant et le personnel téléversent ou retirent eux-mêmes leur photo, l'élève restant géré par l'administration *(tous)*.
 - Rôle d'accès du personnel choisi à la création et modifiable (Personnel, Comptable, Directeur) : il détermine les droits d'accès dans KLASSCI et est renvoyé partout où le personnel est affiché, sans jamais permettre d'attribuer un rôle d'administrateur *(admin)*.
 - Fiche parent enrichie : pour chaque enfant, sa classe, son statut d'inscription et son solde de frais restant, plus un récapitulatif financier global (total dû, payé, reste à payer sur l'année) pour voir d'un coup d'œil la situation du foyer *(admin)*.

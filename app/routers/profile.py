@@ -8,8 +8,14 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
-from app.schemas.profile import MyProfileResponse, MyProfileUpdate, PhotoUrlResponse
-from app.services import profile_service
+from app.schemas.profile import (
+    MyProfileResponse,
+    MyProfileUpdate,
+    NotificationPrefsResponse,
+    NotificationPrefsUpdate,
+    PhotoUrlResponse,
+)
+from app.services import notification_pref_service, profile_service
 from app.utils.photo_upload import save_photo_upload
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -53,3 +59,26 @@ async def delete_my_photo(
 ) -> None:
     """Retire sa propre photo de profil."""
     await profile_service.set_my_photo(db, current_user.user_id, None)
+
+
+@router.get("/me/notifications", response_model=NotificationPrefsResponse)
+async def get_my_notification_prefs(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NotificationPrefsResponse:
+    """Préférences de canaux de notification (email / SMS)."""
+    return NotificationPrefsResponse(**await notification_pref_service.get_prefs(db, current_user.user_id))
+
+
+@router.put("/me/notifications", response_model=NotificationPrefsResponse)
+async def update_my_notification_prefs(
+    data: NotificationPrefsUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NotificationPrefsResponse:
+    """Active ou désactive les canaux email / SMS."""
+    return NotificationPrefsResponse(
+        **await notification_pref_service.update_prefs(
+            db, current_user.user_id, email=data.email, sms=data.sms
+        )
+    )

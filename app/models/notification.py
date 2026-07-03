@@ -60,6 +60,19 @@ class Notification(Base, TimestampMixin):
     user: Mapped[User] = relationship(back_populates="notifications")
 
 
+class NotificationPreference(Base, TimestampMixin):
+    """Préférences de canaux d'un utilisateur. L'in-app (cloche) est toujours actif."""
+
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
 class NotificationTemplate(Base, TimestampMixin):
     """Gabarit de notification (sujet + corps avec variables {{var}})."""
 
