@@ -9,6 +9,7 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.schemas.attendance import ClassAttendanceStats
 from app.schemas.teacher_portal import (
     TeacherClassesListResponse,
+    TeacherClassRosterResponse,
     TeacherDashboardStats,
     TeacherScheduleResponse,
     TeacherUpcomingEval,
@@ -52,6 +53,16 @@ async def list_teacher_evaluations(
 ) -> list[TeacherUpcomingEval]:
     """Liste toutes les évaluations du prof connecté pour la page Mes évaluations."""
     return await teacher_portal_service.list_evaluations(db, current_user.user_id)
+
+
+@router.get("/classes/{class_id}/students", response_model=TeacherClassRosterResponse)
+async def get_class_roster(
+    class_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> TeacherClassRosterResponse:
+    """Liste des eleves inscrits d'une classe assignee a l'enseignant (pour l'appel)."""
+    return await teacher_portal_service.get_class_roster(db, current_user.user_id, class_id)
 
 
 @router.get("/classes/{class_id}/attendance", response_model=ClassAttendanceStats)
