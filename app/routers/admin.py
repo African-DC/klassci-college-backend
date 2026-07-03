@@ -19,6 +19,7 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    HolidaysUpdateRequest,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
@@ -40,6 +41,7 @@ from app.schemas.admin import (
     RoomListResponse,
     RoomResponse,
     RoomUpdate,
+    SchoolHolidayDTO,
     SchoolInfoUpdate,
     SchoolSettingsResponse,
     SeriesCreate,
@@ -848,10 +850,12 @@ async def delete_level(
 async def _build_settings_response(
     db: AsyncSession, school: SchoolSettings
 ) -> SchoolSettingsResponse:
-    """Assemble le payload settings + trimestres de l'AY courante."""
+    """Assemble le payload settings + trimestres + congés de l'AY courante."""
     trimesters = await admin_service.get_trimesters_for_current_year(db)
+    holidays = await admin_service.get_holidays_for_current_year(db)
     payload = SchoolSettingsResponse.model_validate(school)
     payload.trimesters = [TrimesterDTO.model_validate(t) for t in trimesters]
+    payload.holidays = [SchoolHolidayDTO.model_validate(h) for h in holidays]
     return payload
 
 
@@ -904,6 +908,20 @@ async def update_trimesters(
     await admin_service.upsert_trimesters_for_current_year(
         db, items, updated_by=current_user.user_id
     )
+    school = await admin_service.get_school_settings(db)
+    return await _build_settings_response(db, school)
+
+
+@router.put("/settings/holidays", response_model=SchoolSettingsResponse)
+async def update_holidays(
+    data: HolidaysUpdateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Remplace les congés / jours fériés de l'année académique courante."""
+    items = [h.model_dump() for h in data.holidays]
+    await admin_service.upsert_holidays_for_current_year(db, items, updated_by=current_user.user_id)
     school = await admin_service.get_school_settings(db)
     return await _build_settings_response(db, school)
 

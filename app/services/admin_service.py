@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, SchoolSettings, Trimester
+from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
 from app.models.user import (
     Parent,
     ParentStudent,
@@ -1958,6 +1958,69 @@ async def upsert_trimesters_for_current_year(
     await db.commit()
     stmt = (
         select(Trimester).where(Trimester.academic_year_id == year_id).order_by(Trimester.order_no)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def get_holidays_for_current_year(db: AsyncSession) -> list[SchoolHoliday]:
+    """Retourne les congés de l'année académique courante (vide si aucune)."""
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        return []
+    stmt = (
+        select(SchoolHoliday)
+        .where(SchoolHoliday.academic_year_id == year_id)
+        .order_by(SchoolHoliday.start_date)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def upsert_holidays_for_current_year(
+    db: AsyncSession, items: list[dict], *, updated_by: int
+) -> list[SchoolHoliday]:
+    """Remplace les congés de l'AY courante (delete + insert).
+
+    Les items reçus suivent le format `{label, start_date, end_date}`.
+    """
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        raise NotFoundError("AcademicYear", 0)
+
+    async with db.begin_nested():
+        await db.execute(sa_delete(SchoolHoliday).where(SchoolHoliday.academic_year_id == year_id))
+        await db.flush()
+        for item in items:
+            db.add(
+                SchoolHoliday(
+                    academic_year_id=year_id,
+                    label=item["label"],
+                    start_date=item["start_date"],
+                    end_date=item["end_date"],
+                )
+            )
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_holidays",
+            entity_id=year_id,
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            new_values={
+                "items": [
+                    {
+                        "label": it["label"],
+                        "start_date": str(it["start_date"]),
+                        "end_date": str(it["end_date"]),
+                    }
+                    for it in items
+                ]
+            },
+        )
+    await db.commit()
+    stmt = (
+        select(SchoolHoliday)
+        .where(SchoolHoliday.academic_year_id == year_id)
+        .order_by(SchoolHoliday.start_date)
     )
     return list((await db.execute(stmt)).scalars().all())
 

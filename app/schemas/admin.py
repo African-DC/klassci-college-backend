@@ -713,6 +713,22 @@ class TrimesterUpdateRequest(BaseModel):
     trimesters: list[TrimesterDTO]
 
 
+class SchoolHolidayDTO(BaseModel):
+    """Un congé ou jour férié. Jour unique = start_date == end_date."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    start_date: date
+    end_date: date
+
+
+class HolidaysUpdateRequest(BaseModel):
+    """PUT /admin/settings/holidays — remplace les congés de l'AY courante."""
+
+    holidays: list[SchoolHolidayDTO]
+
+
 class NotificationSettingsUpdate(BaseModel):
     """PUT /admin/settings/notifications — préférences globales école."""
 
@@ -745,6 +761,7 @@ class SchoolSettingsResponse(BaseModel):
     website: str | None = None
     motto: str | None = None
     trimesters: list[TrimesterDTO] = []
+    holidays: list[SchoolHolidayDTO] = []
     notify_by_email: bool = False
     notify_by_sms: bool = False
     notify_grades: bool = False
