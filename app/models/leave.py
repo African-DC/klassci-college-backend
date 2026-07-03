@@ -50,3 +50,7 @@ class LeaveRequest(Base, TimestampMixin):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Remplaçant assigné pour couvrir la période (intérim), sur un congé approuvé.
+    interim_teacher_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teacher_profiles.id", ondelete="SET NULL"), nullable=True
+    )

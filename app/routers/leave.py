@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
-from app.schemas.leave import LeaveRequestCreate, LeaveRequestResponse, LeaveReviewRequest
+from app.schemas.leave import (
+    LeaveInterimAssign,
+    LeaveRequestCreate,
+    LeaveRequestResponse,
+    LeaveReviewRequest,
+)
 from app.services import leave_service
 
 # --- Self : l'utilisateur gère ses propres demandes ---
@@ -83,3 +88,14 @@ async def reject_leave_request(
             db, req_id, reviewer_id=current_user.user_id, approve=False, comment=data.comment
         )
     )
+
+
+@admin_router.patch("/requests/{req_id}/interim", response_model=LeaveRequestResponse)
+async def assign_interim(
+    req_id: int,
+    data: LeaveInterimAssign,
+    _: None = require_permission("leave:approve"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> LeaveRequestResponse:
+    """Assigne ou retire le remplaçant d'un congé approuvé."""
+    return LeaveRequestResponse(**await leave_service.set_interim(db, req_id, data.teacher_id))
