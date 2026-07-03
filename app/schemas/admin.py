@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Student
@@ -721,6 +721,12 @@ class SchoolHolidayDTO(BaseModel):
     label: str
     start_date: date
     end_date: date
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "SchoolHolidayDTO":
+        if self.end_date < self.start_date:
+            raise ValueError("La date de fin doit être postérieure ou égale à la date de début")
+        return self
 
 
 class HolidaysUpdateRequest(BaseModel):
