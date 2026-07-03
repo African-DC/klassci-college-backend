@@ -381,6 +381,9 @@ class StaffFullResponse(BaseModel):
     user_last_login: datetime | None = None
     user_created_at: datetime | None = None
 
+    # Activité (versements encaissés, inscriptions traitées) — AY courante
+    activity: dict = {}
+
 
 class StaffListResponse(BaseModel):
     items: list[StaffResponse]
@@ -450,7 +453,9 @@ class ParentLinkBody(BaseModel):
 class ParentFullResponse(ParentResponse):
     user_email: str | None = None
     user_is_active: bool | None = None
+    user_last_login: datetime | None = None
     children: list[dict] = []
+    summary: dict = {}
 
 
 class ParentListResponse(BaseModel):

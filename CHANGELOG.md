@@ -8,6 +8,15 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+
+- Fiche parent enrichie : pour chaque enfant, sa classe, son statut d'inscription et son solde de frais restant, plus un récapitulatif financier global (total dû, payé, reste à payer sur l'année) pour voir d'un coup d'œil la situation du foyer *(admin)*.
+- Fiche personnel enrichie d'un aperçu d'activité de l'année : versements encaissés (nombre et montant), inscriptions traitées et dernière connexion *(admin)*.
+
+### Fixed
+
+- Fiche parent : les enfants liés s'affichaient sans nom ni classe (lignes vides) ; ils apparaissent désormais correctement avec toutes leurs informations *(admin)*.
+
 ### Changed
 
 - Cahier de texte fidèle au calendrier scolaire : il utilise l'emploi du temps de l'année scolaire à laquelle appartient la période demandée (plus seulement l'année courante) et ne génère plus de séances pendant les vacances (semaines hors trimestre) ; une semaine de congés affiche « Vacances scolaires » au lieu d'un planning trompeur *(enseignant, admin)*.
