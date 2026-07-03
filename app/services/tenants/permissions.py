@@ -99,6 +99,9 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Series (2)
     {"slug": "admin:series:read", "name": "View academic series"},
     {"slug": "admin:series:write", "name": "Manage academic series"},
+    # Leave / congés (2)
+    {"slug": "leave:request", "name": "Request leave"},
+    {"slug": "leave:approve", "name": "Approve or reject leave requests"},
     # Super Admin (7)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
     {"slug": "super-admin:tenants:read", "name": "View tenants list and per-tenant stats"},
@@ -139,6 +142,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "timetable:read",
             "reports:read",
             "teacher:attendance:self_declare",
+            "leave:request",
         ],
     },
     "staff": {
@@ -157,6 +161,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "reports:read",
             "admin:teachers:attendance",
             "admin:teachers:attendance:read",
+            "leave:request",
         ],
     },
     "accountant": {
