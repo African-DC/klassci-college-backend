@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.services.pdf import components as ui
-from app.services.pdf._helpers import esc, format_decimal
+from app.services.pdf._helpers import format_decimal
 from app.services.pdf.theme import PDFTheme, method_label, status_label
 
 
@@ -89,7 +89,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     method_display = method_label(method_key)
     status_display = status_label(status_key)
 
-    # Info grid : élève + nature + méthode + ref + statut + notes
+    # Bloc info label/valeur : élève + nature + méthode + ref + statut + notes.
+    # Rendu en table borderless (alignement colonne robuste sous WeasyPrint).
     info_items: list[tuple[str, Any]] = [
         ("Élève", student_name),
         ("Nature", fee_description),
@@ -97,20 +98,11 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     ]
     if reference:
         info_items.append(("Référence", reference))
-    info_items.append(("Statut", ui.status_pill(status_key, label=status_display)))
+    info_items.append(("Statut", {"html": ui.status_pill(status_key, label=status_display)}))
     if notes:
         info_items.append(("Notes", notes))
 
-    info_html = (
-        '<div class="pdf-info-grid" style="grid-template-columns:1fr;">'
-        + "".join(
-            ui.info_row(lbl, val)
-            if not (isinstance(val, str) and val.startswith("<span"))
-            else f'<div class="pdf-info-row"><span class="pdf-info-label">{esc(lbl)}</span><span class="pdf-info-value">{val}</span></div>'
-            for lbl, val in info_items
-        )
-        + "</div>"
-    )
+    info_html = ui.info_table(info_items)
 
     # Allocations section (optionnelle)
     allocations_section = ""

@@ -112,6 +112,31 @@ def info_grid(items: list[tuple[str, Any]], *, columns: int = 2) -> str:
     )
 
 
+def info_table(items: list[tuple[str, Any]]) -> str:
+    """Bloc label/valeur en table borderless — alignement colonne robuste.
+
+    Rend un vrai ``<table>`` deux colonnes plutôt qu'un flex : le support
+    flexbox de WeasyPrint est partiel et laisse l'étiquette rétrécir à son
+    contenu, si bien que les valeurs ne s'alignent plus verticalement. Une
+    table garantit une colonne d'étiquettes de largeur fixe et des valeurs
+    parfaitement alignées, sans bordure.
+
+    La valeur peut être du HTML déjà composé (ex. un status pill) via un
+    dict ``{"html": "<span ...>"}`` ; sinon elle est échappée.
+    """
+    rows: list[str] = []
+    for label, value in items:
+        if isinstance(value, dict) and "html" in value:
+            val_html = str(value["html"])
+        else:
+            val_html = esc(str(value)) if value not in (None, "") else "—"
+        rows.append(
+            f'<tr><td class="pdf-info-label">{esc(label)}</td>'
+            f'<td class="pdf-info-value">{val_html}</td></tr>'
+        )
+    return f'<table class="pdf-info-table">{"".join(rows)}</table>'
+
+
 def meta_banner(left: str, right: str = "", *, theme: PDFTheme) -> str:
     """Panneau gradient compact entre header et content principal."""
     right_html = (
