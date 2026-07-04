@@ -5,11 +5,12 @@ from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.attendance import AttendanceRecord, AttendanceStatus
 from app.models.fee import PaymentStatus
-from app.models.grade import Grade
+from app.models.grade import Evaluation, Grade
 from app.models.user import Student
 from app.repositories import admin_repository
 from app.repositories import student_portal_repository as repo
@@ -23,6 +24,7 @@ from app.schemas.student_portal import (
     StudentFeesResponse,
     StudentGradeResponse,
     StudentGradesListResponse,
+    StudentLatestGrade,
     StudentNextCourse,
     StudentProfileResponse,
     StudentTimetableResponse,
@@ -274,6 +276,30 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
     avg_raw = (await db.execute(avg_stmt)).scalar()
     general_average = round(float(avg_raw), 2) if avg_raw is not None else None
 
+    # Dernière note saisie : mise en avant sur l'accueil (l'élève voit tout de
+    # suite son résultat le plus récent). Tri par date d'évaluation décroissante.
+    latest_stmt = (
+        select(Grade)
+        .join(Evaluation, Evaluation.id == Grade.evaluation_id)
+        .where(Grade.student_id == student.id, Grade.value.is_not(None))
+        .options(selectinload(Grade.evaluation).selectinload(Evaluation.subject))
+        .order_by(Evaluation.date.desc(), Grade.id.desc())
+        .limit(1)
+    )
+    latest_row = (await db.execute(latest_stmt)).scalars().first()
+    latest_grade = None
+    if latest_row is not None and latest_row.evaluation is not None:
+        ev = latest_row.evaluation
+        latest_grade = StudentLatestGrade(
+            value=float(latest_row.value) if latest_row.value is not None else 0.0,
+            out_of=20,
+            subject_name=ev.subject.name if ev.subject else "",
+            evaluation_title=ev.title,
+            type=ev.type,
+            trimester=ev.trimester,
+            date=ev.date,
+        )
+
     # Frais restants (somme balance des fees non payés)
     fees_remaining = Decimal("0")
     if enrollment:
@@ -302,6 +328,7 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
         class_name=class_name,
         next_course=next_course,
         general_average=general_average,
+        latest_grade=latest_grade,
         fees_remaining=float(fees_remaining),
         total_absences=int(total_absences),
         current_academic_year=current_ay_name,
