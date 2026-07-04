@@ -72,7 +72,7 @@ _NEUTRAL_TOKEN = ("#eef2f6", "#cbd5e1", "#334155")
 # --- Contraintes de mise en page (paysage A4, tenir sur 1 page) ---------------
 # Espace vertical disponible pour la grille après en-tête + ligne des jours +
 # légende + pied de page (en px CSS ; ~475px sur A4 paysage marge 8mm).
-_GRID_AVAIL_PX = 448.0
+_GRID_AVAIL_PX = 430.0
 _HOUR_H_MAX = 56.0  # cellule pas démesurée pour une journée courte
 _HOUR_H_MIN = 26.0  # plancher de lisibilité (journées très longues)
 _GUTTER_PCT = 7.0  # largeur de la colonne des heures (%)
@@ -361,16 +361,16 @@ def generate_timetable_pdf(
            l'espacement passe par les marges des puces). */
         .tt-legend {{
             display: flex; flex-wrap: wrap; align-items: center;
-            margin-top: 10px; padding-top: 9px;
+            margin-top: 8px; padding-top: 7px;
             border-top: 0.75px solid var(--border);
         }}
         .tt-legend-chip {{
             display: inline-flex; align-items: center;
-            margin: 0 22px 5px 0; font-size: 8.5px; color: var(--ink);
+            margin: 0 15px 3px 0; font-size: 8px; color: var(--ink);
         }}
         .tt-legend-swatch {{
-            width: 12px; height: 12px; border-radius: 3px; border: 0.75px solid;
-            display: inline-block; margin-right: 7px;
+            width: 11px; height: 11px; border-radius: 3px; border: 0.75px solid;
+            display: inline-block; margin-right: 6px;
         }}
         .tt-empty {{
             padding: 30px; text-align: center; color: var(--muted); font-size: 11px;
