@@ -14,6 +14,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Statistiques DREN : véritable export en PDF (mise en page institutionnelle premium) et en Excel (trois feuilles : synthèse, niveaux et classes, matières), à la place de l'ancien fichier qui affichait des données brutes *(admin)*.
+- Conseil de classe : les décisions de délibération se modifient en lot et le procès-verbal se valide définitivement (il devient alors non modifiable) *(admin)*.
 - MailPulse : nouvel espace de configuration des notifications parents par email et WhatsApp (activation, clé d'accès jamais réaffichée, expéditeur, destinataires de test avec interrupteur, envois réels désactivés par défaut) *(admin)*.
 - MailPulse : envoi d'une notification de test (paiement, absence, note, rappel de frais) par email ou WhatsApp vers des destinataires dédiés, en mode simulation ou réel, sans jamais impliquer un vrai parent *(admin)*.
 - MailPulse : notification automatique des parents par email et WhatsApp lors d'un paiement reçu, d'une absence signalée ou d'une note saisie, dans le respect des interrupteurs de l'établissement et une fois les envois réels activés *(parent, admin)*.

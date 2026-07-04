@@ -207,6 +207,17 @@ async def update_decision_override(
     return decision
 
 
+async def set_published(
+    db: AsyncSession,
+    council: CouncilMinutes,
+    is_published: bool,
+) -> CouncilMinutes:
+    """Marque le PV comme publie (valide) ou brouillon."""
+    council.is_published = is_published
+    await db.flush()
+    return council
+
+
 async def delete_council_minutes(
     db: AsyncSession,
     council: CouncilMinutes,
