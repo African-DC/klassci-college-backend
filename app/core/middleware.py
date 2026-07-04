@@ -134,10 +134,11 @@ def _tenant_from_subdomain(hostname: str) -> str | None:
 def _tenant_from_public_path(path: str) -> str | None:
     """Extrait le tenant du path des routes publiques de vérification.
 
-    Ces routes (`/public/verify/{tenant}/...`, `/public/verify-code/{tenant}/...`)
-    n'ont pas de JWT : le tenant est porté par l'URL pour scoper la bonne DB.
+    Ces routes (`/public/verify/{tenant}/...`, `/public/verify-code/{tenant}/...`,
+    `/public/mailpulse/inbound/{tenant}`) n'ont pas de JWT : le tenant est porté
+    par l'URL pour scoper la bonne DB.
     """
-    for prefix in ("/public/verify/", "/public/verify-code/"):
+    for prefix in ("/public/verify/", "/public/verify-code/", "/public/mailpulse/inbound/"):
         if path.startswith(prefix):
             seg = path[len(prefix) :].split("/", 1)[0].strip().lower()
             if seg == settings.LOCAL_TENANT_ID or _TENANT_SLUG_RE.match(seg):

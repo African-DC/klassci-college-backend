@@ -59,6 +59,7 @@ def config_to_response(school: SchoolSettings) -> MailPulseConfigResponse:
         test_whatsapp_enabled=school.mailpulse_test_whatsapp_enabled,
         test_email_recipients=_recipients_from_json(school.mailpulse_test_email_recipients),
         test_phone_recipients=_recipients_from_json(school.mailpulse_test_phone_recipients),
+        inbound_secret_set=bool(school.mailpulse_inbound_secret),
     )
 
 
@@ -81,6 +82,10 @@ async def update_config(
         # Clé API : ne remplacer que si une nouvelle valeur non vide est fournie.
         if data.api_key and data.api_key.strip():
             school.mailpulse_api_key = data.api_key.strip()
+
+        # Secret webhook entrant : même règle (write-only, vide = conservé).
+        if data.inbound_secret and data.inbound_secret.strip():
+            school.mailpulse_inbound_secret = data.inbound_secret.strip()
 
         school.mailpulse_test_email_recipients = [
             r.model_dump() for r in data.test_email_recipients if r.value
