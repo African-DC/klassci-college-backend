@@ -71,11 +71,12 @@ _NEUTRAL_TOKEN = ("#eef2f6", "#cbd5e1", "#334155")
 
 # --- Contraintes de mise en page (paysage A4, tenir sur 1 page) ---------------
 # Espace vertical disponible pour la grille après en-tête + ligne des jours +
-# légende + pied de page (en px CSS ; ~450px sur A4 paysage marge 8mm).
-_GRID_AVAIL_PX = 450.0
-_HOUR_H_MAX = 52.0  # cellule pas démesurée pour une journée courte
+# légende + pied de page (en px CSS ; ~475px sur A4 paysage marge 8mm).
+_GRID_AVAIL_PX = 448.0
+_HOUR_H_MAX = 56.0  # cellule pas démesurée pour une journée courte
 _HOUR_H_MIN = 26.0  # plancher de lisibilité (journées très longues)
-_GUTTER_PCT = 8.0  # largeur de la colonne des heures (%)
+_GUTTER_PCT = 7.0  # largeur de la colonne des heures (%)
+_DAYHEAD_H = 26.0  # hauteur de la ligne des jours (px)
 
 
 def _time_to_min(t: str) -> int:
@@ -229,12 +230,16 @@ def generate_timetable_pdf(
         )
 
     # Libellés d'horaires « spéciaux » (débuts/fins non alignés sur l'heure).
+    # Libellés d'horaires non alignés sur l'heure (l'heure exacte figure aussi
+    # dans le créneau). On saute ceux à moins de 5 min d'une heure pleine pour
+    # éviter qu'ils ne chevauchent le libellé d'heure (ex. 08:02 vs 08:00).
     special: set[int] = set()
     for s in slots:
         for key in ("start_time", "end_time"):
             if s.get(key):
                 mm = _time_to_min(s[key])
-                if mm % 60 != 0 and grid_start <= mm <= grid_end:
+                offset = mm % 60
+                if offset != 0 and min(offset, 60 - offset) >= 5 and grid_start <= mm <= grid_end:
                     special.add(mm)
     for mm in sorted(special):
         grid_layers.append(
@@ -267,10 +272,14 @@ def generate_timetable_pdf(
                 )
             )
 
-    # En-tête des jours (aligné sur la grille : gouttière + N jours égaux).
+    # En-tête des jours : positionné en absolu sur EXACTEMENT le même système de
+    # pourcentages que les colonnes de la grille → alignement parfait (pas de
+    # dérive due au modèle de boîte du flex).
     day_headers = "".join(
-        f'<div class="tt-dayhead" style="width:{day_w:.3f}%;">{_DAYS_FR.get(d, d)}</div>'
-        for d in active_days
+        f'<div class="tt-dayhead{" tt-dayhead-last" if i == n_days - 1 else ""}" '
+        f"style=\"left:{_GUTTER_PCT + i * day_w:.3f}%; width:{day_w:.3f}%;\">"
+        f"{_DAYS_FR.get(d, d)}</div>"
+        for i, d in enumerate(active_days)
     )
 
     # Légende matière → couleur (décode les pastels, remplit le bas de page).
@@ -288,10 +297,7 @@ def generate_timetable_pdf(
     if has_slots:
         grid_block = f"""
         <div class="tt-wrap">
-            <div class="tt-head">
-                <div class="tt-head-gutter"></div>
-                {day_headers}
-            </div>
+            <div class="tt-head">{day_headers}</div>
             <div class="tt-grid" style="height:{grid_h:.1f}px;">
                 {"".join(grid_layers)}
             </div>
@@ -304,18 +310,17 @@ def generate_timetable_pdf(
     grid_style = f"""
     <style>
         .tt-wrap {{ margin-top: 6px; }}
-        .tt-head {{
-            display: flex; align-items: stretch; margin-bottom: 2px;
-        }}
-        .tt-head-gutter {{ width: {_GUTTER_PCT:.2f}%; flex: 0 0 {_GUTTER_PCT:.2f}%; }}
+        .tt-head {{ position: relative; height: {_DAYHEAD_H:.0f}px; margin-bottom: 2px; }}
         .tt-dayhead {{
-            flex: 0 0 auto; text-align: center; padding: 5px 2px;
+            position: absolute; top: 0; bottom: 0; box-sizing: border-box;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 2px; text-align: center;
             background: var(--primary); color: #fff; font-size: 9.5px;
             font-weight: 700; letter-spacing: 0.4px;
-            border-right: 1px solid rgba(255,255,255,0.35);
-            border-radius: 4px 4px 0 0;
+            border-right: 1px solid rgba(255,255,255,0.4);
+            border-radius: 4px 4px 0 0; overflow: hidden;
         }}
-        .tt-dayhead:last-child {{ border-right: none; }}
+        .tt-dayhead-last {{ border-right: none; }}
         .tt-grid {{
             position: relative; width: 100%;
             border: 0.75px solid var(--border); border-top: none;
@@ -352,17 +357,20 @@ def generate_timetable_pdf(
             font-size: 6.6px; color: #52525b; margin-top: 1px;
             font-variant-numeric: tabular-nums;
         }}
+        /* Légende : conteneur flex (le `gap` n'étant pas honoré par WeasyPrint,
+           l'espacement passe par les marges des puces). */
         .tt-legend {{
-            display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px;
-            padding-top: 8px; border-top: 0.75px solid var(--border);
+            display: flex; flex-wrap: wrap; align-items: center;
+            margin-top: 10px; padding-top: 9px;
+            border-top: 0.75px solid var(--border);
         }}
         .tt-legend-chip {{
-            display: inline-flex; align-items: center; gap: 5px;
-            font-size: 8px; color: var(--ink);
+            display: inline-flex; align-items: center;
+            margin: 0 22px 5px 0; font-size: 8.5px; color: var(--ink);
         }}
         .tt-legend-swatch {{
-            width: 11px; height: 11px; border-radius: 3px; border: 0.75px solid;
-            display: inline-block;
+            width: 12px; height: 12px; border-radius: 3px; border: 0.75px solid;
+            display: inline-block; margin-right: 7px;
         }}
         .tt-empty {{
             padding: 30px; text-align: center; color: var(--muted); font-size: 11px;
