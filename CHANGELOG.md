@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Changed
 
+- Durée de connexion prolongée (jeton d'accès porté à 60 minutes) pour éviter les déconnexions intempestives d'un utilisateur pourtant actif ; la session reste limitée à 30 minutes d'inactivité *(tous)*.
 - Relevé de notes (PDF) aligné sur le design institutionnel premium des autres documents : bandeau d'identité, titre de section, tableau soigné et synthèse en cartes clés (moyenne de classe, note min/max, taux de saisie) *(admin, enseignant)*.
 
 ### Added

@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # 60 min : réduit la fréquence des refresh (donc les courses de rotation du
+    # refresh token qui déconnectaient les utilisateurs actifs). La durée réelle
+    # de session reste bornée par la fenêtre d'inactivité (cookie FE, 30 min).
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
