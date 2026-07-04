@@ -81,9 +81,38 @@ async def login(
             role=user.role,
             first_name=first_name,
             last_name=last_name,
+            must_change_password=user.must_change_password,
         ),
     )
     return response, refresh_token
+
+
+async def change_password(
+    db: AsyncSession,
+    user_id: int,
+    current_password: str,
+    new_password: str,
+) -> None:
+    """Change le mot de passe de l'utilisateur et lève `must_change_password`.
+
+    Utilisé notamment par l'écran de changement forcé à la 1re connexion après
+    création/réinitialisation par un admin.
+    """
+    from app.core.security import hash_password
+
+    user = await get_user_by_id(db, user_id)
+    if not user or not verify_password(current_password, user.hashed_password):
+        raise UnauthorizedError("Mot de passe actuel incorrect")
+    user.hashed_password = hash_password(new_password)
+    user.must_change_password = False
+    await audit_log(
+        db,
+        entity_type="user",
+        action=AuditAction.UPDATE,
+        user_id=user.id,
+        entity_id=user.id,
+    )
+    await db.commit()
 
 
 async def refresh(

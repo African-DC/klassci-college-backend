@@ -16,6 +16,14 @@ class UserInToken(BaseModel):
     role: Literal["admin", "staff", "teacher", "student", "parent", "super_admin"]
     first_name: str
     last_name: str
+    # Force l'écran de changement de mot de passe à la 1re connexion (compte créé
+    # ou réinitialisé par un admin avec un mot de passe temporaire).
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
 
 
 # Réponse body /login — refresh_token envoyé en cookie httpOnly, pas dans le body

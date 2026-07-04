@@ -15,6 +15,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Gestion des comptes de connexion depuis la fiche d'un élève, parent, enseignant ou membre du personnel : voir l'état du compte (email, dernière connexion), créer le compte s'il n'existe pas (élève/parent) et réinitialiser le mot de passe. Le mot de passe temporaire est `Bonjour@<année>` et doit être changé à la première connexion *(admin, directeur, personnel)*.
 - Statistiques DREN : véritable export en PDF (mise en page institutionnelle premium) et en Excel (trois feuilles : synthèse, niveaux et classes, matières), à la place de l'ancien fichier qui affichait des données brutes *(admin)*.
 - Conseil de classe : les décisions de délibération se modifient en lot et le procès-verbal se valide définitivement (il devient alors non modifiable) *(admin)*.
 - Feuille de notes vierge à imprimer pour une classe : l'enseignant récupère la liste de ses élèves prête à remplir à la main (colonnes de notes et moyenne), la matière et le trimestre pouvant être pré-renseignés *(enseignant, admin)*.

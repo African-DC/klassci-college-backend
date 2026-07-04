@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import TenantMiddleware
 from app.core.sentry import init_sentry
+from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
 from app.routers.attachments import router as attachments_router
 from app.routers.attendance import router as attendance_router
@@ -84,6 +85,7 @@ register_exception_handlers(app)
 app.include_router(admin_router)
 app.include_router(attachments_router)
 app.include_router(attendance_router)
+app.include_router(accounts_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(enrollments_router)
