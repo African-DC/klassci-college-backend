@@ -8,6 +8,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+
+- Relevé de notes (PDF) aligné sur le design institutionnel premium des autres documents : bandeau d'identité, titre de section, tableau soigné et synthèse en cartes clés (moyenne de classe, note min/max, taux de saisie) *(admin, enseignant)*.
+
 ### Added
 
 - MailPulse : nouvel espace de configuration des notifications parents par email et WhatsApp (activation, clé d'accès jamais réaffichée, expéditeur, destinataires de test avec interrupteur, envois réels désactivés par défaut) *(admin)*.
