@@ -4,7 +4,12 @@ La clé API n'est JAMAIS renvoyée : la réponse expose seulement ``api_key_set`
 En update, une clé vide/absente conserve la clé existante.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, field_validator
+
+MailPulseEvent = Literal["payment_received", "absence_reported", "grade_published", "fee_reminder"]
+MailPulseTestChannel = Literal["email", "whatsapp", "both"]
 
 
 class MailPulseRecipient(BaseModel):
@@ -77,3 +82,32 @@ class MailPulseConfigUpdate(BaseModel):
             return None
         v = v.strip()
         return v or None
+
+
+class MailPulseTestRequest(BaseModel):
+    """POST /admin/settings/mailpulse/test — envoi de test vers les destinataires dédiés."""
+
+    event: MailPulseEvent
+    channel: MailPulseTestChannel = "both"
+    dry_run: bool = True
+
+
+class MailPulseTestResult(BaseModel):
+    """Résultat d'un envoi de test individuel."""
+
+    channel: Literal["email", "whatsapp"]
+    recipient: str
+    ok: bool
+    status: str
+    error_code: str | None = None
+    error_message: str | None = None
+
+
+class MailPulseTestResponse(BaseModel):
+    """Réponse du moteur de test — jamais de vrais parents impliqués."""
+
+    dry_run: bool
+    event: MailPulseEvent
+    sent: int
+    results: list[MailPulseTestResult] = []
+    message: str
