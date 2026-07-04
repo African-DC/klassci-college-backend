@@ -102,18 +102,15 @@ async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
     return ChildrenListResponse(children=children)
 
 
-async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardResponse:
-    """Dashboard parent : pour chaque enfant, agrège classe + moyenne + absences + reste à payer.
+async def build_child_summaries(db: AsyncSession, parent: Parent) -> list[ParentDashboardChild]:
+    """Agrège, pour chaque enfant d'un parent, classe + moyenne + absences + reste à payer.
 
-    Réutilise les helpers existants (frais, attendance) plutôt que de
-    dupliquer la logique. Une query par enfant sur grades / fees / attendance
-    — acceptable pour la cardinalité typique (1-3 enfants par parent).
+    Réutilisé par le dashboard parent (portail) et la réponse INFO WhatsApp
+    (MailPulse). Une query par enfant — acceptable (1-3 enfants par parent).
     """
     from app.services.attendance_service import get_student_attendance_summary
 
-    parent = await _get_parent_for_user(db, user_id)
     links = await repo.list_children(db, parent.id)
-    parent_name = f"{parent.first_name} {parent.last_name}".strip()
 
     summaries: list[ParentDashboardChild] = []
     for link in links:
@@ -171,6 +168,14 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardRespon
             )
         )
 
+    return summaries
+
+
+async def get_dashboard(db: AsyncSession, user_id: int) -> ParentDashboardResponse:
+    """Dashboard parent : pour chaque enfant, agrège classe + moyenne + absences + reste à payer."""
+    parent = await _get_parent_for_user(db, user_id)
+    parent_name = f"{parent.first_name} {parent.last_name}".strip()
+    summaries = await build_child_summaries(db, parent)
     current_ay_name = await admin_repository.get_current_academic_year_name(db)
 
     return ParentDashboardResponse(

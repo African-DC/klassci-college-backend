@@ -6,7 +6,7 @@ En update, une clé vide/absente conserve la clé existante.
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 MailPulseEvent = Literal["payment_received", "absence_reported", "grade_published", "fee_reminder"]
 MailPulseTestChannel = Literal["email", "whatsapp", "both"]
@@ -41,6 +41,7 @@ class MailPulseConfigResponse(BaseModel):
     test_whatsapp_enabled: bool = True
     test_email_recipients: list[MailPulseRecipient] = []
     test_phone_recipients: list[MailPulseRecipient] = []
+    inbound_secret_set: bool = False
 
 
 class MailPulseConfigUpdate(BaseModel):
@@ -61,6 +62,8 @@ class MailPulseConfigUpdate(BaseModel):
     test_whatsapp_enabled: bool
     test_email_recipients: list[MailPulseRecipient] = []
     test_phone_recipients: list[MailPulseRecipient] = []
+    # Secret du webhook entrant (feature INFO) — write-only, vide = conservé.
+    inbound_secret: str | None = None
 
     @field_validator("base_url")
     @classmethod
@@ -111,3 +114,31 @@ class MailPulseTestResponse(BaseModel):
     sent: int
     results: list[MailPulseTestResult] = []
     message: str
+
+
+class MailPulseInboundPayload(BaseModel):
+    """Message WhatsApp entrant relayé par MailPulse (feature INFO).
+
+    Contrat volontairement permissif : le numéro peut arriver sous ``from`` ou
+    ``phone`` et le texte sous ``text`` ou ``body`` selon le relais.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    sender: str | None = Field(default=None, alias="from")
+    phone: str | None = None
+    text: str | None = None
+    body: str | None = None
+
+    def resolved_phone(self) -> str:
+        return (self.sender or self.phone or "").strip()
+
+    def message_text(self) -> str:
+        return (self.text or self.body or "").strip()
+
+
+class MailPulseInboundResult(BaseModel):
+    """Accusé de traitement d'un message entrant."""
+
+    status: Literal["ignored", "unknown_number", "replied", "disabled"]
+    matched: bool = False

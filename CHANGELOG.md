@@ -13,6 +13,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - MailPulse : nouvel espace de configuration des notifications parents par email et WhatsApp (activation, clé d'accès jamais réaffichée, expéditeur, destinataires de test avec interrupteur, envois réels désactivés par défaut) *(admin)*.
 - MailPulse : envoi d'une notification de test (paiement, absence, note, rappel de frais) par email ou WhatsApp vers des destinataires dédiés, en mode simulation ou réel, sans jamais impliquer un vrai parent *(admin)*.
 - MailPulse : notification automatique des parents par email et WhatsApp lors d'un paiement reçu, d'une absence signalée ou d'une note saisie, dans le respect des interrupteurs de l'établissement et une fois les envois réels activés *(parent, admin)*.
+- MailPulse : réponse automatique aux parents qui écrivent « INFO » sur WhatsApp (classe, moyenne, absences et reste à payer de chaque enfant), sécurisée par un secret partagé propre à l'établissement *(parent, admin)*.
 - Intérim : la direction assigne (ou retire) un enseignant remplaçant sur un congé approuvé ; le demandeur voit qui le remplace *(admin, enseignant)*.
 - Demandes de congé : les enseignants et le personnel posent leurs congés (type, dates, motif) et suivent leur statut ; la direction consulte, approuve ou refuse avec un commentaire *(enseignant, personnel, admin)*.
 - Documents de l'élève : l'administration téléverse des pièces (extrait de naissance, certificat médical, etc.) sur la fiche d'un élève, avec un type choisi dans un catalogue ou créé à la volée *(admin)*.
