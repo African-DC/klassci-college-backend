@@ -53,23 +53,6 @@ def _report_styles() -> str:
             background: var(--soft-bg); font-variant-numeric: tabular-nums;
         }
         .grade-report td.cell-rank { text-align: center; color: var(--ink); }
-        .report-stats {
-            display: flex; gap: 0; margin: 14px 0 4px;
-            border: 0.75px solid var(--border); border-radius: 5px; overflow: hidden;
-        }
-        .report-stat {
-            flex: 1; padding: 9px 12px; text-align: center;
-            border-right: 0.75px solid var(--border);
-        }
-        .report-stat:last-child { border-right: none; }
-        .report-stat-label {
-            font-size: 8px; color: var(--muted); text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-        .report-stat-value {
-            font-family: var(--font-display); font-size: 16px; font-weight: 700;
-            color: var(--primary); margin-top: 3px; font-variant-numeric: tabular-nums;
-        }
     </style>
     """
 
@@ -177,26 +160,21 @@ def _table(evaluations: list[dict[str, Any]], student_rows: list[dict[str, Any]]
     )
 
 
-def _stats_band(class_stats: dict[str, Any]) -> str:
+def _stats_band(theme: PDFTheme, class_stats: dict[str, Any]) -> str:
+    """Bandeau de synthèse via les cartes KPI premium partagées."""
+
     def fmt(val: Any) -> str:
         return ui.format_decimal(val) if val is not None else "—"
 
     fill_rate = class_stats.get("fill_rate")
     fill_str = f"{fill_rate} %" if fill_rate is not None else "—"
-    cells = [
-        ("Moyenne de classe", f"{fmt(class_stats.get('class_avg'))} / 20"),
-        ("Note min", fmt(class_stats.get("min"))),
-        ("Note max", fmt(class_stats.get("max"))),
-        ("Taux de saisie", fill_str),
+    cards = [
+        {"label": "Moyenne de classe", "value": f"{fmt(class_stats.get('class_avg'))} / 20", "tone": "accent"},
+        {"label": "Note min", "value": fmt(class_stats.get("min"))},
+        {"label": "Note max", "value": fmt(class_stats.get("max"))},
+        {"label": "Taux de saisie", "value": fill_str, "tone": "success"},
     ]
-    inner = "".join(
-        f'<div class="report-stat">'
-        f'<div class="report-stat-label">{ui.esc(label)}</div>'
-        f'<div class="report-stat-value">{ui.esc(value)}</div>'
-        "</div>"
-        for label, value in cells
-    )
-    return f'<div class="report-stats">{inner}</div>'
+    return ui.kpis_row(cards, theme=theme)
 
 
 def generate_grade_report_pdf(
@@ -226,7 +204,10 @@ def generate_grade_report_pdf(
 
     issued_str = datetime.utcnow().strftime("%d/%m/%Y")
     table = _table(evaluations, student_rows)
-    stats = _stats_band(class_stats) if evaluations else ""
+    stats = _stats_band(theme, class_stats) if evaluations else ""
+
+    meta_left = f"<strong>Effectif</strong> · {len(student_rows)} élève(s)"
+    meta_right = f"{len(evaluations)} évaluation(s) · établi le {issued_str}"
 
     html = f"""
     <!DOCTYPE html>
@@ -246,6 +227,10 @@ def generate_grade_report_pdf(
             doc_subtitle=subtitle,
         )
     }
+
+        {ui.meta_banner(meta_left, meta_right, theme=theme)}
+
+        {ui.section_title("Relevé détaillé des notes", theme=theme)}
 
         {table}
 
