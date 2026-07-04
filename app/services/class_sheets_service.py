@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
-from app.models.academic import AcademicYear, Class
+from app.models.academic import AcademicYear, Class, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
@@ -91,7 +91,28 @@ async def get_attendance_sheet_pdf(db: AsyncSession, class_id: int, columns: int
     return generate_attendance_sheet_pdf(school, class_info, students, columns=columns)
 
 
-async def get_grade_sheet_pdf(db: AsyncSession, class_id: int, note_columns: int) -> bytes:
-    """Génère la feuille de notes vierge d'une classe (AY courante)."""
+async def get_grade_sheet_pdf(
+    db: AsyncSession,
+    class_id: int,
+    note_columns: int,
+    subject_id: int | None = None,
+    trimester: int | None = None,
+) -> bytes:
+    """Génère la feuille de notes vierge d'une classe (AY courante).
+
+    `subject_id` et `trimester` sont optionnels : s'ils sont fournis, ils
+    pré-remplissent l'en-tête (matière / trimestre) au lieu de lignes à compléter.
+    """
     school, class_info, students = await _load_context(db, class_id)
-    return generate_grade_sheet_pdf(school, class_info, students, note_columns=note_columns)
+    subject_name = ""
+    if subject_id is not None:
+        subject = await db.get(Subject, subject_id)
+        subject_name = subject.name if subject else ""
+    return generate_grade_sheet_pdf(
+        school,
+        class_info,
+        students,
+        note_columns=note_columns,
+        subject_name=subject_name,
+        trimester=trimester,
+    )

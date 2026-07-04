@@ -136,8 +136,18 @@ async def get_grade_report_pdf(
         academic_year_id=academic_year_id,
         trimester=trimester,
     )
+    # Filtrage par NOM de matière et non par subject_id : une évaluation peut
+    # référencer l'entrée catalogue (level_id null) ou l'instance de niveau —
+    # deux subject_id distincts pour le même nom. Comparer les noms évite un
+    # relevé vide quand le sélecteur pointe l'instance et les notes le catalogue.
+    target_subject = await db.get(Subject, subject_id)
+    target_name = (target_subject.name if target_subject else "").strip().casefold()
     evaluations = sorted(
-        (ev for ev in all_evals if ev.subject_id == subject_id),
+        (
+            ev
+            for ev in all_evals
+            if ev.subject is not None and ev.subject.name.strip().casefold() == target_name
+        ),
         key=lambda ev: ev.date,
     )
 

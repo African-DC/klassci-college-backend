@@ -151,6 +151,18 @@ class StudentNextCourse(BaseModel):
     room: str | None = None
 
 
+class StudentLatestGrade(BaseModel):
+    """Dernière note saisie de l'élève (mise en avant sur le tableau de bord)."""
+
+    value: float
+    out_of: int = 20
+    subject_name: str
+    evaluation_title: str
+    type: str
+    trimester: int
+    date: date
+
+
 class StudentDashboardResponse(BaseModel):
     """Contrat consommé par /student/dashboard côté FE.
 
@@ -161,6 +173,7 @@ class StudentDashboardResponse(BaseModel):
     class_name: str
     next_course: StudentNextCourse | None = None
     general_average: float | None = None
+    latest_grade: StudentLatestGrade | None = None
     fees_remaining: float
     total_absences: int
     current_academic_year: str | None = None
