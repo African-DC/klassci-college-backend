@@ -102,6 +102,9 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Leave / congés (2)
     {"slug": "leave:request", "name": "Request leave"},
     {"slug": "leave:approve", "name": "Approve or reject leave requests"},
+    # MailPulse (2)
+    {"slug": "mailpulse:manage", "name": "Configure MailPulse notifications"},
+    {"slug": "mailpulse:test", "name": "Send MailPulse test notifications"},
     # Super Admin (7)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
     {"slug": "super-admin:tenants:read", "name": "View tenants list and per-tenant stats"},

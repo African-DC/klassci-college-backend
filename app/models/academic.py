@@ -6,6 +6,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Date,
@@ -295,3 +296,34 @@ class SchoolSettings(Base, TimestampMixin):
     notify_reenrollment: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # MailPulse — notifications email + WhatsApp aux parents (migration 0039)
+    mailpulse_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    mailpulse_base_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Secret au repos — jamais renvoyé dans une réponse, jamais loggé, exclu du dict PDF.
+    mailpulse_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mailpulse_sender_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mailpulse_sender_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mailpulse_default_language: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="fr", server_default="fr"
+    )
+    mailpulse_timeout: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=20, server_default="20"
+    )
+    # Gate des workflows réels (paiement/absence/note/rappel) vers les vrais parents.
+    mailpulse_real_workflows_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Moteur de test — destinataires dédiés (jamais de vrais parents).
+    mailpulse_test_email_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    mailpulse_test_whatsapp_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    # Listes [{"value": "...", "enabled": true}] — destinataires de test avec interrupteur.
+    mailpulse_test_email_recipients: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    mailpulse_test_phone_recipients: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Secret de signature du webhook entrant (feature INFO) — jamais renvoyé.
+    mailpulse_inbound_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
