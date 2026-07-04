@@ -85,6 +85,7 @@ async def create_session(
         from app.models.notification import NotificationType
         from app.models.user import Student
         from app.services import notification_dispatch_service as notif
+        from app.services.mailpulse import workflow_service as mp_workflow
 
         for record in data.records:
             if record.status == "absent" and record.student_id:
@@ -100,6 +101,14 @@ async def create_session(
                             "body": f"Une absence a été enregistrée le {data.date}.",
                         },
                     )
+                # Notification parents via MailPulse — best-effort, gardée par la config.
+                await mp_workflow.notify_student_parents(
+                    db,
+                    student_id=record.student_id,
+                    event=mp_workflow.EVENT_ABSENCE,
+                    subject="Absence signalée",
+                    body=f"Une absence de votre enfant a été enregistrée le {data.date}.",
+                )
     except Exception:
         logger.exception("Failed to dispatch absence notifications")
 

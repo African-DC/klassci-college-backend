@@ -190,6 +190,26 @@ async def batch_update_grades(
 
     await db.commit()
 
+    # Notification parents via MailPulse — best-effort, gardée par la config tenant
+    # (désactivée par défaut). Une notification par élève noté.
+    try:
+        from app.services.mailpulse import workflow_service as mp_workflow
+
+        notified: set[int] = set()
+        for g in grades:
+            if g.status == "entered" and g.student_id not in notified:
+                notified.add(g.student_id)
+                await mp_workflow.notify_student_parents(
+                    db,
+                    student_id=g.student_id,
+                    event=mp_workflow.EVENT_GRADE,
+                    subject="Nouvelle note disponible",
+                    body="Une nouvelle note est disponible pour votre enfant.",
+                    external_event_id=f"eval-{eval_id}-student-{g.student_id}",
+                )
+    except Exception:
+        logger.exception("Failed to dispatch grade MailPulse notifications")
+
     return [
         {
             "student_id": g.student_id,
