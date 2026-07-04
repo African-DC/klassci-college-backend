@@ -1,11 +1,19 @@
-"""Emploi du temps — PDF landscape A4 grille horaire premium.
+"""Emploi du temps — PDF paysage A4, grille horaire premium sur 1 page.
 
-La grille jours × heures est spécifique à ce PDF (non applicable au
-premium_table générique), mais utilise les CSS variables du theme école
-(var(--primary), var(--accent), var(--soft-bg), var(--border)).
+Refonte 2026-07 : la grille est désormais **minute-précise** (positionnement
+absolu comme la grille FE `/admin/timetable`), plafonnée à **une seule page**.
 
-Refactor 2026-05-18 : utilise `components.py` (header premium, footer) +
-`PDFTheme.from_school` pour les couleurs école dynamiques.
+- Les créneaux sont placés à la minute près (gère 1h, 1h30, 2h, un début à
+  10h30, etc.) au lieu de l'ancien `rowspan = round(fin - début)` qui écrasait
+  ou perdait tout créneau non aligné sur l'heure.
+- La plage horaire est **rognée aux heures réellement utilisées** (min début →
+  max fin) : plus de bandes vides de 7h à 18h qui poussaient sur une 2e page.
+- La hauteur de la grille est **calculée pour tenir sur une page** paysage A4.
+- Les couleurs de matière sont des **pastels « ciel »** (fond clair Tailwind-100
+  + texte foncé -800) : lisibles, jamais un aplat sombre qui masque le texte.
+
+Utilise `components.py` (header/footer premium) + `PDFTheme.from_school` pour
+les couleurs école dynamiques (var(--primary), var(--accent), etc.).
 """
 
 from __future__ import annotations
@@ -27,55 +35,99 @@ _DAYS_FR = {
     "saturday": "Samedi",
 }
 
-# Palette pastel pour matières (cycle si plus de matières que de couleurs)
-_SLOT_COLORS = [
-    "#E8F0FE",
-    "#FEF3E2",
-    "#E8F5E9",
-    "#FDE8E8",
-    "#EDE7F6",
-    "#FFF8E1",
-    "#E0F7FA",
-    "#FCE4EC",
-    "#F3E5F5",
-    "#E8EAF6",
+# Jetons de couleur « ciel » : fond pastel (Tailwind-100), bordure (-300),
+# texte foncé (-800). Miroir du COLOR_MAP de la grille FE — garantit un texte
+# toujours lisible (contraste fond clair / texte foncé), jamais un aplat sombre.
+_COLOR_TOKENS: dict[str, tuple[str, str, str]] = {
+    "blue": ("#dbeafe", "#93c5fd", "#1e40af"),
+    "cyan": ("#cffafe", "#67e8f9", "#155e75"),
+    "teal": ("#ccfbf1", "#5eead4", "#115e59"),
+    "indigo": ("#e0e7ff", "#a5b4fc", "#3730a3"),
+    "violet": ("#ede9fe", "#c4b5fd", "#5b21b6"),
+    "emerald": ("#d1fae5", "#6ee7b7", "#065f46"),
+    "green": ("#dcfce7", "#86efac", "#166534"),
+    "amber": ("#fef3c7", "#fcd34d", "#92400e"),
+    "orange": ("#ffedd5", "#fdba74", "#9a3412"),
+    "rose": ("#ffe4e6", "#fda4af", "#9f1239"),
+    "pink": ("#fce7f3", "#f9a8d4", "#9d174d"),
+    "red": ("#fee2e2", "#fca5a5", "#991b1b"),
+}
+# Ordre de repli (le plus « ciel » d'abord) pour les matières sans couleur.
+_FALLBACK_CYCLE = [
+    "blue",
+    "cyan",
+    "teal",
+    "indigo",
+    "violet",
+    "emerald",
+    "amber",
+    "orange",
+    "rose",
+    "pink",
+    "green",
+    "red",
 ]
+_NEUTRAL_TOKEN = ("#eef2f6", "#cbd5e1", "#334155")
+
+# --- Contraintes de mise en page (paysage A4, tenir sur 1 page) ---------------
+# Espace vertical disponible pour la grille après en-tête + ligne des jours +
+# légende + pied de page (en px CSS ; ~450px sur A4 paysage marge 8mm).
+_GRID_AVAIL_PX = 450.0
+_HOUR_H_MAX = 52.0  # cellule pas démesurée pour une journée courte
+_HOUR_H_MIN = 26.0  # plancher de lisibilité (journées très longues)
+_GUTTER_PCT = 8.0  # largeur de la colonne des heures (%)
 
 
-def _time_to_float(t: str) -> float:
+def _time_to_min(t: str) -> int:
+    """'08:30' -> 510 minutes."""
     parts = t.split(":")
-    return int(parts[0]) + int(parts[1]) / 60
+    return int(parts[0]) * 60 + int(parts[1])
 
 
-def _cell_for_hour(
-    day_slots: list[dict[str, Any]], hour: int, subject_colors: dict[str, str]
-) -> str:
-    """HTML d'une cellule de la grille à l'heure donnée (gère les rowspans)."""
-    for s in day_slots:
-        start = _time_to_float(s["start_time"])
-        end = _time_to_float(s["end_time"])
-        if abs(start - hour) < 0.01:
-            span = max(1, round(end - start))
-            bg = subject_colors.get(s.get("subject_name", ""), "#f0f0f0")
-            subject = esc(s.get("subject_name", ""))
-            teacher = esc(s.get("teacher_name", ""))
-            room = esc(s.get("room", ""))
-            time_str = f"{s['start_time']}-{s['end_time']}"
-            room_div = f'<div style="color:var(--muted);">{room}</div>' if room else ""
-            return (
-                f'<td rowspan="{span}" style="background:{bg}; vertical-align:top; '
-                f"padding:4px; border:1px solid var(--border); font-size:8px; "
-                f'line-height:1.3;">'
-                f'<div style="font-weight:bold; font-size:9px; color:var(--primary);">'
-                f"{subject}</div>"
-                f'<div style="color:var(--ink);">{teacher}</div>'
-                f"{room_div}"
-                f'<div style="color:var(--muted); font-size:7px;">{time_str}</div>'
-                f"</td>"
-            )
-        elif start < hour < end:
-            return ""
-    return '<td style="border:1px solid var(--border);"></td>'
+def _fmt_min(m: int) -> str:
+    """510 -> '08:30'."""
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def _resolve_color(token: str | None, cache: dict[str, tuple[str, str, str]], name: str) -> tuple[str, str, str]:
+    """Résout un jeton de couleur matière en (fond, bordure, texte) pastel."""
+    if name in cache:
+        return cache[name]
+    key = (token or "").strip().lower()
+    if key in _COLOR_TOKENS:
+        resolved = _COLOR_TOKENS[key]
+    elif name:
+        resolved = _COLOR_TOKENS[_FALLBACK_CYCLE[len(cache) % len(_FALLBACK_CYCLE)]]
+    else:
+        resolved = _NEUTRAL_TOKEN
+    cache[name] = resolved
+    return resolved
+
+
+def _slot_html(slot: dict[str, Any], *, left_pct: float, width_pct: float,
+               top_px: float, height_px: float, colors: tuple[str, str, str]) -> str:
+    """Bloc d'un créneau positionné à la minute près."""
+    bg, border, text = colors
+    subject = esc(slot.get("subject_name", ""))
+    teacher = esc(slot.get("teacher_name", ""))
+    room = esc(slot.get("room") or "")
+    time_str = f"{slot['start_time']}–{slot['end_time']}"
+
+    # Divulgation progressive selon la hauteur (comme la grille FE).
+    lines = [f'<div class="tt-slot-subject">{subject}</div>']
+    if height_px >= 30 and teacher:
+        lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
+    if height_px >= 44 and room:
+        lines.append(f'<div class="tt-slot-sub tt-slot-room">{room}</div>')
+    if height_px >= 58:
+        lines.append(f'<div class="tt-slot-time">{time_str}</div>')
+
+    style = (
+        f"left:{left_pct:.3f}%; width:{width_pct:.3f}%; "
+        f"top:{top_px:.1f}px; height:{height_px:.1f}px; "
+        f"background:{bg}; border-color:{border}; color:{text};"
+    )
+    return f'<div class="tt-slot" style="{style}">{"".join(lines)}</div>'
 
 
 def generate_timetable_pdf(
@@ -86,78 +138,225 @@ def generate_timetable_pdf(
     day_start: int = 7,
     day_end: int = 18,
 ) -> bytes:
-    """Generate a landscape A4 timetable PDF — theme école dynamique.
+    """Génère l'emploi du temps en PDF paysage A4, sur une seule page.
 
-    slots: list of dicts avec day, start_time, end_time, subject_name,
-           teacher_name, room, subject_color (optionnel).
+    slots : dicts avec day, start_time, end_time, subject_name, teacher_name,
+            room, subject_color (jeton nommé optionnel : 'blue', 'rose', ...).
     """
-    from weasyprint import HTML  # lazy import — voir module docstring
+    from weasyprint import HTML  # lazy import — WeasyPrint charge GTK au 1er appel
 
     theme = PDFTheme.from_school(school_settings)
-    school_name = school_settings.get("school_name") or ""
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    hours = list(range(day_start, day_end))
-
-    # Couleurs par matière (cycle si pas de couleur explicite)
-    subject_colors: dict[str, str] = {}
-    color_idx = 0
-    for s in slots:
-        sname = s.get("subject_name", "")
-        if sname and sname not in subject_colors:
-            subject_colors[sname] = (
-                s.get("subject_color") or _SLOT_COLORS[color_idx % len(_SLOT_COLORS)]
-            )
-            color_idx += 1
-
-    # Organiser slots par jour + tri intra-jour
+    # Organiser + trier les créneaux par jour.
     slots_by_day: dict[str, list[dict[str, Any]]] = {d: [] for d in _DAYS_ORDER}
     for s in slots:
-        day = s.get("day", "").lower()
+        day = (s.get("day") or "").lower()
         if day in slots_by_day:
             slots_by_day[day].append(s)
     for day in _DAYS_ORDER:
         slots_by_day[day].sort(key=lambda x: x.get("start_time", "00:00"))
 
-    table_rows = ""
-    for hour in hours:
-        cells = "".join(
-            _cell_for_hour(slots_by_day[day], hour, subject_colors) for day in _DAYS_ORDER
+    # N'afficher que les jours qui ont au moins un cours (compacité horizontale).
+    active_days = [d for d in _DAYS_ORDER if slots_by_day[d]] or _DAYS_ORDER[:5]
+
+    # Couleurs par matière (résolues une fois, réutilisées grille + légende).
+    color_cache: dict[str, tuple[str, str, str]] = {}
+    subject_order: list[str] = []
+    for d in active_days:
+        for s in slots_by_day[d]:
+            sname = s.get("subject_name") or ""
+            if sname and sname not in color_cache:
+                _resolve_color(s.get("subject_color"), color_cache, sname)
+                subject_order.append(sname)
+
+    # Bornes horaires : rognées aux heures réellement utilisées (arrondi à l'heure).
+    all_starts = [_time_to_min(s["start_time"]) for s in slots if s.get("start_time")]
+    all_ends = [_time_to_min(s["end_time"]) for s in slots if s.get("end_time")]
+    if all_starts and all_ends:
+        grid_start = (min(all_starts) // 60) * 60
+        grid_end = -(-max(all_ends) // 60) * 60  # ceil vers l'heure
+    else:
+        grid_start = day_start * 60
+        grid_end = day_end * 60
+    span_min = max(60, grid_end - grid_start)
+    span_hours = span_min / 60.0
+
+    # Hauteur d'heure calée pour tenir sur une page.
+    hour_h = min(_HOUR_H_MAX, max(_HOUR_H_MIN, _GRID_AVAIL_PX / span_hours))
+    grid_h = span_min / 60.0 * hour_h
+    px_per_min = hour_h / 60.0
+
+    n_days = len(active_days)
+    day_w = (100.0 - _GUTTER_PCT) / n_days
+
+    def _top(minute: int) -> float:
+        return (minute - grid_start) * px_per_min
+
+    def _label_top(minute: int) -> float:
+        # Garde le libellé entièrement visible aux deux extrémités de la grille.
+        return min(max(0.0, _top(minute) - 5.0), max(0.0, grid_h - 9.0))
+
+    # --- Lignes horaires + bandes zébrées + libellés d'heure -------------------
+    hour_marks = list(range(grid_start, grid_end + 1, 60))
+    grid_layers: list[str] = []
+    # Bandes zébrées (heures paires) pour scanner à l'horizontale.
+    for i, m in enumerate(hour_marks[:-1]):
+        if i % 2 == 1:
+            grid_layers.append(
+                f'<div class="tt-band" style="top:{_top(m):.1f}px; '
+                f'height:{hour_h:.1f}px;"></div>'
+            )
+    # Lignes horaires pleines + libellé dans la gouttière.
+    for m in hour_marks:
+        grid_layers.append(f'<div class="tt-hline" style="top:{_top(m):.1f}px;"></div>')
+        grid_layers.append(
+            f'<div class="tt-hlabel" style="top:{_label_top(m):.1f}px; '
+            f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(m)}</div>'
         )
-        table_rows += f"""
-        <tr>
-            <td style="background:var(--soft-bg); font-weight:bold; text-align:center;
-                       font-size:9px; border:1px solid var(--border);
-                       color:var(--primary);">
-                {hour:02d}:00
-            </td>
-            {cells}
-        </tr>
-        """
+    # Demi-heures (pointillé léger).
+    for m in range(grid_start + 30, grid_end, 60):
+        grid_layers.append(f'<div class="tt-hline tt-hline-half" style="top:{_top(m):.1f}px;"></div>')
 
+    # Libellés d'horaires « spéciaux » (débuts/fins non alignés sur l'heure).
+    special: set[int] = set()
+    for s in slots:
+        for key in ("start_time", "end_time"):
+            if s.get(key):
+                mm = _time_to_min(s[key])
+                if mm % 60 != 0 and grid_start <= mm <= grid_end:
+                    special.add(mm)
+    for mm in sorted(special):
+        grid_layers.append(
+            f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
+            f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'
+        )
+
+    # Séparateurs verticaux de colonnes (gouttière + entre jours).
+    for i in range(n_days + 1):
+        left = _GUTTER_PCT + i * day_w
+        grid_layers.append(f'<div class="tt-vline" style="left:{left:.3f}%;"></div>')
+
+    # --- Créneaux --------------------------------------------------------------
+    for di, day in enumerate(active_days):
+        left = _GUTTER_PCT + di * day_w
+        for s in slots_by_day[day]:
+            start = _time_to_min(s["start_time"])
+            end = _time_to_min(s["end_time"])
+            top = _top(start)
+            height = max(14.0, (end - start) * px_per_min)
+            colors = color_cache.get(s.get("subject_name") or "", _NEUTRAL_TOKEN)
+            grid_layers.append(
+                _slot_html(
+                    s,
+                    left_pct=left + 0.4,
+                    width_pct=day_w - 0.8,
+                    top_px=top + 0.6,
+                    height_px=height - 1.2,
+                    colors=colors,
+                )
+            )
+
+    # En-tête des jours (aligné sur la grille : gouttière + N jours égaux).
     day_headers = "".join(
-        f'<th style="background:var(--primary); color:white; text-align:center; '
-        f'padding:6px; font-size:10px; border:1px solid var(--primary);">'
-        f"{_DAYS_FR.get(d, d)}</th>"
-        for d in _DAYS_ORDER
+        f'<div class="tt-dayhead" style="width:{day_w:.3f}%;">{_DAYS_FR.get(d, d)}</div>'
+        for d in active_days
     )
 
-    # Colonne heure étroite + jours de largeur égale (table-layout fixe)
-    day_col_width = 93.0 / len(_DAYS_ORDER)
-    colgroup = (
-        '<colgroup><col style="width:7%;"/>'
-        + f'<col style="width:{day_col_width:.2f}%;"/>' * len(_DAYS_ORDER)
-        + "</colgroup>"
-    )
+    # Légende matière → couleur (décode les pastels, remplit le bas de page).
+    legend_chips = ""
+    for sname in subject_order:
+        bg, border, _text = color_cache[sname]
+        legend_chips += (
+            f'<span class="tt-legend-chip">'
+            f'<span class="tt-legend-swatch" style="background:{bg}; border-color:{border};"></span>'
+            f"{esc(sname)}</span>"
+        )
+    legend_html = f'<div class="tt-legend">{legend_chips}</div>' if legend_chips else ""
 
-    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    has_slots = any(slots_by_day[d] for d in active_days)
+    if has_slots:
+        grid_block = f"""
+        <div class="tt-wrap">
+            <div class="tt-head">
+                <div class="tt-head-gutter"></div>
+                {day_headers}
+            </div>
+            <div class="tt-grid" style="height:{grid_h:.1f}px;">
+                {"".join(grid_layers)}
+            </div>
+        </div>
+        {legend_html}
+        """
+    else:
+        grid_block = '<div class="tt-empty">Aucun cours programmé pour cette classe.</div>'
 
-    # Style additionnel pour la grille (table layout fixe)
-    grid_style = """
+    grid_style = f"""
     <style>
-        .pdf-timetable {
-            width: 100%; border-collapse: collapse; table-layout: fixed;
-            margin-top: 4px;
-        }
+        .tt-wrap {{ margin-top: 6px; }}
+        .tt-head {{
+            display: flex; align-items: stretch; margin-bottom: 2px;
+        }}
+        .tt-head-gutter {{ width: {_GUTTER_PCT:.2f}%; flex: 0 0 {_GUTTER_PCT:.2f}%; }}
+        .tt-dayhead {{
+            flex: 0 0 auto; text-align: center; padding: 5px 2px;
+            background: var(--primary); color: #fff; font-size: 9.5px;
+            font-weight: 700; letter-spacing: 0.4px;
+            border-right: 1px solid rgba(255,255,255,0.35);
+            border-radius: 4px 4px 0 0;
+        }}
+        .tt-dayhead:last-child {{ border-right: none; }}
+        .tt-grid {{
+            position: relative; width: 100%;
+            border: 0.75px solid var(--border); border-top: none;
+            border-radius: 0 0 5px 5px; overflow: hidden;
+        }}
+        .tt-band {{
+            position: absolute; left: {_GUTTER_PCT:.2f}%; right: 0;
+            background: var(--soft-bg); opacity: 0.55;
+        }}
+        .tt-hline {{
+            position: absolute; left: {_GUTTER_PCT:.2f}%; right: 0; height: 0;
+            border-top: 0.75px solid var(--border);
+        }}
+        .tt-hline-half {{ border-top: 0.5px dashed var(--border); opacity: 0.5; }}
+        .tt-vline {{
+            position: absolute; top: 0; bottom: 0; width: 0;
+            border-left: 0.75px solid var(--border);
+        }}
+        .tt-hlabel {{
+            position: absolute; left: 0; text-align: right; padding-right: 6px;
+            font-size: 8px; font-weight: 600; color: var(--primary);
+            font-variant-numeric: tabular-nums;
+        }}
+        .tt-hlabel-soft {{ font-size: 7px; font-weight: 500; color: var(--muted); }}
+        .tt-slot {{
+            position: absolute; border: 0.75px solid; border-radius: 4px;
+            padding: 2.5px 4px; overflow: hidden; box-sizing: border-box;
+            line-height: 1.15;
+        }}
+        .tt-slot-subject {{ font-weight: 700; font-size: 8.5px; }}
+        .tt-slot-sub {{ font-size: 7.2px; color: #3f3f46; margin-top: 1px; }}
+        .tt-slot-room {{ color: #52525b; }}
+        .tt-slot-time {{
+            font-size: 6.6px; color: #52525b; margin-top: 1px;
+            font-variant-numeric: tabular-nums;
+        }}
+        .tt-legend {{
+            display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 9px;
+            padding-top: 8px; border-top: 0.75px solid var(--border);
+        }}
+        .tt-legend-chip {{
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 8px; color: var(--ink);
+        }}
+        .tt-legend-swatch {{
+            width: 11px; height: 11px; border-radius: 3px; border: 0.75px solid;
+            display: inline-block;
+        }}
+        .tt-empty {{
+            padding: 30px; text-align: center; color: var(--muted); font-size: 11px;
+        }}
     </style>
     """
 
@@ -165,11 +364,10 @@ def generate_timetable_pdf(
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-        {ui.base_styles(theme, page_size="A4 landscape", margin="10mm")}
+        {ui.base_styles(theme, page_size="A4 landscape", margin="8mm 10mm")}
         {grid_style}
     </head>
     <body>
-        {ui.page_decoration(theme=theme, watermark_text=school_name)}
         <div class="pdf-page-body">
         {
         ui.premium_header(
@@ -179,24 +377,7 @@ def generate_timetable_pdf(
             doc_subtitle=f"{class_name} — {academic_year}",
         )
     }
-
-        <table class="pdf-timetable">
-            {colgroup}
-            <thead>
-                <tr>
-                    <th style="background:var(--primary); color:white; text-align:center;
-                                padding:6px; font-size:10px;
-                                border:1px solid var(--primary);">
-                        Heure
-                    </th>
-                    {day_headers}
-                </tr>
-            </thead>
-            <tbody>
-                {table_rows}
-            </tbody>
-        </table>
-
+        {grid_block}
         {
         ui.premium_footer(
             school_settings,
