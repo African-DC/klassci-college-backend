@@ -8,6 +8,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Reçu de versement (PDF) : les informations de l'élève (nom, nature, méthode, référence, statut) sont désormais parfaitement alignées en colonnes, au lieu d'un rendu tassé et décalé *(admin, personnel)*.
+
 ### Changed
 
 - Durée de connexion prolongée (jeton d'accès porté à 60 minutes) pour éviter les déconnexions intempestives d'un utilisateur pourtant actif ; la session reste limitée à 30 minutes d'inactivité *(tous)*.

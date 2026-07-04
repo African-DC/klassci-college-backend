@@ -212,6 +212,24 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         }}
         .pdf-info-value {{ flex: 1; color: var(--ink); }}
 
+        /* Info table (label/valeur alignés — table borderless, robuste WeasyPrint) */
+        .pdf-info-table {{
+            width: 100%; border-collapse: collapse; margin: 8px 0;
+            font-size: 11px;
+        }}
+        .pdf-info-table td {{
+            padding: 3.5px 0; vertical-align: top; border: none;
+        }}
+        .pdf-info-table td.pdf-info-label {{
+            width: 32%; white-space: nowrap; padding-right: 14px;
+            color: var(--muted); font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.3px; font-size: 8.5px;
+            line-height: 1.5;
+        }}
+        .pdf-info-table td.pdf-info-value {{
+            color: var(--ink); font-weight: 500; line-height: 1.4;
+        }}
+
         /* Progress bar */
         .pdf-progress {{
             width: 100%; height: 8px; background: var(--border);
