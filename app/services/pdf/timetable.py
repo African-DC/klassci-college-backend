@@ -89,7 +89,9 @@ def _fmt_min(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-def _resolve_color(token: str | None, cache: dict[str, tuple[str, str, str]], name: str) -> tuple[str, str, str]:
+def _resolve_color(
+    token: str | None, cache: dict[str, tuple[str, str, str]], name: str
+) -> tuple[str, str, str]:
     """Résout un jeton de couleur matière en (fond, bordure, texte) pastel."""
     if name in cache:
         return cache[name]
@@ -104,8 +106,15 @@ def _resolve_color(token: str | None, cache: dict[str, tuple[str, str, str]], na
     return resolved
 
 
-def _slot_html(slot: dict[str, Any], *, left_pct: float, width_pct: float,
-               top_px: float, height_px: float, colors: tuple[str, str, str]) -> str:
+def _slot_html(
+    slot: dict[str, Any],
+    *,
+    left_pct: float,
+    width_pct: float,
+    top_px: float,
+    height_px: float,
+    colors: tuple[str, str, str],
+) -> str:
     """Bloc d'un créneau positionné à la minute près."""
     bg, border, text = colors
     subject = esc(slot.get("subject_name", ""))
@@ -204,8 +213,7 @@ def generate_timetable_pdf(
     for i, m in enumerate(hour_marks[:-1]):
         if i % 2 == 1:
             grid_layers.append(
-                f'<div class="tt-band" style="top:{_top(m):.1f}px; '
-                f'height:{hour_h:.1f}px;"></div>'
+                f'<div class="tt-band" style="top:{_top(m):.1f}px; height:{hour_h:.1f}px;"></div>'
             )
     # Lignes horaires pleines + libellé dans la gouttière.
     for m in hour_marks:
@@ -216,7 +224,9 @@ def generate_timetable_pdf(
         )
     # Demi-heures (pointillé léger).
     for m in range(grid_start + 30, grid_end, 60):
-        grid_layers.append(f'<div class="tt-hline tt-hline-half" style="top:{_top(m):.1f}px;"></div>')
+        grid_layers.append(
+            f'<div class="tt-hline tt-hline-half" style="top:{_top(m):.1f}px;"></div>'
+        )
 
     # Libellés d'horaires « spéciaux » (débuts/fins non alignés sur l'heure).
     special: set[int] = set()
