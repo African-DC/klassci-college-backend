@@ -67,6 +67,15 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
 
+    # MailPulse (notifications email + WhatsApp) — fallback quand les settings
+    # tenant sont vides. La clé API réelle vit dans school_settings par tenant.
+    MAILPULSE_BASE_URL: str = "https://mailpulse-two.vercel.app"
+    MAILPULSE_CONTACTS_ENDPOINT: str = "/api/v1/contacts"
+    MAILPULSE_MESSAGES_ENDPOINT: str = "/api/v1/messages"
+    MAILPULSE_TIMEOUT: int = 20
+    MAILPULSE_SENDER_NAME: str = "KLASSCI"
+    MAILPULSE_DEFAULT_LANGUAGE: str = "fr"
+
     # DigitalOcean Spaces (stockage bulletins PDF)
     DO_SPACES_KEY: str | None = None
     DO_SPACES_SECRET: str | None = None
