@@ -14,6 +14,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Changed
 
+- Emploi du temps (PDF) refondu : tient désormais sur une seule page, avec une grille premium calée à la minute près (créneaux de 1h, 1h30, 2h ou débutant à la demi-heure placés exactement, comme à l'écran), des couleurs de matière claires et lisibles et une légende des matières *(admin, enseignant, élève, parent)*.
 - Durée de connexion prolongée (jeton d'accès porté à 60 minutes) pour éviter les déconnexions intempestives d'un utilisateur pourtant actif ; la session reste limitée à 30 minutes d'inactivité *(tous)*.
 - Relevé de notes (PDF) aligné sur le design institutionnel premium des autres documents : bandeau d'identité, titre de section, tableau soigné et synthèse en cartes clés (moyenne de classe, note min/max, taux de saisie) *(admin, enseignant)*.
 
