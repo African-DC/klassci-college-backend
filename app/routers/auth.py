@@ -10,6 +10,7 @@ from app.core.exceptions import UnauthorizedError
 from app.core.redis import get_redis
 from app.repositories.user_repository import get_user_by_id, get_user_full_name
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     RefreshResponse,
     TokenResponse,
@@ -128,6 +129,21 @@ async def me(
         last_name=last_name,
         tenant_id=current_user.tenant_id,
         is_active=user.is_active,
+    )
+
+
+@router.post("/change-password", status_code=204)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Change son propre mot de passe (et lève le flag de changement forcé)."""
+    await auth_service.change_password(
+        db=db,
+        user_id=current_user.user_id,
+        current_password=data.current_password,
+        new_password=data.new_password,
     )
 
 

@@ -105,6 +105,8 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # MailPulse (2)
     {"slug": "mailpulse:manage", "name": "Configure MailPulse notifications"},
     {"slug": "mailpulse:test", "name": "Send MailPulse test notifications"},
+    # Comptes des acteurs (1)
+    {"slug": "admin:accounts:manage", "name": "Manage actor login accounts"},
     # Super Admin (7)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
     {"slug": "super-admin:tenants:read", "name": "View tenants list and per-tenant stats"},
@@ -164,6 +166,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "reports:read",
             "admin:teachers:attendance",
             "admin:teachers:attendance:read",
+            "admin:accounts:manage",
             "leave:request",
         ],
     },
