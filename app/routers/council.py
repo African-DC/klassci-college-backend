@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.council import (
+    CouncilDecisionsBatchRequest,
     CouncilMinutesGenerateRequest,
     CouncilMinutesResponse,
     CouncilStudentDecisionResponse,
@@ -57,6 +58,33 @@ async def get_council_minutes_pdf(
         lambda: service.get_council_minutes_pdf(db, class_id, trimester, academic_year_id),
         filename=f"pv_conseil_{class_id}_T{trimester}.pdf",
         error_context=f"PV conseil classe {class_id} T{trimester}",
+    )
+
+
+@router.put("/{council_id}/decisions", response_model=CouncilMinutesResponse)
+async def update_council_decisions(
+    council_id: int,
+    data: CouncilDecisionsBatchRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("reports:override"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Met a jour en lot les decisions finales du conseil."""
+    return await service.update_decisions_batch(
+        db, council_id, data, updated_by=current_user.user_id
+    )
+
+
+@router.post("/{council_id}/validate", response_model=CouncilMinutesResponse)
+async def validate_council(
+    council_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("reports:override"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Valide definitivement le proces-verbal (plus modifiable)."""
+    return await service.validate_council_minutes(
+        db, council_id, validated_by=current_user.user_id
     )
 
 

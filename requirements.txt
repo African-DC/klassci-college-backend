@@ -23,6 +23,9 @@ pydyf>=0.10.0,<0.12
 # Visible) en pur Python, rendu SVG → aucune dépendance native. Imprimé sur les
 # documents officiels comme cachet signé pour la vérification publique.
 ppf-datamatrix==0.2
+# openpyxl : génération de classeurs Excel (.xlsx) en pur Python — export des
+# statistiques DREN. Aucune dépendance native, install rapide.
+openpyxl==3.1.5
 rapidfuzz==3.12.2
 sentry-sdk[fastapi]==2.18.0
 click==8.1.7
