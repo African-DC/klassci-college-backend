@@ -67,6 +67,8 @@ async def get_attendance_sheet_pdf(
 async def get_grade_sheet_pdf(
     class_id: int,
     columns: int = Query(6, ge=1, le=12, description="Nombre de colonnes de notes vides"),
+    subject_id: int | None = Query(None, description="Pré-remplit la matière dans l'en-tête"),
+    trimester: int | None = Query(None, ge=1, le=3, description="Pré-remplit le trimestre"),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -74,9 +76,12 @@ async def get_grade_sheet_pdf(
 
     Tableau : N° / Matricule / Nom, puis `columns` colonnes Note vides et une
     colonne Moyenne vide. Paysage A4. Pas de document officiel (ni CEV ni signature).
+    Matière et trimestre optionnels : pré-remplissent l'en-tête si fournis.
     """
     return await pdf_response(
-        lambda: class_sheets_service.get_grade_sheet_pdf(db, class_id, columns),
+        lambda: class_sheets_service.get_grade_sheet_pdf(
+            db, class_id, columns, subject_id, trimester
+        ),
         filename=f"feuille-notes-{class_id}.pdf",
         error_context=f"feuille de notes {class_id}",
     )

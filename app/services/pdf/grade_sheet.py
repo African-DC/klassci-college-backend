@@ -98,12 +98,16 @@ def generate_grade_sheet_pdf(
     class_info: dict[str, Any],
     students: list[dict[str, Any]],
     note_columns: int = _DEFAULT_NOTE_COLUMNS,
+    subject_name: str = "",
+    trimester: int | None = None,
 ) -> bytes:
     """Génère la feuille de notes vierge (paysage A4) — theme école dynamique.
 
     `class_info` : {class_name, level_name, academic_year_name, effectif}
     `students` : [{enrollment_number, first_name, last_name}]
     `note_columns` : nombre de colonnes de notes vides (défaut 6).
+    `subject_name` / `trimester` : pré-remplissent l'en-tête si fournis,
+        sinon des lignes vides à compléter à la main.
     """
     from weasyprint import HTML  # lazy import — GTK requis au runtime
 
@@ -121,7 +125,11 @@ def generate_grade_sheet_pdf(
         f"<strong>Année scolaire :</strong> {ui.esc(academic_year)} &nbsp;·&nbsp; "
         f"<strong>Effectif :</strong> {effectif}"
     )
-    meta_right = "Matière : _______________ &nbsp;·&nbsp; Trimestre : _______________"
+    subject_label = ui.esc(subject_name) if subject_name else "_______________"
+    trimester_label = f"Trimestre {trimester}" if trimester else "_______________"
+    meta_right = (
+        f"Matière : {subject_label} &nbsp;·&nbsp; Trimestre : {trimester_label}"
+    )
 
     table = (
         '<table class="pdf-table sheet-table">'
