@@ -1,4 +1,4 @@
-"""Read system logs via journalctl with secret redaction.
+"""Read service logs with secret redaction.
 
 Risky endpoint by design (Path F). Mitigations:
 - Service name must match a tight regex; never passed to a shell.
@@ -6,19 +6,24 @@ Risky endpoint by design (Path F). Mitigations:
 - Multi-pattern regex redaction for Authorization headers, bearer tokens,
   passwords, JWT-shaped strings, and PAT prefixes.
 - Returns a `redacted_count` so the operator sees the redaction worked.
-
-On Windows / non-systemd hosts the call returns 501.
 """
 
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 MAX_LINES = 5_000
 SERVICE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,49}$")
+DEFAULT_WINDOWS_LOG_DIR = Path(r"C:\klassci\logs")
+SERVICE_ALIASES = {
+    "nginx": "caddy",
+    "klassci-nginx": "klassci-caddy",
+}
 
 
 _REDACTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
@@ -89,3 +94,62 @@ def read_journalctl(service: str, lines: int) -> LogReadResult:
         truncated=lines > MAX_LINES,
         redacted_count=total_redactions,
     )
+
+
+def _windows_log_dir() -> Path:
+    configured = os.getenv("KLASSCI_LOG_DIR")
+    return Path(configured) if configured else DEFAULT_WINDOWS_LOG_DIR
+
+
+def _tail_file(path: Path, max_lines: int) -> list[str]:
+    if not path.exists() or not path.is_file():
+        return []
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        return handle.readlines()[-max_lines:]
+
+
+def read_windows_service_logs(service: str, lines: int) -> LogReadResult:
+    """Read NSSM log files from ``C:\\klassci\\logs`` and apply redaction."""
+    if not is_valid_service_name(service):
+        raise ValueError(f"Invalid service name '{service}'")
+
+    capped = min(lines, MAX_LINES)
+    log_dir = _windows_log_dir()
+    base_service = SERVICE_ALIASES.get(service, service)
+    short_name = base_service.removeprefix("klassci-")
+    candidates = [
+        log_dir / f"{short_name}.err.log",
+        log_dir / f"{short_name}.out.log",
+        log_dir / f"{base_service}.err.log",
+        log_dir / f"{base_service}.out.log",
+    ]
+
+    raw_lines: list[str] = []
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        raw_lines.extend(_tail_file(resolved, capped))
+
+    raw_lines = [ln.rstrip("\r\n") for ln in raw_lines if ln.strip()][-capped:]
+    total_redactions = 0
+    redacted_lines: list[str] = []
+    for raw in raw_lines:
+        clean, n = redact(raw)
+        total_redactions += n
+        redacted_lines.append(clean)
+
+    return LogReadResult(
+        lines=redacted_lines,
+        truncated=lines > MAX_LINES,
+        redacted_count=total_redactions,
+    )
+
+
+def read_service_logs(service: str, lines: int) -> LogReadResult:
+    """Read logs from the host-native backend: NSSM files on Windows, journalctl elsewhere."""
+    if os.name == "nt":
+        return read_windows_service_logs(service, lines)
+    return read_journalctl(service, lines)
