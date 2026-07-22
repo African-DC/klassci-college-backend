@@ -46,6 +46,19 @@ class Settings(BaseSettings):
     # À surcharger via env sur le serveur de démo (ex: http://94.72.96.119).
     PUBLIC_BASE_URL: str = "https://college.klassci.com"
 
+    # Sceau numérique institutionnel KLASSCI. La clé privée est une graine
+    # Ed25519 brute de 32 octets encodée en base64url. Elle est indépendante
+    # de SECRET_KEY afin que la rotation JWT n'invalide jamais les documents.
+    DOCUMENT_SEAL_ACTIVE_KEY_ID: str = "klassci-college-2026-01"
+    DOCUMENT_SEAL_PRIVATE_KEY_B64: str = ""
+    # JSON {"key-id": "base64url-public-key"}. Conserver les anciennes clés
+    # publiques ici après chaque rotation pour valider les sceaux historiques.
+    DOCUMENT_SEAL_PUBLIC_KEYS_JSON: str = "{}"
+    # À renseigner avec l'ancienne SECRET_KEY avant toute rotation JWT afin de
+    # conserver la vérification des documents KCEV1 déjà distribués.
+    DOCUMENT_SEAL_LEGACY_SECRET_KEY: str = ""
+    DOCUMENT_SEAL_DEFAULT_VALIDITY_DAYS: int = 365
+
     # Host allowlist — protection CSRF / host header injection
     # Pattern regex matchant les hôtes acceptés en production multi-tenant.
     # Default couvre <tenant>.college.klassci.com (sous-domaines KLASSCI College).

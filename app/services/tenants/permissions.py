@@ -80,9 +80,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "admin:teachers:attendance", "name": "Manage teacher attendance"},
     {"slug": "admin:teachers:attendance:read", "name": "View teacher attendance"},
     {"slug": "teacher:attendance:self_declare", "name": "Teacher self-declare absence"},
-    # Official documents (2)
+    # Official documents (3)
     {"slug": "documents:certificate", "name": "Generate certificat de scolarite"},
     {"slug": "documents:attendance", "name": "Generate attestation de frequentation"},
+    {"slug": "documents:revoke", "name": "Revoke institutional document seals"},
     # Parents (4)
     {"slug": "admin:parents:read", "name": "View parents"},
     {"slug": "admin:parents:create", "name": "Create parents"},

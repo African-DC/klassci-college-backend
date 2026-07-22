@@ -20,6 +20,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Sceau numérique institutionnel KLASSCI pour les certificats, attestations et bulletins : empreinte SHA-256 du PDF final signée intégralement en Ed25519 avec clé dédiée et rotative, cycle de vie versionné (expiration, révocation, remplacement), aucune identité d'élève dans la réponse publique et contrôle d'intégrité du fichier. L'ancien mécanisme reste vérifiable pour les documents déjà distribués, sans être présenté comme un CEV qualifié *(tous)*.
 - Gestion des comptes de connexion depuis la fiche d'un élève, parent, enseignant ou membre du personnel : voir l'état du compte (email, dernière connexion), créer le compte s'il n'existe pas (élève/parent) et réinitialiser le mot de passe. Le mot de passe temporaire est `Bonjour@<année>` et doit être changé à la première connexion *(admin, directeur, personnel)*.
 - Statistiques DREN : véritable export en PDF (mise en page institutionnelle premium) et en Excel (trois feuilles : synthèse, niveaux et classes, matières), à la place de l'ancien fichier qui affichait des données brutes *(admin)*.
 - Conseil de classe : les décisions de délibération se modifient en lot et le procès-verbal se valide définitivement (il devient alors non modifiable) *(admin)*.

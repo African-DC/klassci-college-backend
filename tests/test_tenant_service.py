@@ -107,11 +107,6 @@ async def test_list_tenant_databases() -> None:
 
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [
-        ("information_schema",),
-        ("mysql",),
-        ("performance_schema",),
-        ("sys",),
-        ("alembic_migration",),
         ("lycee-moderne",),
         ("college-01",),
     ]
@@ -133,10 +128,23 @@ async def test_list_tenant_databases() -> None:
 
     assert "lycee-moderne" in tenants
     assert "college-01" in tenants
-    assert "mysql" not in tenants
-    assert "information_schema" not in tenants
-    assert "sys" not in tenants
     assert len(tenants) == 2
+    query = str(mock_conn.execute.await_args.args[0])
+    assert "alembic_version" in query
+    assert "academic_years" in query
+    assert "document_issuances" not in query
+    assert "HAVING COUNT(DISTINCT table_name) = 4" in query
+
+
+@pytest.mark.asyncio
+async def test_migrate_all_fails_closed_when_no_tenant_is_found() -> None:
+    from app.cli.migrate_all import migrate_all
+
+    with (
+        patch("app.cli.migrate_all.list_tenant_databases", new=AsyncMock(return_value=[])),
+        pytest.raises(RuntimeError, match="No KLASSCI tenant"),
+    ):
+        await migrate_all()
 
 
 # ---------------------------------------------------------------------------

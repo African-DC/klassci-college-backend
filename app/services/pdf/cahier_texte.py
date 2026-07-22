@@ -5,7 +5,7 @@ Restitue, pour une période donnée, la liste datée des séances de la classe
 VIDES : « Contenu de la séance » et « Travail à faire », à remplir à la main
 par l'enseignant après chaque cours.
 
-Document de travail interne : sobre, pas de Cachet Électronique Visible.
+Document de travail interne : sobre, sans sceau numérique institutionnel.
 """
 
 from __future__ import annotations

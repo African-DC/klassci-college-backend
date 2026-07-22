@@ -1,10 +1,8 @@
-"""Cachet Électronique Visible (CEV) — Datamatrix en SVG pur Python.
+"""Datamatrix du Sceau numérique institutionnel KLASSCI en SVG pur Python.
 
-Le CEV suit le principe du 2D-Doc : un code-barres 2D Datamatrix (symbologie
-des documents officiels, plus robuste qu'un QR pour ce cas d'usage) qui, scanné,
-ouvre la page de vérification publique. La preuve cryptographique (signature
-Ed25519) est portée par le code CEV lisible imprimé à côté (voir
-`document_issuance_service`).
+Le Datamatrix ouvre la page publique associée au registre du document. Il ne se
+présente pas comme un 2D-Doc ou un CEV qualifié : la preuve cryptographique est
+le sceau Ed25519 de l'empreinte du PDF conservé par `document_issuance_service`.
 
 Rendu en SVG inline : WeasyPrint le rasterise nativement, donc aucune dépendance
 image (Pillow, libdmtx…) n'est requise.

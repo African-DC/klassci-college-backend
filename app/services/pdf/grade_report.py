@@ -6,7 +6,7 @@ une colonne par évaluation, la note de chaque élève, sa moyenne pondérée pa
 les coefficients d'évaluation et son rang dans la classe.
 
 Document de travail interne (secrétariat, professeur principal, conseil) : sobre,
-pas de Cachet Électronique Visible ni de signature élève.
+sans sceau numérique institutionnel ni signature élève.
 """
 
 from __future__ import annotations
@@ -169,7 +169,11 @@ def _stats_band(theme: PDFTheme, class_stats: dict[str, Any]) -> str:
     fill_rate = class_stats.get("fill_rate")
     fill_str = f"{fill_rate} %" if fill_rate is not None else "—"
     cards = [
-        {"label": "Moyenne de classe", "value": f"{fmt(class_stats.get('class_avg'))} / 20", "tone": "accent"},
+        {
+            "label": "Moyenne de classe",
+            "value": f"{fmt(class_stats.get('class_avg'))} / 20",
+            "tone": "accent",
+        },
         {"label": "Note min", "value": fmt(class_stats.get("min"))},
         {"label": "Note max", "value": fmt(class_stats.get("max"))},
         {"label": "Taux de saisie", "value": fill_str, "tone": "success"},
