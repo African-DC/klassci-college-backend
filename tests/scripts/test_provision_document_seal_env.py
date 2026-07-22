@@ -44,9 +44,8 @@ def test_provision_is_idempotent_and_uses_shared_material(tmp_path: Path) -> Non
 
     first_updates = provision(env_file, key_file)
     first_content = env_file.read_text(encoding="utf-8")
-    if os.name == "posix":
-        os.chmod(env_file, 0o644)
-    second_updates = provision(env_file, key_file)
+    with patch("scripts.provision_document_seal_env.os.chmod", wraps=os.chmod) as chmod:
+        second_updates = provision(env_file, key_file)
 
     assert first_updates == {
         "DOCUMENT_SEAL_ACTIVE_KEY_ID",
@@ -58,6 +57,7 @@ def test_provision_is_idempotent_and_uses_shared_material(tmp_path: Path) -> Non
     assert env_file.read_text(encoding="utf-8") == first_content
     assert 'DOCUMENT_SEAL_LEGACY_SECRET_KEY="legacy-secret"' in first_content
     assert "DOCUMENT_SEAL_PRIVATE_KEY_B64=" in first_content
+    chmod.assert_any_call(env_file, 0o600)
     if os.name == "posix":
         assert env_file.stat().st_mode & 0o777 == 0o600
 
