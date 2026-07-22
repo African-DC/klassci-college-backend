@@ -10,6 +10,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 
+- Pipeline et production Windows : `PyMySQL` est épinglé à la version compatible avec `aiomysql`, et l'ancien déploiement EC2 automatique est retiré.
 - Reçu de versement (PDF) : les informations de l'élève (nom, nature, méthode, référence, statut) sont désormais parfaitement alignées en colonnes, au lieu d'un rendu tassé et décalé *(admin, personnel)*.
 
 ### Changed
