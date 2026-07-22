@@ -22,7 +22,6 @@ import logging
 import re
 import tempfile
 from dataclasses import dataclass
-from typing import BinaryIO
 
 import jwt
 from starlette.requests import Request
@@ -87,7 +86,9 @@ async def _consume_public_upload_quota(scope: Scope, request: Request) -> JSONRe
     return None
 
 
-async def _spool_limited_body(receive: Receive) -> tuple[BinaryIO, int] | None:
+async def _spool_limited_body(
+    receive: Receive,
+) -> tuple[tempfile.SpooledTemporaryFile[bytes], int] | None:
     """Spool a bounded upload before Starlette's multipart parser sees it."""
     body = tempfile.SpooledTemporaryFile(max_size=_PUBLIC_UPLOAD_MEMORY_BYTES, mode="w+b")
     received_bytes = 0
@@ -114,7 +115,7 @@ async def _spool_limited_body(receive: Receive) -> tuple[BinaryIO, int] | None:
 @dataclass
 class _PreparedUpload:
     receive: Receive
-    body: BinaryIO | None = None
+    body: tempfile.SpooledTemporaryFile[bytes] | None = None
     slot_acquired: bool = False
 
     def close(self) -> None:
@@ -124,7 +125,7 @@ class _PreparedUpload:
             _PUBLIC_UPLOAD_SLOTS.release()
 
 
-def _replay_spooled_body(body: BinaryIO, size: int) -> Receive:
+def _replay_spooled_body(body: tempfile.SpooledTemporaryFile[bytes], size: int) -> Receive:
     remaining = size
 
     async def replay() -> Message:
