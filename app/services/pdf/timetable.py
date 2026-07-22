@@ -277,7 +277,7 @@ def generate_timetable_pdf(
     # dérive due au modèle de boîte du flex).
     day_headers = "".join(
         f'<div class="tt-dayhead{" tt-dayhead-last" if i == n_days - 1 else ""}" '
-        f"style=\"left:{_GUTTER_PCT + i * day_w:.3f}%; width:{day_w:.3f}%;\">"
+        f'style="left:{_GUTTER_PCT + i * day_w:.3f}%; width:{day_w:.3f}%;">'
         f"{_DAYS_FR.get(d, d)}</div>"
         for i, d in enumerate(active_days)
     )

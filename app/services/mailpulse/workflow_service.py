@@ -82,7 +82,10 @@ async def _notify_parent(
         )
         logger.info(
             "mailpulse workflow event=%s channel=email status=%s parent_id=%s student_id=%s",
-            event, result.status, parent.id, student_id,
+            event,
+            result.status,
+            parent.id,
+            student_id,
         )
 
     # WhatsApp : dès que MailPulse est actif et que le parent a un numéro.
@@ -96,7 +99,10 @@ async def _notify_parent(
         )
         logger.info(
             "mailpulse workflow event=%s channel=whatsapp status=%s parent_id=%s student_id=%s",
-            event, result.status, parent.id, student_id,
+            event,
+            result.status,
+            parent.id,
+            student_id,
         )
 
 

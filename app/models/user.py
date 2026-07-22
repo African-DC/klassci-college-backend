@@ -64,9 +64,7 @@ class User(Base, TimestampMixin):
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Vrai quand le compte a un mot de passe temporaire (création par un admin
     # ou réinitialisation) : l'utilisateur doit le changer à la 1re connexion.
-    must_change_password: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Relations
     staff_profile: Mapped[StaffProfile | None] = relationship(back_populates="user", uselist=False)

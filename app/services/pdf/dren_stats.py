@@ -40,9 +40,7 @@ def generate_dren_stats_pdf(school: dict[str, Any], data: Any) -> bytes:
     ]
     stats_band = ui.kpis_row(kpis, theme=theme)
 
-    meta_left = (
-        f"<strong>Garçons / Filles :</strong> {data.male_count} / {data.female_count}"
-    )
+    meta_left = f"<strong>Garçons / Filles :</strong> {data.male_count} / {data.female_count}"
     meta_right = f"Taux d'exclusion : {_pct(data.exclusion_rate)}"
     meta = ui.meta_banner(meta_left, meta_right, theme=theme)
 

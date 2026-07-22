@@ -36,13 +36,11 @@ _SAMPLE = {
     ),
     "grade_published": (
         "Nouvelle note disponible",
-        "Test KLASSCI : une nouvelle note est disponible pour Awa Kouadio (6e A) "
-        "en Mathématiques.",
+        "Test KLASSCI : une nouvelle note est disponible pour Awa Kouadio (6e A) en Mathématiques.",
     ),
     "fee_reminder": (
         "Rappel de frais",
-        "Test KLASSCI : il reste 30 000 FCFA à régler pour la scolarité "
-        "d'Awa Kouadio (6e A).",
+        "Test KLASSCI : il reste 30 000 FCFA à régler pour la scolarité d'Awa Kouadio (6e A).",
     ),
 }
 
@@ -57,9 +55,7 @@ def _enabled_values(raw: object) -> list[str]:
     ]
 
 
-def _plan(
-    school: SchoolSettings, channel: MailPulseTestChannel
-) -> tuple[list[str], list[str]]:
+def _plan(school: SchoolSettings, channel: MailPulseTestChannel) -> tuple[list[str], list[str]]:
     """Retourne (emails, phones) de test activés pour les canaux demandés."""
     emails: list[str] = []
     phones: list[str] = []

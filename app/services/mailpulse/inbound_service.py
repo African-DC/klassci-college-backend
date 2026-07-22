@@ -57,14 +57,14 @@ def _compose_info_reply(
     parent: Parent, children: list[ParentDashboardChild], school: SchoolSettings
 ) -> str:
     school_name = school.school_name or "notre établissement"
-    lines = [f"Bonjour {parent.first_name}, voici les informations de vos enfants a {school_name} :"]
+    lines = [
+        f"Bonjour {parent.first_name}, voici les informations de vos enfants a {school_name} :"
+    ]
     if not children:
         lines.append("Aucun enfant inscrit n'est associé à votre numéro pour le moment.")
     for child in children:
         moyenne = (
-            f"{child.general_average}/20"
-            if child.general_average is not None
-            else "non calculée"
+            f"{child.general_average}/20" if child.general_average is not None else "non calculée"
         )
         reste = _fmt_amount(child.fees_remaining)
         lines.append(
@@ -114,6 +114,8 @@ async def handle_inbound(
     )
     logger.info(
         "mailpulse inbound INFO replied parent_id=%s status=%s children=%s",
-        parent.id, result.status, len(children),
+        parent.id,
+        result.status,
+        len(children),
     )
     return 200, MailPulseInboundResult(status="replied", matched=True)

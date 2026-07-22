@@ -83,7 +83,9 @@ def generate_dren_stats_xlsx(data: Any) -> bytes:
     _style_header(ws2, 1, len(headers))
     for lvl in data.levels:
         if not lvl.classes:
-            ws2.append([lvl.level_name, "—", lvl.total_students, lvl.male_count, lvl.female_count, "—"])
+            ws2.append(
+                [lvl.level_name, "—", lvl.total_students, lvl.male_count, lvl.female_count, "—"]
+            )
             continue
         for cls in lvl.classes:
             ws2.append(

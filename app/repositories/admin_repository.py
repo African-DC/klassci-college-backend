@@ -475,9 +475,7 @@ def _staff_role_load_options():
 
 async def get_staff_by_id(db: AsyncSession, staff_id: int) -> StaffProfile | None:
     stmt = (
-        select(StaffProfile)
-        .where(StaffProfile.id == staff_id)
-        .options(_staff_role_load_options())
+        select(StaffProfile).where(StaffProfile.id == staff_id).options(_staff_role_load_options())
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 

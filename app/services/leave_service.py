@@ -37,24 +37,30 @@ async def _enrich_rows(db: AsyncSession, rows: list[LeaveRequest]) -> list[dict]
     interim_names: dict[int, str] = {}
     if tids:
         tres = (
-            await db.execute(select(TeacherProfile).where(TeacherProfile.id.in_(tids)))
-        ).scalars().all()
+            (await db.execute(select(TeacherProfile).where(TeacherProfile.id.in_(tids))))
+            .scalars()
+            .all()
+        )
         interim_names = {t.id: f"{t.last_name} {t.first_name}".strip() for t in tres}
 
     users: dict[int, User] = {}
     if uids:
         res = (
-            await db.execute(
-                select(User)
-                .where(User.id.in_(uids))
-                .options(
-                    selectinload(User.staff_profile),
-                    selectinload(User.teacher_profile),
-                    selectinload(User.student_profile),
-                    selectinload(User.parent_profile),
+            (
+                await db.execute(
+                    select(User)
+                    .where(User.id.in_(uids))
+                    .options(
+                        selectinload(User.staff_profile),
+                        selectinload(User.teacher_profile),
+                        selectinload(User.student_profile),
+                        selectinload(User.parent_profile),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         users = {u.id: u for u in res}
 
     out: list[dict] = []
@@ -109,7 +115,9 @@ async def list_my_requests(db: AsyncSession, user_id: int) -> list[dict]:
                 .where(LeaveRequest.user_id == user_id)
                 .order_by(LeaveRequest.created_at.desc())
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     return await _enrich_rows(db, rows)
 
@@ -127,7 +135,9 @@ async def cancel_request(db: AsyncSession, user_id: int, req_id: int) -> dict:
     if req.user_id != user_id:
         raise NotFoundError("LeaveRequest", req_id)
     if req.status != LeaveStatus.PENDING.value:
-        raise HTTPException(status_code=400, detail="Seule une demande en attente peut être annulée")
+        raise HTTPException(
+            status_code=400, detail="Seule une demande en attente peut être annulée"
+        )
     req.status = LeaveStatus.CANCELLED.value
     await db.commit()
     row = await _get(db, req_id)

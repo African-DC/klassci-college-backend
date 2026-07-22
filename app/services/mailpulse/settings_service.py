@@ -39,7 +39,9 @@ def _recipients_from_json(raw: Any) -> list[MailPulseRecipient]:
     for item in raw:
         if isinstance(item, dict) and item.get("value"):
             out.append(
-                MailPulseRecipient(value=str(item["value"]), enabled=bool(item.get("enabled", True)))
+                MailPulseRecipient(
+                    value=str(item["value"]), enabled=bool(item.get("enabled", True))
+                )
             )
     return out
 
@@ -52,7 +54,8 @@ def config_to_response(school: SchoolSettings) -> MailPulseConfigResponse:
         api_key_set=bool(school.mailpulse_api_key),
         sender_email=school.mailpulse_sender_email,
         sender_name=school.mailpulse_sender_name or app_settings.MAILPULSE_SENDER_NAME,
-        default_language=school.mailpulse_default_language or app_settings.MAILPULSE_DEFAULT_LANGUAGE,
+        default_language=school.mailpulse_default_language
+        or app_settings.MAILPULSE_DEFAULT_LANGUAGE,
         timeout=school.mailpulse_timeout or app_settings.MAILPULSE_TIMEOUT,
         real_workflows_enabled=school.mailpulse_real_workflows_enabled,
         test_email_enabled=school.mailpulse_test_email_enabled,
