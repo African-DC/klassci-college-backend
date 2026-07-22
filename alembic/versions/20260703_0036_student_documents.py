@@ -74,6 +74,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("idx_student_documents_student_id", table_name="student_documents")
+    # MySQL uses this explicit index to enforce the student foreign key and
+    # refuses to drop it independently. Dropping the table removes both.
     op.drop_table("student_documents")
     op.drop_table("document_types")
