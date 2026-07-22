@@ -23,7 +23,9 @@ async def create_leave_request(
     _: None = require_permission("leave:request"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> LeaveRequestResponse:
-    return LeaveRequestResponse(**await leave_service.create_request(db, current_user.user_id, data))
+    return LeaveRequestResponse(
+        **await leave_service.create_request(db, current_user.user_id, data)
+    )
 
 
 @self_router.get("/requests/me", response_model=list[LeaveRequestResponse])

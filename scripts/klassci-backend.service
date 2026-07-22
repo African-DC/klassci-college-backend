@@ -18,7 +18,7 @@ EnvironmentFile=/home/ubuntu/klassci/klassci-backend/.env
 ExecStartPre=+/usr/bin/install -d -m 0755 -o ubuntu -g ubuntu /tmp/klassci-uploads
 ExecStart=/home/ubuntu/klassci/klassci-backend/.venv/bin/uvicorn app.main:app \
     --host 0.0.0.0 --port 8000 \
-    --proxy-headers --forwarded-allow-ips=*
+    --proxy-headers --forwarded-allow-ips=127.0.0.1,::1
 Restart=always
 RestartSec=5
 StandardOutput=journal

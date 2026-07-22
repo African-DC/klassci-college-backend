@@ -35,7 +35,9 @@ def upgrade() -> None:
         sa.Column("user_id", sa.BigInteger(), nullable=False),
         sa.Column(
             "leave_type",
-            sa.Enum("annual", "sick", "maternity", "exceptional", "training", "other", name="leave_type"),
+            sa.Enum(
+                "annual", "sick", "maternity", "exceptional", "training", "other", name="leave_type"
+            ),
             nullable=False,
         ),
         sa.Column("start_date", sa.Date(), nullable=False),
@@ -88,6 +90,4 @@ def downgrade() -> None:
         """
     )
     op.execute(f"DELETE FROM permissions WHERE slug IN ({slugs_sql})")
-    op.drop_index("idx_leave_requests_status", table_name="leave_requests")
-    op.drop_index("idx_leave_requests_user_id", table_name="leave_requests")
     op.drop_table("leave_requests")

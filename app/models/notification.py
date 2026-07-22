@@ -67,7 +67,11 @@ class NotificationPreference(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
     )
     email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

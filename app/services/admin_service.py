@@ -1048,7 +1048,9 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     stmt = (
         select(StaffProfile)
         .where(StaffProfile.id == staff_id)
-        .options(selectinload(StaffProfile.user).selectinload(User.roles).selectinload(UserRole.role))
+        .options(
+            selectinload(StaffProfile.user).selectinload(User.roles).selectinload(UserRole.role)
+        )
     )
     staff = (await db.execute(stmt)).scalar_one_or_none()
     if staff is None:

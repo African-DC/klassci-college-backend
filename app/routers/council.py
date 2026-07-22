@@ -83,9 +83,7 @@ async def validate_council(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
     """Valide definitivement le proces-verbal (plus modifiable)."""
-    return await service.validate_council_minutes(
-        db, council_id, validated_by=current_user.user_id
-    )
+    return await service.validate_council_minutes(db, council_id, validated_by=current_user.user_id)
 
 
 @router.patch(

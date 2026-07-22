@@ -104,7 +104,7 @@ def generate_certificate_scolarite_pdf(
         academic_year_name=academic_year_name,
     )
 
-    # Référence + Cachet Électronique Visible émis par le service (signé).
+    # Référence + sceau numérique institutionnel émis par le service.
     ref_year = issued_at.year if isinstance(issued_at, datetime) else datetime.utcnow().year
     reference = data.get("reference") or (
         f"CS-{ref_year}-{matricule}" if matricule and matricule != "..." else f"CS-{ref_year}"
@@ -174,8 +174,9 @@ def generate_certificate_scolarite_pdf(
             reference=reference,
             note="Document officiel — toute falsification est passible de poursuites.",
             cev_svg=verification.get("cev_svg"),
-            cev_code=verification.get("cev_code"),
+            seal_code=verification.get("seal_code"),
             verify_url=verification.get("verify_url"),
+            manual_verify_url=verification.get("manual_verify_url"),
         )
     }
     """

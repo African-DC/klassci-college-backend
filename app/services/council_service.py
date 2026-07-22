@@ -250,9 +250,7 @@ async def update_decisions_batch(
     if council is None:
         raise NotFoundError("CouncilMinutes", council_id)
     if council.is_published:
-        raise BusinessValidationError(
-            "Ce proces-verbal est valide et ne peut plus etre modifie."
-        )
+        raise BusinessValidationError("Ce proces-verbal est valide et ne peut plus etre modifie.")
 
     decisions_by_student = {d.student_id: d for d in council.decisions}
 

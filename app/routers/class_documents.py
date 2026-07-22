@@ -51,7 +51,7 @@ async def get_attendance_sheet_pdf(
     """Feuille de travail imprimable pour l'appel papier (AY courante).
 
     Tableau : N° / Matricule / Nom, puis `columns` colonnes vides numérotées
-    à cocher au stylo. Paysage A4. Pas de document officiel (ni CEV ni signature).
+    à cocher au stylo. Paysage A4. Pas de document officiel ni de sceau numérique.
     """
     return await pdf_response(
         lambda: class_sheets_service.get_attendance_sheet_pdf(db, class_id, columns),
@@ -75,7 +75,7 @@ async def get_grade_sheet_pdf(
     """Feuille de travail imprimable pour reporter les notes au stylo (AY courante).
 
     Tableau : N° / Matricule / Nom, puis `columns` colonnes Note vides et une
-    colonne Moyenne vide. Paysage A4. Pas de document officiel (ni CEV ni signature).
+    colonne Moyenne vide. Paysage A4. Pas de document officiel ni de sceau numérique.
     Matière et trimestre optionnels : pré-remplissent l'en-tête si fournis.
     """
     return await pdf_response(
@@ -102,7 +102,7 @@ async def get_cahier_texte_pdf(
 
     Développe les créneaux EDT sur les dates réelles de la période. Colonnes
     Contenu / Travail à faire laissées vides pour l'écriture manuscrite. Paysage
-    A4. Pas de document officiel (ni CEV ni signature).
+    A4. Pas de document officiel ni de sceau numérique.
     """
     return await pdf_response(
         lambda: cahier_texte_service.get_cahier_texte_pdf(db, class_id, start, end),

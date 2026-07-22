@@ -205,14 +205,10 @@ class MailPulseClient:
         url = f"{self._base_url}{endpoint}"
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(
-                    url, json=payload, headers=self._headers(idempotency_key)
-                )
+                resp = await client.post(url, json=payload, headers=self._headers(idempotency_key))
         except httpx.HTTPError as exc:
             # Jamais de clé API dans le log — uniquement l'opération et l'erreur.
-            logger.warning(
-                "MailPulse %s transport error: %s", operation, exc.__class__.__name__
-            )
+            logger.warning("MailPulse %s transport error: %s", operation, exc.__class__.__name__)
             return MailPulseResult.transport_error("MailPulse injoignable.")
 
         return _parse_response(resp, operation=operation)

@@ -23,6 +23,8 @@ from app.core.exceptions import (
 from app.models.enrollment import Enrollment
 from app.models.user import Student, User, UserRoleEnum
 from app.services import parent_portal_service
+from app.services._document_verification_helper import DOCUMENT_RENDER_VERSION
+from app.services._school_settings_helper import load_school_settings_for_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +112,7 @@ async def verify_document_access(
 
 
 # ---------------------------------------------------------------------------
-# CEV — émission du cachet électronique visible
+# Sceau numérique institutionnel KLASSCI
 # ---------------------------------------------------------------------------
 
 
@@ -124,8 +126,9 @@ async def _issue_verification(
     academic_year_name: str,
     student_id: int,
     issued_at: datetime,
+    source_data: object,
 ) -> dict[str, Any]:
-    """Enregistre l'émission et renvoie le bloc CEV prêt pour le PDF.
+    """Enregistre l'émission et renvoie le sceau en attente pour le PDF.
 
     La référence (CS-AAAA-MATRICULE / AF-AAAA-MATRICULE) est calculée ici pour
     qu'elle corresponde exactement à ce qui est signé et imprimé.
@@ -149,6 +152,7 @@ async def _issue_verification(
         academic_year=academic_year_name,
         student_id=student_id,
         issued_at=issued_at,
+        source_data=source_data,
     )
 
 
@@ -175,19 +179,9 @@ async def compose_certificate_data(
     issued_at = datetime.utcnow()
     class_name = enrollment.class_.name if enrollment.class_ else ""
     academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+    school_settings = await load_school_settings_for_pdf(db)
 
-    verification = await _issue_verification(
-        db,
-        document_type="certificat_scolarite",
-        ref_prefix="CS",
-        student=student,
-        class_name=class_name,
-        academic_year_name=academic_year_name,
-        student_id=student_id,
-        issued_at=issued_at,
-    )
-
-    return {
+    source_data = {
         "student": {
             "first_name": student.first_name,
             "last_name": student.last_name,
@@ -199,9 +193,27 @@ async def compose_certificate_data(
         },
         "class_name": class_name,
         "academic_year_name": academic_year_name,
+        "school_settings": school_settings,
+        "template_version": DOCUMENT_RENDER_VERSION,
+    }
+    verification = await _issue_verification(
+        db,
+        document_type="certificat_scolarite",
+        ref_prefix="CS",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+        source_data=source_data,
+    )
+
+    return {
+        **source_data,
         "issued_at": issued_at,
         "reference": verification["reference"],
         "verification": verification,
+        "school_settings": school_settings,
     }
 
 
@@ -228,19 +240,9 @@ async def compose_attendance_certificate_data(
     issued_at = datetime.utcnow()
     class_name = enrollment.class_.name if enrollment.class_ else ""
     academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+    school_settings = await load_school_settings_for_pdf(db)
 
-    verification = await _issue_verification(
-        db,
-        document_type="attestation_frequentation",
-        ref_prefix="AF",
-        student=student,
-        class_name=class_name,
-        academic_year_name=academic_year_name,
-        student_id=student_id,
-        issued_at=issued_at,
-    )
-
-    return {
+    source_data = {
         "student": {
             "first_name": student.first_name,
             "last_name": student.last_name,
@@ -253,7 +255,25 @@ async def compose_attendance_certificate_data(
         "class_name": class_name,
         "academic_year_name": academic_year_name,
         "attendance": summary,
+        "school_settings": school_settings,
+        "template_version": DOCUMENT_RENDER_VERSION,
+    }
+    verification = await _issue_verification(
+        db,
+        document_type="attestation_frequentation",
+        ref_prefix="AF",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+        source_data=source_data,
+    )
+
+    return {
+        **source_data,
         "issued_at": issued_at,
         "reference": verification["reference"],
         "verification": verification,
+        "school_settings": school_settings,
     }

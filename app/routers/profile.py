@@ -37,7 +37,9 @@ async def update_my_profile(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> MyProfileResponse:
     """Met à jour les champs éditables par l'utilisateur (téléphone)."""
-    return MyProfileResponse(**await profile_service.update_my_profile(db, current_user.user_id, data))
+    return MyProfileResponse(
+        **await profile_service.update_my_profile(db, current_user.user_id, data)
+    )
 
 
 @router.post("/me/photo", response_model=PhotoUrlResponse)
@@ -67,7 +69,9 @@ async def get_my_notification_prefs(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> NotificationPrefsResponse:
     """Préférences de canaux de notification (email / SMS)."""
-    return NotificationPrefsResponse(**await notification_pref_service.get_prefs(db, current_user.user_id))
+    return NotificationPrefsResponse(
+        **await notification_pref_service.get_prefs(db, current_user.user_id)
+    )
 
 
 @router.put("/me/notifications", response_model=NotificationPrefsResponse)

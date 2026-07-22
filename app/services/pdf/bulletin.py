@@ -228,8 +228,9 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
             reference=reference,
             note="Document officiel — à conserver précieusement.",
             cev_svg=verification.get("cev_svg"),
-            cev_code=verification.get("cev_code"),
+            seal_code=verification.get("seal_code"),
             verify_url=verification.get("verify_url"),
+            manual_verify_url=verification.get("manual_verify_url"),
         )
     }
         </div>

@@ -4,7 +4,7 @@ Direction : institutionnel sobre. La typo (Spectral display + Inter corps) et
 la hiérarchie portent l'autorité ; la couleur primaire est STRUCTURELLE (filet,
 titres, chiffres-clés) et l'accent est réservé à UN point focal par document.
 Pas de double cadre, pas de filigrane bruyant, pas de sceau décoratif : le
-Cachet Électronique Visible (CEV) est l'élément signature.
+Sceau numérique institutionnel KLASSCI est l'élément de confiance.
 
 Exporté via `components.py` (aggregator). Ne pas importer ce module
 directement depuis les generators : utiliser
@@ -266,7 +266,7 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             letter-spacing: 0.5px; color: var(--muted);
         }}
 
-        /* ============ Cachet Électronique Visible (élément signature) ======= */
+        /* ============ Sceau numérique institutionnel ======================== */
         .pdf-verify {{
             margin-top: 18px; padding: 12px 15px;
             border: 0.75px solid var(--border); border-radius: 5px;
@@ -427,14 +427,15 @@ def premium_footer(
     note: str | None = None,
     reference: str | None = None,
     cev_svg: str | None = None,
-    cev_code: str | None = None,
+    seal_code: str | None = None,
     verify_url: str | None = None,
+    manual_verify_url: str | None = None,
 ) -> str:
-    """Footer : école compacte à gauche + réf/note à droite, précédé du CEV.
+    """Footer : école compacte à gauche + réf/note à droite, précédé du sceau.
 
     `reference` : numéro de référence (officialisant, en mono).
-    `cev_svg` + `cev_code` + `verify_url` : ajoute le Cachet Électronique Visible
-    (Datamatrix + code + URL publique) — l'élément signature des docs vérifiables.
+    `cev_svg` + `seal_code` + `verify_url` ajoute le sceau institutionnel
+    (Datamatrix + code + URL publique) aux documents vérifiables.
     """
     school = school or {}
     pieces: list[str] = []
@@ -460,10 +461,10 @@ def premium_footer(
     <div class="pdf-verify">
         <div class="pdf-verify-cev">{cev_svg}</div>
         <div class="pdf-verify-text">
-            <strong>Cachet Électronique Visible (CEV)</strong><br/>
-            Scannez le cachet ou vérifiez sur <span class="pdf-verify-url">{esc(verify_url or "")}</span>
+            <strong>Sceau numérique institutionnel KLASSCI</strong><br/>
+            Scannez le cachet ou vérifiez sur <span class="pdf-verify-url">{esc(manual_verify_url or verify_url or "")}</span>
             en saisissant le code&nbsp;:
-            <div class="pdf-verify-code">{esc(cev_code or "")}</div>
+            <div class="pdf-verify-code">{esc(seal_code or "")}</div>
         </div>
     </div>"""
 

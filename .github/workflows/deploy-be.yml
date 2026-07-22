@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-be-${{ github.ref }}
+  group: deploy-be-production
   cancel-in-progress: false
 
 jobs:
@@ -58,15 +58,31 @@ jobs:
           ssh-keyscan -H -T 10 ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || \
             echo "ssh-keyscan failed (host unreachable?), falling back to accept-new"
 
+      - name: Prepare shared document seal key bundle
+        env:
+          SEAL_KEY_ID: ${{ secrets.DOCUMENT_SEAL_ACTIVE_KEY_ID }}
+          SEAL_PRIVATE_KEY: ${{ secrets.DOCUMENT_SEAL_PRIVATE_KEY_B64 }}
+          SEAL_PUBLIC_KEYS: ${{ secrets.DOCUMENT_SEAL_PUBLIC_KEYS_JSON }}
+        run: |
+          set -euo pipefail
+          test -n "$SEAL_KEY_ID"
+          test -n "$SEAL_PRIVATE_KEY"
+          test -n "$SEAL_PUBLIC_KEYS"
+          umask 077
+          printf 'DOCUMENT_SEAL_ACTIVE_KEY_ID=%s\n' "$SEAL_KEY_ID" > document-seal.env
+          printf 'DOCUMENT_SEAL_PRIVATE_KEY_B64=%s\n' "$SEAL_PRIVATE_KEY" >> document-seal.env
+          printf 'DOCUMENT_SEAL_PUBLIC_KEYS_JSON=%s\n' "$SEAL_PUBLIC_KEYS" >> document-seal.env
+
       - name: Ship + install (no compile) + alembic + restart + health + rollback
         env:
           HOST: ${{ secrets.EC2_HOST }}
         run: |
           set -e
           SSH_OPTS="-i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
-          scp $SSH_OPTS wheels.tgz code.tgz ubuntu@$HOST:/tmp/
-          ssh $SSH_OPTS ubuntu@$HOST 'bash -se' <<'REMOTE'
+          scp $SSH_OPTS wheels.tgz code.tgz document-seal.env ubuntu@$HOST:/tmp/
+          ssh $SSH_OPTS ubuntu@$HOST 'flock -w 300 /tmp/klassci-deploy.lock bash -se' <<'REMOTE'
           set -euo pipefail
+          trap 'rm -f /tmp/document-seal.env' EXIT
           APP=/home/ubuntu/klassci/klassci-backend
           cd "$APP"
           source .venv/bin/activate
@@ -79,9 +95,45 @@ jobs:
           tar czf /tmp/code-prev.tgz app alembic
           tar xzf /tmp/code.tgz
 
+          sudo install -m 0644 scripts/klassci-backend.service \
+            /etc/systemd/system/klassci-backend.service
+          sudo systemctl daemon-reload
+
+          # Trust only the local proxy and make it overwrite client-supplied XFF.
+          matched_nginx_site=0
+          for enabled in /etc/nginx/sites-enabled/*; do
+            if grep -q 'server_name college\.klassci\.com' "$enabled"; then
+              matched_nginx_site=1
+              target=$(readlink -f "$enabled")
+              sudo sed -i \
+                -e 's/\$proxy_add_x_forwarded_for/\$remote_addr/g' \
+                -e 's/client_max_body_size 25M/client_max_body_size 21M/g' \
+                "$target"
+              if grep -q '\$proxy_add_x_forwarded_for' "$target"; then
+                echo "::error::Unsafe X-Forwarded-For remains in $target"
+                exit 1
+              fi
+              if ! grep -q 'client_max_body_size 21M' "$target"; then
+                echo "::error::21M body limit missing from $target"
+                exit 1
+              fi
+            fi
+          done
+          if [ "$matched_nginx_site" -ne 1 ]; then
+            echo "::error::No active KLASSCI nginx site found"
+            exit 1
+          fi
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+          # Provision dedicated Ed25519 material once, without printing secrets.
+          python scripts/provision_document_seal_env.py \
+            --env-file .env \
+            --key-file /tmp/document-seal.env
+
           # Migrations BEFORE restart (expand-contract — old code still runs OK
           # against new schema). Si fail → rollback code, ne PAS restart.
-          if ! TENANT_ID=local alembic upgrade head; then
+          if ! python -m app.cli.migrate_all head; then
             echo "::error::Alembic migration failed. Rolling back code (BE not restarted)."
             tar xzf /tmp/code-prev.tgz
             exit 1

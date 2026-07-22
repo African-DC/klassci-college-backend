@@ -20,6 +20,8 @@ from collections.abc import Awaitable, Callable
 from fastapi import HTTPException, status
 from fastapi.responses import Response
 
+from app.core.exceptions import AppException
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +42,8 @@ async def pdf_response(
     """
     try:
         pdf_bytes = await factory()
+    except AppException:
+        raise
     except OSError as exc:
         logger.exception("PDF generation failed (%s): library load error", error_context)
         raise HTTPException(

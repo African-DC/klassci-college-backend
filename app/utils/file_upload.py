@@ -19,7 +19,9 @@ async def save_document_upload(file: UploadFile, *, prefix: str) -> tuple[str, s
     """Valide et sauvegarde un document. Retourne (url, mime_type)."""
     mime = file.content_type or ""
     if mime not in _ALLOWED_TYPES:
-        raise HTTPException(status_code=400, detail="Format invalide. Accepte : PDF, JPEG, PNG, WebP")
+        raise HTTPException(
+            status_code=400, detail="Format invalide. Accepte : PDF, JPEG, PNG, WebP"
+        )
 
     os.makedirs(DOCUMENT_UPLOAD_DIR, exist_ok=True)
     ext = _ALLOWED_TYPES[mime]
