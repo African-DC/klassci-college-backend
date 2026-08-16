@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Hôtes qui mappent vers le tenant de développement local
 # Inclut "testserver" (par défaut FastAPI TestClient) pour ne pas casser la suite tests.
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", ""}
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", "backend", ""}
 _PUBLIC_UPLOAD_PREFIXES = ("/public/verify-file/", "/public/verify-file-code/")
 _MAX_PUBLIC_UPLOAD_BODY_BYTES = 20 * 1024 * 1024 + 256 * 1024
 _PUBLIC_UPLOADS_PER_MINUTE = 8

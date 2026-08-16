@@ -32,6 +32,7 @@ from app.core.middleware import (
         "localhost",
         "127.0.0.1",
         "0.0.0.0",
+        "backend",
         "",
         # IPs numériques (dev)
         "16.58.132.68",
