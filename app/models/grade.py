@@ -37,8 +37,34 @@ class EvaluationType(str, enum.Enum):
 
 
 class GradeStatus(str, enum.Enum):
+    """Cycle de vie d'une note.
+
+    Trois situations que `pending` confondait, alors que le conseil de classe
+    les traite differemment : la note pas encore saisie, l'eleve absent le jour
+    de l'epreuve (zero d'office, la note compte) et l'epreuve rouverte par un
+    billet d'annulation de zero, en attente de la note de rattrapage que seul
+    l'enseignant saisira.
+    """
+
     PENDING = "pending"
     ENTERED = "entered"
+    ABSENT = "absent"
+    RETAKE_ALLOWED = "retake_allowed"
+
+
+# Statuts dont la valeur entre dans les moyennes. Le zero d'office compte comme
+# une note : l'exclure reviendrait a recompenser l'absence. Constante partagee
+# pour que bulletins, rapports et score enseignant ne divergent pas.
+COUNTED_GRADE_STATUSES: tuple[GradeStatus, ...] = (GradeStatus.ENTERED, GradeStatus.ABSENT)
+
+# Statuts qu'un enregistrement de feuille de notes laissee vide ne doit pas
+# ecraser : un rattrapage autorise et pas encore note doit survivre a la
+# sauvegarde suivante, sinon l'autorisation disparait dans le dos de tout le
+# monde et l'eleve retombe a zero.
+STICKY_GRADE_STATUSES: tuple[GradeStatus, ...] = (
+    GradeStatus.ABSENT,
+    GradeStatus.RETAKE_ALLOWED,
+)
 
 
 class Mention(str, enum.Enum):

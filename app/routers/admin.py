@@ -330,8 +330,10 @@ async def regenerate_enrollment_fees(
 ) -> dict:
     """Régénère les frais obligatoires d'une inscription.
 
-    Supprime les frais sans paiements et recrée les frais obligatoires
-    correspondant à la classe actuelle.
+    Remplace les frais sur lesquels aucun versement n'est imputé, conserve
+    les autres, et recrée les frais obligatoires correspondant à la classe
+    actuelle. La réponse porte le décompte des deux et un message à
+    afficher tel quel.
     """
     async with db.begin_nested():
         result = await enrollment_service.regenerate_enrollment_fees(

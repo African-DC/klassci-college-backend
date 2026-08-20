@@ -14,8 +14,8 @@ facultatives. Aucune ligne existante ne change de sens, et un établissement
 qui ne saisit rien verra simplement ces tableaux marqués « à compléter » —
 jamais remplis de zéros, qui se liraient comme un constat.
 
-Revision ID: 0057_deep_trimester_report_data
-Revises: 0056_payment_survives_student
+Revision ID: 0058_deep_trimester_report_data
+Revises: 0057_school_life_documents
 Create Date: 2026-08-20
 """
 
@@ -23,8 +23,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0057_deep_trimester_report_data"
-down_revision = "0056_payment_survives_student"
+revision = "0058_deep_trimester_report_data"
+down_revision = "0057_school_life_documents"
 branch_labels = None
 depends_on = None
 

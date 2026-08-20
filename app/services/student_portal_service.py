@@ -9,7 +9,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.attendance import AttendanceRecord, AttendanceStatus
-from app.models.fee import PaymentStatus
 from app.models.grade import Evaluation, Grade
 from app.models.user import Student
 from app.repositories import admin_repository
@@ -113,6 +112,10 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
     # s'appuie sur un lien deprecie depuis la migration 0028 et sous-estime
     # donc ce que la famille a verse. C'est elle qui lit ce chiffre.
     paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
+    # Le detail sous chaque frais vient des allocations lui aussi : la
+    # relation depreciee renvoyait une liste vide, donc un frais solde sans
+    # aucun versement visible en dessous.
+    payments_by_fee = await fees_paid.payments_by_enrollment_fee(db, enrollment.id)
 
     total_due = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -123,13 +126,14 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
         payments = [
             PaymentResponse(
                 id=p.id,
-                amount=p.amount,
+                # Part imputee a CE frais, pas le montant total du versement.
+                amount=montant,
                 method=p.method,
                 status=p.status,
                 reference=p.reference,
                 created_at=p.created_at,
             )
-            for p in ef.payments
+            for p, montant in payments_by_fee.get(ef.id, [])
         ]
         fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
         total_paid += fee_paid
@@ -304,12 +308,16 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
             date=ev.date,
         )
 
-    # Frais restants (somme balance des fees non payés)
+    # Reste à payer. Source de vérité : les allocations, pas
+    # `EnrollmentFee.payments`, qui s'appuie sur un lien déprécié depuis la
+    # migration 0028 et surestimait donc la dette annoncée à l'élève dès sa
+    # page d'accueil.
     fees_remaining = Decimal("0")
     if enrollment:
         fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
+        paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
         for fee in fees:
-            paid = sum(p.amount for p in fee.payments if p.status == PaymentStatus.COMPLETED)
+            paid = Decimal(str(paid_by_fee.get(fee.id, 0.0)))
             balance = fee.amount - paid
             if balance > 0:
                 fees_remaining += balance

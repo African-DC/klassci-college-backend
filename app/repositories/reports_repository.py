@@ -11,10 +11,10 @@ from sqlalchemy.orm import selectinload
 from app.models.academic import Subject, Trimester
 from app.models.enrollment import Enrollment
 from app.models.grade import (
+    COUNTED_GRADE_STATUSES,
     Bulletin,
     Evaluation,
     Grade,
-    GradeStatus,
     SubjectAverage,
 )
 from app.models.user import Student
@@ -62,9 +62,12 @@ async def get_entered_grades_for_evaluations(db: AsyncSession, eval_ids: list[in
     """Retourne toutes les notes saisies pour une liste d'evaluations."""
     if not eval_ids:
         return []
+    # Le zéro d'office (élève absent à l'épreuve) porte une valeur et entre
+    # dans le bulletin ; seule une case jamais remplie en est exclue.
     stmt = select(Grade).where(
         Grade.evaluation_id.in_(eval_ids),
-        Grade.status == GradeStatus.ENTERED,
+        Grade.status.in_([s.value for s in COUNTED_GRADE_STATUSES]),
+        Grade.value.is_not(None),
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())

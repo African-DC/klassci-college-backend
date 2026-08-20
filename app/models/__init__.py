@@ -68,6 +68,8 @@ from app.models.fee import (  # noqa: F401
 
 # Notes et bulletins
 from app.models.grade import (  # noqa: F401
+    COUNTED_GRADE_STATUSES,
+    STICKY_GRADE_STATUSES,
     Bulletin,
     CouncilDecision,
     CouncilMinutes,
@@ -104,6 +106,14 @@ from app.models.permission import (  # noqa: F401
 
 # Personal Access Tokens (CLI / agents)
 from app.models.personal_access_token import PersonalAccessToken  # noqa: F401
+
+# Vie scolaire (convocations, autorisations de rattrapage)
+from app.models.school_life import (  # noqa: F401
+    ParentSummons,
+    RetakeAuthorization,
+    RetakeAuthorizationEvaluation,
+    SummonsOutcome,
+)
 
 # Emploi du temps
 from app.models.timetable import (  # noqa: F401
