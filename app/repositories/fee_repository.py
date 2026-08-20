@@ -170,3 +170,72 @@ async def count_fee_variants_for_category(db: AsyncSession, category_id: int) ->
         .where(FeeVariant.fee_category_id == category_id)
     )
     return int((await db.execute(stmt)).scalar_one())
+
+
+async def count_paid_allocations_for_category(db: AsyncSession, category_id: int) -> int:
+    """Versements déjà imputés sur les frais issus de cette catégorie.
+
+    C'est le compteur qui interdit la suppression : de l'argent encaissé qui
+    perd sa contrepartie ne se rattrape pas.
+    """
+    from app.models.fee import EnrollmentFee, PaymentAllocation
+
+    stmt = (
+        select(func.count())
+        .select_from(PaymentAllocation)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
+        .where(FeeVariant.fee_category_id == category_id)
+    )
+    return int((await db.execute(stmt)).scalar_one())
+
+
+async def count_enrollment_fees_for_category(db: AsyncSession, category_id: int) -> int:
+    """Frais d'élèves issus de cette catégorie, payés ou non."""
+    from app.models.fee import EnrollmentFee
+
+    stmt = (
+        select(func.count())
+        .select_from(EnrollmentFee)
+        .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
+        .where(FeeVariant.fee_category_id == category_id)
+    )
+    return int((await db.execute(stmt)).scalar_one())
+
+
+async def count_options_for_category(db: AsyncSession, category_id: int) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(OptionalFeeOption)
+        .where(OptionalFeeOption.fee_category_id == category_id)
+    )
+    return int((await db.execute(stmt)).scalar_one())
+
+
+async def cascade_delete_fee_category(db: AsyncSession, category_id: int) -> None:
+    """Efface la catégorie et tout ce qui en découle, de bas en haut.
+
+    L'ordre suit les dépendances : frais d'élèves, puis options, puis
+    montants, puis la catégorie. Appelée seulement après `ensure_deletable`,
+    donc jamais sur des frais portant un versement.
+    """
+    from sqlalchemy import delete
+
+    from app.models.enrollment import StudentOption
+    from app.models.fee import EnrollmentFee
+
+    variant_ids = select(FeeVariant.id).where(FeeVariant.fee_category_id == category_id)
+    option_ids = select(OptionalFeeOption.id).where(
+        OptionalFeeOption.fee_category_id == category_id
+    )
+
+    await db.execute(delete(EnrollmentFee).where(EnrollmentFee.fee_variant_id.in_(variant_ids)))
+    await db.execute(
+        delete(StudentOption).where(StudentOption.optional_fee_option_id.in_(option_ids))
+    )
+    await db.execute(
+        delete(OptionalFeeOption).where(OptionalFeeOption.fee_category_id == category_id)
+    )
+    await db.execute(delete(FeeVariant).where(FeeVariant.fee_category_id == category_id))
+    await db.execute(delete(FeeCategory).where(FeeCategory.id == category_id))
+    await db.flush()

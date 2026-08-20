@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Supprimer une catégorie de frais annonce d'abord ce qu'elle emporte : « 3 montants configurés et 47 frais d'élèves seront supprimés, confirmez pour continuer ». Dès qu'un versement est imputé dessus, la suppression est refusée même confirmée *(comptable, admin)*.
 - L'ordre d'imputation d'une catégorie de frais se règle à la création : jusqu'ici toute nouvelle catégorie était servie en dernier, sans moyen de la remonter *(comptable)*.
 - Le comptable configure aussi les niveaux et les séries : la grille tarifaire s'y décline, et il restait bloqué au milieu de sa configuration dès qu'un niveau manquait *(comptable)*.
 
@@ -29,6 +30,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
+- Supprimer une série vidait silencieusement la série des classes qui l'utilisaient, en répondant « supprimé » : la base laisse désormais parler ses contraintes au lieu de détacher les données dans le dos de l'utilisateur *(admin)*.
 - Plus aucun « Erreur serveur » muet : quand quelque chose d'imprévu se produit, l'écran affiche un message avec un code de référence à communiquer, et ce même code figure dans le journal du serveur. Les téléchargements Excel, qui échouaient jusque-là en silence, sont couverts aussi *(tous)*.
 - Les messages de conflit disent enfin la bonne chose : créer un montant en double annonce la combinaison en cause au lieu d'un « 1-2-3-4 existe déjà », et enregistrer sur un élément supprimé entre-temps ne parle plus de suppression *(comptable)*.
 - Retirer un échéancier négocié qui n'existait pas ne répond plus « supprimé » et n'écrit plus de trace pour une action qui n'a pas eu lieu ; définir un échéancier sur une inscription inconnue le dit, au lieu d'annoncer des frais à 0 FCFA *(comptable)*.

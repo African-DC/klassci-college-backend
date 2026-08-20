@@ -126,8 +126,8 @@ class Level(Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    series: Mapped[list[Series]] = relationship(back_populates="level")
-    classes: Mapped[list[Class]] = relationship(back_populates="level")
+    series: Mapped[list[Series]] = relationship(back_populates="level", passive_deletes=True)
+    classes: Mapped[list[Class]] = relationship(back_populates="level", passive_deletes=True)
 
 
 class Series(Base):
@@ -143,7 +143,7 @@ class Series(Base):
     name: Mapped[str] = mapped_column(String(20), nullable=False)  # "A1", "C", "D"
 
     level: Mapped[Level] = relationship(back_populates="series")
-    classes: Mapped[list[Class]] = relationship(back_populates="series")
+    classes: Mapped[list[Class]] = relationship(back_populates="series", passive_deletes=True)
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ class Room(Base, TimestampMixin):
     capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     room_type: Mapped[str] = mapped_column(String(30), nullable=False, server_default="classroom")
 
-    classes: Mapped[list[Class]] = relationship(back_populates="room")
+    classes: Mapped[list[Class]] = relationship(back_populates="room", passive_deletes=True)
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="room")
 
 
