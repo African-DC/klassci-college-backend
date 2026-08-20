@@ -11,9 +11,9 @@ Trois changements sur `audit_logs` :
 2. La valeur `read` dans l'ENUM `action` — consulter un dossier d'eleve, un
    versement ou un bulletin est deja un acte qui engage.
 
-3. Des index. Sans eux, la page journal fait un balayage complet d'une table
-   qui grossit a chaque geste de la journee, et devient inutilisable au
-   moment precis ou on en a besoin.
+3. Un index sur `action`. Sans lui, separer les consultations du reste
+   impose un balayage complet d'une table qui grossit a chaque geste de
+   la journee. Les index date, entite et auteur existent depuis 0001.
 
 Le backfill remplit `actor_email` / `actor_role` depuis `users` pour
 l'historique deja ecrit. Les lignes dont l'auteur n'existe plus restent
@@ -88,14 +88,11 @@ def upgrade() -> None:
 
     # La page journal filtre par date (tri par defaut), par entite, par auteur
     # et par action. Un index par axe de filtre reellement propose.
-    for index_name, columns in (
-        ("idx_audit_logs_created_at", ["created_at"]),
-        ("idx_audit_logs_entity", ["entity_type", "entity_id"]),
-        ("idx_audit_logs_user_id", ["user_id"]),
-        ("idx_audit_logs_action", ["action"]),
-    ):
-        if not _has_index(bind, index_name):
-            op.create_index(index_name, "audit_logs", columns)
+    # La migration 0001 pose deja les index date, entite et auteur. Il ne
+    # manque que le filtre par action, sur lequel la page journal s'appuie
+    # pour separer les consultations du reste.
+    if not _has_index(bind, "idx_audit_logs_action"):
+        op.create_index("idx_audit_logs_action", "audit_logs", ["action"])
 
     # Droits de lecture du journal. `audit:read` ouvre tout (direction),
     # `audit:read:financial` n'ouvre que les ecritures d'argent (comptable).
@@ -135,14 +132,10 @@ def downgrade() -> None:
     op.execute("DELETE FROM permissions WHERE slug IN ('audit:read', 'audit:read:financial')")
 
     bind = op.get_bind()
-    for index_name in (
-        "idx_audit_logs_action",
-        "idx_audit_logs_user_id",
-        "idx_audit_logs_entity",
-        "idx_audit_logs_created_at",
-    ):
-        if _has_index(bind, index_name):
-            op.drop_index(index_name, table_name="audit_logs")
+    # On ne rend que ce qu'on a pris : les trois autres index appartiennent a
+    # la migration 0001, qui les supprimera elle-meme en redescendant.
+    if _has_index(bind, "idx_audit_logs_action"):
+        op.drop_index("idx_audit_logs_action", table_name="audit_logs")
 
     # Les consultations n'ont pas d'equivalent dans l'ancien ENUM : on les
     # supprime plutot que de les travestir en une autre action.
