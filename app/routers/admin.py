@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_read import audit_read
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
@@ -144,6 +145,7 @@ async def create_student(
 @router.get("/students/{student_id}/full", response_model=StudentFullResponse)
 async def get_student_full(
     student_id: int,
+    _read: None = audit_read("student", param="student_id"),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
@@ -442,6 +444,7 @@ async def create_staff(
 @router.get("/staff/{staff_id}/full", response_model=StaffFullResponse)
 async def get_staff_full(
     staff_id: int,
+    _read: None = audit_read("staff", param="staff_id"),
     _: None = require_permission("admin:staff:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
@@ -1251,6 +1254,7 @@ async def create_parent(
 @router.get("/parents/{parent_id}/full", response_model=ParentFullResponse)
 async def get_parent_full(
     parent_id: int,
+    _read: None = audit_read("parent", param="parent_id"),
     _: None = require_permission("admin:parents:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:

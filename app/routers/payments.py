@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_read import audit_read
 from app.core.dependencies import (
     TokenData,
     get_current_user,
@@ -139,6 +140,7 @@ async def get_student_payments(
 @router.get("/{payment_id}/receipt")
 async def get_payment_receipt(
     payment_id: int,
+    _read: None = audit_read("payment", param="payment_id"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -185,6 +187,7 @@ async def cancel_payment(
 @router.get("/{payment_id}", response_model=PaymentResponse)
 async def get_payment(
     payment_id: int,
+    _read: None = audit_read("payment", param="payment_id"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentResponse:

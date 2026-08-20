@@ -103,6 +103,11 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Deroger a la retenue d'un document pour impaye. Direction seulement : la
     # personne qui constate la dette ne doit pas etre celle qui l'efface.
     {"slug": "documents:release:override", "name": "Release a document despite arrears"},
+    # Journal d'audit. `audit:read` ouvre tout le journal ; `audit:read:financial`
+    # n'ouvre que les ecritures d'argent — le comptable doit pouvoir remonter un
+    # versement contesté sans lire les notes ni les dossiers medicaux au passage.
+    {"slug": "audit:read", "name": "Read the full audit journal"},
+    {"slug": "audit:read:financial", "name": "Read the financial audit journal"},
     # Parents (4)
     {"slug": "admin:parents:read", "name": "View parents"},
     {"slug": "admin:parents:create", "name": "Create parents"},
@@ -255,6 +260,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "payments:read",
             "payments:create",
             *_CAISSE_SUPERVISION,
+            "audit:read:financial",
             "payments:cancel:any",
             "enrollments:read",
             "admin:students:read",

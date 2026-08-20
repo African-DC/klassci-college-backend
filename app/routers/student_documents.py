@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_read import audit_read
 from app.core.dependencies import (
     TokenData,
     get_current_user,
@@ -78,6 +79,7 @@ async def get_document_release_status(
 @router.get("/{student_id}/documents/certificat-scolarite.pdf")
 async def get_certificat_scolarite(
     student_id: int,
+    _read: None = audit_read("document_certificat", param="student_id"),
     override_reason: str | None = Query(
         None,
         description="Motif de derogation. Requis pour delivrer malgre un impaye.",
@@ -138,6 +140,7 @@ async def get_certificat_scolarite(
 @router.get("/{student_id}/documents/attestation-frequentation.pdf")
 async def get_attestation_frequentation(
     student_id: int,
+    _read: None = audit_read("document_attestation", param="student_id"),
     override_reason: str | None = Query(
         None,
         description="Motif de derogation. Requis pour delivrer malgre un impaye.",

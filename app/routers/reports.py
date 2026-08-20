@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_read import audit_read
 from app.core.dependencies import (
     TokenData,
     get_current_user,
@@ -79,6 +80,7 @@ async def list_bulletins(
 @router.get("/bulletins/{bulletin_id}", response_model=BulletinResponse)
 async def get_bulletin(
     bulletin_id: int,
+    _read: None = audit_read("bulletin", param="bulletin_id"),
     _: None = require_permission("reports:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
@@ -92,6 +94,7 @@ async def get_bulletin(
 @router.get("/bulletins/{bulletin_id}/pdf")
 async def get_bulletin_pdf(
     bulletin_id: int,
+    _read: None = audit_read("bulletin", param="bulletin_id"),
     override_reason: str | None = Query(
         None,
         description="Motif de derogation. Requis pour delivrer malgre un impaye.",
