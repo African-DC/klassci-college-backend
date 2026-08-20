@@ -53,6 +53,12 @@ def test_get_certificat_success() -> None:
                 "app.services.student_documents_service.verify_document_access",
                 new=AsyncMock(return_value=None),
             ),
+            # La retenue pour impaye a ses propres tests : ici on suppose
+            # l'eleve a jour pour ne tester que la generation du certificat.
+            patch(
+                "app.services.document_release_service.ensure_releasable",
+                new=AsyncMock(return_value=None),
+            ),
             patch(
                 "app.services.student_documents_service.compose_certificate_data",
                 new=AsyncMock(
@@ -101,6 +107,12 @@ def test_get_certificat_no_active_enrollment() -> None:
         with (
             patch(
                 "app.services.student_documents_service.verify_document_access",
+                new=AsyncMock(return_value=None),
+            ),
+            # La retenue pour impaye a ses propres tests : ici on suppose
+            # l'eleve a jour pour ne tester que la generation du certificat.
+            patch(
+                "app.services.document_release_service.ensure_releasable",
                 new=AsyncMock(return_value=None),
             ),
             patch(

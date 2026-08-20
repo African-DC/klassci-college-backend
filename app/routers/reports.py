@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.core.exceptions import NotFoundError
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.reports import (
@@ -17,7 +23,11 @@ from app.schemas.reports import (
     BulletinListResponse,
     BulletinResponse,
 )
-from app.services import class_synthesis_service, grade_report_service
+from app.services import (
+    class_synthesis_service,
+    document_release_service,
+    grade_report_service,
+)
 from app.services import reports_service as service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -82,10 +92,24 @@ async def get_bulletin(
 @router.get("/bulletins/{bulletin_id}/pdf")
 async def get_bulletin_pdf(
     bulletin_id: int,
+    override_reason: str | None = Query(
+        None,
+        description="Motif de derogation. Requis pour delivrer malgre un impaye.",
+        max_length=500,
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    may_override: bool = has_permission("documents:release:override"),
     _: None = require_permission("reports:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere et retourne le PDF d'un bulletin."""
+    await document_release_service.ensure_bulletin_releasable(
+        db,
+        bulletin_id,
+        actor_id=current_user.user_id,
+        may_override=may_override,
+        override_reason=override_reason,
+    )
     return await pdf_response(
         lambda: service.get_bulletin_pdf(db, bulletin_id),
         filename=f"bulletin_{bulletin_id}.pdf",

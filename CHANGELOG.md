@@ -15,6 +15,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Retard de paiement calculé sur ce qui est **déjà exigible** et non sur le total de l'année : une famille qui respecte son échéancier n'apparaît jamais en impayé *(tous)*.
 - Moyens de paiement acceptés configurables par l'établissement. Tant que rien n'est configuré, tous restent acceptés *(comptable)*.
 - Journée de caisse : le caissier voit ce qu'il a encaissé, ventilé par moyen de paiement, puis clôture en saisissant les espèces comptées. Le système affiche l'écart avec le théorique et verrouille la journée. Le comptable dispose du point journalier de toutes les caisses, clôturées ou non, avec leur écart *(caissier, comptable)*.
+- Documents retenus en cas d'impayé : certificat de scolarité, attestation de fréquentation et bulletin ne sortent plus tant que des échéances arrivées à terme restent dues. Le refus annonce le montant exact et renvoie au secrétariat. Une famille à jour de son échéancier n'est jamais bloquée, même si le solde de l'année reste ouvert *(tous)*.
+- Dérogation motivée réservée à la direction : le chef d'établissement peut délivrer un document malgré la dette en indiquant pourquoi, et chaque dérogation est journalisée *(admin, directeur)*.
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
