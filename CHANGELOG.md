@@ -9,6 +9,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.
+- Les tableaux que la plateforme ne sait pas remplir sortent vierges avec la mention « à compléter manuellement », jamais garnis de zéros : à la DRENA, un zéro se lit comme un constat *(admin, directeur)*.
+- Visites de classe, formations d'enseignants, transferts et réintégrations, bourses et demi-bourses s'enregistrent désormais, et alimentent directement le rapport *(admin, directeur des études, secrétariat)*.
+- Numéro CNPS et numéro d'autorisation d'enseigner sur les fiches des enseignants et du personnel, réclamés ligne à ligne par l'inspection *(admin)*.
 - Quatre actes de vie scolaire imprimables à l'en-tête officiel du collège : demande de dossier scolaire, billet d'entrée, convocation de parent et billet d'annulation de zéro *(secrétariat, éducateur, directeur des études)*.
 - Le billet d'entrée régularise l'absence qu'il vise : le cahier d'appel et le papier remis à l'élève disent enfin la même chose *(éducateur)*.
 - Registre des convocations : qui a été convoqué ce trimestre, qui est venu, qui ne s'est pas présenté *(éducateur, directeur des études)*.

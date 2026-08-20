@@ -33,6 +33,16 @@ from app.models.audit import AuditAction, AuditLog  # noqa: F401
 # Session de caisse (journée de guichet d'un caissier)
 from app.models.cash_session import CashSession, CashSessionStatus  # noqa: F401
 
+# Données propres au rapport de fin de trimestre de la DEEP
+from app.models.deep_report import (  # noqa: F401
+    ClassVisit,
+    Scholarship,
+    ScholarshipKind,
+    StudentTransfer,
+    TeacherTraining,
+    TransferKind,
+)
+
 # Émissions de documents officiels (vérification publique)
 from app.models.document_issuance import DocumentIssuance  # noqa: F401
 
