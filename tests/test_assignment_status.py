@@ -65,13 +65,37 @@ def test_un_non_affecte_ne_prend_pas_le_filtre_de_l_affecte() -> None:
 
 def test_la_portee_entre_dans_la_cle_d_unicite() -> None:
     """Sans elle, l'école ne pourrait pas définir un tarif affecté ET un tarif
-    non affecté pour le même niveau — c'est pourtant tout l'objet."""
+    non affecté pour le même niveau — c'est pourtant tout l'objet.
+
+    La clé porte sur les colonnes générées : `NULL` n'étant jamais égal à
+    `NULL`, une contrainte posée directement sur les colonnes nullables ne se
+    déclencherait jamais.
+    """
     constraint = next(
         c
         for c in FeeVariant.__table__.constraints
-        if getattr(c, "name", "") == "uq_fee_variant_category_level_series_year"
+        if getattr(c, "name", "") == "uq_fee_variant_dimensions"
     )
-    assert "assignment_scope" in {c.name for c in constraint.columns}
+    assert {c.name for c in constraint.columns} == {
+        "fee_category_id",
+        "academic_year_id",
+        "level_key",
+        "series_key",
+        "scope_key",
+    }
+
+
+def test_les_colonnes_de_cle_neutralisent_les_valeurs_vides() -> None:
+    """C'est ce qui laissait créer des tarifs en double sur tous les niveaux
+    de collège, où la série est toujours vide."""
+    for name, expression in (
+        ("level_key", "COALESCE(level_id, 0)"),
+        ("series_key", "COALESCE(series_id, 0)"),
+        ("scope_key", "COALESCE(assignment_scope, '')"),
+    ):
+        column = FeeVariant.__table__.columns[name]
+        assert column.computed is not None, f"{name} doit etre calculee par la base"
+        assert str(column.computed.sqltext) == expression
 
 
 def test_le_predicat_accepte_la_valeur_brute_de_la_base() -> None:
