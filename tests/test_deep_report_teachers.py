@@ -32,3 +32,19 @@ def test_un_enseignant_sans_sexe_ne_disparait_pas_des_totaux() -> None:
     assert 'counts["T"] += 1' in source, "le total doit compter tout le monde"
     assert 'if genre in ("F", "G")' in source, "la ventilation doit exclure les non renseignés"
     assert "sans sexe renseigné" in source, "la note doit le dire au lecteur"
+
+
+def test_les_quatre_tableaux_se_construisent_reellement() -> None:
+    """Vérifier une signature ne prouve rien : c'est en appelant qu'on voit
+    qu'un appelant n'a pas suivi. Ce test aurait attrapé l'erreur que le
+    déploiement a levée, là où le précédent est passé au vert."""
+    from app.services.deep_report import chapter3_teachers as chapter
+    from app.services.deep_report._context import DisciplineStaffing, ReportContext
+
+    context = ReportContext.__new__(ReportContext)
+    object.__setattr__(context, "teachers", [])
+    object.__setattr__(context, "staff", [])
+    object.__setattr__(context, "staffing", DisciplineStaffing())
+
+    tables = chapter.build_tables(context)
+    assert [t.number for t in tables] == [18, 19, 20, 21]
