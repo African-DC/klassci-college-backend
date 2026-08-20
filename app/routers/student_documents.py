@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.routers._pdf_helpers import pdf_response
-from app.services import document_issuance_service, student_documents_service
+from app.services import (
+    document_issuance_service,
+    document_release_service,
+    student_documents_service,
+)
 from app.services._document_verification_helper import render_verification
 from app.services.pdf_service import (
     generate_attendance_certificate_pdf,
@@ -28,10 +38,53 @@ class RevokeDocumentSealRequest(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class DocumentReleaseStatus(BaseModel):
+    """Etat de la porte de paiement, pour afficher le cadenas avant de cliquer."""
+
+    blocked: bool
+    late_amount: float
+    reason: str | None
+    can_override: bool
+
+
+@router.get("/{student_id}/documents/release-status", response_model=DocumentReleaseStatus)
+async def get_document_release_status(
+    student_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    may_override: bool = has_permission("documents:release:override"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> DocumentReleaseStatus:
+    """Dit si les documents de cet eleve sortiraient, et sinon de combien.
+
+    Le portail parent l'appelle avant d'afficher les boutons de telechargement :
+    voir « Retenu : 75 000 FCFA d'echeances en retard » vaut mieux que cliquer
+    et se prendre un refus.
+    """
+    await student_documents_service.verify_document_access(
+        db,
+        current_user_id=current_user.user_id,
+        student_id=student_id,
+        permission_slug="documents:certificate",
+    )
+    release = await document_release_service.evaluate_release(db, student_id)
+    return DocumentReleaseStatus(
+        blocked=release.blocked,
+        late_amount=release.late_amount,
+        reason=release.reason,
+        can_override=may_override,
+    )
+
+
 @router.get("/{student_id}/documents/certificat-scolarite.pdf")
 async def get_certificat_scolarite(
     student_id: int,
+    override_reason: str | None = Query(
+        None,
+        description="Motif de derogation. Requis pour delivrer malgre un impaye.",
+        max_length=500,
+    ),
     current_user: TokenData = Depends(get_current_user),
+    may_override: bool = has_permission("documents:release:override"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere le certificat de scolarite officiel d'un eleve.
@@ -48,6 +101,17 @@ async def get_certificat_scolarite(
         current_user_id=current_user.user_id,
         student_id=student_id,
         permission_slug="documents:certificate",
+    )
+
+    # Retenue pour impaye — apres le controle d'acces, avant toute generation :
+    # inutile de composer un PDF qui ne sortira pas.
+    await document_release_service.ensure_releasable(
+        db,
+        student_id,
+        document_kind="certificat_scolarite",
+        actor_id=current_user.user_id,
+        may_override=may_override,
+        override_reason=override_reason,
     )
 
     data = await student_documents_service.compose_certificate_data(db, student_id)
@@ -74,7 +138,13 @@ async def get_certificat_scolarite(
 @router.get("/{student_id}/documents/attestation-frequentation.pdf")
 async def get_attestation_frequentation(
     student_id: int,
+    override_reason: str | None = Query(
+        None,
+        description="Motif de derogation. Requis pour delivrer malgre un impaye.",
+        max_length=500,
+    ),
     current_user: TokenData = Depends(get_current_user),
+    may_override: bool = has_permission("documents:release:override"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Genere l'attestation de frequentation officielle d'un eleve.
@@ -91,6 +161,17 @@ async def get_attestation_frequentation(
         current_user_id=current_user.user_id,
         student_id=student_id,
         permission_slug="documents:attendance",
+    )
+
+    # Retenue pour impaye — apres le controle d'acces, avant toute generation :
+    # inutile de composer un PDF qui ne sortira pas.
+    await document_release_service.ensure_releasable(
+        db,
+        student_id,
+        document_kind="attestation_frequentation",
+        actor_id=current_user.user_id,
+        may_override=may_override,
+        override_reason=override_reason,
     )
 
     data = await student_documents_service.compose_attendance_certificate_data(db, student_id)

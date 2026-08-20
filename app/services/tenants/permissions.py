@@ -100,6 +100,9 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "documents:certificate", "name": "Generate certificat de scolarite"},
     {"slug": "documents:attendance", "name": "Generate attestation de frequentation"},
     {"slug": "documents:revoke", "name": "Revoke institutional document seals"},
+    # Deroger a la retenue d'un document pour impaye. Direction seulement : la
+    # personne qui constate la dette ne doit pas etre celle qui l'efface.
+    {"slug": "documents:release:override", "name": "Release a document despite arrears"},
     # Parents (4)
     {"slug": "admin:parents:read", "name": "View parents"},
     {"slug": "admin:parents:create", "name": "Create parents"},
