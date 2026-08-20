@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Statut d'affectation sur l'inscription : affecté, réaffecté ou non affecté, avec le numéro de décision. Un tarif peut désormais ne valoir que pour les affectés ou que pour les non affectés, et l'inscription prend automatiquement le bon montant. Un élève subventionné par l'État ne paie plus comme un non affecté *(comptable, secrétariat)*.
 - Supprimer une catégorie de frais annonce d'abord ce qu'elle emporte : « 3 montants configurés et 47 frais d'élèves seront supprimés, confirmez pour continuer ». Dès qu'un versement est imputé dessus, la suppression est refusée même confirmée *(comptable, admin)*.
 - L'ordre d'imputation d'une catégorie de frais se règle à la création : jusqu'ici toute nouvelle catégorie était servie en dernier, sans moyen de la remonter *(comptable)*.
 - Le comptable configure aussi les niveaux et les séries : la grille tarifaire s'y décline, et il restait bloqué au milieu de sa configuration dès qu'un niveau manquait *(comptable)*.
