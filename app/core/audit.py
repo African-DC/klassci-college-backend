@@ -104,17 +104,18 @@ async def audit_log(
     À appeler sur toutes les mutations sensibles :
     paiements, notes, inscriptions, rôles/permissions.
     """
-    actor = current_actor.get()
     # On ne recopie l'identite que si elle correspond bien a l'auteur declare :
     # un service qui audite au nom d'un autre (import, tache planifiee) ne doit
     # pas heriter de l'identite de la requete courante.
-    matches = actor is not None and (user_id is None or actor.user_id == user_id)
+    actor = current_actor.get()
+    if actor is not None and user_id is not None and actor.user_id != user_id:
+        actor = None
 
     try:
         stmt = insert(AuditLog).values(
-            user_id=user_id if user_id is not None else (actor.user_id if matches else None),
-            actor_email=actor.email if matches and actor else None,
-            actor_role=actor.role if matches and actor else None,
+            user_id=user_id if user_id is not None else (actor.user_id if actor else None),
+            actor_email=actor.email if actor else None,
+            actor_role=actor.role if actor else None,
             entity_type=entity_type,
             entity_id=entity_id,
             action=action,
