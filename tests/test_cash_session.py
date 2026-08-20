@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.models.cash_session import CashSessionStatus
+from app.repositories.cash_session_repository import DayAggregate, MethodTotal
 from app.services import cash_session_service
 from app.services.tenants.permissions import ROLE_DEFINITIONS
 
@@ -106,13 +107,31 @@ def test_variance_is_counted_minus_expected() -> None:
 
 
 def test_method_totals_keep_a_stable_order_and_skip_unused_methods() -> None:
-    totals = cash_session_service._method_totals(
-        {
-            "cheque": {"count": 1, "total": Decimal("5000")},
-            "cash": {"count": 3, "total": Decimal("75000")},
-        }
+    aggregate = DayAggregate(
+        count=4,
+        total=Decimal("80000"),
+        cash_total=Decimal("75000"),
+        by_method={
+            "cheque": MethodTotal(count=1, total=Decimal("5000")),
+            "cash": MethodTotal(count=3, total=Decimal("75000")),
+        },
     )
+    totals = cash_session_service._method_totals(aggregate)
     assert [t.method for t in totals] == ["cash", "cheque"], "espèces d'abord, ordre figé"
     assert totals[0].label == "Espèces"
     assert totals[0].total == 75000.0
     assert all(t.count > 0 for t in totals)
+
+
+def test_empty_aggregate_is_a_real_value_not_none() -> None:
+    """Une caisse ouverte sans versement doit rendre des zéros, pas un trou.
+
+    Le point journalier construit ses lignes depuis les sessions ; une session
+    ouverte dont l'agrégat manque retombe sur ce défaut plutôt que de faire
+    disparaître la caisse de l'écran.
+    """
+    empty = DayAggregate()
+    assert empty.count == 0
+    assert empty.total == Decimal("0")
+    assert empty.cash_total == Decimal("0")
+    assert cash_session_service._method_totals(empty) == []
