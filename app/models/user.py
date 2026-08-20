@@ -151,6 +151,12 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Etablissement d'origine et numero de la decision de transfert : les deux
+    # seules informations que la demande de dossier scolaire ne peut pas
+    # deviner. Sans elles, le secretariat retape l'adresse du college
+    # precedent a chaque demande, avec les fautes que cela suppose.
+    previous_school: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    transfer_decision_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")

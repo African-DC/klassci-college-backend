@@ -5,12 +5,14 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.enrollment import Enrollment
 from app.models.grade import (
+    COUNTED_GRADE_STATUSES,
+    STICKY_GRADE_STATUSES,
     Bulletin,
     Evaluation,
     Grade,
@@ -159,10 +161,31 @@ async def batch_update_grades(
     pour un prof). NULL si non tracé.
     """
     for entry in entries:
-        values: dict[str, Any] = {
-            "value": entry["value"],
-            "status": GradeStatus.ENTERED if entry["value"] is not None else GradeStatus.PENDING,
-        }
+        if entry.get("absent"):
+            # Zéro d'office : la note existe et vaut 0, elle entre dans la
+            # moyenne. C'est ce qu'un billet d'annulation de zéro pourra lever.
+            values: dict[str, Any] = {
+                "value": Decimal("0"),
+                "status": GradeStatus.ABSENT,
+            }
+        elif entry["value"] is not None:
+            values = {"value": entry["value"], "status": GradeStatus.ENTERED}
+        else:
+            # Case laissée vide : on repasse en « à saisir », SAUF si la note
+            # portait un statut qui ne doit pas disparaître au premier
+            # enregistrement de la feuille — un rattrapage autorisé et pas
+            # encore noté se volatiliserait sinon, et l'élève retomberait à
+            # zéro sans que personne ne l'ait décidé.
+            values = {
+                "value": None,
+                "status": case(
+                    (
+                        Grade.status.in_([s.value for s in STICKY_GRADE_STATUSES]),
+                        Grade.status,
+                    ),
+                    else_=GradeStatus.PENDING.value,
+                ),
+            }
         if entered_by_user_id is not None:
             values["entered_by_user_id"] = entered_by_user_id
         stmt = (
@@ -207,7 +230,13 @@ async def get_grades_summary(
     # Toutes les notes
     stmt = (
         select(Grade)
-        .where(Grade.evaluation_id.in_(eval_ids), Grade.status == GradeStatus.ENTERED)
+        # Le zéro d'office compte dans la moyenne au même titre qu'une note
+        # saisie : l'exclure reviendrait à récompenser l'absence.
+        .where(
+            Grade.evaluation_id.in_(eval_ids),
+            Grade.status.in_([s.value for s in COUNTED_GRADE_STATUSES]),
+            Grade.value.is_not(None),
+        )
         .options(selectinload(Grade.student), selectinload(Grade.evaluation))
     )
     result = await db.execute(stmt)

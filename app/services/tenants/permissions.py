@@ -100,6 +100,14 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "documents:certificate", "name": "Generate certificat de scolarite"},
     {"slug": "documents:attendance", "name": "Generate attestation de frequentation"},
     {"slug": "documents:revoke", "name": "Revoke institutional document seals"},
+    # Actes de vie scolaire — une permission par document, parce que ce ne sont
+    # pas les memes bureaux qui les signent. La demande de dossier engage la
+    # correspondance avec un autre etablissement et revient au directeur des
+    # etudes ; les trois autres sont le quotidien de l'educateur.
+    {"slug": "documents:school-file-request", "name": "Issue a school file request"},
+    {"slug": "documents:entry-slip", "name": "Issue a class entry slip"},
+    {"slug": "documents:parent-summons", "name": "Summon a parent and keep the register"},
+    {"slug": "documents:zero-cancellation", "name": "Authorize a missed evaluation retake"},
     # Deroger a la retenue d'un document pour impaye. Direction seulement : la
     # personne qui constate la dette ne doit pas etre celle qui l'efface.
     {"slug": "documents:release:override", "name": "Release a document despite arrears"},
@@ -199,6 +207,16 @@ _FEE_CONFIG = [
 # pouvoir toucher a la grille.
 _INSTALLMENTS_READ = ["admin:fee-installments:read"]
 
+# Les trois actes du bureau de la vie scolaire : billet d'entree, convocation
+# du tuteur, annulation de zero. Ils vont ensemble parce qu'ils traitent tous
+# de la meme journee d'eleve, et que la personne qui en signe un signe les
+# autres.
+_SCHOOL_LIFE_ACTS = [
+    "documents:entry-slip",
+    "documents:parent-summons",
+    "documents:zero-cancellation",
+]
+
 
 ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "admin": {
@@ -256,6 +274,10 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             *_INSTALLMENTS_READ,
             "documents:certificate",
             "documents:attendance",
+            # Le secretariat est le guichet : il edite les quatre actes, y
+            # compris la demande de dossier qu'il poste ensuite.
+            "documents:school-file-request",
+            *_SCHOOL_LIFE_ACTS,
             "leave:request",
         ],
     },
@@ -322,6 +344,10 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "reports:read",
             "documents:certificate",
             "documents:attendance",
+            # Billet d'entree, convocation, annulation de zero : le coeur du
+            # bureau de la vie scolaire. Pas la demande de dossier, qui sort de
+            # l'etablissement et reste au directeur des etudes.
+            *_SCHOOL_LIFE_ACTS,
             "leave:request",
         ],
     },
@@ -363,6 +389,9 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "performance:read",
             "documents:certificate",
             "documents:attendance",
+            # Il signe la demande de dossier scolaire : c'est lui qui
+            # correspond avec l'etablissement d'origine.
+            "documents:school-file-request",
             "leave:request",
             "leave:approve",
             "payments:status:read",

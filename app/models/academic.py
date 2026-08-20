@@ -249,10 +249,21 @@ class SchoolSettings(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     school_name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 50 caracteres et non 20 : l'en-tete officiel imprime deux numeros separes
+    # par un double slash (« 27-31-63-01-60// 07-58-59-97-73 »), ce qui deborde
+    # largement d'un seul numero ivoirien.
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ministry_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Direction Regionale de l'Education Nationale et de l'Alphabetisation de
+    # rattachement (« BOUAKE 2 »). Elle figure sur tout acte administratif et
+    # ne se deduit d'aucune autre colonne.
+    drena_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Armoiries de la Republique. Facultatif : a defaut, les documents
+    # impriment un embleme sobre. Seul l'etablissement detient le fichier
+    # officiel, on ne peut donc pas l'embarquer dans le code.
+    coat_of_arms_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Official documents (PR #105)
     signature_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     head_master_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -268,6 +279,10 @@ class SchoolSettings(Base, TimestampMixin):
     # preserve le comportement des etablissements deja en service.
     enabled_payment_methods: Mapped[str | None] = mapped_column(String(200), nullable=True)
     motto: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Seconde ligne de devise, imprimee en italique sous l'en-tete des actes
+    # administratifs (« Soyons des citoyens responsables pour une ecole de
+    # qualite »). Distincte de `motto`, qui reste la devise principale.
+    secondary_motto: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Timetable generation settings
     slot_duration_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, default=60, server_default="60"

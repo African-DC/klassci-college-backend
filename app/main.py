@@ -44,8 +44,11 @@ from app.routers.profile import router as profile_router
 from app.routers.promotions import router as promotions_router
 from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
+from app.routers.retakes import router as retakes_router
+from app.routers.school_life_documents import router as school_life_documents_router
 from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
+from app.routers.summons import router as summons_router
 from app.routers.super_admin import router as super_admin_router
 from app.routers.teacher_attendance import admin_router as teacher_attendance_admin_router
 from app.routers.teacher_attendance import teacher_router as teacher_attendance_teacher_router
@@ -116,6 +119,9 @@ app.include_router(parent_portal_router)
 app.include_router(teacher_portal_router)
 app.include_router(reports_router)
 app.include_router(student_documents_router)
+app.include_router(school_life_documents_router)
+app.include_router(summons_router)
+app.include_router(retakes_router)
 app.include_router(council_router)
 app.include_router(dren_stats_router)
 app.include_router(super_admin_router)
