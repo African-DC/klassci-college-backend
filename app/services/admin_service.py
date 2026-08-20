@@ -25,6 +25,7 @@ from app.models.user import (
     UserRoleEnum,
 )
 from app.repositories import admin_repository as repo
+from app.repositories import student_purge_repository as purge_repo
 from app.schemas.admin import (
     AcademicYearCreate,
     AcademicYearListResponse,
@@ -253,6 +254,12 @@ async def archive_student(
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
+
+    # Figer l'identité sur les versements dès maintenant : une fois l'élève
+    # archivé, le filtre qui le masque partout le masque aussi derrière ses
+    # versements, et la colonne « Élève » du bordereau journalier se viderait.
+    await purge_repo.freeze_student_identity_on_payments(db, student)
+
     return await archive_service.archive(
         db,
         student,
@@ -292,18 +299,29 @@ async def delete_student(
 
     label = _student_label(student)
     archive_service.ensure_archived_first(student, label=label)
-    await archive_service.record_permanent_deletion(
-        db,
-        entity_type="student",
-        entity_id=student_id,
-        label=label,
-        reason=reason,
-        actor_id=deleted_by,
-    )
+    # Le motif est validé avant la première suppression, pas après.
+    reason = archive_service.ensure_reason(reason)
 
     async with db.begin_nested():
-        await repo.delete_student(db, student)
+        # L'inventaire se constitue pendant la destruction : c'est le seul
+        # moment où l'on sait encore combien de notes, de frais et de
+        # versements portait cette fiche.
+        carried_away = await purge_repo.purge_student_keeping_payments(db, student)
+        outcome = await archive_service.record_permanent_deletion(
+            db,
+            entity_type="student",
+            entity_id=student_id,
+            label=label,
+            reason=reason,
+            actor_id=deleted_by,
+            carried_away=carried_away,
+        )
     await db.commit()
+
+    # Le courriel part une fois la destruction validée, jamais avant : annoncer
+    # par écrit une suppression qui échouerait ensuite laisserait au chef
+    # d'établissement la trace d'un acte qui n'a pas eu lieu.
+    await archive_service.notify(db, outcome)
 
 
 async def get_student_full(

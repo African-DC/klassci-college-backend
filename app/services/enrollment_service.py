@@ -2,7 +2,7 @@
 
 import logging
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -12,7 +12,7 @@ from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, Class, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
-from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption
+from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption, Payment
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
@@ -294,12 +294,21 @@ async def delete_enrollment(
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
 
-    if enrollment.status == EnrollmentStatus.VALIDE and enrollment.enrollment_fees:
-        has_payments = any(ef.payments for ef in enrollment.enrollment_fees)
-        if has_payments:
-            raise BusinessValidationError(
-                "Cannot delete a validated enrollment with existing payments"
-            )
+    # Le garde lisait `EnrollmentFee.payments`, c'est-à-dire l'ancienne
+    # colonne `payments.enrollment_fee_id`, plus jamais renseignée depuis que
+    # le versement se fait sur l'inscription. Il laissait donc passer toutes
+    # les inscriptions payées depuis ce changement. On compte désormais les
+    # versements là où ils sont réellement rattachés.
+    versements = (
+        await db.execute(
+            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
+        )
+    ).scalar() or 0
+    if versements:
+        raise BusinessValidationError(
+            "Impossible de supprimer une inscription qui porte des versements encaissés. "
+            "Passez par la fiche de l'élève : la corbeille conserve les versements."
+        )
 
     async with db.begin_nested():
         await repo.delete_enrollment(db, enrollment)

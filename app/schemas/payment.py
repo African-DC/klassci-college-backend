@@ -91,7 +91,10 @@ class PaymentAllocationResponse(BaseModel):
 
 class PaymentResponse(BaseModel):
     id: int
-    enrollment_id: int
+    #: `None` quand l'élève a été supprimé définitivement. Le versement, lui,
+    #: reste : la caisse avait compté cet argent et les points journaliers
+    #: déjà imprimés le disent. Le nom figé prend alors le relais.
+    enrollment_id: int | None = None
     # DEPRECATED — conservé pour rétrocompat 1 release.
     enrollment_fee_id: int | None = None
     amount: Decimal
@@ -106,6 +109,12 @@ class PaymentResponse(BaseModel):
     student_name: str | None = None
     student_photo_url: str | None = None
     fee_name: str | None = None
+    #: Identité figée, recopiée sur le versement avant la suppression de la
+    #: fiche élève. Renseignée aussi dès la mise à la corbeille.
+    student_matricule: str | None = None
+    #: `True` quand la fiche élève n'existe plus. L'écran peut alors expliquer
+    #: pourquoi la ligne ne mène nulle part, au lieu de proposer un lien mort.
+    student_deleted: bool = False
     # Nouveaux champs (refactor 2026-05-17)
     allocations: list[PaymentAllocationResponse] = []
 
