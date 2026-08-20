@@ -23,7 +23,7 @@ from app.models.attendance import (
 )
 from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
-from app.models.grade import Evaluation, Grade, GradeStatus
+from app.models.grade import COUNTED_GRADE_STATUSES, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import StaffProfile, TeacherProfile
 
@@ -156,7 +156,9 @@ async def entered_grades_by_evaluation(db: AsyncSession, academic_year_id: int) 
         .join(Evaluation, Grade.evaluation_id == Evaluation.id)
         .where(
             Evaluation.academic_year_id == academic_year_id,
-            Grade.status == GradeStatus.ENTERED,
+            # Marquer un élève absent est une saisie comme une autre : c'est
+            # une case que l'enseignant a bien remplie.
+            Grade.status.in_([s.value for s in COUNTED_GRADE_STATUSES]),
         )
         .group_by(Grade.evaluation_id)
     )

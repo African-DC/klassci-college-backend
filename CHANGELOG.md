@@ -9,6 +9,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Quatre actes de vie scolaire imprimables à l'en-tête officiel du collège : demande de dossier scolaire, billet d'entrée, convocation de parent et billet d'annulation de zéro *(secrétariat, éducateur, directeur des études)*.
+- Le billet d'entrée régularise l'absence qu'il vise : le cahier d'appel et le papier remis à l'élève disent enfin la même chose *(éducateur)*.
+- Registre des convocations : qui a été convoqué ce trimestre, qui est venu, qui ne s'est pas présenté *(éducateur, directeur des études)*.
+- Le billet d'annulation de zéro rouvre les évaluations réellement manquées et ne saisit jamais la note de rattrapage, qui reste la main de l'enseignant *(éducateur, enseignant)*.
+- Un élève absent à une épreuve se marque « absent » et non plus « non saisi » : le zéro d'office compte dans la moyenne, et reste rattrapable *(enseignant)*.
+- Paramètres de l'établissement : DRENA de rattachement, seconde devise, armoiries, deux numéros de téléphone ; sur la fiche élève, établissement d'origine et décision de transfert *(admin, secrétariat)*.
 - Corbeille sur les fiches qui portent une histoire : élèves, parents, enseignants, personnel et inscriptions. Les archiver les retire de tous les écrans sans rien détruire, et on peut les restaurer. La suppression définitive ne se fait qu'ensuite, depuis la corbeille, et reste réservée à la direction *(admin, directeur)*.
 - Archiver comme supprimer exigent un motif, repris dans le journal d'audit et destiné à être envoyé par courriel à la direction *(admin, directeur)*.
 - Écran corbeille : toutes les fiches mises de côté au même endroit, de la plus récente à la plus ancienne, avec le motif et son auteur, filtrable par sorte de fiche *(admin, directeur)*.

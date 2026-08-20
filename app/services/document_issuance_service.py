@@ -52,6 +52,9 @@ DOCUMENT_TYPE_LABELS_FR: dict[str, str] = {
     "certificat_scolarite": "Certificat de scolarité",
     "attestation_frequentation": "Attestation de fréquentation",
     "bulletin": "Bulletin de notes",
+    "demande_dossier_scolaire": "Demande de dossier scolaire",
+    "convocation_parent": "Convocation de parent",
+    "annulation_zero": "Billet d'annulation de zéro",
 }
 
 SCHEME_LEGACY = "KCEV1"

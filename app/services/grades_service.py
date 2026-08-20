@@ -141,7 +141,9 @@ async def batch_update_grades(
     if not evaluation:
         raise NotFoundError("Evaluation", eval_id)
 
-    entries = [{"student_id": e.student_id, "value": e.value} for e in payload.grades]
+    entries = [
+        {"student_id": e.student_id, "value": e.value, "absent": e.absent} for e in payload.grades
+    ]
 
     # Valider que tous les student_ids appartiennent bien à l'évaluation
     valid_student_ids = {g.student_id for g in evaluation.grades} if evaluation.grades else set()
