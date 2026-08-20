@@ -14,7 +14,7 @@ documents :
    decision de transfert, que la demande de dossier ne peut pas deviner.
 
 Revision ID: 0055_school_life_documents
-Revises: 0054_archive_permissions
+Revises: 0056_payment_survives_student
 Create Date: 2026-08-20
 """
 
@@ -22,8 +22,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0055_school_life_documents"
-down_revision = "0054_archive_permissions"
+revision = "0057_school_life_documents"
+down_revision = "0056_payment_survives_student"
 branch_labels = None
 depends_on = None
 

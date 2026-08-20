@@ -347,7 +347,7 @@ def test_every_act_permission_granted_in_a_role_is_also_seeded_by_the_migration(
         Path(__file__).resolve().parents[2]
         / "alembic"
         / "versions"
-        / "20260820_0055_school_life_documents.py"
+        / "20260820_0057_school_life_documents.py"
     )
     spec = import_util.spec_from_file_location("migration_0055", path)
     assert spec is not None and spec.loader is not None
