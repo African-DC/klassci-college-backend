@@ -219,11 +219,16 @@ class StudentFullResponse(BaseModel):
     attendance_late: int = 0
     attendance_rate: float = 0.0
 
-    # Financial summary
-    fees_expected: float = 0.0
-    fees_paid: float = 0.0
-    fees_remaining: float = 0.0
-    fees_rate: float = 0.0
+    # Financial summary — `None` quand l'appelant n'a pas `payments:read`.
+    # On renvoie `None` et pas `0` : un zero se lit « la famille ne doit
+    # rien », ce qui serait un mensonge.
+    fees_expected: float | None = 0.0
+    fees_paid: float | None = 0.0
+    fees_remaining: float | None = 0.0
+    fees_rate: float | None = 0.0
+    # Etat de paiement sans montant, pour `payments:status:read`.
+    fee_status: str | None = None
+    last_payment_date: date | None = None
 
     # Trimester breakdowns (current academic year)
     # Toujours 3 entrées (T1/T2/T3) padded avec null/0 si pas de données.

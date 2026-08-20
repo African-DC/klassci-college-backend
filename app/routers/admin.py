@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_read import audit_read
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -77,6 +83,7 @@ from app.schemas.admin import (
     UserAccountUpdate,
 )
 from app.services import admin_service, enrollment_service, matricule_service
+from app.services.finance_visibility import FinanceView
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -147,10 +154,21 @@ async def get_student_full(
     student_id: int,
     _read: None = audit_read("student", param="student_id"),
     _: None = require_permission("admin:students:read"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
-    """Retourne le profil complet d'un eleve avec KPIs."""
-    return await admin_service.get_student_full(db, student_id)
+    """Retourne le profil complet d'un eleve avec KPIs.
+
+    Ce que la famille doit est une information sensible : les montants ne
+    sortent que pour qui manipule l'argent. Les autres recoivent l'etat de
+    paiement, sans somme.
+    """
+    return await admin_service.get_student_full(
+        db,
+        student_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
 
 
 @router.get("/students/{student_id}", response_model=StudentResponse)
@@ -249,10 +267,15 @@ async def create_student_account(
 )
 async def get_student_fees(
     student_id: int,
-    _: None = require_permission("admin:students:read"),
+    _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> StudentEnrollmentFeeListResponse:
-    """Retourne les frais d'inscription d'un élève avec détails de paiement."""
+    """Retourne les frais d'inscription d'un élève avec détails de paiement.
+
+    Garde `payments:read` et non `admin:students:read` : cette reponse n'est
+    faite que de montants, il n'y a rien a en montrer a qui n'a pas le droit
+    de les lire. Une liste de frais aux sommes vidées ne voudrait rien dire.
+    """
     return await admin_service.get_student_enrollment_fees(db, student_id)
 
 
@@ -1255,11 +1278,17 @@ async def create_parent(
 async def get_parent_full(
     parent_id: int,
     _read: None = audit_read("parent", param="parent_id"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
     _: None = require_permission("admin:parents:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Retourne le profil complet d'un parent avec ses enfants."""
-    return await admin_service.get_parent_full(db, parent_id)
+    return await admin_service.get_parent_full(
+        db,
+        parent_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
 
 
 @router.get("/parents/{parent_id}", response_model=ParentResponse)

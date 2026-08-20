@@ -15,6 +15,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Retard de paiement calculé sur ce qui est **déjà exigible** et non sur le total de l'année : une famille qui respecte son échéancier n'apparaît jamais en impayé *(tous)*.
 - Moyens de paiement acceptés configurables par l'établissement. Tant que rien n'est configuré, tous restent acceptés *(comptable)*.
 - Journée de caisse : le caissier voit ce qu'il a encaissé, ventilé par moyen de paiement, puis clôture en saisissant les espèces comptées. Le système affiche l'écart avec le théorique et verrouille la journée. Le comptable dispose du point journalier de toutes les caisses, clôturées ou non, avec leur écart *(caissier, comptable)*.
+- Ce qu'une famille doit n'est plus visible de tous : les montants sont réservés à qui manipule l'argent (comptable, caissier, secrétariat qui encaisse, direction). L'éducateur et le directeur des études voient désormais un état « à jour » ou « en retard » et la date du dernier versement, sans aucune somme, ce qui suffit à valider un dossier *(tous)*.
+- Le secrétariat garde sa propre caisse mais ne voit plus les encaissements des autres guichets ni la trésorerie consolidée, qui restent au comptable *(secrétariat, comptable)*.
 - Journal d'audit consultable : qui a fait quoi, sur quelle fiche et quand, filtrable par type d'information, par personne, par action et par période, avec le détail des valeurs avant et après *(admin, directeur)*.
 - Les consultations de dossiers sensibles sont désormais tracées, pas seulement les modifications : ouvrir la fiche d'un élève, un versement, un bulletin ou une fiche du personnel laisse une trace *(admin, directeur)*.
 - Journal financier pour le comptable : il remonte un versement contesté jusqu'à la personne qui l'a saisi, sans accéder aux notes ni aux dossiers du personnel *(comptable)*.
@@ -25,6 +27,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
+- Le « reste à payer » d'un élève était surévalué : les versements enregistrés depuis la refonte des paiements n'étaient pas comptés dans le total de la fiche. Une famille ayant versé 155 000 FCFA en apparaissait à 105 000 *(admin, comptable)*.
 
 - Le bordereau journalier imprimé par un caissier contenait les versements de toute l'école : le nom du caissier ne servait qu'à signer le document, pas à le filtrer. Chacun n'obtient désormais que sa propre caisse, le comptable gardant la vue consolidée *(caissier)*.
 - Le comptable ne pouvait ouvrir aucun écran filtrant par année scolaire, dont la page Frais : il lui manquait le droit de lire les années. Il configure désormais la grille tarifaire complète (catégories, montants par niveau, options) et édite les rapports *(comptable)*.

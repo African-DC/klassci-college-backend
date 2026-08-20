@@ -82,6 +82,7 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
+from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
 
@@ -253,8 +254,15 @@ async def delete_student(db: AsyncSession, student_id: int, *, deleted_by: int) 
     await db.commit()
 
 
-async def get_student_full(db: AsyncSession, student_id: int) -> dict:
-    """Enriched student profile with user, enrollment, attendance, fees data."""
+async def get_student_full(
+    db: AsyncSession, student_id: int, *, finance: FinanceView | None = None
+) -> dict:
+    """Enriched student profile with user, enrollment, attendance, fees data.
+
+    `finance` dit ce que l'appelant a le droit de lire des montants. Par
+    defaut on ouvre tout : les appels internes (PDF, exports) ne passent pas
+    par une permission, et c'est le routeur qui restreint.
+    """
     from app.models.attendance import AttendanceRecord
     from app.models.enrollment import Enrollment
     from app.models.fee import EnrollmentFee, Payment, PaymentStatus
@@ -333,12 +341,13 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     fees_row = (await db.execute(fees_stmt)).one_or_none()
     expected = float(fees_row.expected) if fees_row else 0.0
 
+    # Somme des versements par l'inscription, pas par `Payment.enrollment_fee_id` :
+    # ce lien est deprecie depuis la migration 0028 et reste vide sur tout
+    # versement passe par les allocations. Le compter faisait apparaitre une
+    # famille a jour comme n'ayant rien verse, et gonflait son reste a payer.
     paid_stmt = (
-        select(
-            func.coalesce(func.sum(Payment.amount), 0).label("paid"),
-        )
-        .join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
-        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
+        select(func.coalesce(func.sum(Payment.amount), 0).label("paid"))
+        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
         .where(Enrollment.student_id == student_id, Payment.status == PaymentStatus.COMPLETED)
     )
     paid_row = (await db.execute(paid_stmt)).one_or_none()
@@ -348,6 +357,13 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
     result["fees_paid"] = paid
     result["fees_remaining"] = expected - paid
     result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
+
+    view = finance or FinanceView(amounts=True, status=True)
+    if view.status:
+        result["fee_status"], result["last_payment_date"] = await payment_pulse(
+            db, enrollment.id if enrollment else None
+        )
+    result = redact(result, view)
 
     # Trimester breakdowns — alimentent les charts du tab Parcours.
     current_ay_id = enrollment.academic_year_id if enrollment else None
@@ -1182,7 +1198,11 @@ async def get_parent(db: AsyncSession, parent_id: int) -> ParentResponse:
 
 
 async def _child_financial_context(
-    db: AsyncSession, student_id: int, academic_year_id: int | None
+    db: AsyncSession,
+    student_id: int,
+    academic_year_id: int | None,
+    *,
+    finance: FinanceView | None = None,
 ) -> dict:
     """Classe + statut d'inscription + solde (frais) de l'élève pour l'AY courante.
 
@@ -1199,6 +1219,8 @@ async def _child_financial_context(
         "fees_expected": 0.0,
         "fees_paid": 0.0,
         "fees_balance": 0.0,
+        "fee_status": None,
+        "last_payment_date": None,
     }
     if academic_year_id is None:
         return ctx
@@ -1239,15 +1261,22 @@ async def _child_financial_context(
     ctx["fees_expected"] = float(expected)
     ctx["fees_paid"] = float(paid)
     ctx["fees_balance"] = float(expected) - float(paid)
+
+    view = finance or FinanceView(amounts=True, status=True)
+    if view.status:
+        ctx["fee_status"], ctx["last_payment_date"] = await payment_pulse(db, enr.id)
     return ctx
 
 
-async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
+async def get_parent_full(
+    db: AsyncSession, parent_id: int, *, finance: FinanceView | None = None
+) -> dict:
     """Enriched parent profile with user account and children list.
 
     Chaque enfant est enrichi (classe, statut d'inscription, solde des frais)
     et un récapitulatif financier agrégé est calculé pour l'AY courante.
     """
+    view = finance or FinanceView(amounts=True, status=True)
     stmt = (
         select(Parent)
         .where(Parent.id == parent_id)
@@ -1286,7 +1315,7 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
     enrolled_count = 0
     for link in parent.children:
         s = link.student
-        ctx = await _child_financial_context(db, s.id, ay_id)
+        ctx = await _child_financial_context(db, s.id, ay_id, finance=view)
         children.append(
             {
                 "student_id": s.id,
@@ -1303,13 +1332,15 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
         total_paid += ctx["fees_paid"]
         if ctx["is_enrolled"]:
             enrolled_count += 1
-    result["children"] = children
+    # Redaction une seule fois, apres les totaux : le recapitulatif du foyer
+    # se calcule sur les vraies valeurs, puis disparait avec elles.
+    result["children"] = [redact(child, view) for child in children]
     result["summary"] = {
         "children_count": len(children),
         "enrolled_count": enrolled_count,
-        "total_expected": total_expected,
-        "total_paid": total_paid,
-        "total_balance": total_expected - total_paid,
+        "total_expected": total_expected if view.amounts else None,
+        "total_paid": total_paid if view.amounts else None,
+        "total_balance": (total_expected - total_paid) if view.amounts else None,
         "academic_year_name": ay_name,
     }
 

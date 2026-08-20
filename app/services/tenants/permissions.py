@@ -106,6 +106,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Journal d'audit. `audit:read` ouvre tout le journal ; `audit:read:financial`
     # n'ouvre que les ecritures d'argent — le comptable doit pouvoir remonter un
     # versement contesté sans lire les notes ni les dossiers medicaux au passage.
+    # Etat de paiement sans montant : « a jour » ou « en retard », et la date du
+    # dernier versement. De quoi valider un dossier d'inscription sans jamais
+    # apprendre combien la famille doit.
+    {"slug": "payments:status:read", "name": "See payment status without amounts"},
     {"slug": "audit:read", "name": "Read the full audit journal"},
     {"slug": "audit:read:financial", "name": "Read the financial audit journal"},
     # Parents (4)
@@ -231,7 +235,6 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "enrollments:update",
             "payments:read",
             "payments:create",
-            *_CAISSE_SUPERVISION,
             "cash-session:manage",
             "admin:students:read",
             "admin:students:create",
@@ -304,7 +307,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "admin:parents:create",
             "admin:parents:update",
             *_REFERENTIEL_READ,
-            "payments:read",
+            "payments:status:read",
             *_INSTALLMENTS_READ,
             "attendance:read",
             "reports:read",
@@ -353,6 +356,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "documents:attendance",
             "leave:request",
             "leave:approve",
+            "payments:status:read",
         ],
     },
     "student": {
