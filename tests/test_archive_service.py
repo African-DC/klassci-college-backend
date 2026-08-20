@@ -190,14 +190,12 @@ def test_toute_fiche_archivable_a_sa_place_dans_la_corbeille() -> None:
     """Une entité archivable sans gestes correspondants serait piégée dans la
     corbeille : masquée par le filtre, mais impossible à en sortir."""
     from app.core.archive_filter import _ARCHIVABLE
-    from app.models.user import Student
-    from app.services.admin_service import PARENT_KIND, STAFF_KIND, TEACHER_KIND
+    from app.services.admin_service import PARENT_KIND, STAFF_KIND, STUDENT_KIND, TEACHER_KIND
     from app.services.enrollment_service import ENROLLMENT_KIND
 
-    couverts = {k.model for k in (TEACHER_KIND, STAFF_KIND, PARENT_KIND, ENROLLMENT_KIND)}
-    # L'élève garde ses trois fonctions écrites à la main, antérieures à la
-    # mécanique générique ; son cas est couvert par le test précédent.
-    couverts.add(Student)
+    couverts = {
+        k.model for k in (STUDENT_KIND, TEACHER_KIND, STAFF_KIND, PARENT_KIND, ENROLLMENT_KIND)
+    }
     assert couverts == set(_ARCHIVABLE)
 
 
