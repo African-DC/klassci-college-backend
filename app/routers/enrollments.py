@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
     DocumentResponse,
     EnrollmentCreate,
@@ -133,15 +134,51 @@ async def update_enrollment(
     )
 
 
-@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_enrollment(
+@router.post("/{enrollment_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_enrollment(
+    enrollment_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place une inscription dans la corbeille. Réversible."""
+    await enrollment_service.archive_enrollment(
+        db, enrollment_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/{enrollment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_enrollment(
     enrollment_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("enrollments:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime une inscription."""
-    await enrollment_service.delete_enrollment(db, enrollment_id, deleted_by=current_user.user_id)
+    """Sort une inscription de la corbeille."""
+    await enrollment_service.restore_enrollment(db, enrollment_id, actor_id=current_user.user_id)
+
+
+@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_enrollment(
+    enrollment_id: int,
+    reason: str | None = Query(
+        None,
+        max_length=500,
+        description="Motif obligatoire. Il figure au journal et dans le courriel à la direction.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime définitivement une inscription déjà placée dans la corbeille.
+
+    Réservé à l'administration : c'est le seul geste du logiciel qui ne se
+    rattrape pas.
+    """
+    await enrollment_service.delete_enrollment(
+        db, enrollment_id, deleted_by=current_user.user_id, reason=reason
+    )
 
 
 @router.post(
