@@ -272,6 +272,10 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "reports:read",
             "reports:generate",
             "leave:request",
+            "admin:levels:create",
+            "admin:levels:update",
+            "admin:levels:delete",
+            "admin:series:write",
         ],
     },
     # Le caissier encaisse au guichet. Il ne voit que ses propres versements :

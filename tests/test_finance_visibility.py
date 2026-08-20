@@ -119,3 +119,38 @@ def test_le_secretariat_garde_sa_caisse_pas_la_tresorerie() -> None:
     accountant = _perms("accountant")
     assert "payments:read:all" in accountant, "la vue consolidée reste au comptable"
     assert "cash-session:read:all" in accountant
+
+
+# ---------------------------------------------------------------------------
+# Le comptable configure la grille tarifaire de bout en bout
+# ---------------------------------------------------------------------------
+
+
+def test_le_comptable_configure_frais_et_tranches_de_bout_en_bout() -> None:
+    """Il crée, modifie et supprime : une grille qu'on ne peut que lire ne
+    sert à rien quand les tarifs changent en cours d'année."""
+    perms = _perms("accountant")
+    for entity in ("fee-categories", "fee-variants", "fee-options"):
+        for verb in ("read", "create", "update", "delete"):
+            assert f"admin:{entity}:{verb}" in perms, f"admin:{entity}:{verb} manque"
+    assert "admin:fee-installments:read" in perms
+    assert "admin:fee-installments:write" in perms
+
+
+def test_le_comptable_gere_niveaux_et_series() -> None:
+    """La grille se décline par niveau et par série : sans le droit de créer
+    le niveau qui manque, il reste bloqué au milieu de sa configuration."""
+    perms = _perms("accountant")
+    for verb in ("read", "create", "update", "delete"):
+        assert f"admin:levels:{verb}" in perms
+    assert "admin:series:read" in perms
+    assert "admin:series:write" in perms
+
+
+def test_aucun_role_ne_reference_un_slug_inexistant() -> None:
+    """Un slug référencé mais jamais installé donne un 403 silencieux : la
+    page se charge, l'action échoue, et personne ne comprend pourquoi."""
+    catalogue = {p["slug"] for p in ALL_PERMISSIONS}
+    for role, definition in ROLE_DEFINITIONS.items():
+        unknown = set(definition["permissions"]) - catalogue
+        assert not unknown, f"{role} référence des slugs absents du catalogue : {unknown}"

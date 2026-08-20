@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le comptable configure aussi les niveaux et les séries : la grille tarifaire s'y décline, et il restait bloqué au milieu de sa configuration dès qu'un niveau manquait *(comptable)*.
 
 - Tranches de paiement : l'établissement découpe le total des frais obligatoires en tranches exprimées en pourcentage, avec une date limite chacune, une grille par année scolaire dont la somme doit faire 100 %. Le montant attendu suit automatiquement le total de chaque élève, sans ressaisie par niveau *(comptable)*.
 - Échéancier négocié : une famille peut obtenir son propre calendrier en montants fermes, qui prime sur la grille de l'établissement. Le total doit correspondre exactement aux frais obligatoires *(comptable)*.
@@ -27,6 +28,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
+- Les « Erreur serveur » sur la configuration des frais sont remplacées par un message qui dit quoi faire : créer une catégorie dont le nom existe déjà annonce désormais le nom en cause, et supprimer un élément encore utilisé explique qu'il faut d'abord retirer ce qui en dépend. La règle vaut pour tout l'écran, pas seulement les frais *(tous)*.
 - Le « reste à payer » d'un élève était surévalué : les versements enregistrés depuis la refonte des paiements n'étaient pas comptés dans le total de la fiche. Une famille ayant versé 155 000 FCFA en apparaissait à 105 000 *(admin, comptable)*.
 
 - Le bordereau journalier imprimé par un caissier contenait les versements de toute l'école : le nom du caissier ne servait qu'à signer le document, pas à le filtrer. Chacun n'obtient désormais que sa propre caisse, le comptable gardant la vue consolidée *(caissier)*.
