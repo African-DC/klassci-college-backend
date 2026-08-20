@@ -7,6 +7,7 @@ granulaire) — il log un warning et crée également 1 PaymentAllocation 1:1
 pour rester cohérent avec la nouvelle source de vérité.
 """
 
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
+from app.services import cash_session_service
 from app.services.payments._allocation import plan_allocation, recompute_fee_status
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
@@ -37,6 +39,11 @@ async def record_enrollment_payment(
     - Override manuel → pas en P0 (priorité stricte).
     - Audit log unique avec breakdown allocation.
     """
+    # Ouvre la journée de caisse au premier versement, et refuse d'encaisser
+    # sur une journée déjà clôturée : l'écart signé le serait sur un total
+    # devenu faux. Hors transaction pour que le refus remonte tel quel.
+    await cash_session_service.ensure_open_session(db, received_by, datetime.now())
+
     async with db.begin_nested():
         enrollment = await repo.get_enrollment_for_update(db, enrollment_id)
         if enrollment is None:

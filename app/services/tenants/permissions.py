@@ -69,6 +69,13 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Operations (5)
     {"slug": "payments:read", "name": "View payments"},
     {"slug": "payments:create", "name": "Create payments"},
+    # Caisse (4) — le caissier ne voit que ses propres versements. Le
+    # cloisonnement se fait ici : `payments:read` seul ne donne accès qu'à sa
+    # caisse, `payments:read:all` ouvre le journal de tout l'etablissement.
+    {"slug": "payments:read:all", "name": "View every cashier's payments"},
+    {"slug": "payments:cancel:any", "name": "Cancel any payment, including a closed day"},
+    {"slug": "cash-session:manage", "name": "Open and close one's own cash day"},
+    {"slug": "cash-session:read:all", "name": "View every cash day (daily reconciliation)"},
     {"slug": "attendance:read", "name": "View attendance"},
     {"slug": "attendance:create", "name": "Create attendance"},
     {"slug": "attendance:update", "name": "Update attendance"},
@@ -140,6 +147,13 @@ _REFERENTIEL_READ = [
     "admin:classes:read",
 ]
 
+# Vue caisse d'un poste qui tient le guichet mais n'est pas cloisonne :
+# le secretariat et la comptabilite voient toutes les caisses.
+_CAISSE_SUPERVISION = [
+    "payments:read:all",
+    "cash-session:read:all",
+]
+
 # Configuration complete de la grille tarifaire (comptable uniquement).
 _FEE_CONFIG = [
     "admin:fee-categories:read",
@@ -197,6 +211,8 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "enrollments:update",
             "payments:read",
             "payments:create",
+            *_CAISSE_SUPERVISION,
+            "cash-session:manage",
             "admin:students:read",
             "admin:students:create",
             "admin:students:update",
@@ -222,6 +238,8 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "permissions": [
             "payments:read",
             "payments:create",
+            *_CAISSE_SUPERVISION,
+            "payments:cancel:any",
             "enrollments:read",
             "admin:students:read",
             *_REFERENTIEL_READ,
@@ -237,8 +255,11 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "cashier": {
         "description": "Caissier / Caissière",
         "permissions": [
+            # Volontairement SANS `payments:read:all` ni `cash-session:read:all` :
+            # c'est ce qui le cantonne a sa propre caisse.
             "payments:read",
             "payments:create",
+            "cash-session:manage",
             "enrollments:read",
             "admin:students:read",
             *_REFERENTIEL_READ,

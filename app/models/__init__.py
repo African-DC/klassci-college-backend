@@ -30,6 +30,9 @@ from app.models.attendance import (  # noqa: F401
 # Audit log (défini dans app.core.audit, re-exporté ici)
 from app.models.audit import AuditAction, AuditLog  # noqa: F401
 
+# Session de caisse (journée de guichet d'un caissier)
+from app.models.cash_session import CashSession, CashSessionStatus  # noqa: F401
+
 # Émissions de documents officiels (vérification publique)
 from app.models.document_issuance import DocumentIssuance  # noqa: F401
 

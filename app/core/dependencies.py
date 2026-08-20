@@ -162,6 +162,32 @@ def require_permission(permission_slug: str) -> Any:
     return Depends(_check)
 
 
+def has_permission(permission_slug: str) -> Any:
+    """Dépendance qui répond `True`/`False` au lieu de lever un 403.
+
+    Pour les endpoints dont la permission ne décide pas de l'accès mais de
+    l'ÉTENDUE : un caissier et un comptable ouvrent tous deux le journal des
+    versements, mais le premier ne doit y lire que sa propre caisse. Écrire
+    `if role == "cashier"` serait une permission en dur (cf. `rules/security`) ;
+    on interroge donc la matrice, comme partout ailleurs.
+    """
+
+    async def _check(
+        current_user: TokenData = Depends(get_current_user),
+        db: AsyncSession = Depends(get_tenant_db),
+    ) -> bool:
+        from app.services.pat_service import scope_matches
+
+        if current_user.auth_method == "pat":
+            return bool(scope_matches(current_user.pat_scopes, permission_slug))
+
+        from app.repositories.permission_repository import check_user_permission
+
+        return bool(await check_user_permission(db, current_user.user_id, permission_slug))
+
+    return Depends(_check)
+
+
 def require_role(*role_names: str) -> Any:
     """Retourne une dépendance FastAPI qui vérifie que l'utilisateur a un des rôles donnés."""
 

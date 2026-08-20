@@ -87,21 +87,56 @@ async def validate_payment(
     return payment_to_response(refreshed)
 
 
+async def _ensure_cashier_may_cancel(db: AsyncSession, payment: object, cashier_id: int) -> None:
+    """Un caissier ne corrige que sa propre saisie, journée encore ouverte."""
+    from app.repositories import cash_session_repository as cash_repo
+
+    if getattr(payment, "received_by", None) != cashier_id:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Ce versement a été encaissé par une autre caisse. "
+                "Demandez la correction à la comptabilité."
+            ),
+        )
+    created_at = getattr(payment, "created_at", None)
+    business_date = created_at.date() if created_at is not None else None
+    if business_date is not None and await cash_repo.has_closed_session(
+        db, cashier_id, business_date
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Votre journée de caisse est clôturée : ce versement ne peut plus être "
+                "annulé ici. Demandez la correction à la comptabilité."
+            ),
+        )
+
+
 async def cancel_payment(
     db: AsyncSession,
     payment_id: int,
     *,
     cancelled_by: int,
+    may_cancel_any: bool = True,
 ) -> PaymentResponse:
     """Annule un paiement et recalcule les statuts de TOUS les fees alloués.
 
     À l'annulation d'un payment alloué à N fees, cascade DELETE allocations
     + recalcule chaque fee.status. Audit log obligatoire avec breakdown.
+
+    `may_cancel_any=False` correspond au caissier : il ne peut corriger qu'un
+    versement qu'il a lui-même saisi, et seulement tant que sa journée n'est
+    pas clôturée. Après clôture, l'écart a été constaté et signé — revenir
+    dessus rendrait faux un document déjà remis.
     """
     async with db.begin_nested():
         payment = await _load_payment_for_transition(db, payment_id)
         current = payment.status
         _ensure_transition_allowed(current, "cancelled")
+
+        if not may_cancel_any:
+            await _ensure_cashier_may_cancel(db, payment, cancelled_by)
 
         # Snapshot des allocations pour l'audit avant la transition
         allocations_snapshot = [
