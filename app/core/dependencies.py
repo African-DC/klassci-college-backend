@@ -53,6 +53,15 @@ async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 
 
+def _role_value(role: object) -> str:
+    """Le slug du role, jamais son repr Python.
+
+    `User.role` est une colonne Enum : `str()` y renvoie « UserRoleEnum.ADMIN »,
+    qui ne correspond a rien cote interface et casse la traduction des libelles.
+    """
+    return str(getattr(role, "value", role))
+
+
 async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     try:
         payload = decode_token(token)
@@ -83,7 +92,7 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     # L'identite est deja chargee ici : on la pose pour que chaque ecriture
     # d'audit de la requete la fige, sans requete supplementaire ni parametre
     # a ajouter aux quelque cent appels existants.
-    current_actor.set(Actor(user_id=user_id, email=user.email, role=str(user.role)))
+    current_actor.set(Actor(user_id=user_id, email=user.email, role=_role_value(user.role)))
 
     return TokenData(
         user_id=user_id,
@@ -112,7 +121,7 @@ async def _authenticate_pat(token: str, db: AsyncSession) -> TokenData:
     if pat.last_used_at is None or utcnow_naive() - pat.last_used_at >= _LAST_USED_THROTTLE:
         await touch_last_used(db, pat.id)
 
-    current_actor.set(Actor(user_id=pat.user_id, email=user.email, role=str(user.role)))
+    current_actor.set(Actor(user_id=pat.user_id, email=user.email, role=_role_value(user.role)))
 
     return TokenData(
         user_id=pat.user_id,

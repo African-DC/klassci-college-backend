@@ -90,3 +90,12 @@ def test_la_consultation_est_une_action_a_part_entiere() -> None:
         AuditAction.UPDATE,
         AuditAction.DELETE,
     }
+
+
+def test_le_role_est_ecrit_en_slug_pas_en_repr_python() -> None:
+    """`str(User.role)` donnerait « UserRoleEnum.ADMIN », illisible et intraduisible."""
+    from app.core.dependencies import _role_value
+    from app.models.user import UserRoleEnum
+
+    assert _role_value(UserRoleEnum.ADMIN) == "admin"
+    assert _role_value("accountant") == "accountant"
