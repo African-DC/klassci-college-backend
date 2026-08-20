@@ -11,6 +11,7 @@
 | `certificate_scolarite` | Certificat de scolarité officiel CI |
 | `attendance_certificate` | Attestation de fréquentation officielle CI |
 | `fee_statement` | État individuel des frais (NEW P0) |
+| `deep_report` | Rapport de fin de trimestre DEEP, 27 tableaux (landscape A4) |
 
 Call sites historiques `from app.services.pdf_service import generate_X_pdf`
 passent par la facade `pdf_service.py` qui re-exporte tout.

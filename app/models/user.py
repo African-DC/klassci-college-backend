@@ -101,6 +101,11 @@ class StaffProfile(Base, TimestampMixin, ArchivableMixin):
     position: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Réclamés nommément par le rapport de fin de trimestre de la DEEP.
+    # Un censeur ou un directeur des études enseigne souvent quelques heures :
+    # il porte donc lui aussi une autorisation d'enseigner.
+    cnps_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    teaching_authorization_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
@@ -123,6 +128,11 @@ class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
     speciality: Mapped[str | None] = mapped_column(String(150), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Réclamés nommément par le rapport de fin de trimestre de la DEEP :
+    # l'inspection vérifie que chaque enseignant est déclaré à la CNPS et
+    # autorisé à enseigner dans le privé.
+    cnps_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    teaching_authorization_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="teacher_profile")
 

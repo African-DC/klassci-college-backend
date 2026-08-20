@@ -9,6 +9,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.
+- Les tableaux que la plateforme ne sait pas remplir sortent vierges avec la mention « à compléter manuellement », jamais garnis de zéros : à la DRENA, un zéro se lit comme un constat *(admin, directeur)*.
+- Visites de classe, formations d'enseignants, transferts et réintégrations, bourses et demi-bourses s'enregistrent désormais, et alimentent directement le rapport *(admin, directeur des études, secrétariat)*.
+- Numéro CNPS et numéro d'autorisation d'enseigner sur les fiches des enseignants et du personnel, réclamés ligne à ligne par l'inspection *(admin)*.
 - Corbeille sur les fiches qui portent une histoire : élèves, parents, enseignants, personnel et inscriptions. Les archiver les retire de tous les écrans sans rien détruire, et on peut les restaurer. La suppression définitive ne se fait qu'ensuite, depuis la corbeille, et reste réservée à la direction *(admin, directeur)*.
 - Archiver comme supprimer exigent un motif, repris dans le journal d'audit et destiné à être envoyé par courriel à la direction *(admin, directeur)*.
 - Chaque mise à la corbeille et chaque suppression définitive part par courriel à la direction : qui a agi, quand, sur quelle fiche, pour quel motif, et ce qui est parti avec. Les destinataires se règlent dans les paramètres de l'établissement ; sans liste, le message part à l'adresse de l'école. Un courriel sort du logiciel : si quelqu'un efface une trace, il n'efface pas une boîte de réception. Une messagerie injoignable n'empêche jamais une suppression *(admin, directeur)*.

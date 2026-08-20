@@ -25,6 +25,7 @@ from app.routers.cash_sessions import router as cash_sessions_router
 from app.routers.class_documents import router as class_documents_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.deep_report import router as deep_report_router
 from app.routers.dren_stats import router as dren_stats_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
@@ -117,6 +118,7 @@ app.include_router(teacher_portal_router)
 app.include_router(reports_router)
 app.include_router(student_documents_router)
 app.include_router(council_router)
+app.include_router(deep_report_router)
 app.include_router(dren_stats_router)
 app.include_router(super_admin_router)
 app.include_router(timetable_router)
