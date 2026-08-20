@@ -79,7 +79,7 @@ def build_tables(context: ReportContext) -> tuple[ReportTable, ...]:
     """Tableaux 18 à 21."""
     return (
         _teachers_table(context),
-        _contract_table(),
+        _contract_table(context),
         _discipline_table(context),
         _discipline_by_gender_table(context),
     )
@@ -212,12 +212,15 @@ def _contract_table(context: ReportContext) -> ReportTable:
             HeaderGroup("2nd cycle", subs=("F", "G", "T"), align="center"),
             HeaderGroup("Total", subs=("F", "G", "T"), align="center"),
         ),
-        rows=tuple(rows),
-        total_row=ReportRow(
-            cells=(
-                "TOTAL",
-                *(str(totals[k]) for k in ("1F", "1G", "1T", "2F", "2G", "2T", "F", "G", "T")),
-            )
+        rows=(
+            *rows,
+            ReportRow(
+                cells=(
+                    "TOTAL",
+                    *(str(totals[k]) for k in ("1F", "1G", "1T", "2F", "2G", "2T", "F", "G", "T")),
+                ),
+                emphasis=True,
+            ),
         ),
         note=" ".join(notes) if notes else None,
         empty_message="Aucun enseignant enregistré.",
