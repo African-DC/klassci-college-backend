@@ -66,6 +66,10 @@ class FeeVariantCreate(BaseModel):
             raise ValueError("amount must be positive")
         return v
 
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
+    # pour les affectes ou que pour les non affectes.
+    assignment_scope: str | None = None
+
 
 class FeeVariantUpdate(BaseModel):
     amount: Decimal | None = None
@@ -77,6 +81,10 @@ class FeeVariantUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("amount must be positive")
         return v
+
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
+    # pour les affectes ou que pour les non affectes.
+    assignment_scope: str | None = None
 
 
 class FeeVariantResponse(BaseModel):
@@ -91,6 +99,7 @@ class FeeVariantResponse(BaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
+    assignment_scope: str | None = None
 
 
 class FeeVariantListResponse(BaseModel):

@@ -25,6 +25,28 @@ class EnrollmentStatus(str, enum.Enum):
     ANNULE = "annule"
 
 
+class AssignmentStatus(str, enum.Enum):
+    """Statut d'affectation d'un eleve par l'Etat.
+
+    En Cote d'Ivoire, un eleve affecte dans un etablissement prive est
+    subventionne : sa famille paie sensiblement moins qu'un non affecte. Le
+    reaffecte — reoriente vers un autre etablissement — reste pris en charge,
+    donc paie comme un affecte ; on garde neanmoins la distinction, que les
+    dossiers du ministere et le rapport de fin de trimestre reclament.
+
+    L'affectation vaut pour une annee et un etablissement donnes : elle vit
+    donc sur l'inscription, pas sur l'eleve. Un redoublant peut la perdre.
+    """
+
+    AFFECTE = "affecte"
+    REAFFECTE = "reaffecte"
+    NON_AFFECTE = "non_affecte"
+
+    @property
+    def is_subsidised(self) -> bool:
+        return self in (AssignmentStatus.AFFECTE, AssignmentStatus.REAFFECTE)
+
+
 class Enrollment(Base, TimestampMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
@@ -43,6 +65,16 @@ class Enrollment(Base, TimestampMixin):
     academic_year_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    # `None` = pas encore renseigne. On ne devine pas : un defaut a
+    # « non affecte » ferait basculer des familles existantes vers le tarif
+    # plein sans que personne ne l'ait decide.
+    assignment_status: Mapped[str | None] = mapped_column(
+        ValueEnum(AssignmentStatus, name="assignment_status"),
+        nullable=True,
+        index=True,
+    )
+    # Numero de la decision d'affectation, reclame par le rapport DEEP.
+    assignment_decision_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(
         ValueEnum(EnrollmentStatus, name="enrollment_status"),
         nullable=False,

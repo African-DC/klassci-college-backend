@@ -53,6 +53,22 @@ class EnrollmentFeeStatus(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 
+class FeeAssignmentScope(str, enum.Enum):
+    """A qui s'applique un tarif selon l'affectation.
+
+    Deux cas seulement la ou l'inscription en connait trois : un reaffecte
+    est subventionne comme un affecte, lui reserver une troisieme colonne
+    reviendrait a la laisser vide en doublant la saisie.
+
+    `None` sur un tarif signifie « s'applique a tout le monde » : c'est ce
+    qui permet aux grilles deja configurees de continuer a fonctionner sans
+    qu'on y touche.
+    """
+
+    AFFECTE = "affecte"
+    NON_AFFECTE = "non_affecte"
+
+
 class FeeCategory(Base, TimestampMixin):
     """Catégorie de frais (ex : Inscription, Scolarité T1, Cantine, Transport).
 
@@ -100,6 +116,7 @@ class FeeVariant(Base, TimestampMixin):
             "fee_category_id",
             "level_id",
             "series_id",
+            "assignment_scope",
             "academic_year_id",
             name="uq_fee_variant_category_level_series_year",
         ),
@@ -116,6 +133,11 @@ class FeeVariant(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     level_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("levels.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    assignment_scope: Mapped[str | None] = mapped_column(
+        ValueEnum(FeeAssignmentScope, name="fee_assignment_scope"),
+        nullable=True,
+        index=True,
     )
     series_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("series.id", ondelete="RESTRICT"), nullable=True, index=True

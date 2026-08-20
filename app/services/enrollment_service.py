@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
@@ -110,7 +111,11 @@ async def create_enrollment(
 
         # Auto-créer les enrollment_fees pour tous les frais obligatoires
         await _create_mandatory_enrollment_fees(
-            db, enrollment.id, data.class_id, data.academic_year_id
+            db,
+            enrollment.id,
+            data.class_id,
+            data.academic_year_id,
+            enrollment.assignment_status,
         )
 
         await audit_log(
@@ -457,7 +462,11 @@ async def create_enrollment_with_student(
 
         # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
         await _create_mandatory_enrollment_fees(
-            db, enrollment.id, data.class_id, data.academic_year_id
+            db,
+            enrollment.id,
+            data.class_id,
+            data.academic_year_id,
+            enrollment.assignment_status,
         )
 
         await audit_log(
@@ -514,10 +523,39 @@ async def re_enroll_student(
 # ---------------------------------------------------------------------------
 
 
+def fee_variant_assignment_predicate(assignment_status: object) -> ColumnElement[bool]:
+    """Quels tarifs s'appliquent a une inscription selon son affectation.
+
+    Un tarif sans portee s'applique a tout le monde : c'est ce qui permet aux
+    grilles deja configurees de continuer a fonctionner sans qu'on y touche.
+
+    Une inscription dont le statut n'est pas renseigne ne recoit QUE ces
+    tarifs-la. Lui donner le tarif affecte ou le tarif non affecte reviendrait
+    a choisir pour l'ecole entre deux montants differents, et la famille le
+    decouvrirait sur sa facture.
+
+    Ecrit une seule fois : l'apercu des frais et leur generation reelle
+    doivent dire la meme chose, et deux copies finissent toujours par diverger.
+    """
+    from app.models.enrollment import AssignmentStatus
+    from app.models.fee import FeeAssignmentScope
+
+    if assignment_status is None:
+        return FeeVariant.assignment_scope.is_(None)
+
+    subsidised = AssignmentStatus(assignment_status).is_subsidised
+    scope = FeeAssignmentScope.AFFECTE if subsidised else FeeAssignmentScope.NON_AFFECTE
+    return or_(
+        FeeVariant.assignment_scope.is_(None),
+        FeeVariant.assignment_scope == scope,
+    )
+
+
 async def _get_mandatory_fee_variants(
     db: AsyncSession,
     class_id: int,
     academic_year_id: int,
+    assignment_status: object = None,
 ) -> list[FeeVariant]:
     """Retourne les FeeVariants obligatoires applicables à une classe pour l'AY donnée.
 
@@ -546,6 +584,7 @@ async def _get_mandatory_fee_variants(
             FeeVariant.academic_year_id == academic_year_id,
             FeeVariant.level_id == class_.level_id,
             series_condition,
+            fee_variant_assignment_predicate(assignment_status),
             FeeCategory.is_mandatory == True,  # noqa: E712
         )
     )
@@ -558,13 +597,14 @@ async def _create_mandatory_enrollment_fees(
     enrollment_id: int,
     class_id: int,
     academic_year_id: int,
+    assignment_status: object = None,
 ) -> None:
     """Crée les EnrollmentFee pour tous les frais obligatoires d'une classe.
 
     Idempotent : ne crée pas de doublons si un enrollment_fee existe déjà
     pour un fee_variant donné.
     """
-    variants = await _get_mandatory_fee_variants(db, class_id, academic_year_id)
+    variants = await _get_mandatory_fee_variants(db, class_id, academic_year_id, assignment_status)
     if not variants:
         return
 
@@ -620,7 +660,11 @@ async def regenerate_enrollment_fees(
 
     # Re-créer les frais obligatoires manquants
     await _create_mandatory_enrollment_fees(
-        db, enrollment_id, enrollment.class_id, enrollment.academic_year_id
+        db,
+        enrollment_id,
+        enrollment.class_id,
+        enrollment.academic_year_id,
+        enrollment.assignment_status,
     )
 
     await audit_log(
@@ -741,6 +785,7 @@ async def get_applicable_fee_variants(
     db: AsyncSession,
     class_id: int,
     academic_year_id: int | None = None,
+    assignment_status: object = None,
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnée.
 
@@ -778,6 +823,7 @@ async def get_applicable_fee_variants(
         FeeVariant.level_id == class_.level_id,
         FeeVariant.level_id.is_(None),
     )
+    assignment_condition = fee_variant_assignment_predicate(assignment_status)
 
     stmt = (
         select(FeeVariant)
@@ -791,6 +837,7 @@ async def get_applicable_fee_variants(
                     FeeVariant.academic_year_id == academic_year_id,
                     FeeVariant.level_id == class_.level_id,
                     series_condition,
+                    assignment_condition,
                 ),
                 # Optional: match academic_year, level NULL (global) or matching
                 and_(
@@ -798,6 +845,7 @@ async def get_applicable_fee_variants(
                     FeeVariant.academic_year_id == academic_year_id,
                     level_condition,
                     series_condition,
+                    assignment_condition,
                 ),
             )
         )

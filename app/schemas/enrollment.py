@@ -20,6 +20,9 @@ class EnrollmentCreate(BaseModel):
             raise ValueError("must be a positive integer")
         return v
 
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
+
 
 class EnrollmentUpdate(BaseModel):
     status: str | None = None
@@ -42,6 +45,9 @@ class EnrollmentUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("class_id must be a positive integer")
         return v
+
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
 
 
 class SubscribeOptionRequest(BaseModel):
@@ -72,6 +78,8 @@ class EnrollmentResponse(BaseModel):
     student_first_name: str | None = None
     student_last_name: str | None = None
     class_name: str | None = None
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
 
 
 class EnrollmentListResponse(BaseModel):
