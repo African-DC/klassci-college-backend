@@ -10,10 +10,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Added
 
+- Journée de caisse : le caissier voit ce qu'il a encaissé, ventilé par moyen de paiement, puis clôture en saisissant les espèces comptées. Le système affiche l'écart avec le théorique et verrouille la journée. Le comptable dispose du point journalier de toutes les caisses, clôturées ou non, avec leur écart *(caissier, comptable)*.
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
 
+- Le bordereau journalier imprimé par un caissier contenait les versements de toute l'école : le nom du caissier ne servait qu'à signer le document, pas à le filtrer. Chacun n'obtient désormais que sa propre caisse, le comptable gardant la vue consolidée *(caissier)*.
 - Le comptable ne pouvait ouvrir aucun écran filtrant par année scolaire, dont la page Frais : il lui manquait le droit de lire les années. Il configure désormais la grille tarifaire complète (catégories, montants par niveau, options) et édite les rapports *(comptable)*.
 - Le score de performance enseignant restait inaccessible sur les établissements récemment créés, faute d'un droit jamais installé à leur ouverture *(admin, directeur)*.
 - Pipeline et production Windows : `PyMySQL` est épinglé à la version compatible avec `aiomysql`, et l'ancien déploiement EC2 automatique est retiré.

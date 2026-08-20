@@ -26,10 +26,15 @@ async def list_payments(
     enrollment_id: int | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    received_by: int | None = None,
     page: int = 1,
     size: int = 20,
 ) -> PaymentListResponse:
-    """Retourne une page de paiements."""
+    """Retourne une page de paiements.
+
+    `received_by` est passé par le routeur quand l'appelant n'a pas
+    `payments:read:all` : un caissier ne lit que sa propre caisse.
+    """
     payments, total = await repo.list_payments(
         db,
         status=status,
@@ -38,6 +43,7 @@ async def list_payments(
         enrollment_id=enrollment_id,
         date_from=date_from,
         date_to=date_to,
+        received_by=received_by,
         page=page,
         size=size,
     )

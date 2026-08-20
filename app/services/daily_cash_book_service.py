@@ -23,8 +23,15 @@ from app.services.pdf import generate_daily_cash_book_pdf
 from app.services.pdf._helpers import enum_value
 
 
-async def _load_payments_for_day(db: AsyncSession, target_date: date) -> list[Payment]:
-    """Charge tous les paiements de la journée avec student name pour PDF."""
+async def _load_payments_for_day(
+    db: AsyncSession, target_date: date, *, restrict_to_cashier_id: int | None = None
+) -> list[Payment]:
+    """Charge les paiements de la journée avec le nom de l'élève pour le PDF.
+
+    `restrict_to_cashier_id` limite le bordereau à une seule caisse. Sans lui,
+    un caissier imprimerait les versements de toute l'école : le paramètre
+    `cashier_user_id` ne servait qu'à signer le document, pas à le filtrer.
+    """
     day_start = datetime.combine(target_date, time.min)
     day_end = day_start + timedelta(days=1)
     stmt = (
@@ -35,6 +42,8 @@ async def _load_payments_for_day(db: AsyncSession, target_date: date) -> list[Pa
         )
         .order_by(Payment.created_at.asc())
     )
+    if restrict_to_cashier_id is not None:
+        stmt = stmt.where(Payment.received_by == restrict_to_cashier_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -67,9 +76,19 @@ async def get_daily_cash_book_pdf(
     target_date: date,
     *,
     cashier_user_id: int | None = None,
+    restrict_to_cashier: bool = False,
 ) -> bytes:
-    """Génère le bordereau journalier en PDF pour la date donnée."""
-    payments = await _load_payments_for_day(db, target_date)
+    """Génère le bordereau journalier en PDF pour la date donnée.
+
+    `restrict_to_cashier` limite le document à la caisse de `cashier_user_id` —
+    c'est le bordereau que le caissier imprime pour clôturer sa journée. Sans
+    lui, le document couvre toutes les caisses : la vue du comptable.
+    """
+    payments = await _load_payments_for_day(
+        db,
+        target_date,
+        restrict_to_cashier_id=cashier_user_id if restrict_to_cashier else None,
+    )
 
     payment_rows: list[dict] = []
     totals_by_method: dict[str, Decimal] = {}

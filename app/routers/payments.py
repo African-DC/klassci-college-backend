@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
     PaymentCreate,
@@ -28,10 +34,16 @@ async def list_payments(
     date_to: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentListResponse:
-    """Liste paginée des paiements avec filtres optionnels."""
+    """Liste paginée des paiements avec filtres optionnels.
+
+    Un caissier n'a pas `payments:read:all` : il ne lit que les versements
+    qu'il a lui-même encaissés.
+    """
     return await payment_service.list_payments(
         db,
         status=status_filter,
@@ -39,6 +51,7 @@ async def list_payments(
         enrollment_fee_id=enrollment_fee_id,
         date_from=date_from,
         date_to=date_to,
+        received_by=None if can_read_all else current_user.user_id,
         page=page,
         size=size,
     )
@@ -79,6 +92,7 @@ async def get_daily_cash_book(
         description="Date à imprimer (YYYY-MM-DD). Par défaut : aujourd'hui.",
     ),
     current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -86,13 +100,19 @@ async def get_daily_cash_book(
 
     Groupe les paiements de la date par méthode (espèces / mobile money /
     virement / chèque), total par méthode + total général, signatures
-    Caissier / Comptabilité. Persona-first : Mme Diallo imprime ce
-    document fin de journée pour clôture.
+    Caissier / Comptabilité.
+
+    Un caissier n'obtient que SA caisse : sans ce filtre, il imprimerait les
+    encaissements de toute l'école. Le comptable, lui, obtient le document
+    consolidé.
     """
     target = target_date or date.today()
     return await pdf_response(
         lambda: daily_cash_book_service.get_daily_cash_book_pdf(
-            db, target, cashier_user_id=current_user.user_id
+            db,
+            target,
+            cashier_user_id=current_user.user_id,
+            restrict_to_cashier=not can_read_all,
         ),
         filename=f"bordereau-{target.isoformat()}.pdf",
         error_context=f"bordereau journalier {target.isoformat()}",
@@ -145,11 +165,21 @@ async def validate_payment(
 async def cancel_payment(
     payment_id: int,
     current_user: TokenData = Depends(get_current_user),
+    may_cancel_any: bool = has_permission("payments:cancel:any"),
     _: None = require_permission("payments:create"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentResponse:
-    """Annule un paiement (pending → cancelled)."""
-    return await payment_service.cancel_payment(db, payment_id, cancelled_by=current_user.user_id)
+    """Annule un paiement.
+
+    Le comptable corrige n'importe quel versement. Le caissier ne corrige que
+    sa propre saisie, et seulement tant que sa journée n'est pas clôturée.
+    """
+    return await payment_service.cancel_payment(
+        db,
+        payment_id,
+        cancelled_by=current_user.user_id,
+        may_cancel_any=may_cancel_any,
+    )
 
 
 @router.get("/{payment_id}", response_model=PaymentResponse)

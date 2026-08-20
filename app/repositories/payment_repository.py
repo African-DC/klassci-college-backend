@@ -81,11 +81,22 @@ async def list_payments(
     enrollment_id: int | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    received_by: int | None = None,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[Payment], int]:
-    """Retourne une page de paiements avec le total."""
+    """Retourne une page de paiements avec le total.
+
+    `received_by` cloisonne un caissier sur sa propre caisse. Le filtre est
+    appliqué ici, dans la requête, et non après coup sur la page : filtrer en
+    Python laisserait le total et la pagination compter les versements des
+    collègues, et le caissier verrait « 128 versements » en n'en lisant que
+    les siens.
+    """
     base = select(Payment).options(*_payment_full_options())
+
+    if received_by is not None:
+        base = base.where(Payment.received_by == received_by)
 
     if status is not None:
         base = base.where(Payment.status == status)
