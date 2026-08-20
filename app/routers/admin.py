@@ -83,7 +83,7 @@ from app.schemas.admin import (
     UserAccountCreate,
     UserAccountUpdate,
 )
-from app.services import admin_service, enrollment_service, matricule_service
+from app.services import admin_service, enrollment_fees, matricule_service
 from app.services.finance_visibility import FinanceView
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -336,7 +336,7 @@ async def regenerate_enrollment_fees(
     afficher tel quel.
     """
     async with db.begin_nested():
-        result = await enrollment_service.regenerate_enrollment_fees(
+        result = await enrollment_fees.regenerate_enrollment_fees(
             db, enrollment_id, regenerated_by=current_user.user_id
         )
     await db.commit()

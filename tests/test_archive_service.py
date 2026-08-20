@@ -168,7 +168,7 @@ GESTES = {
     "teacher": ("app.services.admin_service", "teacher"),
     "staff": ("app.services.admin_service", "staff"),
     "parent": ("app.services.admin_service", "parent"),
-    "enrollment": ("app.services.enrollment_service", "enrollment"),
+    "enrollment": ("app.services.enrollment_archive", "enrollment"),
 }
 
 
@@ -191,7 +191,7 @@ def test_toute_fiche_archivable_a_sa_place_dans_la_corbeille() -> None:
     corbeille : masquée par le filtre, mais impossible à en sortir."""
     from app.core.archive_filter import _ARCHIVABLE
     from app.services.admin_service import PARENT_KIND, STAFF_KIND, STUDENT_KIND, TEACHER_KIND
-    from app.services.enrollment_service import ENROLLMENT_KIND
+    from app.services.enrollment_archive import ENROLLMENT_KIND
 
     couverts = {
         k.model for k in (STUDENT_KIND, TEACHER_KIND, STAFF_KIND, PARENT_KIND, ENROLLMENT_KIND)
@@ -212,7 +212,7 @@ def test_chaque_type_porte_un_libelle_lisible() -> None:
 def test_une_inscription_se_nomme_par_son_eleve() -> None:
     """L'inscription n'a ni prénom ni nom : sans l'élève, la corbeille
     n'afficherait qu'un numéro."""
-    from app.services.enrollment_service import ENROLLMENT_KIND
+    from app.services.enrollment_archive import ENROLLMENT_KIND
 
     class _Inscription:
         id = 42
