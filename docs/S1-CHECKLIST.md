@@ -1,5 +1,12 @@
 # S1 — Trust foundation : checklist user-actions
 
+
+> Cibles actuelles : **démo Windows** `94.72.96.119` / `college.klassci.com`, **production VPS Contabo** `169.58.156.206` (`serveur.africandigitconsulting.com`).
+> L'ancienne EC2 Linux `16.58.132.68` n'existe plus. Ne plus SSH dessus.
+>
+> Démo Windows : `ssh -F deploy/ssh_config klassci`, puis éditer `C:\klassci\backend\.env` et `nssm restart klassci-backend`.
+> Production Contabo : `ssh -F deploy/ssh_config klassci-prod` (`marcel@169.58.156.206`). Stack live : `/opt/apps/klassci-college/deploy/linux`. Éditer `.env`, puis `docker compose up -d`. Aucun build lourd sur le serveur.
+
 **Goal** : finir la phase trust de la trajectoire 10-semaines vers le 1er client. Tout ce qui suit demande la création d'un compte externe (gratuit) ou la configuration d'une valeur que je ne peux pas générer pour toi.
 
 État au 2026-04-26 :
@@ -7,7 +14,7 @@
 | Item | Status | Coût | Bloquant beta ? |
 |------|--------|------|-----------------|
 | HTTPS Let's Encrypt | ✅ live | 0 | — |
-| systemd Restart=always (BE/FE/Celery) | ✅ live | 0 | — |
+| Redémarrage auto (NSSM démo Windows / systemd Contabo) | ✅ live | 0 | — |
 | Single-domain pivot | ✅ live | 0 | — |
 | Sentry SDK intégré (no-op) | ✅ code | 0 | non |
 | Backup MySQL Tier 1 (local) | ✅ live | 0 | non |
@@ -31,12 +38,20 @@ Pourquoi : sans SMTP, le password reset, les invitations, et les notifications e
    - Resend te donne 3 records DNS (DKIM + SPF + return-path)
    - Ajouter ces 3 records dans le DNS provider (Cloudflare/Route53) — propagation ~10 min
 3. **Créer une API Key** : Resend dashboard → API Keys → Create → name `klassci-college-prod`, scope `Sending access`
-4. **Mettre la valeur sur EC2** :
+4. **Mettre la valeur sur le serveur (démo Windows ou prod Contabo)** :
+
+```powershell
+# Démo Windows
+ssh -F deploy/ssh_config klassci
+notepad C:\klassci\backend\.env
+# SMTP_PASSWORD=re_<ta_clé_API>
+# SMTP_FROM_EMAIL=noreply@klassci.com
+nssm restart klassci-backend
+```
 
 ```bash
-ssh -i ~/Downloads/Ec2_key_pair.pem ubuntu@16.58.132.68
-sudo nano /home/ubuntu/klassci/klassci-backend/.env
-# Ajouter / remplacer :
+# Production Contabo 169.58.156.206 (Linux dédié, jamais 16.58.132.68)
+# Éditer le .env backend, puis :
 # SMTP_PASSWORD=re_<ta_clé_API>
 # SMTP_FROM_EMAIL=noreply@klassci.com
 sudo systemctl restart klassci-backend
@@ -57,25 +72,24 @@ Pourquoi : actuellement les bugs en prod sont invisibles (no-op SDK). Avec un DS
    - `klassci-college-backend` (platform: Python / FastAPI)
    - `klassci-college-frontend` (platform: JavaScript / Next.js)
 3. **Copier les 2 DSNs** (visibles dans Project Settings → Client Keys)
-4. **Mettre les valeurs sur EC2** :
+4. **Mettre les valeurs sur le serveur (démo Windows ou prod Contabo)** :
+
+```powershell
+# Démo Windows
+ssh -F deploy/ssh_config klassci
+notepad C:\klassci\backend\.env
+# SENTRY_DSN=...
+# SENTRY_ENVIRONMENT=production
+notepad C:\klassci\frontend\.env.local
+# NEXT_PUBLIC_SENTRY_DSN n'est pris en compte qu'après un nouveau build frontend
+nssm restart klassci-backend
+nssm restart klassci-frontend
+```
 
 ```bash
-ssh -i ~/Downloads/Ec2_key_pair.pem ubuntu@16.58.132.68
-
-# Backend
-sudo nano /home/ubuntu/klassci/klassci-backend/.env
-# Ajouter :
-# SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project_id>
-# SENTRY_ENVIRONMENT=production
-# APP_VERSION=0.1.0-alpha
-
-# Frontend (le SENTRY_DSN client est NEXT_PUBLIC_*, donc inliné au build !)
-sudo nano /home/ubuntu/klassci/klassci-frontend/.next/standalone/.env.local
-# Ajouter :
-# SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<fe_project_id>   ← server-side, pas inliné, marche tout de suite
-# NEXT_PUBLIC_SENTRY_DSN=...   ← inliné au build, NE MARCHERA QU'APRES REBUILD
-# NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
-
+# Production Contabo 169.58.156.206 (Linux dédié, jamais 16.58.132.68)
+# Backend .env : SENTRY_DSN, SENTRY_ENVIRONMENT, APP_VERSION
+# Frontend : SENTRY_DSN serveur immédiat ; NEXT_PUBLIC_SENTRY_DSN seulement après rebuild hors serveur
 sudo systemctl restart klassci-backend klassci-frontend
 ```
 
@@ -101,10 +115,11 @@ Pourquoi : si le timer de backup s'arrête (par ex. après un reboot où l'on au
      - Grace period : 60 min
 3. **Configurer notification** : Settings → Integrations → Email (default, sur ton compte)
 4. **Copier les 2 UUIDs** (dans l'URL de chaque check : `https://healthchecks.io/checks/<UUID>/`)
-5. **Activer sur EC2** :
+5. **Activer sur le serveur (démo Windows ou prod Contabo)** :
 
 ```bash
-ssh -i ~/Downloads/Ec2_key_pair.pem ubuntu@16.58.132.68
+ssh -F deploy/ssh_config klassci        # démo Windows
+ssh -F deploy/ssh_config klassci-prod   # prod Contabo 169.58.156.206
 sudo tee -a /etc/klassci/backup.env > /dev/null <<EOF
 HEALTHCHECKS_BACKUP_UUID=<uuid_du_check_backup>
 HEALTHCHECKS_RESTORE_UUID=<uuid_du_check_restore>
@@ -119,7 +134,7 @@ sudo systemctl start backup-mysql.service
 
 ## 4. Backup Tier 2 — Off-site DO Spaces (avant 1er client)
 
-Pourquoi : actuellement les backups sont seulement sur l'EC2. Si l'instance crash + disk corrompu, on perd les backups en même temps que la DB.
+Pourquoi : actuellement les backups sont seulement sur le serveur de démo. Si l'instance crash + disk corrompu, on perd les backups en même temps que la DB.
 
 ### Étapes
 
@@ -130,10 +145,11 @@ Pourquoi : actuellement les backups sont seulement sur l'EC2. Si l'instance cras
 3. **Générer une Spaces access key** :
    - Settings → API → Spaces Keys → Create → name `klassci-backups-rclone`
    - Noter `access_key` + `secret_access_key`
-4. **Configurer rclone sur EC2** :
+4. **Configurer rclone sur le serveur (démo Windows ou prod Contabo)** :
 
 ```bash
-ssh -i ~/Downloads/Ec2_key_pair.pem ubuntu@16.58.132.68
+ssh -F deploy/ssh_config klassci        # démo Windows
+ssh -F deploy/ssh_config klassci-prod   # prod Contabo 169.58.156.206
 sudo apt install -y rclone
 rclone config
 # Réponses :
@@ -177,7 +193,7 @@ rclone ls do-spaces:klassci-backups/daily/
    - `weekly/` → expire après 28 jours
    - `monthly/` → expire après 365 jours
 
-   Sinon, le script local applique déjà la rétention sur EC2 ; les fichiers Spaces s'accumulent jusqu'à ce qu'on les nettoie.
+   Sinon, le script local applique déjà la rétention sur le serveur de démo ; les fichiers Spaces s'accumulent jusqu'à ce qu'on les nettoie.
 
 ---
 
@@ -186,7 +202,8 @@ rclone ls do-spaces:klassci-backups/daily/
 Une fois 1+2+3+4 fait :
 
 ```bash
-ssh -i ~/Downloads/Ec2_key_pair.pem ubuntu@16.58.132.68
+ssh -F deploy/ssh_config klassci        # démo Windows
+ssh -F deploy/ssh_config klassci-prod   # prod Contabo 169.58.156.206
 
 # 1. Backup déclenché manuellement → vérifier les 3 tiers
 sudo systemctl start backup-mysql.service
@@ -208,7 +225,7 @@ curl -X POST https://college.klassci.com/api-be/sentry-debug   # endpoint à cr�
 
 ## Récap : valeurs à préparer côté user
 
-À la fin de cette checklist, tu auras 6 secrets à coller dans 2 fichiers EC2 :
+À la fin de cette checklist, tu auras 6 secrets à coller dans 2 fichiers serveur (démo Windows ou prod Contabo) :
 
 **`/etc/klassci/backup.env`** (root:ubuntu, mode 640) :
 ```
@@ -249,5 +266,5 @@ sudo systemctl restart klassci-backend klassci-frontend
 | Sentry (5K events/mois) | 0 USD |
 | Healthchecks.io (20 checks) | 0 USD |
 | DO Spaces (250 GB) | 5 USD |
-| EC2 t3.small (existant) | ~17 USD |
+| Ancienne EC2 t3.small (retirée, 16.58.132.68 n'existe plus) | 0 |
 | **Total ajouté par S1** | **5 USD/mois** |
