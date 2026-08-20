@@ -8,8 +8,14 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+
+- Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
+
 ### Fixed
 
+- Le comptable ne pouvait ouvrir aucun écran filtrant par année scolaire, dont la page Frais : il lui manquait le droit de lire les années. Il configure désormais la grille tarifaire complète (catégories, montants par niveau, options) et édite les rapports *(comptable)*.
+- Le score de performance enseignant restait inaccessible sur les établissements récemment créés, faute d'un droit jamais installé à leur ouverture *(admin, directeur)*.
 - Pipeline et production Windows : `PyMySQL` est épinglé à la version compatible avec `aiomysql`, et l'ancien déploiement EC2 automatique est retiré.
 - Reçu de versement (PDF) : les informations de l'élève (nom, nature, méthode, référence, statut) sont désormais parfaitement alignées en colonnes, au lieu d'un rendu tassé et décalé *(admin, personnel)*.
 

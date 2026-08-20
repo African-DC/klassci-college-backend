@@ -76,6 +76,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "reports:read", "name": "View reports"},
     {"slug": "reports:generate", "name": "Generate reports"},
     {"slug": "reports:override", "name": "Override council decisions"},
+    # Performance (1) — seedée par la migration 0034 mais absente de ce catalogue
+    # jusqu'au 2026-08-20 : les tenants provisionnés depuis ce module n'avaient
+    # donc pas le slug et /admin/performance repondait 403.
+    {"slug": "performance:read", "name": "View teacher and staff performance"},
     # Teacher attendance (Phase 7b) (3)
     {"slug": "admin:teachers:attendance", "name": "Manage teacher attendance"},
     {"slug": "admin:teachers:attendance:read", "name": "View teacher attendance"},
@@ -122,6 +126,37 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
 _SUPER_ADMIN_PERMS = [p["slug"] for p in ALL_PERMISSIONS if p["slug"].startswith("super-admin:")]
 
 
+# ---------------------------------------------------------------------------
+# Blocs reutilisables — evitent de recopier les memes listes dans chaque role
+# et rendent les differences entre metiers lisibles d'un coup d'oeil.
+# ---------------------------------------------------------------------------
+
+# Referentiel que tout poste administratif doit pouvoir lire pour se reperer :
+# sans l'annee courante, les ecrans qui filtrent par annee tombent en 403.
+_REFERENTIEL_READ = [
+    "admin:academic-years:read",
+    "admin:levels:read",
+    "admin:series:read",
+    "admin:classes:read",
+]
+
+# Configuration complete de la grille tarifaire (comptable uniquement).
+_FEE_CONFIG = [
+    "admin:fee-categories:read",
+    "admin:fee-categories:create",
+    "admin:fee-categories:update",
+    "admin:fee-categories:delete",
+    "admin:fee-variants:read",
+    "admin:fee-variants:create",
+    "admin:fee-variants:update",
+    "admin:fee-variants:delete",
+    "admin:fee-options:read",
+    "admin:fee-options:create",
+    "admin:fee-options:update",
+    "admin:fee-options:delete",
+]
+
+
 ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "admin": {
         "description": "Administrateur — accès complet du tenant",
@@ -151,8 +186,11 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "leave:request",
         ],
     },
+    # Slug historique `staff`, conserve tel quel : il est porte par des comptes
+    # en production, inscrit dans le JWT et reference dans l'audit. Seul le
+    # libelle passe a « Secretariat ».
     "staff": {
-        "description": "Personnel administratif",
+        "description": "Secrétariat",
         "permissions": [
             "enrollments:read",
             "enrollments:create",
@@ -162,22 +200,114 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "admin:students:read",
             "admin:students:create",
             "admin:students:update",
-            "admin:classes:read",
+            "admin:parents:read",
+            "admin:parents:create",
+            "admin:parents:update",
+            *_REFERENTIEL_READ,
             "attendance:read",
             "reports:read",
             "admin:teachers:attendance",
             "admin:teachers:attendance:read",
             "admin:accounts:manage",
+            "documents:certificate",
+            "documents:attendance",
             "leave:request",
         ],
     },
+    # Le comptable configure la grille tarifaire et consolide toutes les caisses.
+    # Il lui manquait `admin:academic-years:read`, ce qui faisait echouer en 403
+    # tous les ecrans filtrant par annee — dont la page Frais elle-meme.
     "accountant": {
         "description": "Comptable / Trésorier",
         "permissions": [
             "payments:read",
             "payments:create",
             "enrollments:read",
+            "admin:students:read",
+            *_REFERENTIEL_READ,
+            *_FEE_CONFIG,
             "reports:read",
+            "reports:generate",
+            "leave:request",
+        ],
+    },
+    # Le caissier encaisse au guichet. Il ne voit que ses propres versements :
+    # le cloisonnement est applique cote service, `payments:read` ne suffit pas
+    # a lui ouvrir les caisses des collegues.
+    "cashier": {
+        "description": "Caissier / Caissière",
+        "permissions": [
+            "payments:read",
+            "payments:create",
+            "enrollments:read",
+            "admin:students:read",
+            *_REFERENTIEL_READ,
+            "leave:request",
+        ],
+    },
+    # L'educateur monte les inscriptions et reinscriptions, puis valide une fois
+    # l'encaissement passe en caisse. Il lit les paiements sans pouvoir en creer.
+    "educator": {
+        "description": "Éducateur",
+        "permissions": [
+            "enrollments:read",
+            "enrollments:create",
+            "enrollments:update",
+            "admin:students:read",
+            "admin:students:create",
+            "admin:students:update",
+            "admin:parents:read",
+            "admin:parents:create",
+            "admin:parents:update",
+            *_REFERENTIEL_READ,
+            "payments:read",
+            "attendance:read",
+            "reports:read",
+            "documents:certificate",
+            "documents:attendance",
+            "leave:request",
+        ],
+    },
+    # Le directeur des etudes pilote tout le pedagogique et rien du financier :
+    # aucune permission `payments:*` ni `admin:fee-*`.
+    "studies_director": {
+        "description": "Directeur des études",
+        "permissions": [
+            *_REFERENTIEL_READ,
+            "admin:classes:create",
+            "admin:classes:update",
+            "admin:series:write",
+            "admin:rooms:read",
+            "admin:rooms:create",
+            "admin:rooms:update",
+            "admin:subjects:read",
+            "admin:subjects:create",
+            "admin:subjects:update",
+            "admin:subjects:delete",
+            "admin:teachers:read",
+            "admin:teachers:update",
+            "admin:teachers:attendance",
+            "admin:teachers:attendance:read",
+            "admin:students:read",
+            "enrollments:read",
+            "timetable:read",
+            "timetable:write",
+            "timetable:generate",
+            "grades:read",
+            "grades:write",
+            "grades:edit",
+            "bulletins:generate",
+            "attendance:read",
+            "attendance:create",
+            "attendance:update",
+            "reports:read",
+            "reports:generate",
+            "reports:override",
+            "performance:read",
+            "documents:certificate",
+            "documents:attendance",
+            "leave:request",
+            "leave:approve",
         ],
     },
     "student": {

@@ -876,7 +876,26 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
 
 # Rôles d'accès assignables à un membre du personnel. Volontairement restreint :
 # jamais `admin` ni `super_admin` (pas d'escalade de privilèges via ce formulaire).
-STAFF_ASSIGNABLE_ROLES: Final[tuple[str, ...]] = ("staff", "accountant", "director")
+STAFF_ASSIGNABLE_ROLES: Final[tuple[str, ...]] = (
+    "staff",
+    "accountant",
+    "cashier",
+    "educator",
+    "studies_director",
+    "director",
+)
+
+# Ordre de seniorite utilise quand un compte porte plusieurs roles : on affiche
+# le plus eleve. Doit couvrir tout STAFF_ASSIGNABLE_ROLES, sinon le rôle
+# retombe sur un choix arbitraire (`next(iter(names))`).
+_STAFF_ROLE_SENIORITY: Final[tuple[str, ...]] = (
+    "director",
+    "studies_director",
+    "accountant",
+    "cashier",
+    "educator",
+    "staff",
+)
 
 
 def _extract_staff_role(user: object | None) -> str | None:
@@ -885,10 +904,33 @@ def _extract_staff_role(user: object | None) -> str | None:
         return None
     roles = getattr(user, "roles", None) or []
     names = {ur.role.name for ur in roles if getattr(ur, "role", None) is not None}
-    for preferred in ("director", "accountant", "staff"):
+    for preferred in _STAFF_ROLE_SENIORITY:
         if preferred in names:
             return preferred
     return next(iter(names), None)
+
+
+async def _assert_staff_role_seeded(db: AsyncSession, role_name: str) -> None:
+    """Refuse un rôle d'accès absent de la table `roles` de ce tenant.
+
+    `_ensure_default_user_role` se contente d'un warning quand le rôle n'existe
+    pas : acceptable pour le rôle implicite d'un élève, inacceptable ici. Le rôle
+    a été choisi explicitement dans le formulaire ; l'ignorer créerait un compte
+    sans aucune permission, qui se connecte puis se prend un 403 sur chaque page
+    — avec un message « Créé avec succès » à l'écran.
+
+    Cas réel : un tenant qui n'a pas encore joué la migration 0042 ne connaît pas
+    `cashier` / `educator` / `studies_director`.
+    """
+    row = await db.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name})
+    if row.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Le rôle « {role_name} » n'est pas encore installé sur cet établissement. "
+                "Mettez la base à jour avant de l'attribuer."
+            ),
+        )
 
 
 def _validate_staff_role(role: str | None) -> str:
@@ -963,6 +1005,7 @@ async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) 
         raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
 
     role_name = _validate_staff_role(data.role)
+    await _assert_staff_role_seeded(db, role_name)
 
     async with db.begin_nested():
         user = User(
@@ -1003,6 +1046,7 @@ async def update_staff(
     new_role = changes.pop("role", None)
     if new_role is not None:
         new_role = _validate_staff_role(new_role)
+        await _assert_staff_role_seeded(db, new_role)
     if not changes and new_role is None:
         return _staff_to_response(staff)
     async with db.begin_nested():
