@@ -2,23 +2,7 @@
 
 from app.models.enrollment import AssignmentStatus
 from app.models.fee import FeeAssignmentScope, FeeVariant
-from app.services.enrollment_service import fee_variant_assignment_predicate
-
-
-def _bound_scope(predicate: object) -> str | None:
-    """Valeur reellement liee au parametre SQL.
-
-    `str()` d'une clause n'imprime que `:assignment_scope_1` : deux portees
-    differentes produisent donc la meme chaine, et comparer les chaines ne
-    prouverait rien.
-    """
-    compiled = predicate.compile(compile_kwargs={"literal_binds": False})  # type: ignore[attr-defined]
-    values = [v for v in compiled.params.values() if v is not None]
-    return str(getattr(values[0], "value", values[0])) if values else None
-
-
-def _sql(predicate: object) -> str:
-    return str(predicate).replace("\n", " ")
+from app.services.enrollment_fees import applicable_scope_keys, applicable_series_keys
 
 
 def test_le_reaffecte_est_subventionne_comme_un_affecte() -> None:
@@ -37,30 +21,43 @@ def test_une_inscription_sans_statut_ne_recoit_que_les_tarifs_communs() -> None:
     """Lui donner le tarif affecté ou le tarif non affecté reviendrait à
     choisir pour l'école entre deux montants, et la famille le découvrirait
     sur sa facture."""
-    sql = _sql(fee_variant_assignment_predicate(None))
-    assert "IS NULL" in sql
-    assert "OR" not in sql, "aucun tarif cible ne doit s'appliquer par defaut"
+    assert applicable_scope_keys(None) == ("",)
 
 
-def test_un_affecte_recoit_les_tarifs_communs_et_les_siens() -> None:
-    sql = _sql(fee_variant_assignment_predicate(AssignmentStatus.AFFECTE))
-    assert "IS NULL" in sql, "les grilles deja configurees continuent de s'appliquer"
-    assert "OR" in sql
+def test_un_affecte_est_candidat_aux_tarifs_communs_et_aux_siens() -> None:
+    """Les deux sont candidats ; c'est la résolution qui tranche ensuite pour
+    n'en retenir qu'un, le plus spécifique."""
+    assert set(applicable_scope_keys(AssignmentStatus.AFFECTE)) == {
+        "",
+        FeeAssignmentScope.AFFECTE.value,
+    }
 
 
 def test_le_reaffecte_prend_le_meme_filtre_que_l_affecte() -> None:
-    assert _bound_scope(fee_variant_assignment_predicate(AssignmentStatus.REAFFECTE)) == (
-        _bound_scope(fee_variant_assignment_predicate(AssignmentStatus.AFFECTE))
+    assert applicable_scope_keys(AssignmentStatus.REAFFECTE) == applicable_scope_keys(
+        AssignmentStatus.AFFECTE
     )
 
 
-def test_un_non_affecte_ne_prend_pas_le_filtre_de_l_affecte() -> None:
-    assert _bound_scope(fee_variant_assignment_predicate(AssignmentStatus.NON_AFFECTE)) == (
-        FeeAssignmentScope.NON_AFFECTE.value
+def test_un_non_affecte_n_est_jamais_candidat_au_tarif_de_l_affecte() -> None:
+    assert FeeAssignmentScope.AFFECTE.value not in applicable_scope_keys(
+        AssignmentStatus.NON_AFFECTE
     )
-    assert _bound_scope(fee_variant_assignment_predicate(AssignmentStatus.AFFECTE)) == (
-        FeeAssignmentScope.AFFECTE.value
+    assert FeeAssignmentScope.NON_AFFECTE.value not in applicable_scope_keys(
+        AssignmentStatus.AFFECTE
     )
+
+
+def test_le_filtre_accepte_la_valeur_brute_de_la_base() -> None:
+    """SQLAlchemy peut renvoyer la chaine plutot que le membre d'enum."""
+    assert applicable_scope_keys("affecte") == applicable_scope_keys(AssignmentStatus.AFFECTE)
+
+
+def test_une_classe_sans_serie_ne_recoit_que_les_tarifs_sans_serie() -> None:
+    """Au collège la série est toujours vide : lui laisser voir les tarifs de
+    série A2 reviendrait à facturer un tarif de lycée à un élève de 6e."""
+    assert applicable_series_keys(None) == (0,)
+    assert set(applicable_series_keys(7)) == {0, 7}
 
 
 def test_la_portee_entre_dans_la_cle_d_unicite() -> None:
@@ -96,10 +93,3 @@ def test_les_colonnes_de_cle_neutralisent_les_valeurs_vides() -> None:
         column = FeeVariant.__table__.columns[name]
         assert column.computed is not None, f"{name} doit etre calculee par la base"
         assert str(column.computed.sqltext) == expression
-
-
-def test_le_predicat_accepte_la_valeur_brute_de_la_base() -> None:
-    """SQLAlchemy peut renvoyer la chaine plutot que le membre d'enum."""
-    assert _bound_scope(fee_variant_assignment_predicate("affecte")) == (
-        _bound_scope(fee_variant_assignment_predicate(AssignmentStatus.AFFECTE))
-    )

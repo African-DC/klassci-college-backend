@@ -1,18 +1,21 @@
-"""Service inscriptions — logique métier CRUD + frais automatiques."""
+"""Service inscriptions — CRUD, inscription couplee eleve+inscription, options.
+
+La corbeille vit dans `enrollment_archive`, les frais dans `enrollment_fees` :
+ce fichier portait cinq sujets sans rapport, et plus personne ne le relisait
+en entier.
+"""
 
 import logging
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, Class, SchoolSettings
+from app.models.academic import AcademicYear, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
-from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption, Payment
+from app.models.fee import OptionalFeeOption
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
@@ -21,12 +24,9 @@ from app.schemas.enrollment import (
     EnrollmentResponse,
     EnrollmentUpdate,
     EnrollmentWithStudentCreate,
-    FeeVariantResponse,
     ReEnrollmentCreate,
 )
-from app.services import archive_service, fees_paid
-from app.services.archive_service import ArchiveOutcome
-from app.services.deletion import Dependent
+from app.services import enrollment_fees
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ async def create_enrollment(
             )
 
         # Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(
+        await enrollment_fees.create_mandatory_enrollment_fees(
             db,
             enrollment.id,
             data.class_id,
@@ -224,7 +224,9 @@ async def update_enrollment(
 
         # Régénérer les frais obligatoires si la classe a changé
         if class_changed:
-            await regenerate_enrollment_fees(db, enrollment_id, regenerated_by=updated_by)
+            await enrollment_fees.regenerate_enrollment_fees(
+                db, enrollment_id, regenerated_by=updated_by
+            )
 
         await audit_log(
             db,
@@ -285,134 +287,6 @@ async def validate_enrollment(
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment_id)
     return _to_response(refreshed)
-
-
-# ---------------------------------------------------------------------------
-# Corbeille
-# ---------------------------------------------------------------------------
-
-
-def _enrollment_label(record: object) -> str:
-    """« L'inscription de Traoré Aminata » plutôt que « L'inscription #42 ».
-
-    Le numéro ne dit rien à la personne qui relit le journal ou qui hésite
-    devant la corbeille ; le nom de l'élève, si.
-    """
-    student = getattr(record, "student", None)
-    if student is None:
-        return f"L'inscription #{getattr(record, 'id', '')}"
-    nom = f"{student.last_name} {student.first_name}".strip()
-    return f"L'inscription de {nom}"
-
-
-async def _load_enrollment_for_bin(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
-    """Charge l'inscription même archivée, avec l'élève dont on tire le libellé.
-
-    L'élève est chargé ici, pas plus tard : après le `commit` de l'archivage,
-    une relation non préchargée déclencherait une lecture paresseuse hors
-    contexte async.
-    """
-    from app.core.archive_filter import INCLUDE_ARCHIVED
-
-    stmt = (
-        select(Enrollment)
-        .where(Enrollment.id == enrollment_id)
-        .options(selectinload(Enrollment.student))
-        .execution_options(**{INCLUDE_ARCHIVED: True})
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
-
-
-ENROLLMENT_KIND = archive_service.ArchivableKind(
-    "enrollment",
-    "L'inscription",
-    Enrollment,
-    lambda db, r: repo.delete_enrollment(db, r),
-    naming=_enrollment_label,
-    load=_load_enrollment_for_bin,
-)
-
-
-async def _refuse_if_money_moved(db: AsyncSession, enrollment_id: int) -> None:
-    """Interdit de faire disparaître une inscription validée déjà encaissée.
-
-    Une inscription archivée quitte tous les écrans, y compris ceux de la
-    caisse : la masquer alors que des versements y sont rattachés ferait
-    silencieusement mentir le bordereau du jour. La règle valait déjà pour la
-    suppression, elle vaut d'abord pour l'archivage puisque c'est désormais le
-    premier geste.
-    """
-    statut = (
-        await db.execute(select(Enrollment.status).where(Enrollment.id == enrollment_id))
-    ).scalar_one_or_none()
-    if statut != EnrollmentStatus.VALIDE:
-        return
-
-    verses = (
-        await db.execute(
-            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
-        )
-    ).scalar_one()
-    if verses:
-        raise BusinessValidationError(
-            "Cette inscription est validée et porte déjà des versements : "
-            "elle ne peut pas être mise à la corbeille."
-        )
-
-
-async def archive_enrollment(
-    db: AsyncSession, enrollment_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'inscription dans la corbeille : elle quitte les écrans, rien n'est détruit."""
-    await _refuse_if_money_moved(db, enrollment_id)
-    return await archive_service.archive_record(
-        db, ENROLLMENT_KIND, enrollment_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_enrollment(db: AsyncSession, enrollment_id: int, *, actor_id: int) -> None:
-    """Sort l'inscription de la corbeille."""
-    await archive_service.restore_record(db, ENROLLMENT_KIND, enrollment_id, actor_id=actor_id)
-
-
-async def delete_enrollment(
-    db: AsyncSession,
-    enrollment_id: int,
-    deleted_by: int,
-    reason: str | None = None,
-) -> None:
-    """Supprime une inscription ou lève 404. Bloque si statut valide avec paiements."""
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    # Le garde lisait `EnrollmentFee.payments`, c'est-à-dire l'ancienne
-    # colonne `payments.enrollment_fee_id`, plus jamais renseignée depuis que
-    # le versement se fait sur l'inscription. Il laissait donc passer toutes
-    # les inscriptions payées depuis ce changement. On compte désormais les
-    # versements là où ils sont réellement rattachés.
-    versements = (
-        await db.execute(
-            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
-        )
-    ).scalar() or 0
-    if versements:
-        raise BusinessValidationError(
-            "Impossible de supprimer une inscription qui porte des versements encaissés. "
-            "Passez par la fiche de l'élève : la corbeille conserve les versements."
-        )
-
-    async with db.begin_nested():
-        await repo.delete_enrollment(db, enrollment)
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=enrollment_id,
-        )
-
-    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -566,7 +440,7 @@ async def create_enrollment_with_student(
             )
 
         # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(
+        await enrollment_fees.create_mandatory_enrollment_fees(
             db,
             enrollment.id,
             data.class_id,
@@ -621,203 +495,6 @@ async def re_enroll_student(
         notes=data.notes,
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by)
-
-
-# ---------------------------------------------------------------------------
-# Mandatory fee variants helper
-# ---------------------------------------------------------------------------
-
-
-def fee_variant_assignment_predicate(assignment_status: object) -> ColumnElement[bool]:
-    """Quels tarifs s'appliquent a une inscription selon son affectation.
-
-    Un tarif sans portee s'applique a tout le monde : c'est ce qui permet aux
-    grilles deja configurees de continuer a fonctionner sans qu'on y touche.
-
-    Une inscription dont le statut n'est pas renseigne ne recoit QUE ces
-    tarifs-la. Lui donner le tarif affecte ou le tarif non affecte reviendrait
-    a choisir pour l'ecole entre deux montants differents, et la famille le
-    decouvrirait sur sa facture.
-
-    Ecrit une seule fois : l'apercu des frais et leur generation reelle
-    doivent dire la meme chose, et deux copies finissent toujours par diverger.
-    """
-    from app.models.enrollment import AssignmentStatus
-    from app.models.fee import FeeAssignmentScope
-
-    if assignment_status is None:
-        return FeeVariant.assignment_scope.is_(None)
-
-    subsidised = AssignmentStatus(assignment_status).is_subsidised
-    scope = FeeAssignmentScope.AFFECTE if subsidised else FeeAssignmentScope.NON_AFFECTE
-    return or_(
-        FeeVariant.assignment_scope.is_(None),
-        FeeVariant.assignment_scope == scope,
-    )
-
-
-async def _get_mandatory_fee_variants(
-    db: AsyncSession,
-    class_id: int,
-    academic_year_id: int,
-    assignment_status: object = None,
-) -> list[FeeVariant]:
-    """Retourne les FeeVariants obligatoires applicables à une classe pour l'AY donnée.
-
-    Refactor #97 : Class est désormais universal (pas de academic_year_id),
-    donc l'AY est passée explicitement par le caller (qui l'a depuis le payload
-    EnrollmentCreate.academic_year_id).
-    """
-    stmt = select(Class).where(Class.id == class_id)
-    result = await db.execute(stmt)
-    class_ = result.scalar_one_or_none()
-    if class_ is None:
-        raise BusinessValidationError(f"Class {class_id} not found")
-
-    if class_.series_id:
-        series_condition = or_(
-            FeeVariant.series_id == class_.series_id,
-            FeeVariant.series_id.is_(None),
-        )
-    else:
-        series_condition = FeeVariant.series_id.is_(None)
-
-    stmt = (
-        select(FeeVariant)
-        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
-        .where(
-            FeeVariant.academic_year_id == academic_year_id,
-            FeeVariant.level_id == class_.level_id,
-            series_condition,
-            fee_variant_assignment_predicate(assignment_status),
-            FeeCategory.is_mandatory == True,  # noqa: E712
-        )
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return list(rows)
-
-
-async def _create_mandatory_enrollment_fees(
-    db: AsyncSession,
-    enrollment_id: int,
-    class_id: int,
-    academic_year_id: int,
-    assignment_status: object = None,
-) -> None:
-    """Crée les EnrollmentFee pour tous les frais obligatoires d'une classe.
-
-    Idempotent : ne crée pas de doublons si un enrollment_fee existe déjà
-    pour un fee_variant donné.
-    """
-    variants = await _get_mandatory_fee_variants(db, class_id, academic_year_id, assignment_status)
-    if not variants:
-        return
-
-    # Récupérer les fee_variant_ids déjà liés à cette inscription
-    existing_stmt = select(EnrollmentFee.fee_variant_id).where(
-        EnrollmentFee.enrollment_id == enrollment_id
-    )
-    existing_ids = set((await db.execute(existing_stmt)).scalars().all())
-
-    for variant in variants:
-        if variant.id not in existing_ids:
-            fee = EnrollmentFee(
-                enrollment_id=enrollment_id,
-                fee_variant_id=variant.id,
-                amount=variant.amount,
-            )
-            db.add(fee)
-
-    await db.flush()
-
-
-# ---------------------------------------------------------------------------
-# Regenerate enrollment fees
-# ---------------------------------------------------------------------------
-
-
-async def regenerate_enrollment_fees(
-    db: AsyncSession,
-    enrollment_id: int,
-    regenerated_by: int,
-) -> dict:
-    """Régénère les frais obligatoires d'une inscription.
-
-    1. Conserve les frais qui portent une allocation de versement
-    2. Supprime les autres (remplaçables sans conséquence comptable)
-    3. Re-crée les frais obligatoires manquants (idempotent)
-
-    Le tri se fait sur les allocations, seule source vivante depuis la
-    migration 0028. Le garde lisait auparavant `EnrollmentFee.payments`,
-    c'est-à-dire la colonne `payments.enrollment_fee_id`, plus jamais
-    renseignée : il croyait donc qu'aucun frais n'était payé, tentait de
-    tous les détruire, et la clé étrangère `RESTRICT` faisait échouer
-    l'opération entière sous les yeux de l'utilisateur.
-    """
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    protected_fee_ids = await fees_paid.fee_ids_with_allocations(db, enrollment_id)
-
-    deleted_count = 0
-    kept_count = 0
-
-    for ef in list(enrollment.enrollment_fees):
-        # On ne détruit jamais un frais sur lequel de l'argent est imputé :
-        # le versement perdrait sa contrepartie, et le journal d'audit ne
-        # rattrape pas un trou comptable.
-        if ef.id in protected_fee_ids:
-            kept_count += 1
-        else:
-            await db.delete(ef)
-            deleted_count += 1
-
-    await db.flush()
-
-    # Re-créer les frais obligatoires manquants
-    await _create_mandatory_enrollment_fees(
-        db,
-        enrollment_id,
-        enrollment.class_id,
-        enrollment.academic_year_id,
-        enrollment.assignment_status,
-    )
-
-    await audit_log(
-        db,
-        entity_type="enrollment",
-        action=AuditAction.UPDATE,
-        user_id=regenerated_by,
-        entity_id=enrollment_id,
-        new_values={
-            "action": "regenerate_fees",
-            "deleted": deleted_count,
-            "kept_with_payments": kept_count,
-        },
-    )
-
-    # La régénération réussit toujours, mais elle n'a pas fait tout ce que
-    # l'utilisateur pouvait croire : les frais déjà payés sont restés en
-    # place. Le dire, chiffré, plutôt que de le laisser deviner.
-    supprimes = Dependent("frais remplacé", "frais remplacés", deleted_count)
-    conserves = Dependent(
-        "frais conservé car un versement y est imputé",
-        "frais conservés car des versements y sont imputés",
-        kept_count,
-    )
-    parties = [d.phrase() for d in (supprimes, conserves) if d.count]
-    message = (
-        f"Frais régénérés : {', '.join(parties)}."
-        if parties
-        else "Aucun frais à régénérer pour cette inscription."
-    )
-
-    return {
-        "deleted": deleted_count,
-        "kept": kept_count,
-        "message": message,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -911,96 +588,3 @@ async def unsubscribe_optional_fee(
         user_id=deleted_by,
         entity_id=option_id_for_audit,
     )
-
-
-# ---------------------------------------------------------------------------
-# Fee variant resolution by class
-# ---------------------------------------------------------------------------
-
-
-async def get_applicable_fee_variants(
-    db: AsyncSession,
-    class_id: int,
-    academic_year_id: int | None = None,
-    assignment_status: object = None,
-) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnée.
-
-    Frais obligatoires : filtrés par level_id + series_id + academic_year_id.
-    Frais optionnels : level_id NULL (globaux) OU matching level — les frais
-    optionnels comme la cantine sont un prix fixe, pas lié au niveau.
-
-    Refactor #97 : Class est universel, l'AY est passée explicitement par le
-    caller (ou résolue depuis l'AY courante si omise).
-    """
-    stmt = select(Class).where(Class.id == class_id)
-    result = await db.execute(stmt)
-    class_ = result.scalar_one_or_none()
-    if class_ is None:
-        raise BusinessValidationError(f"Class {class_id} not found")
-
-    if academic_year_id is None:
-        current_ay_stmt = select(AcademicYear).where(AcademicYear.is_current.is_(True))
-        current_ay = (await db.execute(current_ay_stmt)).scalar_one_or_none()
-        if current_ay is None:
-            raise BusinessValidationError("Aucune année académique courante configurée.")
-        academic_year_id = current_ay.id
-
-    # Series condition: exact match OR NULL (applicable à tout le niveau)
-    if class_.series_id:
-        series_condition = or_(
-            FeeVariant.series_id == class_.series_id,
-            FeeVariant.series_id.is_(None),
-        )
-    else:
-        series_condition = FeeVariant.series_id.is_(None)
-
-    # Level condition: exact match for mandatory, OR NULL for optional (global fees)
-    level_condition = or_(
-        FeeVariant.level_id == class_.level_id,
-        FeeVariant.level_id.is_(None),
-    )
-    assignment_condition = fee_variant_assignment_predicate(assignment_status)
-
-    stmt = (
-        select(FeeVariant)
-        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
-        .options(selectinload(FeeVariant.category))
-        .where(
-            or_(
-                # Mandatory: must match academic_year + level + series
-                and_(
-                    FeeCategory.is_mandatory,
-                    FeeVariant.academic_year_id == academic_year_id,
-                    FeeVariant.level_id == class_.level_id,
-                    series_condition,
-                    assignment_condition,
-                ),
-                # Optional: match academic_year, level NULL (global) or matching
-                and_(
-                    FeeCategory.is_mandatory.is_(False),
-                    FeeVariant.academic_year_id == academic_year_id,
-                    level_condition,
-                    series_condition,
-                    assignment_condition,
-                ),
-            )
-        )
-        .order_by(FeeCategory.is_mandatory.desc(), FeeVariant.fee_category_id, FeeVariant.id)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-
-    return [
-        FeeVariantResponse(
-            id=fv.id,
-            fee_category_id=fv.fee_category_id,
-            category_name=fv.category.name if fv.category else str(fv.fee_category_id),
-            is_mandatory=fv.category.is_mandatory if fv.category else True,
-            level_id=fv.level_id,
-            series_id=fv.series_id,
-            academic_year_id=fv.academic_year_id,
-            amount=fv.amount,
-            description=fv.description,
-        )
-        for fv in rows
-    ]
