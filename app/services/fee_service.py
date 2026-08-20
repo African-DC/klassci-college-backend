@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.repositories import fee_repository as repo
 from app.schemas.fee import (
     FeeCategoryCreate,
@@ -102,10 +102,36 @@ async def update_fee_category(
     return _fee_category_to_response(refreshed)
 
 
+def _blocked_by_variants_message(category_name: str, count: int) -> str:
+    """Explique ce qui bloque et comment débloquer.
+
+    « Impossible de supprimer » sans dire combien ni comment laisse la
+    secrétaire devant son écran sans savoir quoi faire.
+    """
+    plural = "s" if count > 1 else ""
+    return (
+        f"« {category_name} » porte encore {count} montant{plural} configuré{plural}. "
+        "Supprimez-les d'abord, ou renommez la catégorie si elle ne sert plus."
+    )
+
+
 async def delete_fee_category(db: AsyncSession, category_id: int, *, deleted_by: int) -> None:
+    """Supprime une categorie de frais, et refuse clairement si elle sert.
+
+    Sans ce controle, SQLAlchemy tente de detacher les variantes en mettant
+    leur categorie a NULL — ce que la colonne interdit — et l'utilisateur
+    recoit une erreur de base de donnees illisible. Or la vraie reponse est
+    metier : cette categorie porte encore des montants, on ne peut pas la
+    faire disparaitre sans decider de leur sort.
+    """
     category = await repo.get_fee_category_by_id(db, category_id)
     if category is None:
         raise NotFoundError("FeeCategory", category_id)
+
+    variant_count = await repo.count_fee_variants_for_category(db, category_id)
+    if variant_count:
+        raise ConflictError(_blocked_by_variants_message(category.name, variant_count))
+
     async with db.begin_nested():
         await repo.delete_fee_category(db, category)
         await audit_log(

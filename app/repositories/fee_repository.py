@@ -156,3 +156,17 @@ async def update_optional_fee_option(
 async def delete_optional_fee_option(db: AsyncSession, option: OptionalFeeOption) -> None:
     await db.delete(option)
     await db.flush()
+
+
+async def count_fee_variants_for_category(db: AsyncSession, category_id: int) -> int:
+    """Nombre de montants encore rattachés à une catégorie.
+
+    Sert à refuser une suppression avec un message qui dit combien, plutôt
+    que de laisser la base répondre à notre place.
+    """
+    stmt = (
+        select(func.count())
+        .select_from(FeeVariant)
+        .where(FeeVariant.fee_category_id == category_id)
+    )
+    return int((await db.execute(stmt)).scalar_one())
