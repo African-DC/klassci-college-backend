@@ -243,17 +243,36 @@ class Payment(Base, TimestampMixin):
     `enrollment_fee_id` est DEPRECATED depuis le refactor 2026-05-17
     (migration 0028). Conservé nullable 1 release pour rollback. Tout
     nouveau code doit utiliser `enrollment_id` + parcourir `allocations`.
+
+    **Un versement survit à l'élève.** Quand l'administration supprime
+    définitivement une fiche élève, l'inscription et les frais partent, mais
+    pas les versements : la caissière avait compté ces billets, le tiroir
+    était juste ce soir-là, et tous les points journaliers déjà imprimés
+    disent cette somme. Les effacer ferait mentir des documents signés.
+
+    D'où `enrollment_id` nullable et les deux colonnes `*_snapshot` : le nom
+    et le matricule sont recopiés sur le versement avant que la fiche ne
+    parte, pour que le bordereau reste lisible une fois l'élève disparu.
     """
 
     __tablename__ = "payments"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    enrollment_id: Mapped[int] = mapped_column(
+    # Nullable : un versement orphelin est un versement dont l'élève a été
+    # supprimé. Il garde son montant, sa date et son encaisseur — c'est ce
+    # qui fait tenir les totaux de caisse.
+    enrollment_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("enrollments.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    # Identité figée de l'élève, recopiée avant que sa fiche ne parte.
+    # Renseignée dès la mise à la corbeille : le filtre qui masque les fiches
+    # archivées masque aussi l'élève derrière le versement, et un bordereau
+    # sans nom ne se relit pas.
+    student_name_snapshot: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    student_matricule_snapshot: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # DEPRECATED — conservé pour rétrocompat. Ne plus écrire dessus.
     # TODO(remove-after=0.3.0): drop column + index once all environments
     # have run migration 0028 and no Payment row has enrollment_fee_id set.
@@ -279,7 +298,7 @@ class Payment(Base, TimestampMixin):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    enrollment: Mapped[Enrollment] = relationship(back_populates="payments")
+    enrollment: Mapped[Enrollment | None] = relationship(back_populates="payments")
     enrollment_fee: Mapped[EnrollmentFee | None] = relationship(back_populates="payments")
     allocations: Mapped[list[PaymentAllocation]] = relationship(
         back_populates="payment",

@@ -34,18 +34,41 @@ def allocation_to_response(allocation: PaymentAllocation) -> PaymentAllocationRe
     )
 
 
+def student_identity(payment: Payment) -> tuple[str | None, str | None, str | None, bool]:
+    """Nom, matricule, photo, et « la fiche a disparu ».
+
+    L'inscription d'abord, l'identité figée ensuite. L'ordre compte : tant que
+    l'élève existe, on affiche son nom actuel, qui peut avoir été corrigé
+    depuis le versement. Une fois la fiche partie, le nom recopié est tout ce
+    qui reste — et il vaut infiniment mieux qu'une case vide sur un bordereau
+    de caisse.
+    """
+    enrollment = getattr(payment, "enrollment", None)
+    student = getattr(enrollment, "student", None) if enrollment is not None else None
+    if student is not None:
+        return (
+            f"{student.first_name} {student.last_name}",
+            getattr(student, "enrollment_number", None),
+            getattr(student, "photo_url", None),
+            False,
+        )
+
+    fige = getattr(payment, "student_name_snapshot", None)
+    matricule = getattr(payment, "student_matricule_snapshot", None)
+    # Deux absences distinctes, qu'on ne confond pas : plus d'inscription du
+    # tout, c'est une fiche détruite ; une inscription encore référencée mais
+    # invisible, c'est une fiche dans la corbeille, qui peut revenir.
+    supprime = payment.enrollment_id is None
+    # Sans nom figé non plus, on nomme quand même la ligne : « None » à
+    # l'écran d'une caissière ne veut rien dire, « Élève supprimé » si.
+    defaut = "Élève supprimé" if supprime else "Élève archivé"
+    return (fige or defaut, matricule, None, supprime)
+
+
 def payment_to_response(payment: Payment) -> PaymentResponse:
     """Convertit un Payment ORM en PaymentResponse avec champs enrichis."""
-    student_name = None
-    student_photo_url = None
     fee_name = None
-
-    enrollment = getattr(payment, "enrollment", None)
-    if enrollment is not None:
-        student = getattr(enrollment, "student", None)
-        if student is not None:
-            student_name = f"{student.first_name} {student.last_name}"
-            student_photo_url = getattr(student, "photo_url", None)
+    student_name, student_matricule, student_photo_url, student_deleted = student_identity(payment)
 
     # Legacy fee_name : si l'ancien champ existe, on l'utilise. Sinon
     # on prend la 1re allocation comme libellé indicatif.
@@ -82,5 +105,7 @@ def payment_to_response(payment: Payment) -> PaymentResponse:
         student_name=student_name,
         student_photo_url=student_photo_url,
         fee_name=fee_name,
+        student_matricule=student_matricule,
+        student_deleted=student_deleted,
         allocations=[allocation_to_response(a) for a in allocations],
     )

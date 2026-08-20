@@ -93,7 +93,13 @@ class Enrollment(Base, TimestampMixin, ArchivableMixin):
     documents: Mapped[list[Document]] = relationship(back_populates="enrollment")
     student_options: Mapped[list[StudentOption]] = relationship(back_populates="enrollment")
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="enrollment")
-    payments: Mapped[list[Payment]] = relationship(back_populates="enrollment")
+    # `passive_deletes` laisse la clé étrangère décider : elle est en RESTRICT,
+    # donc supprimer une inscription qui porte encore des versements échoue —
+    # et c'est voulu. Détacher les versements doit rester un geste explicite,
+    # journalisé, pas un effet de bord silencieux de l'ORM.
+    payments: Mapped[list[Payment]] = relationship(
+        back_populates="enrollment", passive_deletes=True
+    )
 
 
 class Document(Base, TimestampMixin):
