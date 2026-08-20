@@ -17,6 +17,7 @@ from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
 from app.routers.attachments import router as attachments_router
 from app.routers.attendance import router as attendance_router
+from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.cash_sessions import router as cash_sessions_router
 from app.routers.class_documents import router as class_documents_router
@@ -121,6 +122,7 @@ app.include_router(teacher_attendance_teacher_router)
 app.include_router(performance_admin_router)
 app.include_router(performance_teacher_router)
 app.include_router(profile_router)
+app.include_router(audit_router)
 
 
 # ---------------------------------------------------------------------------
