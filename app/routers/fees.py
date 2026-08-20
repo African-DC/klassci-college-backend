@@ -81,12 +81,21 @@ async def update_fee_category(
 @router.delete("/fee-categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_fee_category(
     category_id: int,
+    cascade: bool = Query(
+        False,
+        description=(
+            "Confirme la suppression des elements qui en dependent. Sans lui, un "
+            "409 renvoie l'inventaire de ce qui serait emporte."
+        ),
+    ),
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:fee-categories:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Supprime une categorie de frais."""
-    await fee_service.delete_fee_category(db, category_id, deleted_by=current_user.user_id)
+    await fee_service.delete_fee_category(
+        db, category_id, deleted_by=current_user.user_id, cascade=cascade
+    )
 
 
 # ---------------------------------------------------------------------------

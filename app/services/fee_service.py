@@ -5,7 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.repositories import fee_repository as repo
 from app.schemas.fee import (
     FeeCategoryCreate,
@@ -21,6 +21,7 @@ from app.schemas.fee import (
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
+from app.services.deletion import DeletionPlan, Dependent, ensure_deletable
 
 logger = logging.getLogger(__name__)
 
@@ -102,20 +103,9 @@ async def update_fee_category(
     return _fee_category_to_response(refreshed)
 
 
-def _blocked_by_variants_message(category_name: str, count: int) -> str:
-    """Explique ce qui bloque et comment débloquer.
-
-    « Impossible de supprimer » sans dire combien ni comment laisse la
-    secrétaire devant son écran sans savoir quoi faire.
-    """
-    plural = "s" if count > 1 else ""
-    return (
-        f"« {category_name} » porte encore {count} montant{plural} configuré{plural}. "
-        "Supprimez-les d'abord, ou renommez la catégorie si elle ne sert plus."
-    )
-
-
-async def delete_fee_category(db: AsyncSession, category_id: int, *, deleted_by: int) -> None:
+async def delete_fee_category(
+    db: AsyncSession, category_id: int, *, deleted_by: int, cascade: bool = False
+) -> None:
     """Supprime une categorie de frais, et refuse clairement si elle sert.
 
     Sans ce controle, SQLAlchemy tente de detacher les variantes en mettant
@@ -128,18 +118,47 @@ async def delete_fee_category(db: AsyncSession, category_id: int, *, deleted_by:
     if category is None:
         raise NotFoundError("FeeCategory", category_id)
 
-    variant_count = await repo.count_fee_variants_for_category(db, category_id)
-    if variant_count:
-        raise ConflictError(_blocked_by_variants_message(category.name, variant_count))
+    plan = DeletionPlan(
+        entity_label=f"« {category.name} »",
+        dependents=(
+            Dependent(
+                "versement imputé",
+                "versements imputés",
+                await repo.count_paid_allocations_for_category(db, category_id),
+                blocking=True,
+            ),
+            Dependent(
+                "montant configuré",
+                "montants configurés",
+                await repo.count_fee_variants_for_category(db, category_id),
+            ),
+            Dependent(
+                "frais d'élève",
+                "frais d'élèves",
+                await repo.count_enrollment_fees_for_category(db, category_id),
+            ),
+            Dependent(
+                "option",
+                "options",
+                await repo.count_options_for_category(db, category_id),
+            ),
+        ),
+    )
+    ensure_deletable(plan, cascade=cascade)
 
     async with db.begin_nested():
-        await repo.delete_fee_category(db, category)
+        if plan.collateral:
+            await repo.cascade_delete_fee_category(db, category_id)
+        else:
+            await repo.delete_fee_category(db, category)
         await audit_log(
             db,
             entity_type="fee_category",
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=category_id,
+            old_values={"name": category.name},
+            new_values={"cascade": bool(plan.collateral), "emporte": plan.as_payload()},
         )
     await db.commit()
 

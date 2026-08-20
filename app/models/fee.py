@@ -72,8 +72,18 @@ class FeeCategory(Base, TimestampMixin):
         SmallInteger, nullable=False, default=100, server_default="100"
     )
 
-    variants: Mapped[list[FeeVariant]] = relationship(back_populates="category")
-    options: Mapped[list[OptionalFeeOption]] = relationship(back_populates="category")
+    variants: Mapped[list[FeeVariant]] = relationship(
+        back_populates="category",
+        # `passive_deletes` laisse la base parler : sans lui, SQLAlchemy
+        # tente de detacher les enfants en mettant leur cle a NULL avant le
+        # DELETE. Sur une colonne NOT NULL ca produit une erreur illisible,
+        # et sur une colonne nullable ca reussit — en vidant silencieusement
+        # la reference, ce qui est pire.
+        passive_deletes=True,
+    )
+    options: Mapped[list[OptionalFeeOption]] = relationship(
+        back_populates="category", passive_deletes=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +125,9 @@ class FeeVariant(Base, TimestampMixin):
     academic_year: Mapped[AcademicYear] = relationship()
     level: Mapped[Level | None] = relationship()
     series: Mapped[Series | None] = relationship()
-    enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="fee_variant")
+    enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(
+        back_populates="fee_variant", passive_deletes=True
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +154,7 @@ class OptionalFeeOption(Base, TimestampMixin):
     category: Mapped[FeeCategory] = relationship(back_populates="options")
     academic_year: Mapped[AcademicYear] = relationship()
     student_options: Mapped[list[StudentOption]] = relationship(
-        back_populates="optional_fee_option"
+        back_populates="optional_fee_option", passive_deletes=True
     )
 
 
