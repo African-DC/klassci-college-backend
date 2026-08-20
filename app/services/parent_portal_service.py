@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
-from app.models.fee import PaymentStatus
 from app.models.user import Parent, ParentStudent
 from app.repositories import admin_repository
 from app.repositories import parent_portal_repository as repo
@@ -144,16 +143,17 @@ async def build_child_summaries(db: AsyncSession, parent: Parent) -> list[Parent
         else:
             total_absences = 0
 
-        # Fees remaining — sum (amount - completed payments) sur l'inscription active.
+        # Reste à payer sur l'inscription active. Source de vérité : les
+        # allocations, pas `EnrollmentFee.payments`, qui s'appuie sur un lien
+        # déprécié depuis la migration 0028 et surestimait donc la dette
+        # affichée au parent, sur l'écran d'accueil de son portail.
         fees_remaining = Decimal("0.00")
         if active is not None:
             enrollment = await repo.get_student_active_enrollment(db, student.id)
             if enrollment is not None:
+                paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
                 for ef in enrollment.enrollment_fees:
-                    paid = sum(
-                        (p.amount for p in ef.payments if p.status == PaymentStatus.COMPLETED),
-                        Decimal("0.00"),
-                    )
+                    paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
                     remaining = ef.amount - paid
                     if remaining > 0:
                         fees_remaining += remaining
@@ -234,6 +234,10 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
     # s'appuie sur un lien deprecie depuis la migration 0028 et sous-estime
     # donc ce que la famille a verse. C'est elle qui lit ce chiffre.
     paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
+    # Le detail sous chaque frais vient des allocations lui aussi : la
+    # relation depreciee renvoyait une liste vide, donc un frais solde sans
+    # aucun versement visible en dessous.
+    payments_by_fee = await fees_paid.payments_by_enrollment_fee(db, enrollment.id)
 
     fees: list[FeeDetail] = []
     total_due = Decimal("0.00")
@@ -244,13 +248,14 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
         payments = [
             PaymentDetail(
                 id=p.id,
-                amount=p.amount,
+                # Part imputee a CE frais, pas le montant total du versement.
+                amount=montant,
                 method=p.method,
                 status=p.status,
                 reference=p.reference,
                 created_at=p.created_at,
             )
-            for p in ef.payments
+            for p, montant in payments_by_fee.get(ef.id, [])
         ]
         fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
         total_paid += fee_paid

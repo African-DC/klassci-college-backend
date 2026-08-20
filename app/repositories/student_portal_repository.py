@@ -82,12 +82,14 @@ async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list
 async def get_enrollment_fees_for_enrollment(
     db: AsyncSession, enrollment_id: int
 ) -> list[EnrollmentFee]:
-    """Retourne les frais d'une inscription avec paiements et categorie."""
+    """Retourne les frais d'une inscription avec leur categorie."""
     stmt = (
         select(EnrollmentFee)
         .where(EnrollmentFee.enrollment_id == enrollment_id)
         .options(
-            selectinload(EnrollmentFee.payments),
+            # Pas de `EnrollmentFee.payments` ici : la relation est depreciee
+            # depuis la migration 0028 et plus personne ne la lit. Le detail
+            # des versements passe par `fees_paid.payments_by_enrollment_fee`.
             selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
         )
     )

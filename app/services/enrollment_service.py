@@ -24,8 +24,9 @@ from app.schemas.enrollment import (
     FeeVariantResponse,
     ReEnrollmentCreate,
 )
-from app.services import archive_service
+from app.services import archive_service, fees_paid
 from app.services.archive_service import ArchiveOutcome
+from app.services.deletion import Dependent
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -742,19 +743,31 @@ async def regenerate_enrollment_fees(
 ) -> dict:
     """Régénère les frais obligatoires d'une inscription.
 
-    1. Supprime les EnrollmentFee sans paiements (safe to replace)
-    2. Conserve ceux avec paiements (données financières intouchables)
+    1. Conserve les frais qui portent une allocation de versement
+    2. Supprime les autres (remplaçables sans conséquence comptable)
     3. Re-crée les frais obligatoires manquants (idempotent)
+
+    Le tri se fait sur les allocations, seule source vivante depuis la
+    migration 0028. Le garde lisait auparavant `EnrollmentFee.payments`,
+    c'est-à-dire la colonne `payments.enrollment_fee_id`, plus jamais
+    renseignée : il croyait donc qu'aucun frais n'était payé, tentait de
+    tous les détruire, et la clé étrangère `RESTRICT` faisait échouer
+    l'opération entière sous les yeux de l'utilisateur.
     """
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
 
+    protected_fee_ids = await fees_paid.fee_ids_with_allocations(db, enrollment_id)
+
     deleted_count = 0
     kept_count = 0
 
     for ef in list(enrollment.enrollment_fees):
-        if ef.payments:
+        # On ne détruit jamais un frais sur lequel de l'argent est imputé :
+        # le versement perdrait sa contrepartie, et le journal d'audit ne
+        # rattrape pas un trou comptable.
+        if ef.id in protected_fee_ids:
             kept_count += 1
         else:
             await db.delete(ef)
@@ -784,7 +797,27 @@ async def regenerate_enrollment_fees(
         },
     )
 
-    return {"deleted": deleted_count, "kept": kept_count}
+    # La régénération réussit toujours, mais elle n'a pas fait tout ce que
+    # l'utilisateur pouvait croire : les frais déjà payés sont restés en
+    # place. Le dire, chiffré, plutôt que de le laisser deviner.
+    supprimes = Dependent("frais remplacé", "frais remplacés", deleted_count)
+    conserves = Dependent(
+        "frais conservé car un versement y est imputé",
+        "frais conservés car des versements y sont imputés",
+        kept_count,
+    )
+    parties = [d.phrase() for d in (supprimes, conserves) if d.count]
+    message = (
+        f"Frais régénérés : {', '.join(parties)}."
+        if parties
+        else "Aucun frais à régénérer pour cette inscription."
+    )
+
+    return {
+        "deleted": deleted_count,
+        "kept": kept_count,
+        "message": message,
+    }
 
 
 # ---------------------------------------------------------------------------

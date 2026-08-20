@@ -20,7 +20,9 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
             selectinload(Enrollment.student),
             selectinload(Enrollment.class_),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
-            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
+            # Pas de `EnrollmentFee.payments` ici : la relation est dépréciée
+            # depuis la migration 0028 et plus personne ne la lit. La charger
+            # coûtait une requête par appel pour un résultat toujours vide.
         )
     )
     result = await db.execute(stmt)

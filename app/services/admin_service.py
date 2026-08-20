@@ -83,7 +83,7 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
-from app.services import archive_service
+from app.services import archive_service, fees_paid
 from app.services.archive_service import ArchiveOutcome
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
@@ -2470,39 +2470,6 @@ async def update_enrollment_pattern(
 # ---------------------------------------------------------------------------
 
 
-async def _paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, float]:
-    """Montant réellement encaissé sur chaque frais d'un élève.
-
-    La source de vérité est `PaymentAllocation`, pas la relation
-    `EnrollmentFee.payments` : celle-ci s'appuie sur `Payment.enrollment_fee_id`,
-    déprécié depuis la migration 0028. Le chemin d'écriture a migré vers les
-    allocations, le chemin de lecture non — d'où des frais au statut `paid`
-    affichant « 0 FCFA versé » et un « reste à payer » égal au montant total.
-    Un admin lisait donc « 0 payé » sur une famille parfaitement à jour.
-
-    Une seule requête groupée : sommer en Python sur des relations chargées
-    coûterait une requête par frais.
-    """
-    from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
-
-    stmt = (
-        select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
-        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(
-            Enrollment.student_id == student_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-        .group_by(PaymentAllocation.enrollment_fee_id)
-    )
-    return {int(fee_id): float(total or 0) for fee_id, total in (await db.execute(stmt)).all()}
-
-
 async def get_student_enrollment_fees(
     db: AsyncSession,
     student_id: int,
@@ -2535,7 +2502,9 @@ async def get_student_enrollment_fees(
     )
     rows = (await db.execute(stmt)).scalars().all()
 
-    paid_by_fee = await _paid_by_enrollment_fee(db, student_id)
+    # Le calcul canonique, partagé avec les portails : un frais ne peut pas
+    # valoir un montant côté administration et un autre côté famille.
+    paid_by_fee = await fees_paid.paid_by_enrollment_fee(db, student_id)
 
     items: list[StudentEnrollmentFeeResponse] = []
     for ef in rows:
