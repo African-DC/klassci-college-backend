@@ -27,6 +27,7 @@ from app.schemas.parent_portal import (
     ParentDashboardResponse,
     PaymentDetail,
 )
+from app.services import fees_paid
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,11 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
             total_paid=Decimal("0.00"),
         )
 
+    # Source de verite : les allocations, pas `EnrollmentFee.payments`, qui
+    # s'appuie sur un lien deprecie depuis la migration 0028 et sous-estime
+    # donc ce que la famille a verse. C'est elle qui lit ce chiffre.
+    paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
+
     fees: list[FeeDetail] = []
     total_due = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -246,9 +252,8 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
             )
             for p in ef.payments
         ]
-        for p in ef.payments:
-            if p.status == PaymentStatus.COMPLETED:
-                total_paid += p.amount
+        fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
+        total_paid += fee_paid
 
         category_name = (
             ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"

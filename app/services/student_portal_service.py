@@ -30,6 +30,7 @@ from app.schemas.student_portal import (
     StudentTimetableResponse,
     TimetableSlotResponse,
 )
+from app.services import fees_paid
 
 
 async def _get_student_for_user(db: AsyncSession, user_id: int) -> Student:
@@ -108,6 +109,10 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
         raise NotFoundError("Active enrollment not found for student", student.id)
 
     enrollment_fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
+    # Source de verite : les allocations, pas `EnrollmentFee.payments`, qui
+    # s'appuie sur un lien deprecie depuis la migration 0028 et sous-estime
+    # donc ce que la famille a verse. C'est elle qui lit ce chiffre.
+    paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
 
     total_due = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -126,9 +131,8 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
             )
             for p in ef.payments
         ]
-        for p in ef.payments:
-            if p.status == PaymentStatus.COMPLETED:
-                total_paid += p.amount
+        fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
+        total_paid += fee_paid
 
         category_name = (
             ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"
