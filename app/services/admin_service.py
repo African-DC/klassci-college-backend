@@ -965,6 +965,15 @@ async def _set_staff_role(db: AsyncSession, user_id: int, role_name: str) -> Non
         text("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (:u, :r)"),
         {"u": user_id, "r": role_id},
     )
+    # Le DELETE/INSERT ci-dessus passe par du SQL brut : l'ORM ignore la
+    # mutation et garde en cache la collection `user.roles` deja chargee dans
+    # cette session. Un `selectinload` ne reecrit pas une collection deja
+    # peuplee, donc le refetch de `update_staff` renverrait l'ANCIEN role juste
+    # apres l'avoir change — l'admin voit son changement rejete a l'ecran alors
+    # que la base est correcte. On expire la collection pour forcer sa relecture.
+    cached_user = await db.get(User, user_id)
+    if cached_user is not None:
+        db.expire(cached_user, ["roles"])
 
 
 def _staff_to_response(s: object) -> StaffResponse:
