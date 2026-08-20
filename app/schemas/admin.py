@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 # ---------------------------------------------------------------------------
 # Student
@@ -1033,6 +1033,12 @@ class PromotionPreviewRequest(BaseModel):
     source_ay_id: int
     target_ay_id: int
     class_mapping: dict[int, int]
+    # Inscriptions a NE PAS promouvoir : redoublants, departs, exclusions.
+    # Sans cette liste, une promotion emmene tout le monde et il faudrait
+    # annuler a la main les inscriptions creees a tort — ce que personne ne
+    # fera correctement sur trois cents eleves. Le redoublement est courant
+    # dans le systeme ivoirien, ce n'est pas un cas marginal.
+    excluded_enrollment_ids: list[int] = Field(default_factory=list)
 
 
 class SourceClassSummary(BaseModel):

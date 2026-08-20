@@ -78,6 +78,7 @@ async def preview_promotion(
     source_ay_id: int,
     target_ay_id: int,
     class_mapping: dict[int, int],
+    excluded_enrollment_ids: list[int] | None = None,
 ) -> PromotionPreviewResponse:
     """Pre-flight + analyse capacités. Ne modifie rien."""
     target_classes = await _validate_run_inputs(
@@ -153,6 +154,7 @@ async def execute_promotion(
     target_ay_id: int,
     class_mapping: dict[int, int],
     executed_by: int,
+    excluded_enrollment_ids: list[int] | None = None,
 ) -> PromotionExecuteResponse:
     """Execute la promotion bulk. Partial-success + idempotent."""
     await _validate_run_inputs(
@@ -173,6 +175,13 @@ async def execute_promotion(
         .order_by(Enrollment.id)
     )
     source_enrollments = list((await db.execute(source_stmt)).scalars().all())
+
+    # Redoublants, departs, exclusions : ecartes AVANT la boucle. Promouvoir
+    # tout le monde puis annuler a la main est irrealiste sur trois cents
+    # eleves, et le redoublement n'est pas un cas marginal ici.
+    excluded = set(excluded_enrollment_ids or ())
+    if excluded:
+        source_enrollments = [e for e in source_enrollments if e.id not in excluded]
 
     promoted_ids: list[int] = []
     skipped_count = 0
@@ -243,6 +252,7 @@ async def execute_promotion(
             "source_ay_id": source_ay_id,
             "target_ay_id": target_ay_id,
             "class_mapping": {str(k): v for k, v in class_mapping.items()},
+            "excluded_enrollment_ids": sorted(excluded),
             "promoted_count": len(promoted_ids),
             "skipped_count": skipped_count,
             "error_count": len(errors),
