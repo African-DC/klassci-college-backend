@@ -47,13 +47,23 @@ def _enum_value(raw: object) -> str:
 
 
 def transfers_table(context: ReportContext) -> ReportTable:
-    """Tableau 9 — transferts et réintégrations de l'année."""
+    """Tableau 9 — transferts et réintégrations de l'année.
+
+    Deux sources se complètent. Le mouvement enregistré comme tel fait foi ;
+    à défaut, on reprend l'établissement d'origine porté sur la fiche de
+    l'élève, saisi pour la demande de dossier scolaire. Ignorer cette
+    seconde source laisserait le tableau vide alors que le secrétariat a
+    déjà tapé l'information.
+    """
     rows: list[ReportRow] = []
-    for index, (transfer, line) in enumerate(context.transfers, start=1):
+    recorded: set[int] = set()
+
+    for transfer, line in context.transfers:
+        recorded.add(line.enrollment.id)
         rows.append(
             ReportRow(
                 cells=(
-                    str(index),
+                    "",
                     line.full_name,
                     fmt.text(transfer.origin_school),
                     line.class_.name,
@@ -61,6 +71,39 @@ def transfers_table(context: ReportContext) -> ReportTable:
                     _TRANSFER_LABELS.get(_enum_value(transfer.kind), MISSING),
                 )
             )
+        )
+
+    inferred = 0
+    for line in context.lines:
+        if line.enrollment.id in recorded:
+            continue
+        origin = (line.student.previous_school or "").strip()
+        if not origin:
+            continue
+        inferred += 1
+        rows.append(
+            ReportRow(
+                cells=(
+                    "",
+                    line.full_name,
+                    origin,
+                    line.class_.name,
+                    fmt.text(line.student.transfer_decision_number),
+                    f"{_TRANSFER_LABELS[TransferKind.TRANSFERT.value]} (fiche élève)",
+                )
+            )
+        )
+
+    numbered = tuple(
+        ReportRow(cells=(str(index), *row.cells[1:])) for index, row in enumerate(rows, start=1)
+    )
+
+    note = None
+    if inferred:
+        note = (
+            f"{inferred} ligne(s) déduite(s) de l'établissement d'origine porté sur la "
+            "fiche de l'élève, faute de mouvement enregistré : vérifier la nature et le "
+            "numéro de décision avant dépôt."
         )
 
     return ReportTable(
@@ -74,7 +117,8 @@ def transfers_table(context: ReportContext) -> ReportTable:
             "N° de décision",
             "Nature",
         ),
-        rows=tuple(rows),
+        rows=numbered,
+        note=note,
         empty_message=(
             "Aucun transfert ni réintégration enregistré sur l'année — "
             f"{PENDING_NOTE.lower()} le cas échéant."

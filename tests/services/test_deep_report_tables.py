@@ -47,6 +47,8 @@ def _line(
         genre=genre,
         birth_date=birth_date,
         enrollment_number=f"MAT{student_id}",
+        previous_school=None,
+        transfer_decision_number=None,
     )
     enrollment = SimpleNamespace(
         id=student_id * 100,
@@ -191,6 +193,64 @@ def test_inscriptions_sans_statut_sont_signalees_et_non_reparties():
     assert _row_by_label(subsidised, "6ème A").cells[3] == "1"
     assert _row_by_label(everyone, "6ème A").cells[3] == "2"
     assert "sans statut d'affectation" in (subsidised.note or "")
+
+
+# ---------------------------------------------------------------------------
+# Tableau 9 — transferts et réintégrations
+# ---------------------------------------------------------------------------
+
+
+def test_transfert_deduit_de_la_fiche_eleve_quand_rien_n_est_enregistre():
+    """Le secrétariat a saisi l'école d'origine : le tableau ne doit pas rester vide."""
+    line = _line(1, _SIXIEME_A)
+    line.student.previous_school = "Collège Moderne de Bouaké"
+    line.student.transfer_decision_number = "TR-2025-12"
+    table = chapter2_movements.transfers_table(_context([line]))
+
+    assert len(table.rows) == 1
+    assert table.rows[0].cells[2] == "Collège Moderne de Bouaké"
+    assert "fiche élève" in table.rows[0].cells[5]
+    assert "déduite" in (table.note or "")
+
+
+def test_mouvement_enregistre_prime_sur_la_fiche_eleve():
+    line = _line(1, _SIXIEME_A)
+    line.student.previous_school = "Collège Moderne de Bouaké"
+    context = _context([line])
+    context.transfers = [
+        (
+            SimpleNamespace(
+                kind="reintegration",
+                origin_school="Lycée municipal",
+                decision_number="RE-2025-03",
+            ),
+            line,
+        )
+    ]
+    table = chapter2_movements.transfers_table(context)
+
+    assert len(table.rows) == 1
+    assert table.rows[0].cells[2] == "Lycée municipal"
+    assert table.rows[0].cells[5] == "Réintégration"
+    assert table.note is None
+
+
+def test_numerotation_continue_des_deux_sources():
+    first = _line(1, _SIXIEME_A)
+    second = _line(2, _SIXIEME_B)
+    second.student.previous_school = "Collège Moderne de Bouaké"
+    context = _context([first, second])
+    context.transfers = [
+        (
+            SimpleNamespace(
+                kind="transfert", origin_school="Lycée municipal", decision_number=None
+            ),
+            first,
+        )
+    ]
+    table = chapter2_movements.transfers_table(context)
+
+    assert [row.cells[0] for row in table.rows] == ["1", "2"]
 
 
 # ---------------------------------------------------------------------------
