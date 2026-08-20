@@ -66,3 +66,22 @@ def test_erreur_sans_numero_ne_fait_pas_planter_le_handler() -> None:
     status, _, code = integrity_error_message(_NoArgs())  # type: ignore[arg-type]
     assert status == 409
     assert code == "CONSTRAINT"
+
+
+# ---------------------------------------------------------------------------
+# Gardes métier — dire ce qui bloque, pas laisser la base répondre
+# ---------------------------------------------------------------------------
+
+
+def test_le_message_de_suppression_dit_combien_et_quoi_faire() -> None:
+    """« Impossible de supprimer » sans dire combien ni comment ne débloque
+    personne : la secrétaire reste devant son écran."""
+    from app.services.fee_service import _blocked_by_variants_message
+
+    single = _blocked_by_variants_message("Tenue scolaire", 1)
+    assert "Tenue scolaire" in single
+    assert "1 montant configuré" in single
+    assert "Supprimez-les d'abord" in single
+
+    plural = _blocked_by_variants_message("Scolarité", 3)
+    assert "3 montants configurés" in plural
