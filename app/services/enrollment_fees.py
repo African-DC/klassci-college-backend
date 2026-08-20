@@ -346,7 +346,9 @@ async def get_applicable_fee_variants(
     )
     rows: Sequence[FeeVariant] = (await db.execute(stmt)).scalars().all()
 
-    retenus = {fv.id for fv in most_specific_variant_per_category(fv for fv in rows if _is_mandatory(fv))}
+    retenus = {
+        fv.id for fv in most_specific_variant_per_category(fv for fv in rows if _is_mandatory(fv))
+    }
     retenus.update(fv.id for fv in rows if not _is_mandatory(fv))
 
     return [_to_variant_response(fv) for fv in rows if fv.id in retenus]

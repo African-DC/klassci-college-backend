@@ -313,9 +313,7 @@ def test_la_resolution_garde_le_plus_specifique_par_categorie() -> None:
     affecte = _tarif(2, CAT_SCOLARITE_T1, "20000", scope=FeeAssignmentScope.AFFECTE)
     inscription = _tarif(3, CAT_INSCRIPTION, "25000")
 
-    retenus = enrollment_fees.most_specific_variant_per_category(
-        [general, affecte, inscription]
-    )
+    retenus = enrollment_fees.most_specific_variant_per_category([general, affecte, inscription])
 
     assert {v.id for v in retenus} == {affecte.id, inscription.id}
 

@@ -289,8 +289,6 @@ async def validate_enrollment(
     return _to_response(refreshed)
 
 
-
-
 # ---------------------------------------------------------------------------
 # Current academic year helper
 # ---------------------------------------------------------------------------
@@ -497,10 +495,6 @@ async def re_enroll_student(
         notes=data.notes,
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by)
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
