@@ -1040,15 +1040,20 @@ async def delete_room(db: AsyncSession, room: Room) -> None:
     await db.flush()
 
 
-async def get_archived_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
-    """Lit un élève même s'il est dans la corbeille.
+async def get_archived(db: AsyncSession, model: type, record_id: int) -> object | None:
+    """Lit une fiche même si elle est dans la corbeille.
 
     Le filtre global masque les fiches archivées à toutes les lectures : sans
-    cette échappée, on ne pourrait ni les restaurer ni les supprimer, c'est-à-dire
-    que la corbeille serait un cul-de-sac.
+    cette échappée, on ne pourrait ni les restaurer ni les supprimer, autrement
+    dit la corbeille serait un cul-de-sac.
     """
     from app.core.archive_filter import INCLUDE_ARCHIVED
 
-    stmt = select(Student).where(Student.id == student_id)
+    stmt = select(model).where(model.id == record_id)
     result = await db.execute(stmt.execution_options(**{INCLUDE_ARCHIVED: True}))
     return result.scalar_one_or_none()
+
+
+async def get_archived_student_by_id(db: AsyncSession, student_id: int) -> Student | None:
+    """Raccourci typé sur `get_archived` pour les élèves."""
+    return await get_archived(db, Student, student_id)  # type: ignore[return-value]

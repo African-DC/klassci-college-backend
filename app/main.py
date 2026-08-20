@@ -16,6 +16,7 @@ from app.core.middleware import TenantMiddleware
 from app.core.sentry import init_sentry
 from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
+from app.routers.archive import router as archive_router
 from app.routers.attachments import router as attachments_router
 from app.routers.attendance import router as attendance_router
 from app.routers.audit import router as audit_router
@@ -89,6 +90,7 @@ register_archive_filter()
 
 # --- Routers ---
 app.include_router(admin_router)
+app.include_router(archive_router)
 app.include_router(attachments_router)
 app.include_router(attendance_router)
 app.include_router(accounts_router)

@@ -16,6 +16,7 @@ réception.
 """
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -24,6 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.datetimes import utcnow_naive
+from app.core.exceptions import NotFoundError
+from app.repositories import admin_repository as repo
 
 logger = logging.getLogger(__name__)
 
@@ -173,3 +176,100 @@ async def record_permanent_deletion(
         "Suppression definitive %s %s par %s : %s", entity_type, entity_id, actor_id, cleaned
     )
     return ArchiveOutcome(entity_type, entity_id, label, cleaned, permanent=True)
+
+
+# ---------------------------------------------------------------------------
+# La même mécanique pour toutes les fiches qui portent une histoire
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ArchivableKind:
+    """Ce qu'il faut savoir d'une entité pour la mettre à la corbeille.
+
+    Écrire la mécanique une fois plutôt que cinq : archiver un parent, un
+    enseignant ou une inscription obéit exactement aux mêmes règles, et cinq
+    copies finiraient par diverger sur le détail qui compte, l'ordre du garde,
+    le contenu du journal, le libellé rendu à l'écran.
+
+    `naming` et `load` ne servent qu'aux entités qui sortent du cas courant :
+    une inscription ne porte ni prénom ni nom, il faut aller chercher l'élève
+    pour dire de qui il s'agit.
+    """
+
+    entity_type: str
+    article: str  # « L'enseignant », « Le parent »...
+    model: type
+    delete: Callable[[AsyncSession, object], Awaitable[None]]
+    naming: Callable[[object], str] | None = None
+    load: Callable[[AsyncSession, int], Awaitable[object | None]] | None = None
+
+    def label(self, record: object) -> str:
+        if self.naming is not None:
+            return self.naming(record)
+        first = getattr(record, "first_name", "") or ""
+        last = getattr(record, "last_name", "") or ""
+        return f"{self.article} {last} {first}".strip()
+
+
+async def _load(db: AsyncSession, kind: ArchivableKind, record_id: int) -> object:
+    """Charge la fiche, archivée ou non.
+
+    On lit délibérément à travers le filtre global : sans cela, une fiche
+    déjà dans la corbeille serait introuvable, donc ni restaurable ni
+    supprimable.
+    """
+    loader = kind.load or (lambda session, ident: repo.get_archived(session, kind.model, ident))
+    record = await loader(db, record_id)
+    if record is None:
+        raise NotFoundError(kind.model.__name__, record_id)
+    return record
+
+
+async def archive_record(
+    db: AsyncSession, kind: ArchivableKind, record_id: int, *, reason: str | None, actor_id: int
+) -> ArchiveOutcome:
+    """Place la fiche dans la corbeille."""
+    record = await _load(db, kind, record_id)
+    return await archive(
+        db,
+        record,  # type: ignore[arg-type]
+        entity_type=kind.entity_type,
+        label=kind.label(record),
+        reason=reason,
+        actor_id=actor_id,
+    )
+
+
+async def restore_record(
+    db: AsyncSession, kind: ArchivableKind, record_id: int, *, actor_id: int
+) -> None:
+    """Sort la fiche de la corbeille."""
+    record = await _load(db, kind, record_id)
+    await restore(
+        db,
+        record,  # type: ignore[arg-type]
+        entity_type=kind.entity_type,
+        label=kind.label(record),
+        actor_id=actor_id,
+    )
+
+
+async def purge_record(
+    db: AsyncSession, kind: ArchivableKind, record_id: int, *, reason: str | None, actor_id: int
+) -> None:
+    """Supprime définitivement une fiche déjà placée dans la corbeille."""
+    record = await _load(db, kind, record_id)
+    label = kind.label(record)
+    ensure_archived_first(record, label=label)  # type: ignore[arg-type]
+    await record_permanent_deletion(
+        db,
+        entity_type=kind.entity_type,
+        entity_id=record_id,
+        label=label,
+        reason=reason,
+        actor_id=actor_id,
+    )
+    async with db.begin_nested():
+        await kind.delete(db, record)
+    await db.commit()

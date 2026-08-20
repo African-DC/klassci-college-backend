@@ -420,15 +420,51 @@ async def update_teacher(
     return await admin_service.update_teacher(db, teacher_id, data, updated_by=current_user.user_id)
 
 
-@router.delete("/teachers/{teacher_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_teacher(
+@router.post("/teachers/{teacher_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_teacher(
+    teacher_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:teachers:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place un enseignant dans la corbeille. Reversible."""
+    await admin_service.archive_teacher(
+        db, teacher_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/teachers/{teacher_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_teacher(
     teacher_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:teachers:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime un enseignant."""
-    await admin_service.delete_teacher(db, teacher_id, deleted_by=current_user.user_id)
+    """Sort un enseignant de la corbeille."""
+    await admin_service.restore_teacher(db, teacher_id, actor_id=current_user.user_id)
+
+
+@router.delete("/teachers/{teacher_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_teacher(
+    teacher_id: int,
+    reason: str | None = Query(
+        None,
+        max_length=500,
+        description="Motif obligatoire. Il figure au journal et dans le courriel a la direction.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime definitivement un enseignant deja place dans la corbeille.
+
+    Reserve a l'administration : c'est le seul geste du logiciel qui ne se
+    rattrape pas.
+    """
+    await admin_service.delete_teacher(
+        db, teacher_id, deleted_by=current_user.user_id, reason=reason
+    )
 
 
 @router.post("/teachers/{teacher_id}/photo")
@@ -534,15 +570,49 @@ async def update_staff(
     return await admin_service.update_staff(db, staff_id, data, updated_by=current_user.user_id)
 
 
-@router.delete("/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_staff(
+@router.post("/staff/{staff_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_staff(
+    staff_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:staff:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place un membre du personnel dans la corbeille. Reversible."""
+    await admin_service.archive_staff(
+        db, staff_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/staff/{staff_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_staff(
     staff_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:staff:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime un membre du personnel."""
-    await admin_service.delete_staff(db, staff_id, deleted_by=current_user.user_id)
+    """Sort un membre du personnel de la corbeille."""
+    await admin_service.restore_staff(db, staff_id, actor_id=current_user.user_id)
+
+
+@router.delete("/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staff(
+    staff_id: int,
+    reason: str | None = Query(
+        None,
+        max_length=500,
+        description="Motif obligatoire. Il figure au journal et dans le courriel a la direction.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime definitivement un membre du personnel deja place dans la corbeille.
+
+    Reserve a l'administration : c'est le seul geste du logiciel qui ne se
+    rattrape pas.
+    """
+    await admin_service.delete_staff(db, staff_id, deleted_by=current_user.user_id, reason=reason)
 
 
 @router.post("/staff/{staff_id}/photo")
@@ -1350,15 +1420,49 @@ async def update_parent(
     return await admin_service.update_parent(db, parent_id, data, updated_by=current_user.user_id)
 
 
-@router.delete("/parents/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_parent(
+@router.post("/parents/{parent_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_parent(
+    parent_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:parents:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place un parent dans la corbeille. Reversible."""
+    await admin_service.archive_parent(
+        db, parent_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/parents/{parent_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_parent(
     parent_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:parents:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime un parent."""
-    await admin_service.delete_parent(db, parent_id, deleted_by=current_user.user_id)
+    """Sort un parent de la corbeille."""
+    await admin_service.restore_parent(db, parent_id, actor_id=current_user.user_id)
+
+
+@router.delete("/parents/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_parent(
+    parent_id: int,
+    reason: str | None = Query(
+        None,
+        max_length=500,
+        description="Motif obligatoire. Il figure au journal et dans le courriel a la direction.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime definitivement un parent deja place dans la corbeille.
+
+    Reserve a l'administration : c'est le seul geste du logiciel qui ne se
+    rattrape pas.
+    """
+    await admin_service.delete_parent(db, parent_id, deleted_by=current_user.user_id, reason=reason)
 
 
 @router.post("/parents/{parent_id}/link/{student_id}", status_code=status.HTTP_201_CREATED)

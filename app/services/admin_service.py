@@ -240,6 +240,21 @@ async def update_student(
     return _student_to_response(refreshed)
 
 
+# ---------------------------------------------------------------------------
+# Corbeille — les fiches personnes, toutes sur la même mécanique
+# ---------------------------------------------------------------------------
+
+TEACHER_KIND = archive_service.ArchivableKind(
+    "teacher", "L'enseignant", TeacherProfile, lambda db, r: repo.delete_teacher(db, r)
+)
+STAFF_KIND = archive_service.ArchivableKind(
+    "staff", "Le membre du personnel", StaffProfile, lambda db, r: repo.delete_staff(db, r)
+)
+PARENT_KIND = archive_service.ArchivableKind(
+    "parent", "Le parent", Parent, lambda db, r: repo.delete_parent(db, r)
+)
+
+
 def _student_label(student: object) -> str:
     return (
         f"L'eleve {getattr(student, 'last_name', '')} {getattr(student, 'first_name', '')}".strip()
@@ -733,20 +748,27 @@ async def update_teacher(
     return _teacher_to_response(refreshed)
 
 
-async def delete_teacher(db: AsyncSession, teacher_id: int, *, deleted_by: int) -> None:
-    teacher = await repo.get_teacher_by_id(db, teacher_id)
-    if teacher is None:
-        raise NotFoundError("Teacher", teacher_id)
-    async with db.begin_nested():
-        await repo.delete_teacher(db, teacher)
-        await audit_log(
-            db,
-            entity_type="teacher",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=teacher_id,
-        )
-    await db.commit()
+async def archive_teacher(
+    db: AsyncSession, teacher_id: int, *, reason: str | None, actor_id: int
+) -> ArchiveOutcome:
+    """Place l'enseignant dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
+    return await archive_service.archive_record(
+        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=actor_id
+    )
+
+
+async def restore_teacher(db: AsyncSession, teacher_id: int, *, actor_id: int) -> None:
+    """Sort l'enseignant de la corbeille."""
+    await archive_service.restore_record(db, TEACHER_KIND, teacher_id, actor_id=actor_id)
+
+
+async def delete_teacher(
+    db: AsyncSession, teacher_id: int, *, deleted_by: int, reason: str | None = None
+) -> None:
+    """Supprime définitivement une fiche déjà placée dans la corbeille."""
+    await archive_service.purge_record(
+        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=deleted_by
+    )
 
 
 async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
@@ -1146,20 +1168,26 @@ async def update_staff(
     return _staff_to_response(refreshed)
 
 
-async def delete_staff(db: AsyncSession, staff_id: int, *, deleted_by: int) -> None:
-    staff = await repo.get_staff_by_id(db, staff_id)
-    if staff is None:
-        raise NotFoundError("Staff", staff_id)
-    async with db.begin_nested():
-        await repo.delete_staff(db, staff)
-        await audit_log(
-            db,
-            entity_type="staff",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=staff_id,
-        )
-    await db.commit()
+async def archive_staff(
+    db: AsyncSession, staff_id: int, *, reason: str | None, actor_id: int
+) -> ArchiveOutcome:
+    """Place le membre du personnel dans la corbeille : la fiche quitte les
+    écrans, rien n'est détruit."""
+    return await archive_service.archive_record(
+        db, STAFF_KIND, staff_id, reason=reason, actor_id=actor_id
+    )
+
+
+async def restore_staff(db: AsyncSession, staff_id: int, *, actor_id: int) -> None:
+    """Sort le membre du personnel de la corbeille."""
+    await archive_service.restore_record(db, STAFF_KIND, staff_id, actor_id=actor_id)
+
+
+async def delete_staff(
+    db: AsyncSession, staff_id: int, *, deleted_by: int, reason: str | None = None
+) -> None:
+    """Supprime définitivement une fiche déjà placée dans la corbeille."""
+    await archive_service.purge_record(db, STAFF_KIND, staff_id, reason=reason, actor_id=deleted_by)
 
 
 async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
@@ -1485,20 +1513,27 @@ async def update_parent(
     return _parent_to_response(refreshed)
 
 
-async def delete_parent(db: AsyncSession, parent_id: int, *, deleted_by: int) -> None:
-    parent = await repo.get_parent_by_id(db, parent_id)
-    if parent is None:
-        raise NotFoundError("Parent", parent_id)
-    async with db.begin_nested():
-        await repo.delete_parent(db, parent)
-        await audit_log(
-            db,
-            entity_type="parent",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=parent_id,
-        )
-    await db.commit()
+async def archive_parent(
+    db: AsyncSession, parent_id: int, *, reason: str | None, actor_id: int
+) -> ArchiveOutcome:
+    """Place le parent dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
+    return await archive_service.archive_record(
+        db, PARENT_KIND, parent_id, reason=reason, actor_id=actor_id
+    )
+
+
+async def restore_parent(db: AsyncSession, parent_id: int, *, actor_id: int) -> None:
+    """Sort le parent de la corbeille."""
+    await archive_service.restore_record(db, PARENT_KIND, parent_id, actor_id=actor_id)
+
+
+async def delete_parent(
+    db: AsyncSession, parent_id: int, *, deleted_by: int, reason: str | None = None
+) -> None:
+    """Supprime définitivement une fiche déjà placée dans la corbeille."""
+    await archive_service.purge_record(
+        db, PARENT_KIND, parent_id, reason=reason, actor_id=deleted_by
+    )
 
 
 async def link_parent_to_student(
