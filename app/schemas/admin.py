@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
+from app.models.user import TeacherContract
+
 # ---------------------------------------------------------------------------
 # Student
 # ---------------------------------------------------------------------------
@@ -255,6 +257,18 @@ class TeacherCreate(BaseModel):
     password: str
     speciality: str | None = None
     phone: str | None = None
+    # Reclames par le rapport de fin de trimestre de la DEEP (repartition du
+    # personnel enseignant par contrat et par sexe). Facultatifs : on ne devine
+    # ni le sexe ni le contrat de quelqu'un.
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
+
+    @field_validator("genre")
+    @classmethod
+    def valid_genre(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"M", "F"}:
+            raise ValueError("genre must be 'M' or 'F'")
+        return v
 
 
 class TeacherUpdate(BaseModel):
@@ -262,6 +276,15 @@ class TeacherUpdate(BaseModel):
     last_name: str | None = None
     speciality: str | None = None
     phone: str | None = None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
+
+    @field_validator("genre")
+    @classmethod
+    def valid_genre(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"M", "F"}:
+            raise ValueError("genre must be 'M' or 'F'")
+        return v
 
 
 class TeacherResponse(BaseModel):
@@ -273,6 +296,8 @@ class TeacherResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
     photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -299,6 +324,8 @@ class TeacherFullResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
     photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
