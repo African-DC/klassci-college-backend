@@ -24,6 +24,31 @@ from app.services.payments._response import payment_to_response
 from app.services.payments._state import logger
 
 
+async def _ensure_method_accepted(db: AsyncSession, method: str) -> None:
+    """Refuse un moyen de paiement que l'établissement n'accepte pas.
+
+    La colonne vaut `NULL` tant que l'école n'a rien configuré, et signifie
+    alors « tous acceptés » : les établissements déjà en service ne doivent
+    pas voir leurs encaissements bloqués par une option qu'ils n'ont jamais
+    remplie.
+    """
+    from sqlalchemy import select
+
+    from app.models.academic import SchoolSettings
+
+    stmt = select(SchoolSettings.enabled_payment_methods).limit(1)
+    configured = (await db.execute(stmt)).scalar_one_or_none()
+    if not configured:
+        return
+
+    accepted = {key.strip() for key in configured.split(",") if key.strip()}
+    if method not in accepted:
+        raise BusinessValidationError(
+            f"L'établissement n'accepte pas ce moyen de paiement. "
+            f"Moyens acceptés : {', '.join(sorted(accepted))}."
+        )
+
+
 async def record_enrollment_payment(
     db: AsyncSession,
     enrollment_id: int,
@@ -39,6 +64,8 @@ async def record_enrollment_payment(
     - Override manuel → pas en P0 (priorité stricte).
     - Audit log unique avec breakdown allocation.
     """
+    await _ensure_method_accepted(db, data.method)
+
     # Ouvre la journée de caisse au premier versement, et refuse d'encaisser
     # sur une journée déjà clôturée : l'écart signé le serait sur un total
     # devenu faux. Hors transaction pour que le refus remonte tel quel.

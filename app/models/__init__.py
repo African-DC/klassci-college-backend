@@ -70,6 +70,9 @@ from app.models.grade import (  # noqa: F401
     SubjectAverage,
 )
 
+# Tranches de paiement (grille standard + échéancier négocié)
+from app.models.installment import EnrollmentInstallment, FeeInstallment  # noqa: F401
+
 # Messagerie interne
 from app.models.message import Message  # noqa: F401
 

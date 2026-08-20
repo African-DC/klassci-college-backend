@@ -27,6 +27,7 @@ from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
+from app.routers.installments import router as installments_router
 from app.routers.leave import admin_router as leave_admin_router
 from app.routers.leave import self_router as leave_self_router
 from app.routers.mailpulse import router as mailpulse_router
@@ -92,6 +93,7 @@ app.include_router(dashboard_router)
 app.include_router(enrollments_router)
 app.include_router(enrollment_payments_router)
 app.include_router(cash_sessions_router)
+app.include_router(installments_router)
 app.include_router(class_documents_router)
 app.include_router(fees_router)
 app.include_router(grades_router)

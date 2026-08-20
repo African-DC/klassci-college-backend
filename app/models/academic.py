@@ -263,6 +263,10 @@ class SchoolSettings(Base, TimestampMixin):
     primary_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     accent_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Moyens de paiement acceptes, en cles separees par des virgules
+    # (cash, mobile_money, bank_transfer, cheque). NULL = tous acceptes, ce qui
+    # preserve le comportement des etablissements deja en service.
+    enabled_payment_methods: Mapped[str | None] = mapped_column(String(200), nullable=True)
     motto: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Timetable generation settings
     slot_duration_minutes: Mapped[int] = mapped_column(
