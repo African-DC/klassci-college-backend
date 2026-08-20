@@ -146,20 +146,33 @@ def require_permission(permission_slug: str) -> Any:
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
-        from app.services.pat_service import scope_matches
-
-        if current_user.auth_method == "pat":
-            if not scope_matches(current_user.pat_scopes, permission_slug):
+        # Une seule lecture de la matrice, partagée avec `has_permission` :
+        # dupliquer la résolution des droits est exactement là où l'on ne veut
+        # aucune divergence possible.
+        if not await _resolve_permission(current_user, db, permission_slug):
+            if current_user.auth_method == "pat":
                 raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
-            return
-
-        from app.repositories.permission_repository import check_user_permission
-
-        has_perm = await check_user_permission(db, current_user.user_id, permission_slug)
-        if not has_perm:
             raise PermissionDeniedError(permission_slug)
 
     return Depends(_check)
+
+
+async def _resolve_permission(
+    current_user: TokenData, db: AsyncSession, permission_slug: str
+) -> bool:
+    """Répond à « cet appelant a-t-il ce droit ? », sans décider quoi en faire.
+
+    Pour un PAT, la réponse vient du scope déclaré à la création du token ;
+    pour un JWT, de la matrice rôle/permission en base.
+    """
+    if current_user.auth_method == "pat":
+        from app.services.pat_service import scope_matches
+
+        return bool(scope_matches(current_user.pat_scopes, permission_slug))
+
+    from app.repositories.permission_repository import check_user_permission
+
+    return bool(await check_user_permission(db, current_user.user_id, permission_slug))
 
 
 def has_permission(permission_slug: str) -> Any:
@@ -176,14 +189,7 @@ def has_permission(permission_slug: str) -> Any:
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> bool:
-        from app.services.pat_service import scope_matches
-
-        if current_user.auth_method == "pat":
-            return bool(scope_matches(current_user.pat_scopes, permission_slug))
-
-        from app.repositories.permission_repository import check_user_permission
-
-        return bool(await check_user_permission(db, current_user.user_id, permission_slug))
+        return await _resolve_permission(current_user, db, permission_slug)
 
     return Depends(_check)
 

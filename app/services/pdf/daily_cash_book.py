@@ -17,11 +17,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+# Ordre partage avec l ecran caisse : une seule source de verite.
+from app.repositories.cash_session_repository import METHODS_ORDER as _METHODS_ORDER
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import enum_value, format_decimal
 from app.services.pdf.theme import PDFTheme, method_label
-
-_METHODS_ORDER = ["cash", "mobile_money", "bank_transfer", "cheque"]
 
 
 def _payment_rows(payments: list[dict[str, Any]]) -> list[list[Any]]:

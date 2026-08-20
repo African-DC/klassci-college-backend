@@ -6,14 +6,13 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import NotFoundError
 from app.models.cash_session import CashSession, CashSessionStatus
-from app.models.user import StaffProfile, User
 from app.repositories import cash_session_repository as repo
+from app.repositories.cash_session_repository import METHODS_ORDER, DayAggregate
 from app.schemas.cash_session import (
     CashMethodTotal,
     CashSessionCloseRequest,
@@ -24,101 +23,65 @@ from app.services.pdf.theme import method_label
 
 logger = logging.getLogger(__name__)
 
-_METHODS_ORDER = ("cash", "mobile_money", "bank_transfer", "cheque")
 
+def _method_totals(aggregate: DayAggregate) -> list[CashMethodTotal]:
+    """Ventilation ordonnée, en n'affichant que les moyens réellement utilisés.
 
-async def _cashier_display_name(db: AsyncSession, user_id: int) -> str:
-    """Nom lisible du caissier : sa fiche Personnel, sinon son email."""
-    stmt = select(StaffProfile).where(StaffProfile.user_id == user_id)
-    profile = (await db.execute(stmt)).scalar_one_or_none()
-    if profile is not None:
-        full = f"{profile.first_name or ''} {profile.last_name or ''}".strip()
-        if full:
-            return full
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    return user.email if user is not None else "—"
-
-
-def _method_totals(by_method: dict[str, dict[str, object]]) -> list[CashMethodTotal]:
-    """Ventilation ordonnée, en n'affichant que les moyens réellement utilisés."""
-    totals: list[CashMethodTotal] = []
-    for key in _METHODS_ORDER:
-        entry = by_method.get(key)
-        if entry is None:
-            continue
-        totals.append(
-            CashMethodTotal(
-                method=key,
-                label=method_label(key),
-                count=int(entry["count"]),  # type: ignore[arg-type]
-                total=float(entry["total"]),  # type: ignore[arg-type]
-            )
+    Afficher « Chèque : 0 » sur une école qui n'en accepte pas ajoute du bruit
+    sans rien apprendre.
+    """
+    return [
+        CashMethodTotal(
+            method=key,
+            label=method_label(key),
+            count=aggregate.by_method[key].count,
+            total=float(aggregate.by_method[key].total),
         )
-    return totals
+        for key in METHODS_ORDER
+        if key in aggregate.by_method
+    ]
 
 
-async def _to_response(
-    db: AsyncSession,
-    session: CashSession | None,
-    *,
-    cashier_user_id: int,
-    business_date: date_type,
+def _to_response(
+    session: CashSession, *, cashier_name: str, aggregate: DayAggregate
 ) -> CashSessionResponse:
     """Assemble une session avec ses agrégats.
 
-    Une session clôturée garde les montants figés au moment de la clôture :
-    recalculer ferait bouger un écart déjà constaté et signé.
+    Une session clôturée garde `expected_amount`, `counted_amount` et
+    `variance` figés au moment de la clôture : les recalculer ferait bouger un
+    écart déjà constaté et signé.
     """
-    aggregate = await repo.aggregate_day(db, cashier_user_id, business_date)
-    name = await _cashier_display_name(db, cashier_user_id)
-
-    if session is None:
-        # Encaissements sans session : versements antérieurs à la mise en place
-        # des sessions. On les présente comme une journée ouverte, sinon
-        # l'argent encaissé n'apparaîtrait nulle part.
-        return CashSessionResponse(
-            id=0,
-            cashier_user_id=cashier_user_id,
-            cashier_name=name,
-            business_date=business_date,
-            status=CashSessionStatus.OPEN.value,
-            opened_at=datetime.combine(business_date, datetime.min.time()),
-            payments_count=int(aggregate["count"]),  # type: ignore[arg-type]
-            total_collected=float(aggregate["total"]),  # type: ignore[arg-type]
-            cash_collected=float(aggregate["cash_total"]),  # type: ignore[arg-type]
-            by_method=_method_totals(aggregate["by_method"]),  # type: ignore[arg-type]
-        )
-
+    status = session.status if isinstance(session.status, str) else session.status.value
     return CashSessionResponse(
         id=session.id,
         cashier_user_id=session.cashier_user_id,
-        cashier_name=name,
+        cashier_name=cashier_name,
         business_date=session.business_date,
-        status=session.status if isinstance(session.status, str) else session.status.value,
+        status=status,
         opened_at=session.opened_at,
         closed_at=session.closed_at,
-        counted_amount=float(session.counted_amount)
-        if session.counted_amount is not None
-        else None,
+        counted_amount=(
+            float(session.counted_amount) if session.counted_amount is not None else None
+        ),
         expected_amount=(
             float(session.expected_amount) if session.expected_amount is not None else None
         ),
         variance=float(session.variance) if session.variance is not None else None,
         notes=session.notes,
-        payments_count=int(aggregate["count"]),  # type: ignore[arg-type]
-        total_collected=float(aggregate["total"]),  # type: ignore[arg-type]
-        cash_collected=float(aggregate["cash_total"]),  # type: ignore[arg-type]
-        by_method=_method_totals(aggregate["by_method"]),  # type: ignore[arg-type]
+        payments_count=aggregate.count,
+        total_collected=float(aggregate.total),
+        cash_collected=float(aggregate.cash_total),
+        by_method=_method_totals(aggregate),
     )
 
 
 async def ensure_open_session(db: AsyncSession, cashier_user_id: int, when: datetime) -> None:
     """Ouvre la journée du caissier au premier encaissement, si besoin.
 
-    Volontairement paresseux : imposer un « ouvrir ma caisse » avant le
-    premier versement bloquerait le guichet le matin, avec la file devant.
-    Refuse en revanche d'encaisser sur une journée déjà clôturée — sinon
-    l'écart signé serait faux dès la seconde qui suit.
+    Volontairement paresseux : imposer un « ouvrir ma caisse » avant le premier
+    versement bloquerait le guichet le matin, avec la file déjà devant. Refuse
+    en revanche d'encaisser sur une journée clôturée — l'écart signé serait
+    faux la seconde suivante.
     """
     business_date = when.date()
     session = await repo.get_session(db, cashier_user_id, business_date)
@@ -138,10 +101,29 @@ async def ensure_open_session(db: AsyncSession, cashier_user_id: int, when: date
 async def get_my_session(
     db: AsyncSession, cashier_user_id: int, business_date: date_type
 ) -> CashSessionResponse:
+    """Ma caisse. La session est créée si elle n'existe pas encore.
+
+    Ouvrir l'écran avant le premier encaissement de la journée est le cas
+    normal : renvoyer un 404 obligerait le front à inventer une journée vide,
+    et le caissier ne pourrait pas clôturer une journée sans versement.
+    """
     session = await repo.get_session(db, cashier_user_id, business_date)
-    return await _to_response(
-        db, session, cashier_user_id=cashier_user_id, business_date=business_date
-    )
+    if session is None:
+        session = await repo.create_session(
+            db,
+            cashier_user_id,
+            business_date,
+            opened_at=datetime.combine(business_date, datetime.min.time()),
+        )
+        await db.commit()
+        refreshed = await repo.get_session_by_id(db, session.id)
+        if refreshed is None:
+            raise NotFoundError("CashSession", session.id)
+        session = refreshed
+
+    aggregate = await repo.aggregate_day(db, cashier_user_id, business_date)
+    names = await repo.cashier_names(db, [cashier_user_id])
+    return _to_response(session, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate)
 
 
 async def close_my_session(
@@ -158,7 +140,7 @@ async def close_my_session(
         raise HTTPException(status_code=409, detail="Cette journée de caisse est déjà clôturée.")
 
     aggregate = await repo.aggregate_day(db, cashier_user_id, business_date)
-    expected = Decimal(str(aggregate["cash_total"]))
+    expected = aggregate.cash_total
     counted = Decimal(str(data.counted_amount))
 
     async with db.begin_nested():
@@ -187,24 +169,29 @@ async def close_my_session(
     refreshed = await repo.get_session_by_id(db, session.id)
     if refreshed is None:
         raise NotFoundError("CashSession", session.id)
-    return await _to_response(
-        db, refreshed, cashier_user_id=cashier_user_id, business_date=business_date
+    names = await repo.cashier_names(db, [cashier_user_id])
+    return _to_response(
+        refreshed, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate
     )
 
 
 async def get_daily_point(db: AsyncSession, business_date: date_type) -> CashSessionListResponse:
-    """Point journalier du comptable : toutes les caisses, clôturées ou non."""
-    sessions = await repo.list_sessions_for_date(db, business_date)
-    known = {s.cashier_user_id: s for s in sessions}
+    """Point journalier du comptable : toutes les caisses, clôturées ou non.
 
-    # Un caissier qui a encaissé sans session enregistrée doit apparaître :
-    # son argent existe même si la ligne de session manque.
-    for cashier_id, _email in await repo.list_cashier_ids_with_payments(db, business_date):
-        known.setdefault(cashier_id, None)  # type: ignore[arg-type]
+    Trois requêtes au total quel que soit le nombre de caisses : les sessions,
+    leurs agrégats groupés, puis les noms.
+    """
+    sessions = await repo.list_sessions_for_date(db, business_date)
+    aggregates = await repo.aggregate_date_by_cashier(db, business_date)
+    names = await repo.cashier_names(db, [s.cashier_user_id for s in sessions])
 
     items = [
-        await _to_response(db, session, cashier_user_id=cashier_id, business_date=business_date)
-        for cashier_id, session in sorted(known.items())
+        _to_response(
+            session,
+            cashier_name=names.get(session.cashier_user_id, "—"),
+            aggregate=aggregates.get(session.cashier_user_id, DayAggregate()),
+        )
+        for session in sessions
     ]
 
     return CashSessionListResponse(
