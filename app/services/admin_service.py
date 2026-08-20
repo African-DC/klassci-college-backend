@@ -2346,6 +2346,39 @@ async def update_enrollment_pattern(
 # ---------------------------------------------------------------------------
 
 
+async def _paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, float]:
+    """Montant réellement encaissé sur chaque frais d'un élève.
+
+    La source de vérité est `PaymentAllocation`, pas la relation
+    `EnrollmentFee.payments` : celle-ci s'appuie sur `Payment.enrollment_fee_id`,
+    déprécié depuis la migration 0028. Le chemin d'écriture a migré vers les
+    allocations, le chemin de lecture non — d'où des frais au statut `paid`
+    affichant « 0 FCFA versé » et un « reste à payer » égal au montant total.
+    Un admin lisait donc « 0 payé » sur une famille parfaitement à jour.
+
+    Une seule requête groupée : sommer en Python sur des relations chargées
+    coûterait une requête par frais.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+
+    stmt = (
+        select(
+            PaymentAllocation.enrollment_fee_id,
+            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+        )
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(
+            Enrollment.student_id == student_id,
+            Payment.status == PaymentStatus.COMPLETED.value,
+        )
+        .group_by(PaymentAllocation.enrollment_fee_id)
+    )
+    return {int(fee_id): float(total or 0) for fee_id, total in (await db.execute(stmt)).all()}
+
+
 async def get_student_enrollment_fees(
     db: AsyncSession,
     student_id: int,
@@ -2360,7 +2393,6 @@ async def get_student_enrollment_fees(
         EnrollmentFee,
         FeeVariant,
         OptionalFeeOption,
-        PaymentStatus,
     )
 
     student = await repo.get_student_by_id(db, student_id)
@@ -2374,11 +2406,12 @@ async def get_student_enrollment_fees(
         .where(Enrollment.student_id == student_id)
         .options(
             selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
-            selectinload(EnrollmentFee.payments),
         )
         .order_by(EnrollmentFee.enrollment_id, EnrollmentFee.id)
     )
     rows = (await db.execute(stmt)).scalars().all()
+
+    paid_by_fee = await _paid_by_enrollment_fee(db, student_id)
 
     items: list[StudentEnrollmentFeeResponse] = []
     for ef in rows:
@@ -2387,7 +2420,7 @@ async def get_student_enrollment_fees(
             if ef.fee_variant and ef.fee_variant.category
             else "Inconnu"
         )
-        paid = sum(float(p.amount) for p in ef.payments if p.status == PaymentStatus.COMPLETED)
+        paid = paid_by_fee.get(ef.id, 0.0)
         amount = float(ef.amount)
         remaining = max(0.0, amount - paid)
 
