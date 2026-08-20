@@ -6,6 +6,7 @@ import secrets
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.db_errors import integrity_error_message
 
@@ -55,6 +56,79 @@ class BusinessValidationError(AppException):
 
 
 # ---------------------------------------------------------------------------
+# Le filet qui rattrape l'imprevu
+# ---------------------------------------------------------------------------
+
+
+def unexpected_error_response(path: str) -> JSONResponse:
+    """Transforme l'imprevu en reponse exploitable, et journalise la trace.
+
+    Le code de reference relie ce que l'utilisateur a lu a la ligne de journal
+    exacte : il n'a plus a raconter ce qu'il faisait pour qu'on retrouve la
+    panne.
+    """
+    reference = secrets.token_hex(3).upper()
+    logger.exception("Erreur inattendue [%s] sur %s", reference, path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "Une erreur inattendue est survenue. Communiquez le code "
+                f"{reference} a votre administrateur."
+            ),
+            "code": "INTERNAL",
+            "reference": reference,
+        },
+    )
+
+
+class UnexpectedErrorMiddleware:
+    """Rattrape l'imprevu SOUS le middleware CORS, pour que l'ecran le lise.
+
+    Un `@app.exception_handler(Exception)` ne suffit pas : Starlette confie
+    cette cle a `ServerErrorMiddleware`, qui coiffe toute la pile, CORS
+    compris. La reponse produite la-haut ne repasse jamais par CORS, sort donc
+    sans en-tete `Access-Control-Allow-Origin`, et le navigateur la bloque.
+    L'utilisateur voit une erreur reseau, et le code de reference — la seule
+    raison d'etre du dispositif — ne lui parvient jamais.
+
+    Place sous CORS, la reponse remonte la pile normalement et ressort avec
+    ses en-tetes.
+
+    Starlette documente un autre remede : envelopper l'application entiere,
+    `app = CORSMiddleware(app=app, ...)`, ce qui coiffe meme
+    `ServerErrorMiddleware`. Ecarte ici parce que `app` cesserait alors d'etre
+    une instance FastAPI, que plusieurs modules importent comme telle.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        started = False
+
+        async def _send(message: Message) -> None:
+            nonlocal started
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        except Exception:
+            if started:
+                # Les en-tetes sont deja partis : plus moyen de rendre autre
+                # chose. On laisse remonter, la trace sera journalisee au-dessus.
+                raise
+            response = unexpected_error_response(scope.get("path", ""))
+            await response(scope, receive, send)
+
+
+# ---------------------------------------------------------------------------
 # Handlers FastAPI
 # ---------------------------------------------------------------------------
 
@@ -64,30 +138,14 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unexpected_error_handler(request: Request, exc: Exception) -> JSONResponse:
-        """Dernier filet : transforme l'imprevu en reponse exploitable.
+        """Ultime recours, pour ce qui echappe meme au middleware.
 
-        Sans lui, l'exception remonte a `ServerErrorMiddleware`, qui se trouve
-        AU-DESSUS du middleware CORS : la reponse est du texte brut sans
-        en-tete `Access-Control-Allow-Origin`, le navigateur la bloque, et
-        l'utilisateur ne voit qu'une erreur reseau. Le probleme devient alors
-        indiagnosticable depuis l'ecran.
-
-        Le code de reference relie ce que l'utilisateur a lu a la ligne de
-        journal exacte : il n'a plus a raconter ce qu'il faisait.
+        Ce handler s'execute dans `ServerErrorMiddleware`, tout en haut de la
+        pile : il ne couvre donc que les pannes du middleware CORS lui-meme.
+        Tout le reste est attrape plus bas par `UnexpectedErrorMiddleware`,
+        qui rend, lui, une reponse que le navigateur accepte.
         """
-        reference = secrets.token_hex(3).upper()
-        logger.exception("Erreur inattendue [%s] sur %s", reference, request.url.path)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "detail": (
-                    "Une erreur inattendue est survenue. Communiquez le code "
-                    f"{reference} a votre administrateur."
-                ),
-                "code": "INTERNAL",
-                "reference": reference,
-            },
-        )
+        return unexpected_error_response(request.url.path)
 
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:

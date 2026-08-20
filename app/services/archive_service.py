@@ -269,7 +269,12 @@ class ArchivableKind:
     entity_type: str
     article: str  # « L'enseignant », « Le parent »...
     model: type
-    delete: Callable[[AsyncSession, object], Awaitable[None]]
+    #: Détruit la fiche et rend l'inventaire de ce qu'elle a emporté. Cet
+    #: inventaire ne peut se constituer que PENDANT la destruction : c'est le
+    #: seul moment où l'on sait encore combien de notes, de frais et de
+    #: versements portait la fiche. Rendre `None` quand il n'y a rien à
+    #: dénombrer.
+    delete: Callable[[AsyncSession, object], Awaitable[Sequence[Dependent] | None]]
     naming: Callable[[object], str] | None = None
     load: Callable[[AsyncSession, int], Awaitable[object | None]] | None = None
 
@@ -331,14 +336,22 @@ async def purge_record(
     record = await _load(db, kind, record_id)
     label = kind.label(record)
     ensure_archived_first(record, label=label)  # type: ignore[arg-type]
-    await record_permanent_deletion(
-        db,
-        entity_type=kind.entity_type,
-        entity_id=record_id,
-        label=label,
-        reason=reason,
-        actor_id=actor_id,
-    )
+    # Le motif est validé avant la première destruction, pas après.
+    reason = ensure_reason(reason)
+
     async with db.begin_nested():
-        await kind.delete(db, record)
+        carried_away = await kind.delete(db, record)
+        outcome = await record_permanent_deletion(
+            db,
+            entity_type=kind.entity_type,
+            entity_id=record_id,
+            label=label,
+            reason=reason,
+            actor_id=actor_id,
+            carried_away=carried_away,
+        )
     await db.commit()
+    # Le courriel part APRÈS la destruction, jamais avant : annoncer par écrit
+    # une suppression qui échouerait ensuite laisserait au chef d'établissement
+    # la trace d'un acte qui n'a pas eu lieu.
+    await notify(db, outcome)
