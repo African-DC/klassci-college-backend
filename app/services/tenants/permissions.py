@@ -110,6 +110,11 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # dernier versement. De quoi valider un dossier d'inscription sans jamais
     # apprendre combien la famille doit.
     {"slug": "payments:status:read", "name": "See payment status without amounts"},
+    # Corbeille. Archiver reste ouvert a qui pouvait deja supprimer ; vider la
+    # corbeille est reserve a la direction, c'est le seul geste du logiciel
+    # qui ne se rattrape pas.
+    {"slug": "archive:read", "name": "Browse the recycle bin"},
+    {"slug": "archive:purge", "name": "Permanently delete an archived record"},
     {"slug": "audit:read", "name": "Read the full audit journal"},
     {"slug": "audit:read:financial", "name": "Read the financial audit journal"},
     # Parents (4)

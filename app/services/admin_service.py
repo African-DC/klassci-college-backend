@@ -82,6 +82,8 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
+from app.services import archive_service
+from app.services.archive_service import ArchiveOutcome
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
@@ -238,19 +240,69 @@ async def update_student(
     return _student_to_response(refreshed)
 
 
-async def delete_student(db: AsyncSession, student_id: int, *, deleted_by: int) -> None:
+def _student_label(student: object) -> str:
+    return (
+        f"L'eleve {getattr(student, 'last_name', '')} {getattr(student, 'first_name', '')}".strip()
+    )
+
+
+async def archive_student(
+    db: AsyncSession, student_id: int, *, reason: str | None, actor_id: int
+) -> ArchiveOutcome:
+    """Place l'eleve dans la corbeille : il quitte les ecrans, rien n'est detruit."""
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
+    return await archive_service.archive(
+        db,
+        student,
+        entity_type="student",
+        label=_student_label(student),
+        reason=reason,
+        actor_id=actor_id,
+    )
+
+
+async def restore_student(db: AsyncSession, student_id: int, *, actor_id: int) -> None:
+    """Sort l'eleve de la corbeille."""
+    student = await repo.get_archived_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+    await archive_service.restore(
+        db,
+        student,
+        entity_type="student",
+        label=_student_label(student),
+        actor_id=actor_id,
+    )
+
+
+async def delete_student(
+    db: AsyncSession, student_id: int, *, deleted_by: int, reason: str | None = None
+) -> None:
+    """Supprime definitivement un eleve deja place dans la corbeille.
+
+    Le passage par la corbeille n'est pas une formalite : c'est ce qui laisse
+    le temps de se raviser. Le court-circuiter transformerait un clic
+    malheureux en perte definitive.
+    """
+    student = await repo.get_archived_student_by_id(db, student_id)
+    if student is None:
+        raise NotFoundError("Student", student_id)
+
+    label = _student_label(student)
+    archive_service.ensure_archived_first(student, label=label)
+    await archive_service.record_permanent_deletion(
+        db,
+        entity_type="student",
+        entity_id=student_id,
+        label=label,
+        reason=reason,
+        actor_id=deleted_by,
+    )
+
     async with db.begin_nested():
         await repo.delete_student(db, student)
-        await audit_log(
-            db,
-            entity_type="student",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=student_id,
-        )
     await db.commit()
 
 

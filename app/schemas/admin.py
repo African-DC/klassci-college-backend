@@ -1107,3 +1107,13 @@ class PromotionExecuteResponse(BaseModel):
     skipped_count: int
     error_count: int
     errors: list[PromotionExecuteError]
+
+
+class ArchiveRequest(BaseModel):
+    """Motif d'archivage.
+
+    Obligatoire : sans lui, le journal dirait qu'une fiche a disparu sans dire
+    pourquoi, ce qui ne vaut guère mieux que pas de trace du tout.
+    """
+
+    reason: str = Field(min_length=10, max_length=500)

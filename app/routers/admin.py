@@ -20,6 +20,7 @@ from app.schemas.admin import (
     AcademicYearListResponse,
     AcademicYearResponse,
     AcademicYearUpdate,
+    ArchiveRequest,
     ClassCreate,
     ClassListResponse,
     ClassResponse,
@@ -193,15 +194,51 @@ async def update_student(
     return await admin_service.update_student(db, student_id, data, updated_by=current_user.user_id)
 
 
-@router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_student(
+@router.post("/students/{student_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_student(
+    student_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:students:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place un eleve dans la corbeille. Reversible."""
+    await admin_service.archive_student(
+        db, student_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/students/{student_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_student(
     student_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:students:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime un eleve."""
-    await admin_service.delete_student(db, student_id, deleted_by=current_user.user_id)
+    """Sort un eleve de la corbeille."""
+    await admin_service.restore_student(db, student_id, actor_id=current_user.user_id)
+
+
+@router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student(
+    student_id: int,
+    reason: str | None = Query(
+        None,
+        max_length=500,
+        description="Motif obligatoire. Il figure au journal et dans le courriel a la direction.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime definitivement un eleve deja place dans la corbeille.
+
+    Reserve a l'administration : c'est le seul geste du logiciel qui ne se
+    rattrape pas.
+    """
+    await admin_service.delete_student(
+        db, student_id, deleted_by=current_user.user_id, reason=reason
+    )
 
 
 @router.post("/students/{student_id}/photo")

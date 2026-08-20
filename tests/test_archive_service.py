@@ -92,3 +92,41 @@ def test_la_colonne_de_corbeille_est_indexee() -> None:
     for model in _ARCHIVABLE:
         indexes = {tuple(c.name for c in idx.columns) for idx in model.__table__.indexes}
         assert ("archived_at",) in indexes, f"{model.__tablename__} : archived_at sans index"
+
+
+def test_vider_la_corbeille_est_reserve_a_la_direction() -> None:
+    """Archiver se rattrape, supprimer definitivement non : les deux gestes
+    ne peuvent pas relever du meme droit."""
+    from app.services.tenants.permissions import ALL_PERMISSIONS, ROLE_DEFINITIONS
+
+    slugs = {p["slug"] for p in ALL_PERMISSIONS}
+    assert {"archive:read", "archive:purge"} <= slugs
+
+    def perms(role: str) -> set[str]:
+        return set(ROLE_DEFINITIONS[role]["permissions"])
+
+    for role in ("admin", "director"):
+        assert "archive:purge" in perms(role)
+
+    for role in ("staff", "educator", "accountant", "cashier", "studies_director", "teacher"):
+        assert "archive:purge" not in perms(role), f"{role} ne doit pas vider la corbeille"
+
+
+def test_archiver_reste_sur_le_droit_de_suppression_existant() -> None:
+    """Archiver n'introduit pas un droit de plus : c'est reversible, et le
+    geste reste ouvert a qui pouvait deja supprimer.
+
+    Aujourd'hui seul l'administrateur le peut. Ouvrir l'archivage au
+    secretariat se fait en cochant `admin:students:delete` dans l'ecran Roles
+    et permissions, sans toucher au code — mais c'est une decision d'ecole,
+    pas un choix a prendre a sa place.
+    """
+    from app.services.tenants.permissions import ROLE_DEFINITIONS
+
+    def perms(role: str) -> set[str]:
+        return set(ROLE_DEFINITIONS[role]["permissions"])
+
+    assert "admin:students:delete" in perms("admin")
+    for role in ("staff", "educator"):
+        assert "admin:students:delete" not in perms(role)
+        assert "archive:purge" not in perms(role)
