@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Corbeille sur les fiches qui portent une histoire : élèves, parents, enseignants, personnel et inscriptions. Les archiver les retire de tous les écrans sans rien détruire, et on peut les restaurer. La suppression définitive ne se fait qu'ensuite, depuis la corbeille, et reste réservée à la direction *(admin, directeur)*.
+- Archiver comme supprimer exigent un motif, repris dans le journal d'audit et destiné à être envoyé par courriel à la direction *(admin, directeur)*.
+- Écran corbeille : toutes les fiches mises de côté au même endroit, de la plus récente à la plus ancienne, avec le motif et son auteur, filtrable par sorte de fiche *(admin, directeur)*.
 - Statut d'affectation sur l'inscription : affecté, réaffecté ou non affecté, avec le numéro de décision. Un tarif peut désormais ne valoir que pour les affectés ou que pour les non affectés, et l'inscription prend automatiquement le bon montant. Un élève subventionné par l'État ne paie plus comme un non affecté *(comptable, secrétariat)*.
 - Supprimer une catégorie de frais annonce d'abord ce qu'elle emporte : « 3 montants configurés et 47 frais d'élèves seront supprimés, confirmez pour continuer ». Dès qu'un versement est imputé dessus, la suppression est refusée même confirmée *(comptable, admin)*.
 - L'ordre d'imputation d'une catégorie de frais se règle à la création : jusqu'ici toute nouvelle catégorie était servie en dernier, sans moyen de la remonter *(comptable)*.

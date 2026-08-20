@@ -9,6 +9,7 @@ from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueCons
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ class AssignmentStatus(str, enum.Enum):
         return self in (AssignmentStatus.AFFECTE, AssignmentStatus.REAFFECTE)
 
 
-class Enrollment(Base, TimestampMixin):
+class Enrollment(Base, TimestampMixin, ArchivableMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
     __tablename__ = "enrollments"
