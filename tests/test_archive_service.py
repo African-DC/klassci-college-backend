@@ -60,3 +60,35 @@ def test_on_ne_supprime_pas_une_fiche_encore_visible() -> None:
 
 def test_une_fiche_deja_dans_la_corbeille_peut_etre_supprimee() -> None:
     ensure_archived_first(_Fiche(archived=True), label="L'élève Traoré Aminata")
+
+
+# ---------------------------------------------------------------------------
+# Le filtre global
+# ---------------------------------------------------------------------------
+
+
+def test_toute_entite_archivable_est_couverte_par_le_filtre() -> None:
+    """Une entité qui gagne la corbeille sans entrer dans cette liste
+    réapparaîtrait dans tous les écrans : la corbeille promet l'inverse."""
+    from app.core.archive_filter import _ARCHIVABLE
+    from app.models.archivable import ArchivableMixin
+    from app.models.enrollment import Enrollment
+    from app.models.user import Parent, StaffProfile, Student, TeacherProfile
+
+    attendues = {Student, Parent, TeacherProfile, StaffProfile, Enrollment}
+    assert set(_ARCHIVABLE) == attendues
+
+    for model in _ARCHIVABLE:
+        assert issubclass(model, ArchivableMixin), f"{model.__name__} n'a pas les colonnes"
+        for colonne in ("archived_at", "archived_by", "archive_reason"):
+            assert colonne in model.__table__.columns
+
+
+def test_la_colonne_de_corbeille_est_indexee() -> None:
+    """Toutes les listes filtrent dessus : sans index, chaque écran ferait un
+    balayage complet de la table."""
+    from app.core.archive_filter import _ARCHIVABLE
+
+    for model in _ARCHIVABLE:
+        indexes = {tuple(c.name for c in idx.columns) for idx in model.__table__.indexes}
+        assert ("archived_at",) in indexes, f"{model.__tablename__} : archived_at sans index"

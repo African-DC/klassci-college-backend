@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.core.archive_filter import register_archive_filter
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middleware import TenantMiddleware
@@ -83,6 +84,8 @@ app.add_middleware(
 
 # --- Handlers d'exception ---
 register_exception_handlers(app)
+# Les fiches mises a la corbeille disparaissent de toutes les lectures.
+register_archive_filter()
 
 # --- Routers ---
 app.include_router(admin_router)

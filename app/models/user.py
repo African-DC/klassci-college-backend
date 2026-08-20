@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
@@ -82,7 +83,7 @@ class User(Base, TimestampMixin):
 # ---------------------------------------------------------------------------
 
 
-class StaffProfile(Base, TimestampMixin):
+class StaffProfile(Base, TimestampMixin, ArchivableMixin):
     """Profil personnel administratif."""
 
     __tablename__ = "staff_profiles"
@@ -104,7 +105,7 @@ class StaffProfile(Base, TimestampMixin):
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
 
-class TeacherProfile(Base, TimestampMixin):
+class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
     """Profil enseignant."""
 
     __tablename__ = "teacher_profiles"
@@ -131,7 +132,7 @@ class TeacherProfile(Base, TimestampMixin):
 # ---------------------------------------------------------------------------
 
 
-class Student(Base, TimestampMixin):
+class Student(Base, TimestampMixin, ArchivableMixin):
     """Profil élève — peut ou non avoir un compte User."""
 
     __tablename__ = "students"
@@ -169,7 +170,7 @@ class ParentRelationship(str, enum.Enum):
     OTHER = "other"
 
 
-class Parent(Base, TimestampMixin):
+class Parent(Base, TimestampMixin, ArchivableMixin):
     """Profil parent / tuteur légal."""
 
     __tablename__ = "parents"
