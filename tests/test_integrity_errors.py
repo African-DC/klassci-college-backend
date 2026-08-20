@@ -66,3 +66,33 @@ def test_erreur_sans_numero_ne_fait_pas_planter_le_handler() -> None:
     status, _, code = integrity_error_message(_NoArgs())  # type: ignore[arg-type]
     assert status == 409
     assert code == "CONSTRAINT"
+
+
+def test_un_nom_a_tiret_reste_traite_comme_un_nom() -> None:
+    """« Jean-Baptiste » contient un tiret sans être une clé composée : se fier
+    à la forme de la valeur aurait produit le mauvais message."""
+    exc = _FakeIntegrityError(
+        1062, "Duplicate entry 'Jean-Baptiste' for key 'fee_categories.name'"
+    )
+    _, detail, _ = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert "Jean-Baptiste" in detail
+    assert "autre nom" in detail
+
+
+def test_une_cle_composee_inconnue_ne_parle_pas_de_nom() -> None:
+    """Un index compose qu'on n'a pas nomme explicitement doit quand meme
+    produire un message qui ne demande pas l'impossible."""
+    exc = _FakeIntegrityError(
+        1062, "Duplicate entry '1-1-1-0-affecte' for key 'fee_variants.uq_quelque_chose'"
+    )
+    _, detail, _ = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert "autre nom" not in detail
+    assert "combinaison de valeurs" in detail
+
+
+def test_la_cle_des_tarifs_a_son_message_dedie() -> None:
+    exc = _FakeIntegrityError(
+        1062, "Duplicate entry '1-1-1-0-affecte' for key 'fee_variants.uq_fee_variant_dimensions'"
+    )
+    _, detail, _ = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert "portée" in detail and "niveau" in detail

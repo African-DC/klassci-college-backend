@@ -29,9 +29,10 @@ _DUPLICATE_ENTRY = re.compile(r"Duplicate entry '([^']*)' for key '([^']*)'")
 # Messages sur mesure pour les contraintes composées, où la valeur en cause
 # ressemble à « 1-2-3-4 » et ne veut rien dire pour un utilisateur.
 _COMPOSITE_MESSAGES = {
-    "uq_fee_variant_category_level_series_year": (
-        "Un montant est déjà défini pour cette catégorie, ce niveau, cette série "
-        "et cette année. Modifiez celui qui existe au lieu d'en créer un second."
+    "uq_fee_variant_dimensions": (
+        "Un montant est déjà défini pour cette catégorie, ce niveau, cette série, "
+        "cette portée et cette année. Modifiez celui qui existe au lieu d'en créer "
+        "un second."
     ),
     "uq_fee_installment_year_position": (
         "Cette tranche existe déjà pour l'année scolaire. Rechargez la page : "
@@ -61,16 +62,20 @@ def _duplicate_message(exc: IntegrityError) -> str:
     if index_name in _COMPOSITE_MESSAGES:
         return _COMPOSITE_MESSAGES[index_name]
 
-    # Une clé composée arrive sous la forme « 1-2-3-4 » : annoncer « 1-2-3-4
-    # existe déjà, choisissez un autre nom » n'aide personne, il n'y a aucun
-    # nom à changer.
-    if "-" in value and value.replace("-", "").isdigit():
-        return (
-            "Cet enregistrement existe déjà avec la même combinaison de valeurs. "
-            "Modifiez celui qui existe au lieu d'en créer un second."
-        )
+    # « Choisissez un autre nom » ne vaut que si l'index porte reellement sur
+    # un nom. Sur une cle composee, MySQL joint les colonnes par des tirets et
+    # produit « 1-1-1-0-affecte » : annoncer qu'il faut en changer le nom
+    # n'aide personne, il n'y a aucun nom a changer.
+    #
+    # On se fie au nom de l'index plutot qu'a la forme de la valeur : un nom
+    # legitime peut contenir un tiret, « Jean-Baptiste » par exemple.
+    if "name" in index_name.lower():
+        return f"« {value} » existe déjà. Choisissez un autre nom."
 
-    return f"« {value} » existe déjà. Choisissez un autre nom."
+    return (
+        "Cet enregistrement existe déjà avec la même combinaison de valeurs. "
+        "Modifiez celui qui existe au lieu d'en créer un second."
+    )
 
 
 def integrity_error_message(exc: IntegrityError) -> tuple[int, str, str]:
