@@ -48,6 +48,11 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "admin:fee-variants:create", "name": "Create fee variants"},
     {"slug": "admin:fee-variants:update", "name": "Update fee variants"},
     {"slug": "admin:fee-variants:delete", "name": "Delete fee variants"},
+    # Tranches (2) — le decoupage du total obligatoire dans le temps. Distinct
+    # des categories de frais, qui sont des natures et non des echeances.
+    {"slug": "admin:fee-installments:read", "name": "View the instalment grid"},
+    {"slug": "admin:fee-installments:write", "name": "Set the instalment grid"},
+    {"slug": "enrollments:schedule:write", "name": "Negotiate a family payment plan"},
     {"slug": "admin:fee-options:read", "name": "View fee options"},
     {"slug": "admin:fee-options:create", "name": "Create fee options"},
     {"slug": "admin:fee-options:update", "name": "Update fee options"},
@@ -168,7 +173,14 @@ _FEE_CONFIG = [
     "admin:fee-options:create",
     "admin:fee-options:update",
     "admin:fee-options:delete",
+    "admin:fee-installments:read",
+    "admin:fee-installments:write",
+    "enrollments:schedule:write",
 ]
+
+# Lecture seule des tranches : savoir ce que la famille doit et quand, sans
+# pouvoir toucher a la grille.
+_INSTALLMENTS_READ = ["admin:fee-installments:read"]
 
 
 ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -225,6 +237,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "admin:teachers:attendance",
             "admin:teachers:attendance:read",
             "admin:accounts:manage",
+            *_INSTALLMENTS_READ,
             "documents:certificate",
             "documents:attendance",
             "leave:request",
@@ -260,6 +273,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "payments:read",
             "payments:create",
             "cash-session:manage",
+            *_INSTALLMENTS_READ,
             "enrollments:read",
             "admin:students:read",
             *_REFERENTIEL_READ,
@@ -282,6 +296,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "admin:parents:update",
             *_REFERENTIEL_READ,
             "payments:read",
+            *_INSTALLMENTS_READ,
             "attendance:read",
             "reports:read",
             "documents:certificate",

@@ -259,14 +259,25 @@ def test_studies_director_has_no_financial_access() -> None:
     """Separation des taches : le directeur des etudes ne touche pas a l'argent."""
     perms = set(ROLE_DEFINITIONS["studies_director"]["permissions"])
     forbidden = {p for p in perms if p.startswith(("payments:", "admin:fee-"))}
-    assert not forbidden, f"Le directeur des etudes ne doit avoir aucun droit financier : {forbidden}"
+    assert not forbidden, (
+        f"Le directeur des etudes ne doit avoir aucun droit financier : {forbidden}"
+    )
 
 
 def test_cashier_cannot_configure_fees_nor_read_reports() -> None:
-    """Le caissier encaisse : il ne configure pas la grille et n'a pas les rapports."""
+    """Le caissier encaisse : il ne configure rien et n'a pas les rapports.
+
+    Il LIT en revanche la grille de tranches : au guichet, un parent demande
+    « je dois combien et pour quand ? », et lui refuser cette lecture le
+    rendrait incapable de répondre.
+    """
     perms = set(ROLE_DEFINITIONS["cashier"]["permissions"])
     assert "payments:create" in perms
-    assert not {p for p in perms if p.startswith("admin:fee-")}
+    assert "admin:fee-installments:read" in perms
+
+    writes = {p for p in perms if p.startswith("admin:fee-") and not p.endswith(":read")}
+    assert not writes, f"Le caissier ne doit configurer aucun frais : {writes}"
+    assert "enrollments:schedule:write" not in perms, "négocier un échéancier est financier"
     assert "reports:read" not in perms
 
 
