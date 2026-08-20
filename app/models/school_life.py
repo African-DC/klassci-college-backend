@@ -83,7 +83,7 @@ class ParentSummons(Base, TimestampMixin):
     )
     # Référence du document scellé, pour rapprocher une convocation du papier
     # que la famille présente au portail.
-    reference: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     outcome: Mapped[str] = mapped_column(
         ValueEnum(SummonsOutcome, name="summons_outcome"),
@@ -137,7 +137,7 @@ class RetakeAuthorization(Base, TimestampMixin):
     issued_by_user_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    reference: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
 
     student: Mapped[Student] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()

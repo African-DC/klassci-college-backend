@@ -38,6 +38,9 @@ async def compose_request_data(
         context=context,
         issued_at=issued_at,
         source_data=source_data,
+        # La demande n'a pas de registre : une émission corrigée doit bien
+        # remplacer la précédente, l'ancien courrier n'ayant plus cours.
+        act_id=None,
     )
 
     await audit_log(
