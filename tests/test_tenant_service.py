@@ -255,13 +255,21 @@ def test_every_assignable_staff_role_is_defined() -> None:
         )
 
 
-def test_studies_director_has_no_financial_access() -> None:
-    """Separation des taches : le directeur des etudes ne touche pas a l'argent."""
+def test_studies_director_sees_payment_status_but_never_amounts() -> None:
+    """Separation des taches : il sait si un dossier est a jour, jamais combien.
+
+    Il preside les conseils de classe : savoir qu'une famille est en retard de
+    paiement pendant qu'on decide du passage d'un eleve pourrait peser sur la
+    decision. Il a donc l'etat, jamais la somme.
+    """
     perms = set(ROLE_DEFINITIONS["studies_director"]["permissions"])
-    forbidden = {p for p in perms if p.startswith(("payments:", "admin:fee-"))}
-    assert not forbidden, (
-        f"Le directeur des etudes ne doit avoir aucun droit financier : {forbidden}"
-    )
+    assert "payments:status:read" in perms
+    forbidden = {
+        p
+        for p in perms
+        if p.startswith(("payments:", "admin:fee-")) and p != "payments:status:read"
+    }
+    assert not forbidden, f"Le directeur des etudes ne lit aucun montant : {forbidden}"
 
 
 def test_cashier_cannot_configure_fees_nor_read_reports() -> None:
@@ -281,10 +289,16 @@ def test_cashier_cannot_configure_fees_nor_read_reports() -> None:
     assert "reports:read" not in perms
 
 
-def test_educator_reads_payments_but_never_creates_them() -> None:
-    """L'educateur valide au vu de l'encaissement, il ne tient pas la caisse."""
+def test_educator_validates_on_payment_status_without_seeing_amounts() -> None:
+    """L'educateur valide au vu de l'encaissement, sans lire les montants.
+
+    Un badge « a jour / en retard » et la date du dernier versement suffisent
+    a decider si un dossier peut etre valide. Combien la famille doit ne le
+    regarde pas : c'est la situation economique du foyer.
+    """
     perms = set(ROLE_DEFINITIONS["educator"]["permissions"])
-    assert "payments:read" in perms
+    assert "payments:status:read" in perms
+    assert "payments:read" not in perms
     assert "payments:create" not in perms
     assert "enrollments:create" in perms
     assert "enrollments:update" in perms
