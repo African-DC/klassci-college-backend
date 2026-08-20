@@ -110,6 +110,18 @@ class StaffProfile(Base, TimestampMixin, ArchivableMixin):
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
 
+class TeacherContract(str, enum.Enum):
+    """Type de contrat d'un enseignant, tel que la DRENA le distingue.
+
+    Le rapport de fin de trimestre en fait une synthese obligatoire : sans
+    cette information, deux de ses tableaux restent vierges.
+    """
+
+    PERMANENT = "permanent"
+    VACATAIRE = "vacataire"
+    FONCTIONNAIRE = "fonctionnaire"
+
+
 class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
     """Profil enseignant."""
 
@@ -126,6 +138,12 @@ class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     speciality: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Reclames par la synthese DRENA. `None` tant que l'ecole ne les a pas
+    # saisis : on ne devine ni le sexe ni le contrat de quelqu'un.
+    genre: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    contract_type: Mapped[str | None] = mapped_column(
+        ValueEnum(TeacherContract, name="teacher_contract"), nullable=True
+    )
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Réclamés nommément par le rapport de fin de trimestre de la DEEP :
