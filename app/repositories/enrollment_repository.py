@@ -78,6 +78,8 @@ async def create_enrollment(
     academic_year_id: int,
     created_by: int | None,
     notes: str | None,
+    assignment_status: str | None = None,
+    assignment_decision_number: str | None = None,
 ) -> Enrollment:
     """Crée une inscription et la flush pour obtenir l'ID."""
     enrollment = Enrollment(
@@ -86,6 +88,8 @@ async def create_enrollment(
         academic_year_id=academic_year_id,
         created_by=created_by,
         notes=notes,
+        assignment_status=assignment_status,
+        assignment_decision_number=assignment_decision_number,
     )
     db.add(enrollment)
     await db.flush()

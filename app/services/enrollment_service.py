@@ -99,6 +99,8 @@ async def create_enrollment(
             academic_year_id=data.academic_year_id,
             created_by=created_by,
             notes=data.notes,
+            assignment_status=data.assignment_status,
+            assignment_decision_number=data.assignment_decision_number,
         )
 
         # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat)
@@ -450,6 +452,8 @@ async def create_enrollment_with_student(
             academic_year_id=academic_year_id,
             created_by=created_by,
             notes=data.notes,
+            assignment_status=data.assignment_status,
+            assignment_decision_number=data.assignment_decision_number,
         )
 
         # 4. Create enrollment fee if variant provided (rétrocompat)

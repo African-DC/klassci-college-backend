@@ -140,6 +140,10 @@ class EnrollmentWithStudentCreate(BaseModel):
     # Enrollment info
     class_id: int
     academic_year_id: int | None = None  # if None, use current year
+    # Statut d'affectation : il decide du tarif applique, il doit donc
+    # etre saisi au moment ou l'inscription est creee.
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
     fee_variant_id: int | None = None
     notes: str | None = None
 
