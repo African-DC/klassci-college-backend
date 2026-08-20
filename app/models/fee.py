@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Computed,
     ForeignKey,
     Numeric,
     SmallInteger,
@@ -114,12 +115,27 @@ class FeeVariant(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint(
             "fee_category_id",
-            "level_id",
-            "series_id",
-            "assignment_scope",
             "academic_year_id",
-            name="uq_fee_variant_category_level_series_year",
+            "level_key",
+            "series_key",
+            "scope_key",
+            name="uq_fee_variant_dimensions",
         ),
+    )
+
+    # Colonnes generees par la base : `NULL` n'etant jamais egal a `NULL`,
+    # une contrainte posee directement sur `level_id` / `series_id` /
+    # `assignment_scope` ne se declenche jamais des que l'un d'eux est vide.
+    # C'est ce qui laissait creer des tarifs en double sur tous les niveaux de
+    # college, ou la serie est toujours vide.
+    level_key: Mapped[int] = mapped_column(
+        BigInteger, Computed("COALESCE(level_id, 0)", persisted=True), nullable=False
+    )
+    series_key: Mapped[int] = mapped_column(
+        BigInteger, Computed("COALESCE(series_id, 0)", persisted=True), nullable=False
+    )
+    scope_key: Mapped[str] = mapped_column(
+        String(20), Computed("COALESCE(assignment_scope, '')", persisted=True), nullable=False
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
