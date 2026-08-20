@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Type de contrat et sexe des enseignants sur leur fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin, directeur)*.
 - Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.
 - Les tableaux que la plateforme ne sait pas remplir sortent vierges avec la mention « à compléter manuellement », jamais garnis de zéros : à la DRENA, un zéro se lit comme un constat *(admin, directeur)*.
 - Visites de classe, formations d'enseignants, transferts et réintégrations, bourses et demi-bourses s'enregistrent désormais, et alimentent directement le rapport *(admin, directeur des études, secrétariat)*.

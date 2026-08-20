@@ -10,6 +10,7 @@ et 21, qui reposent entièrement sur ces informations, sont livrés à remplir
 
 from __future__ import annotations
 
+from app.models.user import TeacherContract
 from app.services.deep_report import _format as fmt
 from app.services.deep_report._context import ReportContext
 from app.services.deep_report._metrics import Cycle
@@ -80,7 +81,7 @@ def build_tables(context: ReportContext) -> tuple[ReportTable, ...]:
         _teachers_table(context),
         _contract_table(),
         _discipline_table(context),
-        _discipline_by_gender_table(),
+        _discipline_by_gender_table(context),
     )
 
 
@@ -132,8 +133,76 @@ def _teachers_table(context: ReportContext) -> ReportTable:
     )
 
 
-def _contract_table() -> ReportTable:
-    """Tableau 19 — synthèse par type de contrat, hors de portée de KLASSCI."""
+def _contract_table(context: ReportContext) -> ReportTable:
+    """Tableau 19 — synthèse par type de contrat, ventilée par cycle et par sexe.
+
+    Un enseignant dont le contrat ou le sexe n'est pas renseigné est compté
+    dans le total mais dans aucune colonne ventilée, et la note le dit. Le
+    ranger arbitrairement dans « vacataire » ou dans « G » ferait dire au
+    rapport une chose que personne n'a constatée.
+    """
+    labels = {
+        TeacherContract.PERMANENT: "Permanents",
+        TeacherContract.VACATAIRE: "Vacataires",
+        TeacherContract.FONCTIONNAIRE: "Fonctionnaires",
+    }
+
+    def cycles_of(teacher_id: int) -> set[Cycle]:
+        return {
+            cycle
+            for (_name, cycle), ids in context.staffing.by_subject_cycle.items()
+            if teacher_id in ids
+        }
+
+    rows: list[ReportRow] = []
+    unknown_contract = 0
+    unknown_gender = 0
+    totals = {"1F": 0, "1G": 0, "1T": 0, "2F": 0, "2G": 0, "2T": 0, "F": 0, "G": 0, "T": 0}
+
+    for contract, label in labels.items():
+        counts = dict.fromkeys(totals, 0)
+        for teacher in context.teachers:
+            if str(getattr(teacher, "contract_type", "") or "") != contract.value:
+                continue
+            genre = (getattr(teacher, "genre", "") or "").upper()
+            cycles = cycles_of(teacher.id)
+            counts["T"] += 1
+            if genre in ("F", "G"):
+                counts[genre] += 1
+            for cycle, prefix in ((Cycle.FIRST, "1"), (Cycle.SECOND, "2")):
+                if cycle in cycles:
+                    counts[f"{prefix}T"] += 1
+                    if genre in ("F", "G"):
+                        counts[f"{prefix}{genre}"] += 1
+        for key in totals:
+            totals[key] += counts[key]
+        rows.append(
+            ReportRow(
+                cells=(
+                    label,
+                    *(str(counts[k]) for k in ("1F", "1G", "1T", "2F", "2G", "2T", "F", "G", "T")),
+                )
+            )
+        )
+
+    for teacher in context.teachers:
+        if not getattr(teacher, "contract_type", None):
+            unknown_contract += 1
+        if (getattr(teacher, "genre", "") or "").upper() not in ("F", "G"):
+            unknown_gender += 1
+
+    notes: list[str] = []
+    if unknown_contract:
+        notes.append(
+            f"{unknown_contract} enseignant(s) sans type de contrat renseigné : "
+            "absents de ce tableau."
+        )
+    if unknown_gender:
+        notes.append(
+            f"{unknown_gender} enseignant(s) sans sexe renseigné : comptés dans les totaux, "
+            "dans aucune colonne F ou G."
+        )
+
     return ReportTable(
         number=19,
         title="Synthèse des enseignants par type de contrat",
@@ -143,13 +212,15 @@ def _contract_table() -> ReportTable:
             HeaderGroup("2nd cycle", subs=("F", "G", "T"), align="center"),
             HeaderGroup("Total", subs=("F", "G", "T"), align="center"),
         ),
-        pending=True,
-        note=(
-            "Le type de contrat et le sexe des enseignants ne sont pas enregistrés dans "
-            f"KLASSCI : ce tableau est laissé vide, {PENDING_NOTE.lower()}. Aucun zéro "
-            "n'est porté, un effectif nul se lirait comme un constat."
+        rows=tuple(rows),
+        total_row=ReportRow(
+            cells=(
+                "TOTAL",
+                *(str(totals[k]) for k in ("1F", "1G", "1T", "2F", "2G", "2T", "F", "G", "T")),
+            )
         ),
-        empty_message=f"{PENDING_NOTE} — données non collectées.",
+        note=" ".join(notes) if notes else None,
+        empty_message="Aucun enseignant enregistré.",
     )
 
 
@@ -208,8 +279,8 @@ def _discipline_table(context: ReportContext) -> ReportTable:
     )
 
 
-def _discipline_by_gender_table() -> ReportTable:
-    """Tableau 21 — même grille par sexe, impossible faute de donnée."""
+def _discipline_by_gender_table(context: ReportContext) -> ReportTable:
+    """Tableau 21 — même grille que le 20, ventilée par sexe."""
     groups = (
         HeaderGroup("Établissement"),
         *(
@@ -218,14 +289,45 @@ def _discipline_by_gender_table() -> ReportTable:
         ),
         HeaderGroup("TOTAL", subs=("F", "G"), align="center"),
     )
+
+    gender_of = {t.id: (getattr(t, "genre", "") or "").upper() for t in context.teachers}
+
+    subjects_by_code: dict[str, list[str]] = {code: [] for code, _kw in _DISCIPLINE_CODES}
+    for subject_name in context.staffing.subject_names:
+        code = _code_of_subject(subject_name)
+        if code is not None:
+            subjects_by_code[code].append(subject_name)
+
+    def ids_for(names: tuple[str, ...]) -> set[int]:
+        found: set[int] = set()
+        for name in names:
+            for cycle in (Cycle.FIRST, Cycle.SECOND):
+                found |= context.staffing.by_subject_cycle.get((name, cycle), set())
+        return found
+
+    cells: list[str] = ["Effectif enseignant"]
+    totals: dict[str, set[int]] = {"F": set(), "G": set()}
+    for code, _keywords in _DISCIPLINE_CODES:
+        ids = ids_for(tuple(subjects_by_code[code]))
+        for genre in ("F", "G"):
+            matching = {i for i in ids if gender_of.get(i) == genre}
+            cells.append(str(len(matching)))
+            totals[genre] |= matching
+    cells.extend([str(len(totals["F"])), str(len(totals["G"]))])
+
+    unknown = sum(1 for g in gender_of.values() if g not in ("F", "G"))
+    note = "Un enseignant intervenant sur plusieurs disciplines est compté dans chacune."
+    if unknown:
+        note += f" {unknown} enseignant(s) sans sexe renseigné ne figurent dans aucune colonne."
+
     return ReportTable(
         number=21,
         title="Enseignants par discipline et par sexe",
         groups=groups,
-        pending=True,
-        note=(
-            "Le sexe des enseignants n'est pas enregistré dans KLASSCI : ce tableau est "
-            f"laissé vide, {PENDING_NOTE.lower()}."
+        rows=(ReportRow(cells=tuple(cells)),) if context.staffing.subject_names else (),
+        note=note,
+        empty_message=(
+            "Aucun emploi du temps saisi pour cette année : la répartition par discipline "
+            f"ne peut pas être établie — {PENDING_NOTE.lower()}."
         ),
-        empty_message=f"{PENDING_NOTE} — sexe des enseignants non collecté.",
     )
