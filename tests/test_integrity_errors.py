@@ -5,7 +5,7 @@ Internal Server Error` en texte brut. Le front n'a plus qu'un « Erreur
 serveur » générique, alors que la cause est parfaitement explicable.
 """
 
-from app.core.exceptions import integrity_error_message
+from app.core.db_errors import integrity_error_message
 
 
 class _FakeOrig(Exception):
@@ -85,3 +85,36 @@ def test_le_message_de_suppression_dit_combien_et_quoi_faire() -> None:
 
     plural = _blocked_by_variants_message("Scolarité", 3)
     assert "3 montants configurés" in plural
+
+
+def test_cle_composee_ne_demande_pas_de_changer_un_nom() -> None:
+    """« 1-2-3-4 existe déjà, choisissez un autre nom » : il n'y a aucun nom
+    à changer, et l'utilisateur reste bloqué devant son formulaire."""
+    exc = _FakeIntegrityError(
+        1062,
+        "(1062, \"Duplicate entry '1-2-3-4' for key "
+        "'fee_variants.uq_fee_variant_category_level_series_year'\")",
+    )
+    _, detail, code = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert code == "DUPLICATE"
+    assert "autre nom" not in detail
+    assert "catégorie" in detail and "niveau" in detail
+
+
+def test_creer_avec_un_parent_absent_ne_parle_pas_de_suppression() -> None:
+    """Annoncer « impossible de supprimer » a quelqu'un qui vient de cliquer
+    sur Enregistrer le laisse perplexe."""
+    exc = _FakeIntegrityError(1452, "Cannot add or update a child row")
+    _, detail, code = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert code == "MISSING_PARENT"
+    assert "supprimer" not in detail
+    assert "Rechargez la page" in detail
+
+
+def test_colonne_non_nulle_est_traitee_comme_un_element_encore_utilise() -> None:
+    """SQLAlchemy detache les enfants avant un DELETE : le symptome est
+    « column cannot be null », la cause est bien une dependance."""
+    exc = _FakeIntegrityError(1048, "Column 'fee_category_id' cannot be null")
+    _, detail, code = integrity_error_message(exc)  # type: ignore[arg-type]
+    assert code == "IN_USE"
+    assert "utilisé ailleurs" in detail

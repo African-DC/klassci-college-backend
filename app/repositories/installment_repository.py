@@ -83,10 +83,16 @@ async def replace_enrollment_plan(
     return created
 
 
-async def clear_enrollment_plan(db: AsyncSession, enrollment_id: int) -> None:
-    await db.execute(
+async def clear_enrollment_plan(db: AsyncSession, enrollment_id: int) -> int:
+    """Retire l'accord negocie et renvoie le nombre d'echeances supprimees.
+
+    Le compte permet a l'appelant de ne journaliser que ce qui s'est
+    reellement produit.
+    """
+    result = await db.execute(
         delete(EnrollmentInstallment).where(EnrollmentInstallment.enrollment_id == enrollment_id)
     )
+    return int(result.rowcount or 0)
 
 
 async def mandatory_total(db: AsyncSession, enrollment_id: int) -> Decimal:

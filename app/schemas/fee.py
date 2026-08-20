@@ -3,7 +3,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # FeeCategory
@@ -14,12 +14,17 @@ class FeeCategoryCreate(BaseModel):
     name: str
     description: str | None = None
     is_mandatory: bool = True
+    # Ordre d'imputation des versements : plus petit = servi en premier.
+    # Sans ce champ, toute categorie creee tombait a 100, donc derniere, et
+    # rien ne permettait de la remonter depuis l'interface.
+    priority: int = Field(default=100, ge=0, le=999)
 
 
 class FeeCategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     is_mandatory: bool | None = None
+    priority: int | None = Field(default=None, ge=0, le=999)
 
 
 class FeeCategoryResponse(BaseModel):
@@ -29,6 +34,7 @@ class FeeCategoryResponse(BaseModel):
     name: str
     description: str | None
     is_mandatory: bool
+    priority: int
     created_at: datetime
     updated_at: datetime
 

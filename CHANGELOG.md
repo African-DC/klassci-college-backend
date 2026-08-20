@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- L'ordre d'imputation d'une catégorie de frais se règle à la création : jusqu'ici toute nouvelle catégorie était servie en dernier, sans moyen de la remonter *(comptable)*.
 - Le comptable configure aussi les niveaux et les séries : la grille tarifaire s'y décline, et il restait bloqué au milieu de sa configuration dès qu'un niveau manquait *(comptable)*.
 
 - Tranches de paiement : l'établissement découpe le total des frais obligatoires en tranches exprimées en pourcentage, avec une date limite chacune, une grille par année scolaire dont la somme doit faire 100 %. Le montant attendu suit automatiquement le total de chaque élève, sans ressaisie par niveau *(comptable)*.
@@ -28,6 +29,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Trois nouveaux rôles pour coller à l'organisation réelle d'un collège : **caissier** (encaisse au guichet, sans accès à la trésorerie globale), **éducateur** (monte les inscriptions et réinscriptions, consulte les versements pour valider) et **directeur des études** (tout le pédagogique, aucun accès aux finances). Ils s'attribuent depuis la fiche d'un membre du personnel, chaque rôle indiquant en clair ce qu'il permet de faire *(admin, directeur)*.
 
 ### Fixed
+- Plus aucun « Erreur serveur » muet : quand quelque chose d'imprévu se produit, l'écran affiche un message avec un code de référence à communiquer, et ce même code figure dans le journal du serveur. Les téléchargements Excel, qui échouaient jusque-là en silence, sont couverts aussi *(tous)*.
+- Les messages de conflit disent enfin la bonne chose : créer un montant en double annonce la combinaison en cause au lieu d'un « 1-2-3-4 existe déjà », et enregistrer sur un élément supprimé entre-temps ne parle plus de suppression *(comptable)*.
+- Retirer un échéancier négocié qui n'existait pas ne répond plus « supprimé » et n'écrit plus de trace pour une action qui n'a pas eu lieu ; définir un échéancier sur une inscription inconnue le dit, au lieu d'annoncer des frais à 0 FCFA *(comptable)*.
 - Les « Erreur serveur » sur la configuration des frais sont remplacées par un message qui dit quoi faire : créer une catégorie dont le nom existe déjà annonce désormais le nom en cause, et supprimer un élément encore utilisé explique qu'il faut d'abord retirer ce qui en dépend. La règle vaut pour tout l'écran, pas seulement les frais *(tous)*.
 - Le « reste à payer » d'un élève était surévalué : les versements enregistrés depuis la refonte des paiements n'étaient pas comptés dans le total de la fiche. Une famille ayant versé 155 000 FCFA en apparaissait à 105 000 *(admin, comptable)*.
 

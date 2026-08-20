@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_tenant_db, require_permission
-from app.routers._pdf_helpers import pdf_response
+from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.dren_stats import DrenStatsResponse
 from app.services import dren_stats_service as service
 
@@ -37,15 +37,14 @@ async def export_dren_stats(
 ) -> Response:
     """Exporte les statistiques DREN au format PDF (défaut) ou Excel (`?format=xlsx`)."""
     if export_format == "xlsx":
-        content = await service.export_dren_stats_xlsx(db, academic_year_id)
-        return Response(
-            content=content,
+        # Meme filet que le PDF : sans lui, une erreur d'openpyxl remonte en
+        # texte brut et le telechargement echoue en silence.
+        return await binary_response(
+            lambda: service.export_dren_stats_xlsx(db, academic_year_id),
+            filename=f"statistiques-dren-{academic_year_id}.xlsx",
             media_type=_XLSX_MEDIA_TYPE,
-            headers={
-                "Content-Disposition": (
-                    f'attachment; filename="statistiques-dren-{academic_year_id}.xlsx"'
-                )
-            },
+            error_context=f"statistiques DREN {academic_year_id}",
+            disposition="attachment",
         )
     return await pdf_response(
         lambda: service.export_dren_stats_pdf(db, academic_year_id),
