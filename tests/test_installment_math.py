@@ -139,3 +139,29 @@ def test_studies_director_stays_out_of_the_instalment_grid() -> None:
     perms = set(ROLE_DEFINITIONS["studies_director"]["permissions"])
     financial = {p for p in perms if "installment" in p or "schedule" in p}
     assert not financial, f"Le directeur des études ne touche pas aux échéances : {financial}"
+
+
+# ---------------------------------------------------------------------------
+# Promotion — exclusion des redoublants
+# ---------------------------------------------------------------------------
+
+
+def test_promotion_request_accepts_an_exclusion_list() -> None:
+    """Sans exclusion, une promotion emmène tout le monde, redoublants compris."""
+    from app.schemas.admin import PromotionExecuteRequest
+
+    request = PromotionExecuteRequest(
+        source_ay_id=1,
+        target_ay_id=2,
+        class_mapping={1: 2},
+        excluded_enrollment_ids=[7, 9],
+    )
+    assert request.excluded_enrollment_ids == [7, 9]
+
+
+def test_promotion_exclusion_defaults_to_empty() -> None:
+    """Rétrocompatible : un appel sans la liste promeut comme avant."""
+    from app.schemas.admin import PromotionExecuteRequest
+
+    request = PromotionExecuteRequest(source_ay_id=1, target_ay_id=2, class_mapping={1: 2})
+    assert request.excluded_enrollment_ids == []

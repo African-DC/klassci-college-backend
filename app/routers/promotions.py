@@ -50,6 +50,7 @@ async def preview_promotion(
         source_ay_id=data.source_ay_id,
         target_ay_id=data.target_ay_id,
         class_mapping=data.class_mapping,
+        excluded_enrollment_ids=data.excluded_enrollment_ids,
     )
 
 
@@ -74,4 +75,5 @@ async def execute_promotion(
         target_ay_id=data.target_ay_id,
         class_mapping=data.class_mapping,
         executed_by=current_user.user_id,
+        excluded_enrollment_ids=data.excluded_enrollment_ids,
     )
