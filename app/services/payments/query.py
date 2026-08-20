@@ -1,11 +1,12 @@
 """Read-only queries paiements : list, get, get_by_enrollment, summary."""
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.models.academic import AcademicYear
 from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 from app.repositories import payment_repository as repo
@@ -69,6 +70,42 @@ async def get_student_payments(db: AsyncSession, enrollment_id: int) -> list[Pay
     return [payment_to_response(p) for p in payments]
 
 
+async def _belongs_to_year(db: AsyncSession, academic_year_id: int):
+    """Condition « ce versement relève de cette année scolaire ».
+
+    Une jointure interne sur l'inscription ferait disparaître des totaux tout
+    versement dont l'élève a été supprimé : le tableau de bord annoncerait
+    moins d'argent encaissé que le bordereau de caisse du même jour, et
+    personne ne saurait lequel croire.
+
+    On rattache donc le versement orphelin par sa date. C'est exact : une
+    somme encaissée le 12 novembre relève de l'année scolaire qui couvre le
+    12 novembre, que la fiche élève existe encore ou non.
+    """
+    dates = (
+        await db.execute(
+            select(AcademicYear.start_date, AcademicYear.end_date).where(
+                AcademicYear.id == academic_year_id
+            )
+        )
+    ).one_or_none()
+
+    par_inscription = Enrollment.academic_year_id == academic_year_id
+    if dates is None:
+        return par_inscription
+
+    start = datetime.combine(dates.start_date, time.min)
+    # Borne haute exclusive au lendemain de la fin : un versement encaissé à
+    # 16 h le dernier jour ne doit pas tomber hors de l'année.
+    end = datetime.combine(dates.end_date, time.min) + timedelta(days=1)
+    return or_(
+        par_inscription,
+        and_(
+            Payment.enrollment_id.is_(None), Payment.created_at >= start, Payment.created_at < end
+        ),
+    )
+
+
 async def get_payments_summary(
     db: AsyncSession,
     *,
@@ -117,9 +154,10 @@ async def get_payments_summary(
         ).label("total_cancelled"),
     )
     if academic_year_id is not None:
-        pay_stmt = pay_stmt.join(Enrollment, Payment.enrollment_id == Enrollment.id).where(
-            Enrollment.academic_year_id == academic_year_id
+        pay_stmt = pay_stmt.select_from(Payment).outerjoin(
+            Enrollment, Payment.enrollment_id == Enrollment.id
         )
+        pay_stmt = pay_stmt.where(await _belongs_to_year(db, academic_year_id))
 
     pay_row = (await db.execute(pay_stmt)).one()
 

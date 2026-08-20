@@ -17,6 +17,7 @@ from app.repositories import payment_repository as repo
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.payments._response import student_identity
 from app.services.pdf_service import generate_receipt_pdf
 
 
@@ -28,6 +29,11 @@ def _fee_description(payment: Payment) -> str:
             return cat.name
     allocations = payment.allocations or []
     if not allocations:
+        if payment.enrollment_id is None:
+            # La répartition par frais est partie avec l'inscription. Le
+            # montant, lui, a bien été encaissé : le reçu doit le dire au
+            # lieu de laisser la ligne « Nature » vide.
+            return "Versement encaissé — dossier élève supprimé"
         return ""
     if len(allocations) == 1:
         ef = allocations[0].enrollment_fee
@@ -96,11 +102,12 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
     if payment is None:
         raise NotFoundError("Payment", payment_id)
 
-    student_name = ""
-    enrollment = payment.enrollment
-    if enrollment and enrollment.student:
-        s = enrollment.student
-        student_name = f"{s.first_name} {s.last_name}"
+    # Même résolution que la liste des versements : l'élève vivant d'abord,
+    # l'identité figée ensuite. Un reçu réimprimé après la suppression d'une
+    # fiche doit rester opposable, donc porter un nom.
+    student_name, student_matricule, _photo, _supprime = student_identity(payment)
+    if student_matricule:
+        student_name = f"{student_name} ({student_matricule})"
 
     school = await _get_school_settings(db)
     received_by_name = await _resolve_received_by_name(db, payment.received_by)
@@ -117,7 +124,7 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
         "reference": payment.reference,
         "status": enum_value(payment.status),
         "notes": payment.notes,
-        "student_name": student_name,
+        "student_name": student_name or "",
         "fee_description": _fee_description(payment),
         "created_at": payment.created_at,
         "received_by_name": received_by_name,

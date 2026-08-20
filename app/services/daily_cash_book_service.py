@@ -61,14 +61,20 @@ async def _resolve_cashier_name(db: AsyncSession, user_id: int | None) -> str:
 
 
 def _student_full_name(payment: Payment) -> str:
-    enrollment = payment.enrollment
-    if enrollment is None:
-        return "—"
-    student = enrollment.student
-    if student is None:
-        return "—"
-    parts = [student.first_name or "", student.last_name or ""]
-    return " ".join(p for p in parts if p).strip() or "—"
+    """Nom porté par la ligne du bordereau.
+
+    Une colonne « Élève » remplie de tirets rendrait le document inutilisable
+    au moment même où il sert le plus : quand on cherche à qui correspondait
+    une somme encaissée il y a trois mois. D'où le repli sur le nom figé,
+    recopié sur le versement avant que la fiche ne parte.
+    """
+    student = payment.enrollment.student if payment.enrollment is not None else None
+    if student is not None:
+        parts = [student.first_name or "", student.last_name or ""]
+        nom = " ".join(p for p in parts if p).strip()
+        if nom:
+            return nom
+    return payment.student_name_snapshot or "—"
 
 
 async def get_daily_cash_book_pdf(

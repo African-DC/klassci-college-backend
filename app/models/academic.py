@@ -331,3 +331,7 @@ class SchoolSettings(Base, TimestampMixin):
     mailpulse_test_phone_recipients: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Secret de signature du webhook entrant (feature INFO) — jamais renvoyé.
     mailpulse_inbound_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Destinataires du courriel de suppression, séparés par des virgules.
+    # Un courriel sort du logiciel : si quelqu'un efface une trace, il n'efface
+    # pas une boîte de réception. Vide, on retombe sur l'adresse de l'école.
+    deletion_notice_emails: Mapped[str | None] = mapped_column(String(500), nullable=True)

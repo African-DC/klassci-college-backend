@@ -380,10 +380,38 @@ async def delete_enrollment(
     deleted_by: int,
     reason: str | None = None,
 ) -> None:
-    """Supprime définitivement une inscription déjà placée dans la corbeille."""
-    await archive_service.purge_record(
-        db, ENROLLMENT_KIND, enrollment_id, reason=reason, actor_id=deleted_by
-    )
+    """Supprime une inscription ou lève 404. Bloque si statut valide avec paiements."""
+    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
+    if enrollment is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+
+    # Le garde lisait `EnrollmentFee.payments`, c'est-à-dire l'ancienne
+    # colonne `payments.enrollment_fee_id`, plus jamais renseignée depuis que
+    # le versement se fait sur l'inscription. Il laissait donc passer toutes
+    # les inscriptions payées depuis ce changement. On compte désormais les
+    # versements là où ils sont réellement rattachés.
+    versements = (
+        await db.execute(
+            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
+        )
+    ).scalar() or 0
+    if versements:
+        raise BusinessValidationError(
+            "Impossible de supprimer une inscription qui porte des versements encaissés. "
+            "Passez par la fiche de l'élève : la corbeille conserve les versements."
+        )
+
+    async with db.begin_nested():
+        await repo.delete_enrollment(db, enrollment)
+        await audit_log(
+            db,
+            entity_type="enrollment",
+            action=AuditAction.DELETE,
+            user_id=deleted_by,
+            entity_id=enrollment_id,
+        )
+
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
