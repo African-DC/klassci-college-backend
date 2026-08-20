@@ -25,6 +25,59 @@ from app.core.exceptions import AppException
 logger = logging.getLogger(__name__)
 
 
+async def binary_response(
+    factory: Callable[[], Awaitable[bytes]],
+    *,
+    filename: str,
+    media_type: str,
+    error_context: str,
+    disposition: str = "inline",
+) -> Response:
+    """Genere un fichier binaire et l'expose sans jamais laisser fuir un 500 brut.
+
+    Une exception non traitee dans une fabrique de document remonte en texte
+    brut, contourne le pipeline d'erreurs, et le telechargement echoue en
+    silence cote navigateur : l'utilisateur clique, rien ne se passe, et
+    aucune trace exploitable n'arrive a l'ecran.
+
+    `error_context` est repris dans le message d'erreur pour situer le
+    document sans exposer la trace technique (ex. « bulletin 42 »).
+    `disposition` : `inline` pour un apercu navigateur, `attachment` pour
+    forcer le telechargement.
+    """
+    try:
+        content = await factory()
+    except AppException:
+        raise
+    except HTTPException:
+        # Une regle metier levee dans la fabrique — la porte de paiement, par
+        # exemple — doit remonter telle quelle. La transformer en 500
+        # « generation impossible » masquerait la vraie raison du refus.
+        raise
+    except OSError as exc:
+        logger.exception("Generation echouee (%s) : chargement de bibliotheque", error_context)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                f"Generation impossible pour {error_context}. "
+                "Le serveur n'a pas pu charger une bibliotheque necessaire (GTK/Cairo). "
+                "Contactez l'administrateur systeme."
+            ),
+        ) from exc
+    except Exception as exc:
+        logger.exception("Generation echouee (%s)", error_context)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Generation impossible pour {error_context}.",
+        ) from exc
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+    )
+
+
 async def pdf_response(
     factory: Callable[[], Awaitable[bytes]],
     *,
@@ -32,37 +85,15 @@ async def pdf_response(
     error_context: str,
     disposition: str = "inline",
 ) -> Response:
-    """Génère un PDF et le retourne comme `application/pdf`.
+    """Genere un PDF et le retourne comme `application/pdf`.
 
-    `factory` est une coroutine sans args qui produit les bytes PDF.
-    `error_context` est inclus dans le `detail` 500 pour faciliter le debug
-    sans exposer la stack trace au client (ex: "bulletin 42").
-    `disposition` : `inline` pour preview navigateur (défaut), `attachment`
-    pour forcer le téléchargement direct (ex: export EDT, bordereau).
+    Cas particulier de `binary_response` : tout endpoint PDF passe par ici
+    (rule `pdf-response-wrap.md`).
     """
-    try:
-        pdf_bytes = await factory()
-    except AppException:
-        raise
-    except OSError as exc:
-        logger.exception("PDF generation failed (%s): library load error", error_context)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                f"Génération PDF impossible pour {error_context}. "
-                "Le serveur n'a pas pu charger la bibliothèque PDF (GTK/Cairo). "
-                "Contactez l'administrateur système."
-            ),
-        ) from exc
-    except Exception as exc:
-        logger.exception("PDF generation failed (%s)", error_context)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Génération PDF impossible pour {error_context}.",
-        ) from exc
-
-    return Response(
-        content=pdf_bytes,
+    return await binary_response(
+        factory,
+        filename=filename,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        error_context=error_context,
+        disposition=disposition,
     )

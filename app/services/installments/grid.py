@@ -3,9 +3,11 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.exceptions import NotFoundError
 from app.repositories import installment_repository as repo
 from app.schemas.installment import (
     EnrollmentPlanUpdate,
@@ -88,6 +90,23 @@ async def replace_grid(
     return await list_grid(db, academic_year_id)
 
 
+async def _assert_enrollment_exists(db: AsyncSession, enrollment_id: int) -> None:
+    """Refuse tot sur une inscription inconnue.
+
+    Sans ce controle, `mandatory_total` renvoie 0 pour un identifiant qui
+    n'existe pas, et l'utilisateur recoit « l'echeancier totalise 150 000 FCFA
+    alors que les frais s'elevent a 0 FCFA » : il cherche une erreur de
+    montants alors que l'inscription n'existe simplement plus.
+    """
+    from app.models.enrollment import Enrollment
+
+    exists = (
+        await db.execute(select(Enrollment.id).where(Enrollment.id == enrollment_id))
+    ).scalar_one_or_none()
+    if exists is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+
+
 async def set_enrollment_plan(
     db: AsyncSession, enrollment_id: int, data: EnrollmentPlanUpdate, *, updated_by: int
 ) -> None:
@@ -98,6 +117,7 @@ async def set_enrollment_plan(
     reste redevable, et un accord qui couvre plus lui réclamerait de l'argent
     qu'elle ne doit pas.
     """
+    await _assert_enrollment_exists(db, enrollment_id)
     total_mandatory = await repo.mandatory_total(db, enrollment_id)
     planned = sum((Decimal(str(i.amount)) for i in data.installments), Decimal("0"))
     if planned != total_mandatory:
@@ -136,14 +156,23 @@ async def set_enrollment_plan(
 
 
 async def clear_enrollment_plan(db: AsyncSession, enrollment_id: int, *, updated_by: int) -> None:
-    """Supprime l'accord : la famille repasse sur la grille de l'établissement."""
+    """Supprime l'accord : la famille repasse sur la grille de l'établissement.
+
+    Ne journalise que si un accord existait vraiment. Ecrire « accord
+    supprime » quand il n'y avait rien a supprimer remplit le journal de
+    faits qui ne se sont pas produits, et c'est precisement ce qu'un journal
+    d'audit ne doit jamais faire.
+    """
+    await _assert_enrollment_exists(db, enrollment_id)
+
     async with db.begin_nested():
-        await repo.clear_enrollment_plan(db, enrollment_id)
-        await audit_log(
-            db,
-            entity_type="enrollment_installment_plan",
-            action=AuditAction.DELETE,
-            user_id=updated_by,
-            entity_id=enrollment_id,
-        )
+        removed = await repo.clear_enrollment_plan(db, enrollment_id)
+        if removed:
+            await audit_log(
+                db,
+                entity_type="enrollment_installment_plan",
+                action=AuditAction.DELETE,
+                user_id=updated_by,
+                entity_id=enrollment_id,
+            )
     await db.commit()
