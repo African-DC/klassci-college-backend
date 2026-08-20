@@ -784,6 +784,7 @@ class SchoolSettingsResponse(BaseModel):
     accent_color: str | None = None
     website: str | None = None
     motto: str | None = None
+    deletion_notice_emails: str | None = None
     trimesters: list[TrimesterDTO] = []
     holidays: list[SchoolHolidayDTO] = []
     notify_by_email: bool = False
@@ -862,6 +863,10 @@ class SchoolInfoUpdate(BaseModel):
     accent_color: str | None = None
     website: str | None = None
     motto: str | None = None
+    #: Destinataires du courriel envoyé à chaque archivage et à chaque
+    #: suppression définitive, séparés par des virgules. Laisser vide fait
+    #: retomber sur l'adresse de l'établissement.
+    deletion_notice_emails: str | None = None
 
     @field_validator("primary_color", "accent_color")
     @classmethod
