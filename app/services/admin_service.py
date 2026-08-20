@@ -255,7 +255,14 @@ PARENT_KIND = archive_service.ArchivableKind(
     "parent", "Le parent", Parent, lambda db, r: repo.delete_parent(db, r)
 )
 STUDENT_KIND = archive_service.ArchivableKind(
-    "student", "L'eleve", Student, lambda db, r: repo.delete_student(db, r)
+    "student",
+    "L'eleve",
+    Student,
+    # Surtout pas `repo.delete_student`, qui est un `db.delete` nu : il ferait
+    # sauter le RESTRICT sur `payments.enrollment_id`. L'argent encaissé
+    # survit à la fiche de l'élève, sous identité figée.
+    purge_repo.purge_student_keeping_payments,
+    load=repo.get_archived_student_by_id,
 )
 
 
@@ -296,35 +303,9 @@ async def delete_student(
     le temps de se raviser. Le court-circuiter transformerait un clic
     malheureux en perte definitive.
     """
-    student = await repo.get_archived_student_by_id(db, student_id)
-    if student is None:
-        raise NotFoundError("Student", student_id)
-
-    label = STUDENT_KIND.label(student)
-    archive_service.ensure_archived_first(student, label=label)
-    # Le motif est validé avant la première suppression, pas après.
-    reason = archive_service.ensure_reason(reason)
-
-    async with db.begin_nested():
-        # L'inventaire se constitue pendant la destruction : c'est le seul
-        # moment où l'on sait encore combien de notes, de frais et de
-        # versements portait cette fiche.
-        carried_away = await purge_repo.purge_student_keeping_payments(db, student)
-        outcome = await archive_service.record_permanent_deletion(
-            db,
-            entity_type="student",
-            entity_id=student_id,
-            label=label,
-            reason=reason,
-            actor_id=deleted_by,
-            carried_away=carried_away,
-        )
-    await db.commit()
-
-    # Le courriel part une fois la destruction validée, jamais avant : annoncer
-    # par écrit une suppression qui échouerait ensuite laisserait au chef
-    # d'établissement la trace d'un acte qui n'a pas eu lieu.
-    await archive_service.notify(db, outcome)
+    await archive_service.purge_record(
+        db, STUDENT_KIND, student_id, reason=reason, actor_id=deleted_by
+    )
 
 
 async def get_student_full(
