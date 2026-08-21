@@ -62,8 +62,12 @@ class BulletinResponse(BaseModel):
 
 
 class BulletinListResponse(BaseModel):
+    """Enveloppe paginée. `total` porte le compte de l'école, pas de la page."""
+
     items: list[BulletinResponse]
     total: int
+    page: int
+    size: int
 
 
 class BulletinGenerateResponse(BaseModel):
