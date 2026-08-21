@@ -135,7 +135,7 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
             )
             for p, montant in payments_by_fee.get(ef.id, [])
         ]
-        fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
+        fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
         total_paid += fee_paid
 
         category_name = (
@@ -317,7 +317,7 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
         fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
         paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
         for fee in fees:
-            paid = Decimal(str(paid_by_fee.get(fee.id, 0.0)))
+            paid = paid_by_fee.get(fee.id, Decimal("0"))
             balance = fee.amount - paid
             if balance > 0:
                 fees_remaining += balance

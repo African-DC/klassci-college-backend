@@ -23,7 +23,6 @@ from app.models.fee import (
     FeeVariant,
     Payment,
     PaymentAllocation,
-    PaymentStatus,
 )
 
 # ---------------------------------------------------------------------------
@@ -211,26 +210,14 @@ async def get_enrollment_fees_ordered_by_priority(
 
 
 # ---------------------------------------------------------------------------
-# Totals calculation — source of truth = payment_allocations
+# Combien a été versé sur un frais : voir `app.services.fees_paid`.
+#
+# La formule vivait ici une seconde fois, frais par frais. Quatre boucles
+# l'appelaient, dont celle de la caisse : encaisser sur une inscription à six
+# frais coûtait six requêtes séquentielles là où `fees_paid.paid_by_enrollment`
+# en fait une seule, groupée. Deux copies d'un même calcul finissent par
+# diverger, et c'est de l'argent qu'elles comptent.
 # ---------------------------------------------------------------------------
-
-
-async def get_total_paid_for_enrollment_fee(db: AsyncSession, enrollment_fee_id: int) -> Decimal:
-    """Total alloué à un fee depuis les paiements COMPLETED.
-
-    Source de vérité = `payment_allocations`. Exclut les payments
-    cancelled/failed/refunded.
-    """
-    stmt = (
-        select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
-        .join(Payment, PaymentAllocation.payment_id == Payment.id)
-        .where(
-            PaymentAllocation.enrollment_fee_id == enrollment_fee_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-    )
-    result = await db.execute(stmt)
-    return Decimal(str(result.scalar()))
 
 
 # ---------------------------------------------------------------------------

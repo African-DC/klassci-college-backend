@@ -20,7 +20,19 @@ if TYPE_CHECKING:
     from app.models.fee import Payment
 
 
-async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, float]:
+def _par_frais(rows: object) -> dict[int, Decimal]:
+    """Indexe une somme groupée par frais, en `Decimal`.
+
+    En `Decimal` et pas en `float` : ce sont des francs CFA, et le reste du
+    calcul — `EnrollmentFee.amount`, `PaymentAllocation.amount` — est en
+    `Decimal`. Rendre des flottants obligeait chaque appelant à recharger le
+    montant par `Decimal(str(...))` avant de le soustraire, un aller-retour
+    qui n'existait que pour réparer le type qu'on venait de perdre.
+    """
+    return {int(fee_id): Decimal(str(total or 0)) for fee_id, total in rows.all()}  # type: ignore[attr-defined]
+
+
+async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, Decimal]:
     """Montant encaissé sur chaque frais de l'élève, indexé par frais.
 
     Une seule requête groupée : sommer en Python sur des relations chargées
@@ -43,10 +55,10 @@ async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int,
         )
         .group_by(PaymentAllocation.enrollment_fee_id)
     )
-    return {int(fee_id): float(total or 0) for fee_id, total in (await db.execute(stmt)).all()}
+    return _par_frais(await db.execute(stmt))
 
 
-async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, float]:
+async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, Decimal]:
     """Même calcul, borné à une inscription plutôt qu'à un élève.
 
     Utile aux portails, qui affichent une année à la fois : un élève qui a
@@ -68,7 +80,38 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
         )
         .group_by(PaymentAllocation.enrollment_fee_id)
     )
-    return {int(fee_id): float(total or 0) for fee_id, total in (await db.execute(stmt)).all()}
+    return _par_frais(await db.execute(stmt))
+
+
+def _allocations_sur_frais_dus():
+    """Le socle du calcul : les allocations posées sur ce qui reste dû.
+
+    Frais obligatoires, non exonérés, versements encaissés. Un seul endroit
+    décrit ce périmètre, parce qu'un chiffre calculé sur deux périmètres
+    différents finit toujours par en contredire un autre à l'écran.
+    """
+    from app.models.fee import (
+        EnrollmentFee,
+        EnrollmentFeeStatus,
+        FeeCategory,
+        FeeVariant,
+        Payment,
+        PaymentAllocation,
+        PaymentStatus,
+    )
+
+    return (
+        select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
+        .join(FeeCategory, FeeCategory.id == FeeVariant.fee_category_id)
+        .where(
+            Payment.status == PaymentStatus.COMPLETED.value,
+            FeeCategory.is_mandatory.is_(True),
+            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+        )
+    )
 
 
 async def paid_on_mandatory(db: AsyncSession, enrollment_id: int) -> Decimal:
@@ -90,29 +133,31 @@ async def paid_on_mandatory(db: AsyncSession, enrollment_id: int) -> Decimal:
     exonérés : l'argent imputé à un frais qui n'est plus dû sort du calcul
     en même temps que le frais.
     """
-    from app.models.fee import (
-        EnrollmentFee,
-        EnrollmentFeeStatus,
-        FeeCategory,
-        FeeVariant,
-        Payment,
-        PaymentAllocation,
-        PaymentStatus,
-    )
+    from app.models.fee import EnrollmentFee
 
-    stmt = (
-        select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
-        .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
-        .join(FeeCategory, FeeCategory.id == FeeVariant.fee_category_id)
-        .where(
-            EnrollmentFee.enrollment_id == enrollment_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-            FeeCategory.is_mandatory.is_(True),
-            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+    stmt = _allocations_sur_frais_dus().where(EnrollmentFee.enrollment_id == enrollment_id)
+    return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
+
+
+async def paid_on_mandatory_for_year(
+    db: AsyncSession, academic_year_id: int | None = None
+) -> Decimal:
+    """Le même calcul, pour toute une année scolaire.
+
+    C'est le chiffre du tableau de bord. Il se lisait auparavant comme la
+    somme brute des versements encaissés, face à un attendu qui totalisait
+    tous les frais, exonérés et facultatifs compris : une famille exonérée
+    après avoir versé restait comptée comme ayant payé, et le taux d'avancement
+    de l'école divergeait de la fiche de chacun de ses élèves.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee
+
+    stmt = _allocations_sur_frais_dus()
+    if academic_year_id is not None:
+        stmt = stmt.join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id).where(
+            Enrollment.academic_year_id == academic_year_id
         )
-    )
     return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
 
 

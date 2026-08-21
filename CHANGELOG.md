@@ -11,10 +11,18 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Changed
 - Le registre des convocations et celui des billets d'annulation de zéro se consultent par pages : ils s'empilent d'une année sur l'autre et chargeaient jusqu'ici tout leur historique pour n'en montrer que le haut *(éducateur, secrétariat)*
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
+- Supprimer définitivement une inscription obéit aux mêmes règles que supprimer un élève : motif obligatoire, passage par la corbeille d'abord, courriel à la direction *(admin, directeur)*
+- Encaisser sur une inscription qui porte plusieurs frais est plus rapide : la caisse interroge la base une fois au lieu d'une fois par frais *(caissier)*
 
 ### Fixed
 - L'éducateur et le secrétariat peuvent enfin délivrer un billet d'annulation de zéro : l'écran demandait les évaluations manquées par le cahier de notes de la classe, que ni l'un ni l'autre n'a le droit de lire, et refusait donc leur premier clic *(éducateur, secrétariat)*
 - Les quatre compteurs du registre des convocations décrivent l'année consultée et non le filtre en cours : cliquer « Tuteur absent » affichait « Convocations 8, Tuteur venu 0, Tuteur absent 8 » *(éducateur)*
+- Une inscription pouvait être détruite sans motif, sans passer par la corbeille et sans que personne n'en soit averti *(admin, directeur)*
+- Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent *(comptable, secrétariat)*
+- Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés *(directeur, comptable)*
+- Une famille exonérée après avoir payé restait comptée comme ayant payé dans les chiffres de l'école *(comptable, directeur)*
+- Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit *(comptable, admin)*
+- Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées *(comptable, admin)*
 - Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*
 - Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais *(secrétariat, comptable)*
 - Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*

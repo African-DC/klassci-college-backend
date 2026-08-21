@@ -2371,7 +2371,7 @@ async def get_student_enrollment_fees(
             if ef.fee_variant and ef.fee_variant.category
             else "Inconnu"
         )
-        paid = paid_by_fee.get(ef.id, 0.0)
+        paid = float(paid_by_fee.get(ef.id, 0))
         amount = float(ef.amount)
         remaining = max(0.0, amount - paid)
 

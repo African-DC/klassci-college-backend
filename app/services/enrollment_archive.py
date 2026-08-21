@@ -1,21 +1,28 @@
-"""Corbeille des inscriptions : archiver, restaurer, supprimer.
+"""Ce qui distingue une inscription des autres fiches de la corbeille.
 
-Extrait de `enrollment_service`. Ces trois gestes n'ont rien à voir avec le
-CRUD d'une inscription : ils décident de ce qui disparaît des écrans et de ce
-qui disparaît pour de bon.
+Archiver, restaurer et supprimer définitivement obéissent partout aux mêmes
+règles, et `archive_service` les applique déjà : motif obligatoire avant toute
+écriture, passage par la corbeille avant toute destruction, journal d'audit
+avec l'identité figée de l'auteur, courriel à la direction.
+
+Ce module ne porte donc plus les trois gestes — il porterait alors une seconde
+copie de ces règles, et c'est exactement ce qui était arrivé : la suppression
+définitive d'une inscription ignorait le motif, ne vérifiait pas le passage par
+la corbeille et ne prévenait personne. Il ne reste ici que ce qui est propre à
+l'inscription : comment on la nomme, comment on la charge une fois masquée, et
+l'argent qui interdit de la faire disparaître.
 """
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import BusinessValidationError
+from app.models.archivable import ArchivableMixin
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import Payment
 from app.repositories import enrollment_repository as repo
 from app.services import archive_service
-from app.services.archive_service import ArchiveOutcome
 
 
 def _enrollment_label(record: object) -> str:
@@ -49,93 +56,62 @@ async def _load_enrollment_for_bin(db: AsyncSession, enrollment_id: int) -> Enro
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
-ENROLLMENT_KIND = archive_service.ArchivableKind(
-    "enrollment",
-    "L'inscription",
-    Enrollment,
-    lambda db, r: repo.delete_enrollment(db, r),
-    naming=_enrollment_label,
-    load=_load_enrollment_for_bin,
-)
+async def _count_payments(db: AsyncSession, enrollment_id: int) -> int:
+    """Nombre de versements rattachés à l'inscription, quel qu'en soit le statut.
+
+    On compte sur `Payment.enrollment_id` : depuis la migration 0028, c'est là
+    que le versement se rattache. L'ancien garde lisait `EnrollmentFee.payments`,
+    c'est-à-dire la colonne `payments.enrollment_fee_id` que plus personne ne
+    renseigne — il laissait donc passer toutes les inscriptions payées.
+    """
+    stmt = select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
+    return (await db.execute(stmt)).scalar() or 0
 
 
-async def _refuse_if_money_moved(db: AsyncSession, enrollment_id: int) -> None:
-    """Interdit de faire disparaître une inscription validée déjà encaissée.
+async def _refuse_if_money_moved(db: AsyncSession, record: ArchivableMixin) -> None:
+    """Interdit de faire disparaître des écrans une inscription déjà encaissée.
 
     Une inscription archivée quitte tous les écrans, y compris ceux de la
     caisse : la masquer alors que des versements y sont rattachés ferait
-    silencieusement mentir le bordereau du jour. La règle valait déjà pour la
-    suppression, elle vaut d'abord pour l'archivage puisque c'est désormais le
-    premier geste.
-    """
-    statut = (
-        await db.execute(select(Enrollment.status).where(Enrollment.id == enrollment_id))
-    ).scalar_one_or_none()
-    if statut != EnrollmentStatus.VALIDE:
-        return
+    silencieusement mentir le bordereau du jour.
 
-    verses = (
-        await db.execute(
-            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
-        )
-    ).scalar_one()
-    if verses:
+    Le garde ne vise que les inscriptions validées : un prospect abandonné n'a
+    rien encaissé, et c'est précisément la fiche qu'un secrétariat range.
+    """
+    if getattr(record, "status", None) != EnrollmentStatus.VALIDE:
+        return
+    if await _count_payments(db, record.id):
         raise BusinessValidationError(
             "Cette inscription est validée et porte déjà des versements : "
             "elle ne peut pas être mise à la corbeille."
         )
 
 
-async def archive_enrollment(
-    db: AsyncSession, enrollment_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'inscription dans la corbeille : elle quitte les écrans, rien n'est détruit."""
-    await _refuse_if_money_moved(db, enrollment_id)
-    return await archive_service.archive_record(
-        db, ENROLLMENT_KIND, enrollment_id, reason=reason, actor_id=actor_id
-    )
+async def _purge_enrollment(db: AsyncSession, record: ArchivableMixin) -> None:
+    """Détruit l'inscription — sauf si de l'argent y est encore rattaché.
 
+    Plus strict que le garde de l'archivage, et volontairement : archiver se
+    défait, détruire non. Un versement dont l'inscription part perdrait sa
+    contrepartie quel que soit le statut de celle-ci.
 
-async def restore_enrollment(db: AsyncSession, enrollment_id: int, *, actor_id: int) -> None:
-    """Sort l'inscription de la corbeille."""
-    await archive_service.restore_record(db, ENROLLMENT_KIND, enrollment_id, actor_id=actor_id)
-
-
-async def delete_enrollment(
-    db: AsyncSession,
-    enrollment_id: int,
-    deleted_by: int,
-    reason: str | None = None,
-) -> None:
-    """Supprime une inscription ou lève 404. Bloque si statut valide avec paiements."""
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    # Le garde lisait `EnrollmentFee.payments`, c'est-à-dire l'ancienne
-    # colonne `payments.enrollment_fee_id`, plus jamais renseignée depuis que
-    # le versement se fait sur l'inscription. Il laissait donc passer toutes
-    # les inscriptions payées depuis ce changement. On compte désormais les
-    # versements là où ils sont réellement rattachés.
-    versements = (
-        await db.execute(
-            select(func.count()).select_from(Payment).where(Payment.enrollment_id == enrollment_id)
-        )
-    ).scalar() or 0
-    if versements:
+    La règle vit ici, dans le `delete` du type, plutôt que dans un second
+    chemin de suppression : c'est la seule chose que l'inscription ajoute au
+    geste commun, elle n'a jamais justifié d'en réécrire toutes les étapes.
+    """
+    if await _count_payments(db, record.id):
         raise BusinessValidationError(
             "Impossible de supprimer une inscription qui porte des versements encaissés. "
             "Passez par la fiche de l'élève : la corbeille conserve les versements."
         )
+    await repo.delete_enrollment(db, record)
 
-    async with db.begin_nested():
-        await repo.delete_enrollment(db, enrollment)
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=enrollment_id,
-        )
 
-    await db.commit()
+ENROLLMENT_KIND = archive_service.ArchivableKind(
+    "enrollment",
+    "L'inscription",
+    Enrollment,
+    _purge_enrollment,
+    naming=_enrollment_label,
+    load=_load_enrollment_for_bin,
+    before_archive=_refuse_if_money_moved,
+)

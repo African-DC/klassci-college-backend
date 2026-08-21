@@ -15,7 +15,8 @@ from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import Integer, MetaData, Table, create_engine
+from sqlalchemy import Integer, MetaData, Table, UniqueConstraint, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import Base
@@ -301,6 +302,67 @@ async def test_aucun_tarif_configure_ne_facture_rien(db: _AsyncBridge) -> None:
     await _facturer(db, AssignmentStatus.AFFECTE)
 
     assert _lignes_facturees(db) == []
+
+
+# ---------------------------------------------------------------------------
+# L'invariant, porté par la base et non plus par une seule fonction
+# ---------------------------------------------------------------------------
+
+
+async def test_la_base_refuse_une_seconde_ligne_pour_la_meme_categorie(
+    db: _AsyncBridge,
+) -> None:
+    """« Une catégorie, une ligne » ne vivait que dans une fonction Python, et
+    il existe deux chemins d'insertion. Le second — le `fee_variant_id` passé
+    à la création d'une inscription — ne passait par aucun garde.
+
+    La base tranche désormais : la dette d'une famille ne peut plus doubler
+    parce qu'un chemin d'écriture a oublié de vérifier."""
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "50000"))
+    db.add(_tarif(2, CAT_SCOLARITE_T1, "20000", scope=FeeAssignmentScope.AFFECTE))
+    await db.flush()
+
+    await _facturer(db, None)
+
+    db.add(
+        EnrollmentFee(
+            id=999,
+            enrollment_id=INSCRIPTION_AFFECTE,
+            fee_variant_id=2,
+            fee_category_id=CAT_SCOLARITE_T1,
+            amount=Decimal("20000"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await db.flush()
+
+    db._session.rollback()
+
+
+async def test_deux_categories_differentes_cohabitent_sans_heurt(db: _AsyncBridge) -> None:
+    """La contrainte porte sur la catégorie, pas sur l'inscription : un élève
+    doit bien l'Inscription ET la Scolarité."""
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "50000"))
+    db.add(_tarif(2, CAT_INSCRIPTION, "25000"))
+    await db.flush()
+
+    await _facturer(db, None)
+
+    assert _lignes_facturees(db) == [
+        (CAT_SCOLARITE_T1, Decimal("50000")),
+        (CAT_INSCRIPTION, Decimal("25000")),
+    ]
+
+
+def test_la_contrainte_est_declaree_sur_la_table() -> None:
+    """Elle doit exister dans le schéma que les migrations posent, pas
+    seulement dans la tête de celui qui a écrit la fonction."""
+    contraintes = {
+        tuple(c.name for c in contrainte.columns)
+        for contrainte in EnrollmentFee.__table__.constraints
+        if isinstance(contrainte, UniqueConstraint)
+    }
+    assert ("enrollment_id", "fee_category_id") in contraintes
 
 
 # ---------------------------------------------------------------------------
