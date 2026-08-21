@@ -5,6 +5,8 @@ recompute chaque fee.status. Audit log obligatoire avec breakdown
 (snapshot des allocations avant suppression) — décision Marcel #4.
 """
 
+from decimal import Decimal
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ from app.core.exceptions import NotFoundError
 from app.models.fee import Payment, PaymentAllocation, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import PaymentResponse
-from app.services.payments._allocation import recompute_fee_status
+from app.services.payments._allocation import paid_for_fees, recompute_fee_status
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
 from app.services.payments._state import VALID_TRANSITIONS
@@ -61,10 +63,14 @@ async def validate_payment(
         payment.status = PaymentStatus.COMPLETED.value
         await db.flush()
 
+        touches = []
         for allocation in payment.allocations:
             fee = await repo.get_enrollment_fee_for_update(db, allocation.enrollment_fee_id)
             if fee is not None:
-                await recompute_fee_status(db, fee)
+                touches.append(fee)
+        verses = await paid_for_fees(db, touches)
+        for fee in touches:
+            recompute_fee_status(fee, verses.get(fee.id, Decimal("0")))
         await db.flush()
 
         await audit_log(
@@ -146,10 +152,14 @@ async def cancel_payment(
         payment.status = PaymentStatus.CANCELLED.value
         await db.flush()
 
+        touches = []
         for fee_id in affected_fee_ids:
             fee = await repo.get_enrollment_fee_for_update(db, fee_id)
             if fee is not None:
-                await recompute_fee_status(db, fee)
+                touches.append(fee)
+        verses = await paid_for_fees(db, touches)
+        for fee in touches:
+            recompute_fee_status(fee, verses.get(fee.id, Decimal("0")))
         await db.flush()
 
         await audit_log(

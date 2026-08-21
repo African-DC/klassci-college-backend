@@ -115,6 +115,9 @@ async def create_enrollment_fee(
     fee = EnrollmentFee(
         enrollment_id=enrollment_id,
         fee_variant_id=fee_variant_id,
+        # Recopiee du tarif : c'est elle que porte la contrainte
+        # `uq_enrollment_fee_category`, une categorie par inscription.
+        fee_category_id=variant.fee_category_id,
         amount=variant.amount,
     )
     db.add(fee)

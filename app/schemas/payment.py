@@ -127,6 +127,19 @@ class PaymentListResponse(BaseModel):
 
 
 class PaymentSummaryResponse(BaseModel):
+    """Les chiffres du tableau de bord, et ce qu'ils recouvrent exactement.
+
+    `total_expected`, `total_paid` et `completion_rate` parlent de la même
+    dette : les frais obligatoires encore dus, et l'argent imputé sur eux. Ils
+    se comparent entre eux, et ils disent la même chose que la fiche de chaque
+    élève.
+
+    `total_pending`, `total_cancelled` et `payment_count` comptent des
+    versements, pas des dettes — versements orphelins compris, pour ne pas
+    dire moins que le bordereau de caisse du jour. Ils ne se comparent pas à
+    `total_expected`.
+    """
+
     total_expected: float
     total_paid: float
     total_pending: float

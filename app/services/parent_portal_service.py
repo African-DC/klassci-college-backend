@@ -153,7 +153,7 @@ async def build_child_summaries(db: AsyncSession, parent: Parent) -> list[Parent
             if enrollment is not None:
                 paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
                 for ef in enrollment.enrollment_fees:
-                    paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
+                    paid = paid_by_fee.get(ef.id, Decimal("0"))
                     remaining = ef.amount - paid
                     if remaining > 0:
                         fees_remaining += remaining
@@ -257,7 +257,7 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
             )
             for p, montant in payments_by_fee.get(ef.id, [])
         ]
-        fee_paid = Decimal(str(paid_by_fee.get(ef.id, 0.0)))
+        fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
         total_paid += fee_paid
 
         category_name = (
