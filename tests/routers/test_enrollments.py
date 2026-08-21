@@ -219,7 +219,7 @@ def test_delete_enrollment_success() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.enrollments.enrollment_service.delete_enrollment",
+            "app.routers.enrollments.enrollment_archive.delete_enrollment",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -238,7 +238,7 @@ def test_delete_enrollment_not_found() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.enrollments.enrollment_service.delete_enrollment",
+            "app.routers.enrollments.enrollment_archive.delete_enrollment",
             new_callable=AsyncMock,
             side_effect=NotFoundError("Enrollment", 999),
         ):

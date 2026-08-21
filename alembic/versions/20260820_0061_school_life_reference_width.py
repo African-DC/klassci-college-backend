@@ -9,8 +9,8 @@ l'identifiant, la reference depasse les 60 caracteres de la colonne, et
 MySQL en mode strict refuse l'ecriture au moment ou le guichet imprime.
 On aligne les deux colonnes sur `document_issuance.reference`, deja en 100.
 
-Revision ID: 0060_school_life_reference_width
-Revises: 0059_teacher_contract_and_gender
+Revision ID: 0061_school_life_reference_width
+Revises: 0060_merge_duplicate_fees
 Create Date: 2026-08-20
 """
 
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0060_school_life_reference_width"
-down_revision = "0059_teacher_contract_and_gender"
+revision = "0061_school_life_reference_width"
+down_revision = "0060_merge_duplicate_fees"
 branch_labels = None
 depends_on = None
 
