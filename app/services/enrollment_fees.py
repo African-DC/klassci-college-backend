@@ -182,6 +182,9 @@ async def create_mandatory_enrollment_fees(
             EnrollmentFee(
                 enrollment_id=enrollment_id,
                 fee_variant_id=variant.id,
+                # Recopiee du tarif : c'est elle que porte la contrainte
+                # `uq_enrollment_fee_category`, une categorie par inscription.
+                fee_category_id=variant.fee_category_id,
                 amount=variant.amount,
             )
         )
