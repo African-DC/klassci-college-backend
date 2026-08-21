@@ -18,7 +18,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
 - Une catégorie de frais dit désormais ce qu'elle donne droit, élément par élément : ce qui se retire au guichet et ce qui s'ouvre comme accès *(admin, comptable)*
 - Le reçu de versement porte, sous le montant, ce que la famille obtient contre les frais réglés ce jour : le parent repart avec la preuve écrite de sa tenue et de ses macarons *(parent, caissier, secrétariat)*
-- L'état des frais et les portails de la famille annoncent la contrepartie de chaque frais, en plus de son montant *(parent, élève, secrétariat)*
+- L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
 
 ### Changed
 - Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler *(élève, parent)*
