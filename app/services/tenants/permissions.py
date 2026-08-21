@@ -10,6 +10,8 @@ guards against drift inside this file but cannot detect missing migrations.
 
 from typing import Any
 
+from app.core.payment_methods import SELECTABLE_METHODS
+
 ALL_PERMISSIONS: list[dict[str, str]] = [
     # Admin module (28)
     {"slug": "admin:students:read", "name": "View students"},
@@ -81,6 +83,17 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "payments:cancel:any", "name": "Cancel any payment, including a closed day"},
     {"slug": "cash-session:manage", "name": "Open and close one's own cash day"},
     {"slug": "cash-session:read:all", "name": "View every cash day (daily reconciliation)"},
+    # Un slug par moyen de paiement encaissable. `payments:create` dit qui peut
+    # encaisser ; ceux-ci disent par quel moyen. Le comptable du college Rostan
+    # encaisse en mobile money, virement et cheque mais ne touche jamais
+    # d'especes : sans ces slugs, qui pouvait encaisser pouvait encaisser en
+    # especes, et donc ouvrir un tiroir dont il n'a pas la responsabilite.
+    # Ils sont resolus par la matrice role/permission comme tout le reste :
+    # aucun nom de role n'apparait dans le code d'encaissement.
+    *(
+        {"slug": f"payments:method:{_method}", "name": f"Take payment by {_method}"}
+        for _method in SELECTABLE_METHODS
+    ),
     {"slug": "attendance:read", "name": "View attendance"},
     {"slug": "attendance:create", "name": "Create attendance"},
     {"slug": "attendance:update", "name": "Update attendance"},
@@ -184,6 +197,12 @@ _CAISSE_SUPERVISION = [
     "cash-session:read:all",
 ]
 
+# Tous les moyens d'encaissement. C'est le DEFAUT, et il reproduit exactement
+# le comportement d'avant l'existence de ces slugs : qui pouvait encaisser
+# pouvait encaisser par n'importe quel moyen. Une ecole deja en service ne voit
+# donc rien changer tant qu'elle n'a pas ouvert l'ecran de configuration.
+_ALL_PAYMENT_METHODS = [f"payments:method:{_method}" for _method in SELECTABLE_METHODS]
+
 # Configuration complete de la grille tarifaire (comptable uniquement).
 _FEE_CONFIG = [
     "admin:fee-categories:read",
@@ -258,6 +277,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "enrollments:update",
             "payments:read",
             "payments:create",
+            *_ALL_PAYMENT_METHODS,
             "cash-session:manage",
             "admin:students:read",
             "admin:students:create",
@@ -289,6 +309,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "permissions": [
             "payments:read",
             "payments:create",
+            *_ALL_PAYMENT_METHODS,
             *_CAISSE_SUPERVISION,
             "audit:read:financial",
             "payments:cancel:any",
@@ -315,6 +336,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             # c'est ce qui le cantonne a sa propre caisse.
             "payments:read",
             "payments:create",
+            *_ALL_PAYMENT_METHODS,
             "cash-session:manage",
             *_INSTALLMENTS_READ,
             "enrollments:read",

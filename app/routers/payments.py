@@ -14,14 +14,18 @@ from app.core.dependencies import (
     has_permission,
     require_permission,
 )
+from app.core.payment_methods import method_label
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
     PaymentCreate,
     PaymentListResponse,
+    PaymentMethodListResponse,
+    PaymentMethodOption,
     PaymentResponse,
     PaymentSummaryResponse,
 )
 from app.services import daily_cash_book_service, payment_service
+from app.services.payments import methods as payment_methods
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -66,11 +70,34 @@ async def create_payment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentResponse:
     """Enregistre un nouveau paiement."""
-    return await payment_service.create_payment(db, data, received_by=current_user.user_id)
+    return await payment_service.create_payment(db, data, actor=current_user)
 
 
-# NOTE: /summary MUST be defined BEFORE /{payment_id}
-# to avoid FastAPI matching "summary" as a payment_id path param.
+# NOTE: /methods and /summary MUST be defined BEFORE /{payment_id}
+# to avoid FastAPI matching "methods" / "summary" as a payment_id path param.
+@router.get(
+    "/methods",
+    response_model=PaymentMethodListResponse,
+    summary="Moyens de paiement que l'utilisateur courant peut saisir",
+)
+async def list_my_payment_methods(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("payments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentMethodListResponse:
+    """Ce que le formulaire d'encaissement doit proposer, et rien de plus.
+
+    Croise ce que l'établissement accepte et ce que le profil autorise. Le
+    sélecteur se remplit d'ici plutôt que d'une liste figée côté écran :
+    proposer un moyen pour le refuser à l'enregistrement ferait recommencer la
+    saisie devant la famille.
+    """
+    keys = await payment_methods.allowed_methods_for(db, current_user)
+    return PaymentMethodListResponse(
+        items=[PaymentMethodOption(key=key, label=method_label(key)) for key in keys]
+    )
+
+
 @router.get("/summary", response_model=PaymentSummaryResponse)
 async def get_payments_summary(
     academic_year_id: int | None = Query(None),

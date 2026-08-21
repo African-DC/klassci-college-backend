@@ -11,9 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.datetimes import utcnow_naive
 from app.core.exceptions import NotFoundError
+from app.core.payment_methods import ordered_methods
 from app.models.cash_session import CashSession, CashSessionStatus, is_locked
 from app.repositories import cash_session_repository as repo
-from app.repositories.cash_session_repository import METHODS_ORDER, DayAggregate
+from app.repositories.cash_session_repository import DayAggregate
 from app.schemas.cash_session import (
     CashMethodTotal,
     CashSessionCloseRequest,
@@ -30,6 +31,13 @@ def _method_totals(aggregate: DayAggregate) -> list[CashMethodTotal]:
 
     Afficher « Chèque : 0 » sur une école qui n'en accepte pas ajoute du bruit
     sans rien apprendre.
+
+    La liste est pilotée par ce qui a réellement été encaissé, et seulement
+    ordonnée par `DISPLAY_ORDER`. Boucler sur l'ordre en filtrant faisait
+    disparaître de la ventilation tout moyen absent de cette constante — un
+    versement en Moov Money le lendemain de son ajout au produit, par exemple —
+    alors qu'il restait compté dans le total. La somme des lignes ne collait
+    plus au total affiché juste en dessous, sans que rien ne le signale.
     """
     return [
         CashMethodTotal(
@@ -38,8 +46,7 @@ def _method_totals(aggregate: DayAggregate) -> list[CashMethodTotal]:
             count=aggregate.by_method[key].count,
             total=float(aggregate.by_method[key].total),
         )
-        for key in METHODS_ORDER
-        if key in aggregate.by_method
+        for key in ordered_methods(aggregate.by_method)
     ]
 
 
