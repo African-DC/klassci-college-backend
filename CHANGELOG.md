@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Chaque versement dit qui l'a encaissé : le nom du caissier apparaît dans la liste, dans le reçu et dans les deux exports, et la comptabilité peut isoler une caisse pour la contrôler *(comptable, directeur, caissier)*
+- Le journal des versements s'exporte en PDF au gabarit officiel de l'établissement, avec récapitulatif par moyen de paiement et par caissier, et signatures caissier / comptabilité *(comptable, caissier)*
+- Le même journal s'exporte en classeur Excel aux couleurs et au logo de l'école, en deux feuilles : le détail ligne à ligne et le récapitulatif, montants calculables et en-têtes répétées à l'impression *(comptable)*
 - Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
 - Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
 - Le lieu de naissance de l'élève se saisit à la création, à la modification et à l'inscription, et se retrouve sur le certificat de scolarité, l'attestation de fréquentation et la fiche d'inscription, sous la forme « né(e) le ... à ... » attendue par l'administration *(secrétariat, admin, parent)*
@@ -39,6 +42,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un export des versements ne déverse plus que la caisse de celui qui le demande : un caissier obtenait jusqu'ici les mêmes documents qu'un comptable, alors que son écran ne lui montre que ses propres encaissements *(caissier, comptable, directeur)*
 - Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier *(comptable, directeur)*
 - Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel *(comptable, caissier)*
 - Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier *(comptable)*

@@ -111,6 +111,9 @@ class PaymentResponse(BaseModel):
     status: str
     reference: str | None
     received_by: int | None
+    #: Qui a encaissé, en clair. Sans lui, la ligne ne répond pas à la
+    #: première question qu'on lui pose au moment d'un contrôle de caisse.
+    received_by_name: str | None = None
     notes: str | None
     created_at: datetime
     updated_at: datetime
@@ -126,6 +129,13 @@ class PaymentResponse(BaseModel):
     student_deleted: bool = False
     # Nouveaux champs (refactor 2026-05-17)
     allocations: list[PaymentAllocationResponse] = []
+
+
+class CashierOption(BaseModel):
+    """Un compte ayant déjà encaissé — de quoi remplir le filtre « Encaissé par »."""
+
+    id: int
+    name: str
 
 
 class PaymentListResponse(BaseModel):

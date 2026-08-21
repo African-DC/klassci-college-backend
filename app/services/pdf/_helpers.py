@@ -83,16 +83,18 @@ _MIME_BY_EXT = {
 }
 
 
-def image_to_datauri(url_or_path: str | None) -> str | None:
-    """Resolve an image URL/path and return a `data:image/...;base64,...` URI.
+def image_bytes(url_or_path: str | None) -> tuple[bytes, str] | None:
+    """Resolve an image URL/path and return its `(content, mime)`.
 
     Accepts:
     - relative URLs like `/uploads/photos/abc.png` (resolved against `_UPLOAD_ROOT`)
     - absolute filesystem paths
     Returns None if the file cannot be found or read.
 
-    WeasyPrint embeds inline data URIs reliably across multi-tenant containers,
-    avoiding the brittleness of file:// or HTTP-fetched assets.
+    Partagé par le PDF (qui en fait une data URI) et par l'export Excel (qui
+    a besoin des octets bruts pour poser le logo dans la feuille) : une seule
+    résolution de chemin, donc un logo qui apparaît aux deux endroits ou à
+    aucun, jamais à un seul.
     """
     if not url_or_path:
         return None
@@ -108,14 +110,27 @@ def image_to_datauri(url_or_path: str | None) -> str | None:
             if not os.path.exists(path):
                 continue
             with open(path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("ascii")
+                content = f.read()
             ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
-            mime = _MIME_BY_EXT.get(ext, "image/png")
-            return f"data:{mime};base64,{encoded}"
+            return content, _MIME_BY_EXT.get(ext, "image/png")
         except OSError as exc:
             logger.warning("Could not embed image %s: %s", path, exc)
             continue
     return None
+
+
+def image_to_datauri(url_or_path: str | None) -> str | None:
+    """Resolve an image URL/path and return a `data:image/...;base64,...` URI.
+
+    WeasyPrint embeds inline data URIs reliably across multi-tenant containers,
+    avoiding the brittleness of file:// or HTTP-fetched assets.
+    """
+    resolved = image_bytes(url_or_path)
+    if resolved is None:
+        return None
+    content, mime = resolved
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 # ---------------------------------------------------------------------------

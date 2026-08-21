@@ -26,6 +26,7 @@ from app.models.base import TimestampMixin, ValueEnum
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Level, Series
     from app.models.enrollment import Enrollment, StudentOption
+    from app.models.user import User
 
 
 class PaymentMethod(str, enum.Enum):
@@ -359,6 +360,14 @@ class Payment(Base, TimestampMixin):
     allocations: Mapped[list[PaymentAllocation]] = relationship(
         back_populates="payment",
         cascade="all, delete-orphan",
+    )
+    # Qui a encaisse. Lecture seule : `received_by` est deja la colonne ecrite,
+    # et un second chemin d'ecriture vers la meme donnee finirait par la
+    # contredire. `lazy="raise"` force le selectinload explicite du repository
+    # plutot qu'un chargement paresseux qui casserait en MissingGreenlet apres
+    # un commit.
+    received_by_user: Mapped[User | None] = relationship(
+        "User", foreign_keys=[received_by], viewonly=True, lazy="raise"
     )
 
 

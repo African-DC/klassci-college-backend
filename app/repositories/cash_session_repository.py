@@ -13,6 +13,7 @@ from app.core.payment_methods import DISPLAY_ORDER
 from app.models.cash_session import LOCKED_STATUSES, CashSession, CashSessionStatus
 from app.models.fee import Payment, PaymentStatus
 from app.models.user import StaffProfile, User
+from app.repositories.user_repository import format_person_name
 
 # Les versements annulés, échoués ou remboursés ne sont plus dans le tiroir :
 # ils ne comptent ni dans le total encaissé ni dans le théorique espèces.
@@ -163,8 +164,10 @@ async def aggregate_date_by_cashier(
 async def cashier_names(db: AsyncSession, user_ids: list[int]) -> dict[int, str]:
     """Nom lisible de chaque caissier, en une requête au lieu d'une par ligne.
 
-    La fiche Personnel fait foi ; à défaut, l'email, qui vaut toujours mieux
-    qu'un tiret pour identifier qui a encaissé.
+    La fiche Personnel fait foi ; à défaut l'adresse e-mail, qui vaut toujours
+    mieux qu'un tiret pour identifier qui a encaissé. Le repli est celui de
+    `format_person_name`, partagé avec le journal des versements : deux pièces
+    comptables du même jour ne peuvent pas nommer la même personne autrement.
     """
     if not user_ids:
         return {}
@@ -175,8 +178,7 @@ async def cashier_names(db: AsyncSession, user_ids: list[int]) -> dict[int, str]
     )
     names: dict[int, str] = {}
     for user_id, email, first_name, last_name in (await db.execute(stmt)).all():
-        full = f"{first_name or ''} {last_name or ''}".strip()
-        names[int(user_id)] = full or email
+        names[int(user_id)] = format_person_name(first_name, last_name, email)
     return names
 
 
