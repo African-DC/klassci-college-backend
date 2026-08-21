@@ -18,6 +18,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent *(comptable, secrétariat)*
 - Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés *(directeur, comptable)*
 - Une famille exonérée après avoir payé restait comptée comme ayant payé dans les chiffres de l'école *(comptable, directeur)*
+- Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit *(comptable, admin)*
+- Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées *(comptable, admin)*
 - Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*
 - Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais *(secrétariat, comptable)*
 - Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*

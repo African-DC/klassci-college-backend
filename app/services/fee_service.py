@@ -230,7 +230,16 @@ async def update_fee_variant(
     variant = await repo.get_fee_variant_by_id(db, variant_id)
     if variant is None:
         raise NotFoundError("FeeVariant", variant_id)
-    changes = data.model_dump(exclude_none=True, mode="json")
+    # `exclude_unset` et non `exclude_none` : envoyer explicitement
+    # `assignment_scope: null` doit remettre le tarif a « tous les eleves ».
+    # Avec `exclude_none`, ce vide etait silencieusement jete, et une portee
+    # posee par erreur ne se retirait plus jamais depuis l'ecran — le
+    # formulaire acceptait le choix et il ne se passait rien.
+    changes = data.model_dump(exclude_unset=True, mode="json")
+    # Le montant, lui, n'est pas effacable : la colonne ne l'accepte pas, et
+    # un tarif sans montant ne veut rien dire.
+    if changes.get("amount", ...) is None:
+        del changes["amount"]
     if not changes:
         return _fee_variant_to_response(variant)
     async with db.begin_nested():

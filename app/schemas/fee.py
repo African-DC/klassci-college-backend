@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.fee import FeeAssignmentScope
+
 # ---------------------------------------------------------------------------
 # FeeCategory
 # ---------------------------------------------------------------------------
@@ -68,7 +70,7 @@ class FeeVariantCreate(BaseModel):
 
     # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
     # pour les affectes ou que pour les non affectes.
-    assignment_scope: str | None = None
+    assignment_scope: FeeAssignmentScope | None = None
 
 
 class FeeVariantUpdate(BaseModel):
@@ -83,8 +85,11 @@ class FeeVariantUpdate(BaseModel):
         return v
 
     # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
-    # pour les affectes ou que pour les non affectes.
-    assignment_scope: str | None = None
+    # pour les affectes ou que pour les non affectes. Remettre ce champ a
+    # `None` doit rendre le tarif universel : le service distingue donc un
+    # champ absent d'un champ envoye vide, sans quoi une portee posee par
+    # erreur ne se retirerait plus jamais depuis l'ecran.
+    assignment_scope: FeeAssignmentScope | None = None
 
 
 class FeeVariantResponse(BaseModel):
