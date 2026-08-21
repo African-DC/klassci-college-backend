@@ -88,8 +88,21 @@ class SummonsRegisterSummary(BaseModel):
 
 
 class ParentSummonsRegister(BaseModel):
+    """Une page du registre, et le décompte de tout le registre consulté.
+
+    `summary` ne décrit jamais `items` : il porte sur l'ensemble des lignes de
+    l'année, du trimestre et de l'élève consultés, quelle que soit la page
+    affichée et quelle que soit la suite filtrée. Un décompte calculé sur les
+    lignes déjà filtrées répondait « Convocations 8, Tuteur absent 8 » dès
+    qu'on cliquait « Tuteur absent » : l'éducateur croyait lire
+    l'établissement, il lisait son propre filtre.
+    """
+
     items: list[ParentSummonsResponse]
     summary: SummonsRegisterSummary
+    total: int
+    page: int
+    size: int
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +157,13 @@ class RetakeAuthorizationResponse(BaseModel):
     issued_by_name: str | None = None
     evaluations: list[RetakeTargetResponse]
     created_at: datetime
+
+
+class RetakeAuthorizationList(BaseModel):
+    items: list[RetakeAuthorizationResponse]
+    total: int
+    page: int
+    size: int
 
 
 # ---------------------------------------------------------------------------

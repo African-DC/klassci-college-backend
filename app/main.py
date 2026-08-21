@@ -45,6 +45,7 @@ from app.routers.profile import router as profile_router
 from app.routers.promotions import router as promotions_router
 from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
+from app.routers.retakes import missed_evaluations_router
 from app.routers.retakes import router as retakes_router
 from app.routers.school_life_documents import router as school_life_documents_router
 from app.routers.student_documents import router as student_documents_router
@@ -126,6 +127,7 @@ app.include_router(student_documents_router)
 app.include_router(school_life_documents_router)
 app.include_router(summons_router)
 app.include_router(retakes_router)
+app.include_router(missed_evaluations_router)
 app.include_router(council_router)
 app.include_router(deep_report_router)
 app.include_router(dren_stats_router)

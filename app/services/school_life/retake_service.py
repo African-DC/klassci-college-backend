@@ -8,10 +8,10 @@ finit par contester.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +21,7 @@ from app.models.grade import Evaluation, Grade, GradeStatus
 from app.models.school_life import RetakeAuthorization, RetakeAuthorizationEvaluation
 from app.schemas.school_life import (
     RetakeAuthorizationCreate,
+    RetakeAuthorizationList,
     RetakeAuthorizationResponse,
     RetakeTargetResponse,
 )
@@ -222,16 +223,81 @@ async def create_authorization(
     )
 
 
+async def list_missed_evaluations(
+    db: AsyncSession, *, student_id: int, period_start: date, period_end: date
+) -> list[RetakeTargetResponse]:
+    """Épreuves qu'un élève a manquées sur une fenêtre d'absence.
+
+    C'est exactement le lot que `create_authorization` accepte de rouvrir : le
+    guichet ne doit proposer que ce que la règle métier acceptera ensuite.
+
+    Le croisement se fait ici, en une requête, parce qu'il appartient au
+    bureau de la vie scolaire. Le reconstituer côté écran obligeait à lire le
+    cahier de notes de la classe — un droit que ni l'éducateur ni le
+    secrétariat n'ont, et qu'ils n'ont pas à avoir pour lever un zéro.
+    """
+    if period_end < period_start:
+        raise BusinessValidationError("La fin de la période doit suivre son début.")
+
+    stmt = (
+        select(Grade)
+        .join(Grade.evaluation)
+        .where(
+            Grade.student_id == student_id,
+            Grade.status == GradeStatus.ABSENT.value,
+            Evaluation.date >= period_start,
+            Evaluation.date <= period_end,
+        )
+        .options(selectinload(Grade.evaluation).selectinload(Evaluation.subject))
+        .order_by(Evaluation.date, Evaluation.id)
+    )
+    grades = (await db.execute(stmt)).scalars().all()
+    return [
+        RetakeTargetResponse(
+            evaluation_id=grade.evaluation.id,
+            title=grade.evaluation.title,
+            subject_name=grade.evaluation.subject.name if grade.evaluation.subject else None,
+            date=grade.evaluation.date,
+            coefficient=grade.evaluation.coefficient,
+            trimester=grade.evaluation.trimester,
+        )
+        for grade in grades
+        if grade.evaluation is not None
+    ]
+
+
 async def list_authorizations(
     db: AsyncSession,
     *,
     academic_year_id: int | None = None,
     trimester: int | None = None,
     student_id: int | None = None,
-) -> list[RetakeAuthorizationResponse]:
-    """Autorisations délivrées, de la plus récente à la plus ancienne."""
+    page: int = 1,
+    size: int = 20,
+) -> RetakeAuthorizationList:
+    """Autorisations délivrées, de la plus récente à la plus ancienne.
+
+    Paginé : un registre s'empile d'une année sur l'autre et n'est jamais
+    purgé, alors que la question posée devant l'écran porte toujours sur les
+    dernières lignes.
+    """
+    filters = []
+    if academic_year_id is not None:
+        filters.append(RetakeAuthorization.academic_year_id == academic_year_id)
+    if trimester is not None:
+        filters.append(RetakeAuthorization.trimester == trimester)
+    if student_id is not None:
+        filters.append(RetakeAuthorization.student_id == student_id)
+
+    total = int(
+        (
+            await db.execute(select(func.count()).select_from(RetakeAuthorization).where(*filters))
+        ).scalar_one()
+    )
+
     stmt = (
         select(RetakeAuthorization)
+        .where(*filters)
         .options(
             selectinload(RetakeAuthorization.student),
             selectinload(RetakeAuthorization.academic_year),
@@ -240,25 +306,26 @@ async def list_authorizations(
             .selectinload(Evaluation.subject),
         )
         .order_by(RetakeAuthorization.period_start.desc(), RetakeAuthorization.id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
     )
-    if academic_year_id is not None:
-        stmt = stmt.where(RetakeAuthorization.academic_year_id == academic_year_id)
-    if trimester is not None:
-        stmt = stmt.where(RetakeAuthorization.trimester == trimester)
-    if student_id is not None:
-        stmt = stmt.where(RetakeAuthorization.student_id == student_id)
 
     rows = list((await db.execute(stmt)).scalars().all())
     issuers = {uid: await actor_name(db, uid) for uid in {r.issued_by_user_id for r in rows}}
     class_names = await current_class_names(db, {row.student_id for row in rows})
-    return [
-        _to_response(
-            row,
-            class_name=class_names.get(row.student_id),
-            issued_by_name=issuers.get(row.issued_by_user_id),
-        )
-        for row in rows
-    ]
+    return RetakeAuthorizationList(
+        items=[
+            _to_response(
+                row,
+                class_name=class_names.get(row.student_id),
+                issued_by_name=issuers.get(row.issued_by_user_id),
+            )
+            for row in rows
+        ],
+        total=total,
+        page=page,
+        size=size,
+    )
 
 
 async def compose_document_data(db: AsyncSession, authorization_id: int) -> dict[str, Any]:

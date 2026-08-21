@@ -9,9 +9,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Changed
+- Le registre des convocations et celui des billets d'annulation de zéro se consultent par pages : ils s'empilent d'une année sur l'autre et chargeaient jusqu'ici tout leur historique pour n'en montrer que le haut *(éducateur, secrétariat)*
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
 
 ### Fixed
+- L'éducateur et le secrétariat peuvent enfin délivrer un billet d'annulation de zéro : l'écran demandait les évaluations manquées par le cahier de notes de la classe, que ni l'un ni l'autre n'a le droit de lire, et refusait donc leur premier clic *(éducateur, secrétariat)*
+- Les quatre compteurs du registre des convocations décrivent l'année consultée et non le filtre en cours : cliquer « Tuteur absent » affichait « Convocations 8, Tuteur venu 0, Tuteur absent 8 » *(éducateur)*
 - Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*
 - Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais *(secrétariat, comptable)*
 - Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*
@@ -23,6 +26,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève *(admin)*
 
 ### Added
+- Les évaluations manquées d'un élève sur une période s'obtiennent directement, sans passer par le cahier de notes de sa classe : le formulaire du billet d'annulation de zéro les affiche en une requête au lieu d'une quarantaine *(éducateur, secrétariat)*
 - Sexe et type de contrat de l'enseignant, permanent, vacataire ou fonctionnaire, saisissables sur sa fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin)*
 - Type de contrat et sexe des enseignants sur leur fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin, directeur)*.
 - Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.
