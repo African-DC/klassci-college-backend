@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Chaque versement dit qui l'a encaissé : le nom du caissier apparaît dans la liste, dans le reçu et dans les deux exports, et la comptabilité peut isoler une caisse pour la contrôler *(comptable, directeur, caissier)*
+- Le journal des versements s'exporte en PDF au gabarit officiel de l'établissement, avec récapitulatif par moyen de paiement et par caissier, et signatures caissier / comptabilité *(comptable, caissier)*
+- Le même journal s'exporte en classeur Excel aux couleurs et au logo de l'école, en deux feuilles : le détail ligne à ligne et le récapitulatif, montants calculables et en-têtes répétées à l'impression *(comptable)*
 - Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
 - Le caissier retrouve à sa connexion ses journées clôturées d'office et les régularise en saisissant ce qu'il avait compté, ce qui fait naître l'écart réel *(caissier)*
 - Le point journalier distingue les caisses arrêtées par leur caissier de celles clôturées d'office, dont l'écart reste inconnu tant que personne n'a compté *(comptable, directeur)*
@@ -22,6 +25,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un export des versements ne déverse plus que la caisse de celui qui le demande : un caissier obtenait jusqu'ici les mêmes documents qu'un comptable, alors que son écran ne lui montre que ses propres encaissements *(caissier, comptable, directeur)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
 - La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*

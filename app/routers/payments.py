@@ -14,14 +14,19 @@ from app.core.dependencies import (
     has_permission,
     require_permission,
 )
-from app.routers._pdf_helpers import pdf_response
+from app.repositories.payment_filters import PaymentFilters
+from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
+    CashierOption,
     PaymentCreate,
     PaymentListResponse,
     PaymentResponse,
     PaymentSummaryResponse,
 )
-from app.services import daily_cash_book_service, payment_service
+from app.services import daily_cash_book_service, payment_service, payments_journal_service
+from app.services.payments.scope import cashier_scope
+
+_XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -33,6 +38,9 @@ async def list_payments(
     enrollment_fee_id: int | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
+    received_by: int | None = Query(
+        None, description="N'afficher que la caisse de cet encaisseur."
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     current_user: TokenData = Depends(get_current_user),
@@ -43,7 +51,8 @@ async def list_payments(
     """Liste paginée des paiements avec filtres optionnels.
 
     Un caissier n'a pas `payments:read:all` : il ne lit que les versements
-    qu'il a lui-même encaissés.
+    qu'il a lui-même encaissés, et le paramètre `received_by` ne lui sert pas
+    de passe-droit vers la caisse d'un collègue.
     """
     return await payment_service.list_payments(
         db,
@@ -52,7 +61,11 @@ async def list_payments(
         enrollment_fee_id=enrollment_fee_id,
         date_from=date_from,
         date_to=date_to,
-        received_by=None if can_read_all else current_user.user_id,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
         page=page,
         size=size,
     )
@@ -79,6 +92,80 @@ async def get_payments_summary(
 ) -> PaymentSummaryResponse:
     """Agrège les statistiques de paiement (total attendu, payé, en attente, annulé)."""
     return await payment_service.get_payments_summary(db, academic_year_id=academic_year_id)
+
+
+# NOTE: /cashiers MUST be defined BEFORE /{payment_id}
+@router.get("/cashiers", response_model=list[CashierOption])
+async def list_cashiers(
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[CashierOption]:
+    """Les encaisseurs proposables dans le filtre « Encaissé par ».
+
+    Un caissier cloisonne sa vue sur lui-même : lui servir la liste de ses
+    collègues lui apprendrait qui tient les autres guichets, alors que le
+    filtre ne pourrait de toute façon rien lui montrer d'eux.
+    """
+    if not can_read_all:
+        return await payments_journal_service.own_cashier_option(db, current_user.user_id)
+    return await payments_journal_service.list_cashier_options(db)
+
+
+# NOTE: /export MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/export",
+    summary="Journal des versements (PDF ou Excel) — mêmes filtres que la liste",
+)
+async def export_payments(
+    status_filter: str | None = Query(None, alias="status"),
+    method: str | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    received_by: int | None = Query(None),
+    export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Exporte le journal des versements au gabarit officiel de l'établissement.
+
+    Le cloisonnement est celui de la liste, appliqué dans la même requête : un
+    export qui déverserait toutes les caisses contournerait la restriction de
+    l'écran sans que personne ne le voie, puisqu'on ne relit pas un classeur
+    de la même façon qu'un tableau.
+    """
+    filters = PaymentFilters(
+        status=status_filter,
+        method=method,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+    )
+    jour = date.today().isoformat()
+    if export_format == "xlsx":
+        return await binary_response(
+            lambda: payments_journal_service.get_journal_xlsx(
+                db, filters=filters, restricted=not can_read_all
+            ),
+            filename=f"journal-versements-{jour}.xlsx",
+            media_type=_XLSX_MEDIA_TYPE,
+            error_context="journal des versements (Excel)",
+            disposition="attachment",
+        )
+    return await pdf_response(
+        lambda: payments_journal_service.get_journal_pdf(
+            db, filters=filters, restricted=not can_read_all
+        ),
+        filename=f"journal-versements-{jour}.pdf",
+        error_context="journal des versements",
+    )
 
 
 # NOTE: /daily-cash-book MUST be defined BEFORE /{payment_id}
