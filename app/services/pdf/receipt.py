@@ -56,7 +56,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     """Generate a payment receipt PDF — premium template + theme école dynamique.
 
     payment_data keys: payment_id, amount, method, reference, status, notes,
-        student_name, fee_description, created_at, received_by_name, allocations.
+        student_name, fee_description, created_at, received_by_name, allocations,
+        entitlements: list[(nom du frais, ce qu'il ouvre)] + entitlements_overflow.
     school_settings keys: school_name, ministry_code, address, phone, email,
         logo_url, signature_image_url, head_master_name, head_master_title,
         primary_color, accent_color, website, motto.
@@ -77,6 +78,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
     created_at = payment_data.get("created_at")
     received_by = payment_data.get("received_by_name") or "—"
     allocations = payment_data.get("allocations") or []
+    entitlements = payment_data.get("entitlements") or []
+    entitlements_overflow = int(payment_data.get("entitlements_overflow") or 0)
 
     amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
     pay_date = (
@@ -122,6 +125,16 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
             col_widths=["40%", "20%", "22%", "18%"],
         )
 
+    # Ce que ce versement ouvre. Placé avant les signatures : un parent qui
+    # signe doit avoir lu ce qu'on lui promet, et c'est cette ligne qui tranche
+    # au guichet quand il revient réclamer une tenue six semaines plus tard.
+    entitlements_html = ui.entitlements_note(
+        entitlements,
+        theme=theme,
+        title="Ce que ce versement ouvre",
+        overflow=entitlements_overflow,
+    )
+
     # Signatures
     signatures_html = ui.signature_block(
         roles=[
@@ -152,6 +165,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
         {info_html}
 
         {allocations_section}
+
+        {entitlements_html}
 
         {signatures_html}
 

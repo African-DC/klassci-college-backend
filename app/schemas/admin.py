@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models.user import TeacherContract
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Student
@@ -863,6 +864,9 @@ class StudentEnrollmentFeeResponse(BaseModel):
     id: int  # enrollment_fee.id ou student_option.id
     enrollment_id: int
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     amount: float  # total dû
     paid: float  # somme des paiements complétés
     remaining: float

@@ -6,13 +6,16 @@ juste de la projection.
 """
 
 from app.models.fee import Payment, PaymentAllocation
+from app.schemas.fee import FeeEntitlement
 from app.schemas.payment import PaymentAllocationResponse, PaymentResponse
+from app.services import fee_entitlements as entitlements
 
 
 def allocation_to_response(allocation: PaymentAllocation) -> PaymentAllocationResponse:
     """Sérialise un PaymentAllocation avec sa catégorie."""
     fee_category_name = None
     fee_category_priority = None
+    fee_category_entitlements: list[FeeEntitlement] = []
     enrollment_fee_status_after = None
     ef = getattr(allocation, "enrollment_fee", None)
     if ef is not None:
@@ -23,12 +26,14 @@ def allocation_to_response(allocation: PaymentAllocation) -> PaymentAllocationRe
             if cat is not None:
                 fee_category_name = cat.name
                 fee_category_priority = cat.priority
+                fee_category_entitlements = entitlements.read(cat)
 
     return PaymentAllocationResponse(
         id=allocation.id,
         enrollment_fee_id=allocation.enrollment_fee_id,
         amount=allocation.amount,
         fee_category_name=fee_category_name,
+        fee_category_entitlements=fee_category_entitlements,
         fee_category_priority=fee_category_priority,
         enrollment_fee_status_after=enrollment_fee_status_after,
     )
