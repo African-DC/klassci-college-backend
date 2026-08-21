@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
+- Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
 
 ### Changed
@@ -16,6 +18,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
 ### Security
