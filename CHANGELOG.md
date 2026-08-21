@@ -17,6 +17,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*
 - Un billet d'entrée perdu ou mal imprimé peut être réédité : la réimpression ne modifie plus rien dans le cahier d'appel *(éducateur)*
 - L'observation notée dans le cahier d'appel, « parti à l'infirmerie », est conservée au journal avant d'être remplacée par la mention du billet *(éducateur)*
+- Un doublon sur une contrainte à plusieurs colonnes conseillait « choisissez un autre nom » devant un formulaire qui n'a pas de champ « nom ». Le message se décide maintenant sur la contrainte violée, et non sur l'apparence de la valeur *(admin, comptable)*
 - Deux points d'entrée de l'API annonçaient le dépôt de justificatifs sur une inscription alors qu'aucun code ne les servait : ils échouaient à chaque appel. Les justificatifs se déposent sur la fiche de l'élève, où ils ont toujours fonctionné *(admin)*
 - Les erreurs inattendues affichent enfin leur code de référence à l'écran ; le navigateur bloquait jusqu'ici la réponse et l'utilisateur ne voyait qu'une erreur réseau *(admin)*
 - La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève *(admin)*
