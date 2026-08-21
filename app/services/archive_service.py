@@ -270,6 +270,10 @@ class ArchivableKind:
     delete: Callable[[AsyncSession, ArchivableMixin], Awaitable[Sequence[Dependent] | None]]
     naming: Callable[[ArchivableMixin], str] | None = None
     load: Callable[[AsyncSession, int], Awaitable[ArchivableMixin | None]] | None = None
+    #: Ce qu'il faut figer avant que la fiche ne quitte les écrans. L'élève en
+    #: a besoin : le filtre qui le masque masque aussi son nom derrière ses
+    #: versements, et la colonne « Élève » du bordereau journalier se viderait.
+    before_archive: Callable[[AsyncSession, ArchivableMixin], Awaitable[object]] | None = None
 
     def label(self, record: ArchivableMixin) -> str:
         if self.naming is not None:
@@ -298,6 +302,8 @@ async def archive_record(
 ) -> ArchiveOutcome:
     """Place la fiche dans la corbeille."""
     record = await _load(db, kind, record_id)
+    if kind.before_archive is not None:
+        await kind.before_archive(db, record)
     return await archive(
         db,
         record,

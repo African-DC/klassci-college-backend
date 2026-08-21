@@ -1,5 +1,8 @@
 """Corbeille — archiver d'abord, supprimer ensuite, toujours avec un motif."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi import HTTPException
 
@@ -162,28 +165,68 @@ def _kind_bidon(record: object) -> ArchivableKind:
     return ArchivableKind("essai", "La fiche", _Personne, _supprime, load=_charge)
 
 
-#: Le geste attendu de chaque entité, et le module qui le porte.
-GESTES = {
-    "student": ("app.services.admin_service", "student"),
-    "teacher": ("app.services.admin_service", "teacher"),
-    "staff": ("app.services.admin_service", "staff"),
-    "parent": ("app.services.admin_service", "parent"),
-    "enrollment": ("app.services.enrollment_archive", "enrollment"),
-}
+def test_le_registre_couvre_les_quatre_fiches_de_personnes() -> None:
+    """Une sorte de fiche absente du registre perd ses trois gestes d'un coup.
+
+    Elle resterait archivable par le filtre global, donc invisible, sans
+    aucun moyen de l'en sortir."""
+    from app.routers.archive import BINS
+    from app.services.admin_service import PARENT_KIND, STAFF_KIND, STUDENT_KIND, TEACHER_KIND
+
+    assert {b.kind for b in BINS.values()} == {
+        STUDENT_KIND,
+        TEACHER_KIND,
+        STAFF_KIND,
+        PARENT_KIND,
+    }
 
 
-def test_chaque_entite_archivable_a_ses_trois_gestes() -> None:
-    """Archiver, restaurer, supprimer : une entité qui n'a que le troisième
-    offre une suppression sans filet, ce que la corbeille existe pour éviter."""
-    import importlib
-    import inspect
+def test_l_eleve_fige_son_identite_avant_de_quitter_les_ecrans() -> None:
+    """Le filtre qui masque l'élève archivé le masque aussi derrière ses
+    versements : sans ce recopiage, la colonne « Élève » du bordereau
+    journalier se viderait du jour au lendemain."""
+    from app.repositories import student_purge_repository as purge_repo
+    from app.services.admin_service import STUDENT_KIND
 
-    for entite, (module_name, suffixe) in GESTES.items():
-        module = importlib.import_module(module_name)
-        for geste in ("archive", "restore", "delete"):
-            fn = getattr(module, f"{geste}_{suffixe}", None)
-            assert fn is not None, f"{entite} : {geste}_{suffixe} manquant"
-            assert inspect.iscoroutinefunction(fn), f"{geste}_{suffixe} doit être async"
+    assert STUDENT_KIND.before_archive is purge_repo.freeze_student_identity_on_payments
+
+
+async def test_le_prealable_court_avant_que_la_fiche_ne_soit_archivee() -> None:
+    """L'ordre est le tout : figer une identité APRÈS l'archivage lirait une
+    fiche déjà masquée."""
+    from app.services.archive_service import archive_record
+
+    fiche = _Personne(archived=False)
+    vus: list[object] = []
+
+    async def _prealable(_db: object, record: object) -> None:
+        vus.append(getattr(record, "archived_at", None))
+
+    kind = _kind_bidon(fiche)
+    kind = ArchivableKind(
+        kind.entity_type,
+        kind.article,
+        kind.model,
+        kind.delete,
+        load=kind.load,
+        before_archive=_prealable,
+    )
+
+    db = SimpleNamespace(commit=AsyncMock(), add=lambda _o: None)
+    with (
+        patch("app.services.archive_service.audit_log", new=AsyncMock()),
+        patch("app.services.archive_service.notify", new=AsyncMock()),
+    ):
+        await archive_record(
+            db,  # type: ignore[arg-type]
+            kind,
+            42,
+            reason="Fiche créée deux fois par erreur",
+            actor_id=1,
+        )
+
+    assert vus == [None], "le préalable doit voir la fiche encore visible"
+    assert fiche.archived_at is not None
 
 
 def test_toute_fiche_archivable_a_sa_place_dans_la_corbeille() -> None:

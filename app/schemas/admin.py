@@ -1115,10 +1115,15 @@ class PromotionExecuteResponse(BaseModel):
 
 
 class ArchiveRequest(BaseModel):
-    """Motif d'archivage.
+    """Motif d'un geste de corbeille — mise à la corbeille ou suppression définitive.
 
     Obligatoire : sans lui, le journal dirait qu'une fiche a disparu sans dire
     pourquoi, ce qui ne vaut guère mieux que pas de trace du tout.
+
+    Il voyage dans le corps de la requête, y compris pour la suppression
+    définitive. Un motif passé en paramètre d'URL finirait recopié dans les
+    journaux d'accès du serveur et chez tous les intermédiaires ; « élève
+    exclu pour vol » n'a rien à faire dans une adresse.
     """
 
     reason: str = Field(min_length=10, max_length=500)

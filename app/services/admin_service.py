@@ -84,7 +84,6 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.services import archive_service, fees_paid
-from app.services.archive_service import ArchiveOutcome
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
@@ -263,49 +262,12 @@ STUDENT_KIND = archive_service.ArchivableKind(
     # survit à la fiche de l'élève, sous identité figée.
     purge_repo.purge_student_keeping_payments,
     load=repo.get_archived_student_by_id,
+    # Figer l'identité sur les versements AVANT que la fiche ne quitte les
+    # écrans : le filtre qui masque l'élève archivé le masque aussi derrière
+    # ses versements, et la colonne « Élève » du bordereau journalier se
+    # viderait du jour au lendemain.
+    before_archive=purge_repo.freeze_student_identity_on_payments,
 )
-
-
-async def archive_student(
-    db: AsyncSession, student_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'eleve dans la corbeille : il quitte les ecrans, rien n'est detruit."""
-    student = await repo.get_student_by_id(db, student_id)
-    if student is None:
-        raise NotFoundError("Student", student_id)
-
-    # Figer l'identité sur les versements dès maintenant : une fois l'élève
-    # archivé, le filtre qui le masque partout le masque aussi derrière ses
-    # versements, et la colonne « Élève » du bordereau journalier se viderait.
-    await purge_repo.freeze_student_identity_on_payments(db, student)
-
-    return await archive_service.archive(
-        db,
-        student,
-        entity_type="student",
-        label=STUDENT_KIND.label(student),
-        reason=reason,
-        actor_id=actor_id,
-    )
-
-
-async def restore_student(db: AsyncSession, student_id: int, *, actor_id: int) -> None:
-    """Sort l'eleve de la corbeille."""
-    await archive_service.restore_record(db, STUDENT_KIND, student_id, actor_id=actor_id)
-
-
-async def delete_student(
-    db: AsyncSession, student_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime definitivement un eleve deja place dans la corbeille.
-
-    Le passage par la corbeille n'est pas une formalite : c'est ce qui laisse
-    le temps de se raviser. Le court-circuiter transformerait un clic
-    malheureux en perte definitive.
-    """
-    await archive_service.purge_record(
-        db, STUDENT_KIND, student_id, reason=reason, actor_id=deleted_by
-    )
 
 
 async def get_student_full(
@@ -735,29 +697,6 @@ async def update_teacher(
     return _teacher_to_response(refreshed)
 
 
-async def archive_teacher(
-    db: AsyncSession, teacher_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'enseignant dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_teacher(db: AsyncSession, teacher_id: int, *, actor_id: int) -> None:
-    """Sort l'enseignant de la corbeille."""
-    await archive_service.restore_record(db, TEACHER_KIND, teacher_id, actor_id=actor_id)
-
-
-async def delete_teacher(
-    db: AsyncSession, teacher_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(
-        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=deleted_by
-    )
-
-
 async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     """Enriched teacher profile with user account and aggregated KPIs."""
     from app.models.enrollment import Enrollment
@@ -1155,28 +1094,6 @@ async def update_staff(
     return _staff_to_response(refreshed)
 
 
-async def archive_staff(
-    db: AsyncSession, staff_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place le membre du personnel dans la corbeille : la fiche quitte les
-    écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, STAFF_KIND, staff_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_staff(db: AsyncSession, staff_id: int, *, actor_id: int) -> None:
-    """Sort le membre du personnel de la corbeille."""
-    await archive_service.restore_record(db, STAFF_KIND, staff_id, actor_id=actor_id)
-
-
-async def delete_staff(
-    db: AsyncSession, staff_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(db, STAFF_KIND, staff_id, reason=reason, actor_id=deleted_by)
-
-
 async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     """Enriched staff profile with user account info."""
     from app.models.user import StaffProfile
@@ -1498,29 +1415,6 @@ async def update_parent(
     if refreshed is None:
         raise NotFoundError("Parent", parent_id)
     return _parent_to_response(refreshed)
-
-
-async def archive_parent(
-    db: AsyncSession, parent_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place le parent dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, PARENT_KIND, parent_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_parent(db: AsyncSession, parent_id: int, *, actor_id: int) -> None:
-    """Sort le parent de la corbeille."""
-    await archive_service.restore_record(db, PARENT_KIND, parent_id, actor_id=actor_id)
-
-
-async def delete_parent(
-    db: AsyncSession, parent_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(
-        db, PARENT_KIND, parent_id, reason=reason, actor_id=deleted_by
-    )
 
 
 async def link_parent_to_student(

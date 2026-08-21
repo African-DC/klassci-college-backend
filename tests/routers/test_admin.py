@@ -229,21 +229,6 @@ def test_update_student_success() -> None:
     assert resp.json()["first_name"] == "Jacques"
 
 
-def test_delete_student_success() -> None:
-    _override_deps()
-    try:
-        with patch(
-            f"{SVC}.delete_student",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            with TestClient(app) as client:
-                resp = client.delete("/admin/students/1")
-    finally:
-        _clear_deps()
-    assert resp.status_code == 204
-
-
 def test_students_unauthenticated() -> None:
     with TestClient(app) as client:
         resp = client.get("/admin/students")
@@ -311,21 +296,6 @@ def test_get_teacher_not_found() -> None:
     assert resp.status_code == 404
 
 
-def test_delete_teacher_success() -> None:
-    _override_deps()
-    try:
-        with patch(
-            f"{SVC}.delete_teacher",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            with TestClient(app) as client:
-                resp = client.delete("/admin/teachers/1")
-    finally:
-        _clear_deps()
-    assert resp.status_code == 204
-
-
 # ---------------------------------------------------------------------------
 # Staff
 # ---------------------------------------------------------------------------
@@ -368,21 +338,6 @@ def test_create_staff_success() -> None:
     finally:
         _clear_deps()
     assert resp.status_code == 201
-
-
-def test_delete_staff_success() -> None:
-    _override_deps()
-    try:
-        with patch(
-            f"{SVC}.delete_staff",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            with TestClient(app) as client:
-                resp = client.delete("/admin/staff/1")
-    finally:
-        _clear_deps()
-    assert resp.status_code == 204
 
 
 # ---------------------------------------------------------------------------
