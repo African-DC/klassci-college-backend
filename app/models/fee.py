@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Computed,
@@ -54,6 +55,20 @@ class EnrollmentFeeStatus(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 
+class FeeEntitlementKind(str, enum.Enum):
+    """Nature d'une contrepartie : un objet qu'on retire, ou un droit qui s'ouvre.
+
+    Deux natures suffisent parce que ce sont les deux seules qui changent la
+    phrase du secretariat. Un polo se retire a la boutique et se cochera un
+    jour comme remis ; l'acces a l'infirmerie s'ouvre le jour du versement et
+    ne se remet a personne. Les confondre, c'est promettre a une famille
+    qu'elle viendra chercher une bibliotheque.
+    """
+
+    ITEM = "item"
+    ACCESS = "access"
+
+
 class FeeAssignmentScope(str, enum.Enum):
     """A qui s'applique un tarif selon l'affectation.
 
@@ -82,6 +97,13 @@ class FeeCategory(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Ce que la famille recoit en echange de ce frais, en clair et par element.
+    #: Liste ordonnee de `{label, quantity, kind}` — voir `FeeEntitlementKind`.
+    #: Embarquee sur la ligne plutot que sortie en table : cette information est
+    #: lue partout ou une categorie est deja chargee (grille des frais, fiche
+    #: eleve, portails, recu), et une relation de plus y ajouterait autant
+    #: d'occasions d'oublier un `selectinload`.
+    entitlements: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Ordre d'allocation des paiements automatiques. Lower = paid first.
     # Convention : 10 Inscription, 20/30/40 T1/T2/T3, 50 COGES, 60 Tenue, 100 reste.

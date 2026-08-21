@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from app.services.pdf._blocks import (
     amount_box,
+    entitlements_note,
     info_grid,
     info_row,
     info_table,
@@ -65,6 +66,7 @@ __all__ = [
     "appreciation_label",
     "base_styles",
     "document_frame",
+    "entitlements_note",
     "enum_value",
     "esc",
     "format_decimal",

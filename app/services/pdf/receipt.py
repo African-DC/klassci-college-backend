@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from app.services.pdf import _blocks as ui
 from app.services.pdf import _receipt_parts as parts
 from app.services.pdf._receipt_styles import receipt_styles
 from app.services.pdf.theme import PDFTheme
@@ -40,8 +41,19 @@ def _document_reference(payment_data: dict[str, Any]) -> str:
     return f"REC-{year}-{payment_id}" if payment_id else ""
 
 
-def _half_html(data: dict[str, Any], school: dict[str, Any], *, copy_label: str) -> str:
-    """Un exemplaire complet et autonome, sur une moitié de page."""
+def _half_html(
+    data: dict[str, Any],
+    school: dict[str, Any],
+    *,
+    copy_label: str,
+    entitlements_html: str = "",
+) -> str:
+    """Un exemplaire complet et autonome, sur une moitié de page.
+
+    La contrepartie figure sur les deux exemplaires : c'est elle qu'on oppose
+    au guichet quand la famille revient réclamer une tenue six semaines plus
+    tard, et elle ne sert à rien si seule la souche de l'école la porte.
+    """
     created_at = data.get("created_at")
     when = created_at.strftime("%d/%m/%Y") if isinstance(created_at, datetime) else ""
     doc_number = " · ".join(
@@ -55,6 +67,7 @@ def _half_html(data: dict[str, Any], school: dict[str, Any], *, copy_label: str)
             <td class="rc-col-right">{parts.situation_column_html(data)}</td>
         </tr></table>
         {parts.key_figures_html(data)}
+        {entitlements_html}
         <div class="rc-bottom">{parts.footer_html(data, school)}</div>
     </div>
     """
@@ -78,13 +91,21 @@ def build_receipt_html(payment_data: dict[str, Any], school_settings: dict[str, 
     data = dict(payment_data or {})
     data.setdefault("document_reference", _document_reference(data))
 
+    # Ce que ce versement ouvre — composé une fois, imprimé sur les deux moitiés.
+    contrepartie = ui.entitlements_note(
+        data.get("entitlements") or [],
+        theme=theme,
+        title="Ce que ce versement ouvre",
+        overflow=int(data.get("entitlements_overflow") or 0),
+    )
+
     return f"""<!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">{receipt_styles(theme)}</head>
     <body>
-        {_half_html(data, school, copy_label=COPY_FAMILY)}
+        {_half_html(data, school, copy_label=COPY_FAMILY, entitlements_html=contrepartie)}
         <div class="rc-cut"><span class="rc-cut-label">Découper ici</span></div>
-        {_half_html(data, school, copy_label=COPY_SCHOOL)}
+        {_half_html(data, school, copy_label=COPY_SCHOOL, entitlements_html=contrepartie)}
     </body>
     </html>
     """
@@ -95,7 +116,8 @@ def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str
 
     payment_data : payment_id, amount, method, reference, status, notes,
         student_name, class_name, academic_year_name, fee_description,
-        created_at, received_by_name, situation, schedule.
+        created_at, received_by_name, situation, schedule, entitlements,
+        entitlements_overflow.
     school_settings : school_name, ministry_code, address, phone, email,
         logo_url, primary_color, accent_color, website.
     """

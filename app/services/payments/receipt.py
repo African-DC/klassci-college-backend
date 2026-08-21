@@ -17,6 +17,7 @@ from app.core.exceptions import NotFoundError
 from app.models.fee import Payment
 from app.models.user import User
 from app.repositories import payment_repository as repo
+from app.services import fee_entitlements as entitlements
 from app.services import fee_situation
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
@@ -45,6 +46,30 @@ def _fee_description(payment: Payment) -> str:
         if ef and ef.fee_variant and ef.fee_variant.category:
             return ef.fee_variant.category.name
     return f"Réparti sur {len(allocations)} frais par priorité"
+
+
+def _build_entitlements(payment: Payment) -> tuple[list[tuple[str, str]], int]:
+    """Ce que les frais réglés par CE versement ouvrent, et combien débordent.
+
+    Seulement les catégories touchées aujourd'hui : un reçu n'a pas à rappeler
+    ce que la scolarité du trimestre suivant donnera un jour. Les doublons sont
+    écartés parce qu'un versement peut alimenter deux tranches de la même
+    catégorie, et annoncer deux fois le même polo ferait douter de tout le reste.
+    """
+    vues: set[str] = set()
+    lignes: list[tuple[str, str]] = []
+    for allocation in payment.allocations or []:
+        ef = allocation.enrollment_fee
+        categorie = ef.fee_variant.category if ef and ef.fee_variant else None
+        if categorie is None or categorie.name in vues:
+            continue
+        vues.add(categorie.name)
+        texte = entitlements.receipt_line(entitlements.read(categorie), categorie.description)
+        if texte:
+            lignes.append((categorie.name, texte))
+
+    debordement = max(len(lignes) - entitlements.RECEIPT_MAX_CATEGORIES, 0)
+    return lignes[: entitlements.RECEIPT_MAX_CATEGORIES], debordement
 
 
 async def _resolve_received_by_name(db: AsyncSession, user_id: int | None) -> str:
@@ -136,6 +161,12 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
     year = getattr(enrollment, "academic_year", None) if enrollment is not None else None
 
     school = await _get_school_settings(db)
+    received_by_name = await _resolve_received_by_name(db, payment.received_by)
+    entitlements_lines, entitlements_overflow = _build_entitlements(payment)
+
+    # FIX bug enum : SQLAlchemy SAEnum retourne l'enum object (PaymentMethod.CASH),
+    # passer par enum_value() pour obtenir la string brute consommée par les labels FR.
+
     payment_data = {
         "payment_id": payment.id,
         "amount": payment.amount,
@@ -150,9 +181,14 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
         "academic_year_name": getattr(year, "name", "") or "",
         "fee_description": _fee_description(payment),
         "created_at": payment.created_at,
-        "received_by_name": await _resolve_received_by_name(db, payment.received_by),
+        "received_by_name": received_by_name,
         "situation": await _build_situation(db, payment.enrollment_id),
         "schedule": await _build_schedule(db, payment.enrollment_id),
+        # Affiché même quand le tableau d'allocation ne l'est pas : le cas le
+        # plus fréquent est justement le versement d'un seul frais, et c'est
+        # celui-là que la famille vient réclamer.
+        "entitlements": entitlements_lines,
+        "entitlements_overflow": entitlements_overflow,
     }
 
     return generate_receipt_pdf(payment_data, school)

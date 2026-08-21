@@ -74,6 +74,9 @@ async def _build_fees_section(
     rows = [
         {
             "category_name": line.category_name,
+            # L'etat des frais est la piece que la famille garde : il doit dire
+            # ce que chaque ligne achete, pas seulement ce qu'elle coute.
+            "entitlements": line.entitlements,
             "amount": line.due,
             "paid": line.paid,
             "remaining": line.remaining,

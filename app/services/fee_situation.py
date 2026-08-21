@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services.pdf._helpers import enum_value
 
@@ -33,6 +34,9 @@ class FeeLine:
 
     category_name: str
     priority: int
+    # Ce que la ligne achete, pas seulement ce qu'elle coute. Calcule ici pour
+    # que le recu et l'etat des frais promettent mot pour mot la meme chose.
+    entitlements: str
     due: Decimal
     paid: Decimal
     remaining: Decimal
@@ -91,6 +95,10 @@ def situation_from_fees(fees: Iterable[object], paid_by_fee: dict[int, Decimal])
                 category_name=getattr(category, "name", "") or "",
                 priority=getattr(category, "priority", _PRIORITE_PAR_DEFAUT)
                 or _PRIORITE_PAR_DEFAUT,
+                entitlements=entitlements.receipt_line(
+                    entitlements.read(category),
+                    getattr(category, "description", None),
+                ),
                 due=due,
                 paid=paid,
                 remaining=max(due - paid, Decimal("0")),
