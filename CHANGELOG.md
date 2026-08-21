@@ -22,6 +22,13 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier *(comptable, directeur)*
+- Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel *(comptable, caissier)*
+- Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier *(comptable)*
+- La date du bordereau s'écrivait en anglais, « Friday 21 August 2026 », en tête d'une pièce comptable française *(comptable, caissier)*
+- Un refus de changement de statut affichait au guichet « impossible de passer de 'PaymentStatus.COMPLETED' », un nom technique interne, et le journal d'audit financier en gardait la trace *(caissier, comptable)*
+- La notification de clôture d'office s'accordait mal au pluriel : « Votre journées de caisse du 19/08, 20/08 ont été clôturées » *(caissier)*
+- Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien *(devops)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
 - La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*

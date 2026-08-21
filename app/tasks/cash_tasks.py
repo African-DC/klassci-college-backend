@@ -17,6 +17,7 @@ import asyncio
 import logging
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.celery_app import celery_app
@@ -37,7 +38,7 @@ def close_stale_cash_sessions_all_tenants_task(self: Any) -> dict[str, Any]:
     remonte dans le résultat pour qu'un silence ne passe pas pour un succès.
     """
     slugs = asyncio.run(list_tenant_slugs())
-    totals = {"tenants": len(slugs), "closed": 0, "failed": 0, "pending": 0}
+    totals = {"tenants": len(slugs), "closed": 0, "failed": 0, "skipped": 0, "pending": 0}
 
     for slug in slugs:
         try:
@@ -45,6 +46,9 @@ def close_stale_cash_sessions_all_tenants_task(self: Any) -> dict[str, Any]:
         except Exception:
             logger.exception("Cash auto-closure failed for tenant=%s", slug)
             totals["failed"] += 1
+            continue
+        if report["skipped"]:
+            totals["skipped"] += 1
             continue
         totals["closed"] += report["closed"]
         totals["pending"] += 1 if report["has_more"] else 0
@@ -63,6 +67,23 @@ def close_stale_cash_sessions_task(self: Any, tenant_id: str) -> dict[str, Any]:
         raise
 
 
+async def _is_klassci_tenant(db: AsyncSession) -> bool:
+    """Vrai si cette base porte bien une caisse KLASSCI.
+
+    `list_tenant_slugs()` énumère les schémas MySQL et retire les bases
+    système : tout ce qui reste passe pour un établissement. Sur un serveur
+    qui héberge d'autres applications, cela inclut leurs bases, et le balayage
+    y échouait chaque nuit sur « Table 'x.cash_sessions' doesn't exist » —
+    deux `failed` sur trois « tenants » dès la première exécution en démo.
+    Un compteur d'échecs qui compte des bases hors sujet ne signale plus rien.
+    """
+    stmt = text(
+        "SELECT 1 FROM information_schema.tables "
+        "WHERE table_schema = DATABASE() AND table_name = 'cash_sessions' LIMIT 1"
+    )
+    return (await db.execute(stmt)).scalar_one_or_none() is not None
+
+
 async def _close_stale_async(tenant_id: str) -> dict[str, Any]:
     """Corps async — une connexion courte, refermée quoi qu'il arrive."""
     current_tenant_id.set(tenant_id)
@@ -70,6 +91,15 @@ async def _close_stale_async(tenant_id: str) -> dict[str, Any]:
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     try:
         async with factory() as db:
+            if not await _is_klassci_tenant(db):
+                logger.info("Cash auto-closure: %s is not a KLASSCI tenant, skipped", tenant_id)
+                return {
+                    "tenant": tenant_id,
+                    "closed": 0,
+                    "cashiers_notified": 0,
+                    "has_more": False,
+                    "skipped": True,
+                }
             # La journée EN COURS est calculée dans le fuseau de l'école, pas
             # dans celui du serveur : c'est elle qui définit ce qui est
             # « révolu ». Voir `SCHOOL_TIMEZONE`.
@@ -81,4 +111,5 @@ async def _close_stale_async(tenant_id: str) -> dict[str, Any]:
         "closed": report.closed,
         "cashiers_notified": report.cashiers_notified,
         "has_more": report.has_more,
+        "skipped": False,
     }
