@@ -250,6 +250,29 @@ async def test_une_inscription_validee_deja_encaissee_ne_part_pas_a_la_corbeille
     assert inscription.archived_at is None
 
 
+async def test_le_garde_reconnait_le_statut_tel_que_la_base_le_rend(
+    journal: tuple[list[dict], list[object]],
+) -> None:
+    """La base rend « valide », une chaîne, pas l'énumération.
+
+    Un garde qui ne reconnaîtrait que l'énumération laisserait passer toutes
+    les inscriptions réelles sans que rien ne le signale.
+    """
+    inscription = _inscription(archivee=False, statut="valide")
+    db = _Session(inscription, versements=1)
+
+    with pytest.raises(BusinessValidationError):
+        await archive_service.archive_record(
+            db,  # type: ignore[arg-type]
+            ENROLLMENT_KIND,
+            42,
+            reason=MOTIF,
+            actor_id=1,
+        )
+
+    assert inscription.archived_at is None
+
+
 async def test_un_prospect_sans_versement_part_a_la_corbeille(
     journal: tuple[list[dict], list[object]],
 ) -> None:
