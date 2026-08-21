@@ -19,7 +19,6 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.datetimes import utcnow_naive
 from app.core.exceptions import NotFoundError
+from app.models.archivable import ArchivableMixin
 from app.repositories import admin_repository as repo
 from app.services.deletion import Dependent
 
@@ -35,13 +35,6 @@ logger = logging.getLogger(__name__)
 # Un motif d'un mot ne dit rien. Assez court pour ne pas décourager, assez
 # long pour interdire « ok » ou « test ».
 MIN_REASON_LENGTH = 10
-
-
-class Archivable(Protocol):
-    id: int
-    archived_at: object
-    archived_by: object
-    archive_reason: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +83,7 @@ def ensure_reason(reason: str | None) -> str:
 
 async def archive(
     db: AsyncSession,
-    entity: Archivable,
+    entity: ArchivableMixin,
     *,
     entity_type: str,
     label: str,
@@ -133,7 +126,7 @@ async def archive(
 
 async def restore(
     db: AsyncSession,
-    entity: Archivable,
+    entity: ArchivableMixin,
     *,
     entity_type: str,
     label: str,
@@ -163,7 +156,7 @@ async def restore(
     await db.commit()
 
 
-def ensure_archived_first(entity: Archivable, *, label: str) -> None:
+def ensure_archived_first(entity: ArchivableMixin, *, label: str) -> None:
     """Interdit la suppression définitive d'une fiche encore visible.
 
     Le passage par la corbeille est ce qui laisse le temps de se raviser. Le
@@ -268,17 +261,17 @@ class ArchivableKind:
 
     entity_type: str
     article: str  # « L'enseignant », « Le parent »...
-    model: type
+    model: type[ArchivableMixin]
     #: Détruit la fiche et rend l'inventaire de ce qu'elle a emporté. Cet
     #: inventaire ne peut se constituer que PENDANT la destruction : c'est le
     #: seul moment où l'on sait encore combien de notes, de frais et de
     #: versements portait la fiche. Rendre `None` quand il n'y a rien à
     #: dénombrer.
-    delete: Callable[[AsyncSession, object], Awaitable[Sequence[Dependent] | None]]
-    naming: Callable[[object], str] | None = None
-    load: Callable[[AsyncSession, int], Awaitable[object | None]] | None = None
+    delete: Callable[[AsyncSession, ArchivableMixin], Awaitable[Sequence[Dependent] | None]]
+    naming: Callable[[ArchivableMixin], str] | None = None
+    load: Callable[[AsyncSession, int], Awaitable[ArchivableMixin | None]] | None = None
 
-    def label(self, record: object) -> str:
+    def label(self, record: ArchivableMixin) -> str:
         if self.naming is not None:
             return self.naming(record)
         first = getattr(record, "first_name", "") or ""
@@ -286,7 +279,7 @@ class ArchivableKind:
         return f"{self.article} {last} {first}".strip()
 
 
-async def _load(db: AsyncSession, kind: ArchivableKind, record_id: int) -> object:
+async def _load(db: AsyncSession, kind: ArchivableKind, record_id: int) -> ArchivableMixin:
     """Charge la fiche, archivée ou non.
 
     On lit délibérément à travers le filtre global : sans cela, une fiche
@@ -307,7 +300,7 @@ async def archive_record(
     record = await _load(db, kind, record_id)
     return await archive(
         db,
-        record,  # type: ignore[arg-type]
+        record,
         entity_type=kind.entity_type,
         label=kind.label(record),
         reason=reason,
@@ -322,7 +315,7 @@ async def restore_record(
     record = await _load(db, kind, record_id)
     await restore(
         db,
-        record,  # type: ignore[arg-type]
+        record,
         entity_type=kind.entity_type,
         label=kind.label(record),
         actor_id=actor_id,
@@ -335,7 +328,7 @@ async def purge_record(
     """Supprime définitivement une fiche déjà placée dans la corbeille."""
     record = await _load(db, kind, record_id)
     label = kind.label(record)
-    ensure_archived_first(record, label=label)  # type: ignore[arg-type]
+    ensure_archived_first(record, label=label)
     # Le motif est validé avant la première destruction, pas après.
     reason = ensure_reason(reason)
 
