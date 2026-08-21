@@ -24,6 +24,7 @@ from app.models.fee import (
     Payment,
     PaymentAllocation,
 )
+from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
 
 # ---------------------------------------------------------------------------
 # Loaders communs (selectinload exhaustif — voir preload-relations-after-commit)
@@ -32,7 +33,7 @@ from app.models.fee import (
 
 def _payment_full_options():
     """Tout ce que le service / le PDF / la notif consomment post-commit."""
-    from app.models.user import Student
+    from app.models.user import Student, User
 
     return (
         # Pour le notif dispatch
@@ -48,6 +49,12 @@ def _payment_full_options():
         selectinload(Payment.enrollment_fee)
         .selectinload(EnrollmentFee.fee_variant)
         .selectinload(FeeVariant.category),
+        # Pour nommer l'encaisseur. Les deux profils sont chargés parce qu'un
+        # versement peut avoir ete encaisse par un poste administratif comme
+        # par un enseignant regisseur : lire le mauvais profil rendrait une
+        # colonne vide sur un document comptable.
+        selectinload(Payment.received_by_user).selectinload(User.staff_profile),
+        selectinload(Payment.received_by_user).selectinload(User.teacher_profile),
     )
 
 
@@ -92,30 +99,18 @@ async def list_payments(
     collègues, et le caissier verrait « 128 versements » en n'en lisant que
     les siens.
     """
-    base = select(Payment).options(*_payment_full_options())
-
-    if received_by is not None:
-        base = base.where(Payment.received_by == received_by)
-
-    if status is not None:
-        base = base.where(Payment.status == status)
-    if method is not None:
-        base = base.where(Payment.method == method)
-    if enrollment_id is not None:
-        base = base.where(Payment.enrollment_id == enrollment_id)
-    if enrollment_fee_id is not None:
-        # Le filtre passe par les allocations (nouveau modèle)
-        base = base.where(
-            Payment.id.in_(
-                select(PaymentAllocation.payment_id).where(
-                    PaymentAllocation.enrollment_fee_id == enrollment_fee_id
-                )
-            )
-        )
-    if date_from is not None:
-        base = base.where(Payment.created_at >= date_from)
-    if date_to is not None:
-        base = base.where(Payment.created_at <= date_to)
+    base = apply_payment_filters(
+        select(Payment).options(*_payment_full_options()),
+        PaymentFilters(
+            status=status,
+            method=method,
+            enrollment_fee_id=enrollment_fee_id,
+            enrollment_id=enrollment_id,
+            date_from=date_from,
+            date_to=date_to,
+            received_by=received_by,
+        ),
+    )
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0

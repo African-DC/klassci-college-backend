@@ -7,6 +7,7 @@ juste de la projection.
 
 from app.models.fee import Payment, PaymentAllocation
 from app.schemas.payment import PaymentAllocationResponse, PaymentResponse
+from app.services.payments._cashier import cashier_name
 
 
 def allocation_to_response(allocation: PaymentAllocation) -> PaymentAllocationResponse:
@@ -99,6 +100,7 @@ def payment_to_response(payment: Payment) -> PaymentResponse:
         status=payment.status,
         reference=payment.reference,
         received_by=payment.received_by,
+        received_by_name=cashier_name(getattr(payment, "received_by_user", None)),
         notes=payment.notes,
         created_at=payment.created_at,
         updated_at=payment.updated_at,
