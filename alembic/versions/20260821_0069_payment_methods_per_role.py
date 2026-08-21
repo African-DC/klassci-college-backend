@@ -19,15 +19,15 @@ exactement le comportement d'avant : qui pouvait encaisser pouvait encaisser
 par n'importe quel moyen. Aucune école en service ne voit son guichet changer
 tant qu'elle n'a pas ouvert l'écran de configuration.
 
-Revision ID: 0065_payment_methods
-Revises: 0064_cash_auto_closure
+Revision ID: 0069_payment_methods
+Revises: 0068_student_birth_place
 Create Date: 2026-08-21
 """
 
 from alembic import op
 
-revision = "0065_payment_methods"
-down_revision = "0064_cash_auto_closure"
+revision = "0069_payment_methods"
+down_revision = "0068_student_birth_place"
 branch_labels = None
 depends_on = None
 

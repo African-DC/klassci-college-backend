@@ -86,7 +86,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
 
     data keys :
         student_name, class_name, academic_year_name, enrollment_id,
-        fees: list[{category_name, amount, paid, remaining, status}],
+        fees: list[{category_name, amount, paid, remaining, status, entitlements}],
         payments: list[{id, created_at, method, reference, amount, status}],
         totals: {total_expected, total_paid, total_remaining, completion_rate},
         issued_at: datetime
@@ -156,6 +156,12 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         col_widths=["34%", "17%", "17%", "17%", "15%"],
     )
 
+    entitlements_section = ui.entitlements_note(
+        [(f.get("category_name", ""), f.get("entitlements", "")) for f in fees],
+        theme=theme,
+        title="Ce que ces frais ouvrent",
+    )
+
     payments_section = ui.section_title(
         "Historique des versements", theme=theme
     ) + ui.premium_table(
@@ -197,6 +203,8 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         {balance_box}
 
         {fees_section}
+
+        {entitlements_section}
 
         {payments_section}
 

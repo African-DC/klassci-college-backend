@@ -23,6 +23,7 @@ from app.models.enrollment import AssignmentStatus
 from app.models.fee import EnrollmentFee, FeeAssignmentScope, FeeCategory, FeeVariant
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import FeeVariantResponse
+from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services.deletion import Dependent
 
@@ -296,6 +297,7 @@ def _to_variant_response(fv: FeeVariant) -> FeeVariantResponse:
         id=fv.id,
         fee_category_id=fv.fee_category_id,
         category_name=fv.category.name if fv.category else str(fv.fee_category_id),
+        entitlements=entitlements.read(fv.category),
         is_mandatory=fv.category.is_mandatory if fv.category else True,
         level_id=fv.level_id,
         series_id=fv.series_id,

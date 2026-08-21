@@ -6,6 +6,7 @@ depuis tous les Payment d'une date donnée, et délègue au générateur PDF sta
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
@@ -15,7 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
-from app.models.user import User
+from app.repositories import cash_session_repository as cash_repo
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
@@ -48,16 +49,46 @@ async def _load_payments_for_day(
     return list(result.scalars().all())
 
 
-async def _resolve_cashier_name(db: AsyncSession, user_id: int | None) -> str:
-    """Nom du caissier ayant clôturé — soit l'user demandeur, soit '—'."""
-    if not user_id:
-        return "—"
-    stmt = select(User).where(User.id == user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
-    if user is None:
-        return "—"
-    return user.email.split("@")[0]
+@dataclass(slots=True)
+class CashierDayTotals:
+    """Ce qu'une caisse a encaissé sur la journée, ventilé par moyen.
+
+    Une dataclass et non un `dict[str, object]` : la version en dictionnaire
+    demandait un `type: ignore` à chaque lecture d'un champ, et le générateur
+    PDF n'avait aucun moyen de savoir qu'il manipulait des `Decimal`.
+    """
+
+    cashier_name: str
+    count: int = 0
+    total: Decimal = Decimal("0")
+    by_method: dict[str, Decimal] = field(default_factory=dict)
+
+
+def cashier_breakdown(payments: list[Payment], names: dict[int, str]) -> list[CashierDayTotals]:
+    """Qui a encaissé quoi, et sous quelle forme.
+
+    C'est ce que le comptable cherche en ouvrant le bordereau consolidé :
+    non pas une somme unique, mais la ventilation caisse par caisse. Sans
+    elle, rapprocher un dépôt bancaire d'une caisse précise obligeait à
+    relire ligne à ligne le détail des versements.
+
+    Seuls les versements validés comptent : un versement annulé n'a pas
+    alimenté le tiroir, et l'inclure gonflerait le total à rapprocher.
+    """
+    per_cashier: dict[int | None, CashierDayTotals] = {}
+    for payment in payments:
+        if enum_value(payment.status) != PaymentStatus.COMPLETED.value:
+            continue
+        key = payment.received_by
+        entry = per_cashier.get(key)
+        if entry is None:
+            entry = CashierDayTotals(cashier_name=names.get(key, "—") if key else "—")
+            per_cashier[key] = entry
+        method = str(enum_value(payment.method) or "")
+        entry.count += 1
+        entry.total += payment.amount
+        entry.by_method[method] = entry.by_method.get(method, Decimal("0")) + payment.amount
+    return sorted(per_cashier.values(), key=lambda e: e.cashier_name)
 
 
 def _student_full_name(payment: Payment) -> str:
@@ -96,6 +127,15 @@ async def get_daily_cash_book_pdf(
         restrict_to_cashier_id=cashier_user_id if restrict_to_cashier else None,
     )
 
+    # Un seul aller-retour pour tous les noms, la fiche Personnel faisant foi.
+    # `_resolve_cashier_name` recomposait ici un nom depuis l'email et le
+    # bordereau sortait signé « accountant6 » ou « cashier3 » — un identifiant
+    # technique en guise de signature sur une pièce comptable.
+    cashier_ids = sorted({p.received_by for p in payments if p.received_by})
+    if cashier_user_id and cashier_user_id not in cashier_ids:
+        cashier_ids.append(cashier_user_id)
+    names = await cash_repo.cashier_names(db, cashier_ids)
+
     payment_rows: list[dict] = []
     totals_by_method: dict[str, Decimal] = {}
     total_general = Decimal("0")
@@ -111,6 +151,7 @@ async def get_daily_cash_book_pdf(
                 "id": p.id,
                 "created_at": p.created_at,
                 "student_name": _student_full_name(p),
+                "cashier_name": names.get(p.received_by, "—") if p.received_by else "—",
                 "method": p_method,
                 "reference": p.reference,
                 "amount": p.amount,
@@ -124,13 +165,20 @@ async def get_daily_cash_book_pdf(
         elif p_status == PaymentStatus.CANCELLED.value:
             count_cancelled += 1
 
-    cashier_name = await _resolve_cashier_name(db, cashier_user_id)
     school = await _get_school_settings(db)
+    issued_by_name = names.get(cashier_user_id, "—") if cashier_user_id else "—"
 
     data = {
         "date": datetime.combine(target_date, time.min),
-        "cashier_name": cashier_name,
+        # Le document consolidé couvre plusieurs caisses : il ne peut pas être
+        # attribué à un caissier, et surtout pas à celui qui l'imprime. Le
+        # générateur s'appuie sur ce drapeau pour choisir l'en-tête, la
+        # ventilation par caisse et le bloc de signature.
+        "consolidated": not restrict_to_cashier,
+        "cashier_name": issued_by_name if restrict_to_cashier else None,
+        "issued_by_name": issued_by_name,
         "payments": payment_rows,
+        "by_cashier": cashier_breakdown(payments, names),
         "totals_by_method": totals_by_method,
         "total_general": total_general,
         "count_completed": count_completed,

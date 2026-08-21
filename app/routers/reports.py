@@ -64,16 +64,20 @@ async def list_bulletins(
     trimester: int | None = Query(None, ge=1, le=3),
     academic_year_id: int | None = Query(None),
     is_published: bool | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     _: None = require_permission("reports:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
-    """Liste les bulletins, filtrables par classe, trimestre, annee et statut."""
+    """Liste paginee des bulletins, filtrable par classe, trimestre, annee et statut."""
     return await service.list_bulletins(
         db,
         class_id=class_id,
         trimester=trimester,
         academic_year_id=academic_year_id,
         is_published=is_published,
+        page=page,
+        size=size,
     )
 
 
