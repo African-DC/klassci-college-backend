@@ -32,7 +32,7 @@ from sqlalchemy import Date, case, cast, func, select, update
 
 from app.cli.seed_demo.context import SeedContext, logger
 from app.core.exceptions import BusinessValidationError
-from app.models.cash_session import CashSession, CashSessionStatus
+from app.models.cash_session import CashSession, CashSessionStatus, is_locked
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
     EnrollmentFee,
@@ -210,14 +210,48 @@ async def _known_references(ctx: SeedContext) -> set[str]:
     return {str(row) for row in rows if row}
 
 
-def _cashiers(ctx: SeedContext) -> list[int]:
-    """Les comptes qui tiennent la caisse, à défaut celui qui signe le semis."""
+async def _cashiers(ctx: SeedContext) -> list[int]:
+    """Les comptes qui tiennent la caisse et dont le tiroir est encore ouvert.
+
+    Le service refuse d'encaisser sur une journée clôturée, et il a raison :
+    l'écart signé le soir deviendrait faux la seconde suivante. Un locataire
+    déjà démontré porte donc des caisses verrouillées — arrêtées par leur
+    caissier, ou d'office à minuit. Les écarter ici, plutôt que de laisser le
+    premier versement se heurter au refus, évite d'interrompre le semis sur un
+    geste parfaitement légitime de l'application.
+    """
     found = [
         user_id
         for role, user_id in sorted(ctx.staff_user_by_role.items())
         if role.startswith("cashier")
     ]
-    return list(dict.fromkeys(found)) or [ctx.actor_id]
+    candidates = list(dict.fromkeys([*found, ctx.actor_id]))
+
+    # La date que le service retiendra au moment d'ouvrir la journée : la
+    # sienne, pas celle du contexte, qui pourrait dater d'un semis commencé la
+    # veille au soir.
+    business_date = datetime.now().date()
+    stmt = select(CashSession.cashier_user_id, CashSession.status).where(
+        CashSession.business_date == business_date,
+        CashSession.cashier_user_id.in_(candidates),
+    )
+    locked = {
+        int(cashier_id)
+        for cashier_id, status in (await ctx.db.execute(stmt)).all()
+        if is_locked(status)
+    }
+    open_today = [user_id for user_id in candidates if user_id not in locked]
+    if not open_today:
+        raise BusinessValidationError(
+            "Toutes les caisses du jour sont clôturées sur ce locataire : "
+            "aucun versement ne peut être enregistré aujourd'hui. Régularisez "
+            "une journée depuis l'écran de caisse, ou relancez demain."
+        )
+    for cashier_id in sorted(locked):
+        logger.info(
+            "Caisse du %s déjà clôturée pour le compte %s : écarté.", business_date, cashier_id
+        )
+    return open_today
 
 
 def _plan_for(
@@ -261,7 +295,7 @@ async def pay_school_year(ctx: SeedContext) -> None:
         return
 
     known = await _known_references(ctx)
-    cashiers = _cashiers(ctx)
+    cashiers = await _cashiers(ctx)
     recorded: list[int] = []
 
     for enrollment_id in sorted(dues):
@@ -351,8 +385,14 @@ async def _cash_by_day(ctx: SeedContext) -> dict[tuple[int, date], Decimal]:
 
 
 def _is_closed(session: CashSession) -> bool:
-    """Vrai si la journée est déjà verrouillée, quelle que soit sa forme lue."""
-    return str(getattr(session.status, "value", session.status)) == CashSessionStatus.CLOSED.value
+    """Vrai si la journée est déjà verrouillée, quelle que soit sa forme lue.
+
+    Clôturée par son caissier ou d'office à minuit : dans les deux cas la
+    journée est arrêtée. Une journée clôturée d'office n'a justement PAS été
+    comptée ; lui inventer ici un montant et un écart effacerait la seule
+    information qu'elle porte, à savoir que personne n'a ouvert le tiroir.
+    """
+    return is_locked(session.status)
 
 
 async def settle_cash_days(ctx: SeedContext) -> None:
