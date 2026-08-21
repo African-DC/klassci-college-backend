@@ -10,9 +10,15 @@ Architecture (refactor 2026-05-17) :
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-_ALLOWED_METHODS = {"cash", "mobile_money", "bank_transfer", "cheque"}
+from app.core.payment_methods import SELECTABLE_METHODS
+from app.schemas.fee import FeeEntitlement
+
+#: Ce qu'un formulaire peut soumettre. `mobile_money` en est volontairement
+#: absent : la valeur reste lisible en base mais n'est plus saisissable depuis
+#: que les quatre operateurs ivoiriens sont distingues.
+_ALLOWED_METHODS = set(SELECTABLE_METHODS)
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +89,9 @@ class PaymentAllocationResponse(BaseModel):
     enrollment_fee_id: int
     amount: Decimal
     fee_category_name: str | None = None
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int | None = None
     enrollment_fee_status_after: str | None = None
 
@@ -168,6 +177,9 @@ class AllocationPreviewLine(BaseModel):
 
     enrollment_fee_id: int
     fee_category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int
     fee_total: Decimal
     fee_paid_before: Decimal
@@ -187,3 +199,25 @@ class AllocationPreviewResponse(BaseModel):
     can_record: bool
     reject_reason: str | None
     lines: list[AllocationPreviewLine]
+
+
+# ---------------------------------------------------------------------------
+# Moyens de paiement disponibles pour l'appelant
+# ---------------------------------------------------------------------------
+
+
+class PaymentMethodOption(BaseModel):
+    """Une entrée du sélecteur d'encaissement."""
+
+    key: str
+    label: str
+
+
+class PaymentMethodListResponse(BaseModel):
+    """Ce que l'appelant peut saisir, déjà dans l'ordre d'affichage.
+
+    L'ordre vient du serveur et suit la fréquence réelle au guichet ; l'écran
+    n'a pas à le recalculer, et surtout pas à le retrier alphabétiquement.
+    """
+
+    items: list[PaymentMethodOption]

@@ -38,6 +38,7 @@ from app.routers.mailpulse import router as mailpulse_router
 from app.routers.mailpulse_public import router as mailpulse_public_router
 from app.routers.notifications import router as notifications_router
 from app.routers.parent_portal import router as parent_portal_router
+from app.routers.payment_method_settings import router as payment_method_settings_router
 from app.routers.payments import router as payments_router
 from app.routers.performance import admin_router as performance_admin_router
 from app.routers.performance import teacher_router as performance_teacher_router
@@ -117,6 +118,7 @@ app.include_router(mailpulse_router)
 app.include_router(mailpulse_public_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)
+app.include_router(payment_method_settings_router)
 app.include_router(promotions_router)
 app.include_router(public_verify_router)
 app.include_router(student_portal_router)

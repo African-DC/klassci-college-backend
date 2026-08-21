@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.models.user import TeacherContract
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Student
@@ -17,6 +18,7 @@ class StudentCreate(BaseModel):
     email: str
     password: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None
@@ -34,6 +36,7 @@ class StudentUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     user_id: int | None = None
@@ -71,6 +74,7 @@ class StudentResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
@@ -193,6 +197,7 @@ class StudentFullResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
@@ -863,6 +868,9 @@ class StudentEnrollmentFeeResponse(BaseModel):
     id: int  # enrollment_fee.id ou student_option.id
     enrollment_id: int
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     amount: float  # total dû
     paid: float  # somme des paiements complétés
     remaining: float

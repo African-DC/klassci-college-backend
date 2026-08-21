@@ -3,7 +3,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.fee import FeeEntitlement
 
 
 class EnrollmentCreate(BaseModel):
@@ -131,6 +133,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None
@@ -190,6 +193,9 @@ class FeeVariantResponse(BaseModel):
     id: int
     fee_category_id: int
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     is_mandatory: bool = True
     level_id: int | None
     series_id: int | None

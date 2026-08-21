@@ -61,7 +61,9 @@ async def create_fee_category(
     db: AsyncSession, data: FeeCategoryCreate, *, created_by: int
 ) -> FeeCategoryResponse:
     async with db.begin_nested():
-        category = await repo.create_fee_category(db, **data.model_dump())
+        # `mode="json"` et pas `model_dump()` nu : la contrepartie contient des
+        # enums `FeeEntitlementKind`, que la colonne JSON ne sait pas ecrire.
+        category = await repo.create_fee_category(db, **data.model_dump(mode="json"))
         await audit_log(
             db,
             entity_type="fee_category",

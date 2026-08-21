@@ -328,11 +328,14 @@ def test_le_recapitulatif_du_classeur_ventile_par_moyen_et_par_caissier() -> Non
     journal = _journal(
         [
             _versement(1, montant="50000", method="cash", caissier=SOPHIE),
-            _versement(2, montant="45000", method="orange_money", caissier=MARIAM),
+            # Un moyen que le systeme ne connait pas : encaisse en base, sans
+            # libelle. Il doit rester lisible sous sa cle plutot que disparaitre
+            # d'une ventilation dont le total continue de le compter.
+            _versement(2, montant="45000", method="carte_bancaire", caissier=MARIAM),
         ]
     )
     valeurs = _valeurs(_classeur(journal)["Récapitulatif"])
     assert "Espèces" in valeurs
-    assert "orange_money" in valeurs, "un moyen inconnu reste visible sous son nom"
+    assert "carte_bancaire" in valeurs, "un moyen inconnu reste visible sous son nom"
     assert "Sophie Yao" in valeurs
     assert "Mariam Diallo" in valeurs

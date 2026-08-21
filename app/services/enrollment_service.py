@@ -348,6 +348,7 @@ async def create_enrollment_with_student(
             first_name=data.first_name,
             last_name=data.last_name,
             birth_date=data.birth_date,
+            birth_place=data.birth_place,
             genre=data.genre,
             enrollment_number=data.enrollment_number,
         )

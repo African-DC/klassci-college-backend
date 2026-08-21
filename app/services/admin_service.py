@@ -84,6 +84,7 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.services import archive_service, fees_paid
+from app.services import fee_entitlements as entitlements
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
@@ -324,6 +325,7 @@ async def get_student_full(db: AsyncSession, student_id: int, *, finance: Financ
         "first_name": student.first_name,
         "last_name": student.last_name,
         "birth_date": student.birth_date,
+        "birth_place": student.birth_place,
         "genre": student.genre,
         "enrollment_number": student.enrollment_number,
         "photo_url": student.photo_url,
@@ -2379,11 +2381,8 @@ async def get_student_enrollment_fees(
 
     items: list[StudentEnrollmentFeeResponse] = []
     for ef in rows:
-        category_name = (
-            ef.fee_variant.category.name
-            if ef.fee_variant and ef.fee_variant.category
-            else "Inconnu"
-        )
+        categorie = ef.fee_variant.category if ef.fee_variant else None
+        category_name = categorie.name if categorie else "Inconnu"
         paid = float(paid_by_fee.get(ef.id, 0))
         amount = float(ef.amount)
         remaining = max(0.0, amount - paid)
@@ -2393,6 +2392,7 @@ async def get_student_enrollment_fees(
                 id=ef.id,
                 enrollment_id=ef.enrollment_id,
                 category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 amount=amount,
                 paid=paid,
                 remaining=remaining,
@@ -2417,7 +2417,8 @@ async def get_student_enrollment_fees(
 
     for so in opt_rows:
         option = so.optional_fee_option
-        category_name = option.category.name if option and option.category else "Inconnu"
+        categorie = option.category if option else None
+        category_name = categorie.name if categorie else "Inconnu"
         option_name = option.name if option else "Inconnu"
         amount = float(option.amount * so.quantity) if option else 0.0
 
@@ -2426,6 +2427,7 @@ async def get_student_enrollment_fees(
                 id=so.id,
                 enrollment_id=so.enrollment_id,
                 category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 amount=amount,
                 paid=0.0,  # Optional fees don't use EnrollmentFee/Payment
                 remaining=amount,
