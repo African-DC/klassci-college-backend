@@ -18,6 +18,7 @@ from sqlalchemy import Integer, MetaData, Table, create_engine
 from sqlalchemy.orm import Session
 
 from app.core.database import Base
+from app.core.exceptions import NotFoundError
 from app.models.academic import Class, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.grade import (
@@ -246,6 +247,32 @@ async def test_une_evaluation_sans_note_rend_zero_et_zero(
     (evaluation,) = page["items"]
     assert evaluation["total_students"] == 0
     assert evaluation["graded_students"] == 0
+
+
+@pytest.mark.asyncio
+async def test_la_fiche_d_une_evaluation_porte_les_memes_compteurs(
+    evaluation_partiellement_notee: _AsyncBridge,
+) -> None:
+    """L'écran de saisie lit une évaluation seule et retrouve les mêmes nombres."""
+    evaluation = await grades_service.get_evaluation(
+        evaluation_partiellement_notee,  # type: ignore[arg-type]
+        eval_id=1,
+    )
+
+    assert evaluation["total_students"] == 5
+    assert evaluation["graded_students"] == 3
+
+
+@pytest.mark.asyncio
+async def test_une_evaluation_inconnue_leve_un_introuvable(
+    evaluation_partiellement_notee: _AsyncBridge,
+) -> None:
+    """Un identifiant qui n'existe pas donne un 404, pas une page vide."""
+    with pytest.raises(NotFoundError):
+        await grades_service.get_evaluation(
+            evaluation_partiellement_notee,  # type: ignore[arg-type]
+            eval_id=999,
+        )
 
 
 # ---------------------------------------------------------------------------

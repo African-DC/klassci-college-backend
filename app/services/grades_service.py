@@ -80,6 +80,24 @@ async def list_evaluations(
     }
 
 
+async def get_evaluation(db: AsyncSession, eval_id: int) -> dict[str, Any]:
+    """Une évaluation et ses deux compteurs.
+
+    Les écrans de saisie n'ont besoin que de celle qu'ils éditent : ils
+    parcouraient jusqu'ici toute la liste de la classe pour y retrouver une
+    ligne, ce qu'une liste paginée ne garantit plus.
+    """
+    evaluation = await repo.get_evaluation_by_id(db, eval_id)
+    if not evaluation:
+        raise NotFoundError("Evaluation", eval_id)
+    grades = evaluation.grades or []
+    counts = repo.EvaluationGradeCounts(
+        total=len(grades),
+        graded=sum(1 for g in grades if g.status == "entered"),
+    )
+    return _build_eval_response(evaluation, counts)
+
+
 async def teacher_exists(db: AsyncSession, teacher_id: int) -> bool:
     """Vérifie qu'un teacher_profile existe — utilisé pour valider la délégation admin."""
     result = await db.execute(select(exists().where(TeacherProfile.id == teacher_id)))

@@ -125,6 +125,47 @@ def test_list_evaluations_no_auth() -> None:
 
 
 # ---------------------------------------------------------------------------
+# GET /evaluations/{evaluation_id}
+# ---------------------------------------------------------------------------
+
+
+def test_get_evaluation_success() -> None:
+    """GET /evaluations/1 → 200 + l'évaluation seule, sans charger la liste."""
+    _override_deps()
+    try:
+        with patch(
+            "app.services.grades_service.get_evaluation",
+            new=AsyncMock(return_value=SAMPLE_EVAL),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/evaluations/1")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == 1
+        assert data["total_students"] == 35
+        assert data["graded_students"] == 28
+    finally:
+        _clear_deps()
+
+
+def test_get_evaluation_not_found() -> None:
+    """GET /evaluations/999 → 404."""
+    _override_deps()
+    try:
+        from app.core.exceptions import NotFoundError
+
+        with patch(
+            "app.services.grades_service.get_evaluation",
+            new=AsyncMock(side_effect=NotFoundError("Evaluation", 999)),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/evaluations/999")
+        assert resp.status_code == 404
+    finally:
+        _clear_deps()
+
+
+# ---------------------------------------------------------------------------
 # POST /evaluations
 # ---------------------------------------------------------------------------
 

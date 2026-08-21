@@ -50,6 +50,16 @@ async def list_evaluations(
     )
 
 
+@router.get("/evaluations/{evaluation_id}", response_model=EvaluationResponse)
+async def get_evaluation(
+    evaluation_id: int,
+    _: None = require_permission("grades:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Any:
+    """Une évaluation par identifiant, avec ses compteurs d'élèves et de notes saisies."""
+    return await service.get_evaluation(db, eval_id=evaluation_id)
+
+
 @router.post("/evaluations", response_model=EvaluationResponse, status_code=201)
 async def create_evaluation(
     data: EvaluationCreate,
