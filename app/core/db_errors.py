@@ -40,6 +40,11 @@ _COMPOSITE_MESSAGES = {
     "uq_cash_session_cashier_date": (
         "Une journée de caisse est déjà ouverte pour cette personne à cette date."
     ),
+    "uq_fee_variant_dimensions": (
+        "Un montant est déjà défini pour cette catégorie, ce niveau, cette série, "
+        "cette année et ce statut d'affectation. Modifiez celui qui existe au lieu "
+        "d'en créer un second."
+    ),
 }
 
 
@@ -61,16 +66,19 @@ def _duplicate_message(exc: IntegrityError) -> str:
     if index_name in _COMPOSITE_MESSAGES:
         return _COMPOSITE_MESSAGES[index_name]
 
-    # Une clé composée arrive sous la forme « 1-2-3-4 » : annoncer « 1-2-3-4
-    # existe déjà, choisissez un autre nom » n'aide personne, il n'y a aucun
-    # nom à changer.
-    if "-" in value and value.replace("-", "").isdigit():
-        return (
-            "Cet enregistrement existe déjà avec la même combinaison de valeurs. "
-            "Modifiez celui qui existe au lieu d'en créer un second."
-        )
+    # C'est l'INDEX qui dit s'il y a un nom à changer, pas la forme de la
+    # valeur. Deviner d'après la valeur se trompe dans les deux sens : une clé
+    # composée « 1-1-1-0-affecte » porte des lettres et passait pour un nom,
+    # tandis qu'un nom comme « 2024-2025 » ne porte que des chiffres et passait
+    # pour une clé composée. Dans les deux cas l'utilisateur lisait une consigne
+    # inapplicable.
+    if "name" in index_name.lower():
+        return f"« {value} » existe déjà. Choisissez un autre nom."
 
-    return f"« {value} » existe déjà. Choisissez un autre nom."
+    return (
+        "Cet enregistrement existe déjà avec la même combinaison de valeurs. "
+        "Modifiez celui qui existe au lieu d'en créer un second."
+    )
 
 
 def integrity_error_message(exc: IntegrityError) -> tuple[int, str, str]:
