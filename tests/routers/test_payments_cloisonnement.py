@@ -56,11 +56,16 @@ VERSEMENT = PaymentResponse(
 UNE_PAGE = PaymentListResponse(items=[VERSEMENT], total=1, page=1, size=20)
 
 
+def _mock_infra() -> AsyncMock:
+    """Session ou client Redis factice, une instance neuve par requête."""
+    return AsyncMock()
+
+
 def _client(qui: TokenData, *, permissions: set[str]) -> Iterator[TestClient]:
     """Client authentifié dont la matrice de permissions répond `permissions`."""
     app.dependency_overrides[get_current_user] = lambda: qui
-    app.dependency_overrides[get_tenant_db] = lambda: AsyncMock()
-    app.dependency_overrides[get_redis] = lambda: AsyncMock()
+    app.dependency_overrides[get_tenant_db] = _mock_infra
+    app.dependency_overrides[get_redis] = _mock_infra
 
     async def _check(_db: object, _user_id: int, slug: str) -> bool:
         return slug in permissions
