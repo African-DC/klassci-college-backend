@@ -29,7 +29,7 @@ async def get_current_academic_year_name(db: AsyncSession) -> str | None:
 
 
 def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
-    """Loader options bornant `Student.enrollments` à l'année courante + status valide.
+    """Loader options bornant `Student.enrollments` à l'année courante.
 
     Single source of truth partagée entre `list_students` et `get_student_by_id` :
     sans ce eager-load, `_student_to_response` plante avec `MissingGreenlet` quand
@@ -42,7 +42,16 @@ def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
                 Enrollment,
                 and_(
                     Enrollment.academic_year_id == current_ay_id,
-                    Enrollment.status == EnrollmentStatus.VALIDE,
+                    # Les inscriptions en cours restent chargees : sans elles,
+                    # l'ecran confond « aucune inscription » et « inscription en
+                    # attente de validation », et invite a en creer une seconde.
+                    Enrollment.status.in_(
+                        (
+                            EnrollmentStatus.VALIDE,
+                            EnrollmentStatus.PROSPECT,
+                            EnrollmentStatus.EN_VALIDATION,
+                        )
+                    ),
                 ),
                 include_aliases=True,
             )

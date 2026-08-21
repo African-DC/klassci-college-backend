@@ -81,6 +81,10 @@ class StudentResponse(BaseModel):
     updated_at: datetime
     # Enrichi par list_students avec l'inscription année courante (None si non inscrit).
     current_enrollment: CurrentEnrollmentInfo | None = None
+    # Inscription engagée mais pas encore validée. Distincte de `current_enrollment` :
+    # confondre les deux fait proposer « À inscrire » à un élève qui a déjà un
+    # dossier ouvert, et invite à en créer un second.
+    pending_enrollment: CurrentEnrollmentInfo | None = None
 
 
 class StudentClassFilterCount(BaseModel):

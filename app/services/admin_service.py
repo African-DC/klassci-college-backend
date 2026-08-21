@@ -14,6 +14,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
+from app.models.enrollment import EnrollmentStatus
 from app.models.permission import UserRole
 from app.models.user import (
     Parent,
@@ -97,19 +98,31 @@ logger = logging.getLogger(__name__)
 def _student_to_response(s: object) -> StudentResponse:
     """Convertit un Student ORM en StudentResponse, en attachant l'inscription courante.
 
-    `s.enrollments` est déjà borné par `with_loader_criteria` à l'année courante +
-    status=valide côté repo, donc au plus 1 entrée. None si non inscrit.
+    `s.enrollments` est borné par le dépôt à l'année courante, tous statuts
+    en cours confondus. On sépare ici les deux cas que l'écran ne doit surtout
+    pas confondre : une inscription **validée**, et une inscription **engagée
+    mais pas encore validée**. Les afficher pareil poussait la secrétaire à
+    créer un second dossier pour un élève qui en avait déjà un.
     """
     response = StudentResponse.model_validate(s)
-    enrollments = getattr(s, "enrollments", None) or []
-    if enrollments:
-        e = enrollments[0]
-        response.current_enrollment = CurrentEnrollmentInfo(
+    enrollments = list(getattr(s, "enrollments", None) or [])
+
+    def _info(e: object) -> CurrentEnrollmentInfo:
+        return CurrentEnrollmentInfo(
             enrollment_id=e.id,
             class_id=e.class_id,
             class_name=e.class_.name if e.class_ else "",
             status=e.status,
         )
+
+    validees = [e for e in enrollments if e.status == EnrollmentStatus.VALIDE]
+    if validees:
+        response.current_enrollment = _info(validees[0])
+    elif enrollments:
+        # La plus avancée d'abord : « en validation » passe avant « prospect ».
+        ordre = {EnrollmentStatus.EN_VALIDATION: 0, EnrollmentStatus.PROSPECT: 1}
+        enrollments.sort(key=lambda e: ordre.get(e.status, 9))
+        response.pending_enrollment = _info(enrollments[0])
     return response
 
 
