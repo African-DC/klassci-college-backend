@@ -104,14 +104,39 @@ async def mandatory_total(db: AsyncSession, enrollment_id: int) -> Decimal:
 
     Les frais exonérés sont exclus aussi : ils ne sont plus dus.
     """
-    stmt = (
+    stmt = _frais_dus().where(EnrollmentFee.enrollment_id == enrollment_id)
+    return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
+
+
+def _frais_dus():
+    """Le socle du calcul : ce qui reste dû, obligatoire et non exonéré."""
+    return (
         select(func.coalesce(func.sum(EnrollmentFee.amount), 0))
         .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
         .join(FeeCategory, FeeCategory.id == FeeVariant.fee_category_id)
         .where(
-            EnrollmentFee.enrollment_id == enrollment_id,
             FeeCategory.is_mandatory.is_(True),
             EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
         )
     )
+
+
+async def mandatory_total_for_year(
+    db: AsyncSession, academic_year_id: int | None = None
+) -> Decimal:
+    """Le même total, pour toute une année scolaire.
+
+    Le pendant exact de `fees_paid.paid_on_mandatory_for_year`. Le tableau de
+    bord totalisait auparavant TOUS les frais d'élèves — facultatifs et
+    exonérés compris — face à un encaissé qui, lui, ne comptait que des
+    versements : les deux moitiés du taux d'avancement ne parlaient pas de la
+    même dette.
+    """
+    from app.models.enrollment import Enrollment
+
+    stmt = _frais_dus()
+    if academic_year_id is not None:
+        stmt = stmt.join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id).where(
+            Enrollment.academic_year_id == academic_year_id
+        )
     return Decimal(str((await db.execute(stmt)).scalar_one() or 0))

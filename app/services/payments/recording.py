@@ -17,8 +17,12 @@ from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
-from app.services import cash_session_service
-from app.services.payments._allocation import plan_allocation, recompute_fee_status
+from app.services import cash_session_service, fees_paid
+from app.services.payments._allocation import (
+    paid_for_fees,
+    plan_allocation,
+    recompute_fee_status,
+)
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
 from app.services.payments._state import logger
@@ -83,12 +87,14 @@ async def record_enrollment_payment(
                 "(tous payés/exonérés ou frais non configurés)"
             )
 
-        fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = []
-        total_remaining = Decimal("0")
-        for fee in unpaid_fees:
-            paid = await repo.get_total_paid_for_enrollment_fee(db, fee.id)
-            fees_with_paid.append((fee, paid))
-            total_remaining += fee.amount - paid
+        # Une requete groupee pour toute l'inscription, pas une par frais :
+        # encaisser sur une inscription a six frais coutait six allers-retours
+        # sequentiels a la base, le tiroir ouvert et la famille au guichet.
+        deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_id)
+        fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
+            (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in unpaid_fees
+        ]
+        total_remaining = sum((fee.amount - paid for fee, paid in fees_with_paid), Decimal("0"))
 
         if data.amount > total_remaining:
             raise BusinessValidationError(
@@ -120,7 +126,14 @@ async def record_enrollment_payment(
                 enrollment_fee_id=fee.id,
                 amount=allocated,
             )
-            await recompute_fee_status(db, fee)
+
+        await db.flush()
+
+        # Les statuts se recalculent une fois les allocations écrites, sur un
+        # seul relevé groupé : un aller-retour, pas un par frais touché.
+        apres = await paid_for_fees(db, [fee for fee, _ in splits])
+        for fee, _allocated in splits:
+            recompute_fee_status(fee, apres.get(fee.id, Decimal("0")))
 
         await db.flush()
 
@@ -183,7 +196,8 @@ async def create_payment(
                 f"Cannot add payment: enrollment fee status is '{enrollment_fee.status}'"
             )
 
-        total_paid = await repo.get_total_paid_for_enrollment_fee(db, data.enrollment_fee_id)
+        deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_fee.enrollment_id)
+        total_paid = deja_verse.get(data.enrollment_fee_id, Decimal("0"))
         remaining = enrollment_fee.amount - total_paid
         if data.amount > remaining:
             raise BusinessValidationError(
@@ -208,8 +222,10 @@ async def create_payment(
             enrollment_fee_id=data.enrollment_fee_id,
             amount=data.amount,
         )
+        await db.flush()
 
-        await recompute_fee_status(db, enrollment_fee)
+        apres = await paid_for_fees(db, [enrollment_fee])
+        recompute_fee_status(enrollment_fee, apres.get(enrollment_fee.id, Decimal("0")))
         await db.flush()
 
         await audit_log(

@@ -6,12 +6,13 @@ recalcul fee.status est centralisée ici pour être appelée par
 `recording.py` (à la création) ET par `lifecycle.py` (cancel/validate).
 """
 
+from collections.abc import Iterable
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
-from app.repositories import payment_repository as repo
+from app.services import fees_paid
 
 
 def plan_allocation(
@@ -38,16 +39,32 @@ def plan_allocation(
     return splits, remaining
 
 
-async def recompute_fee_status(db: AsyncSession, fee: EnrollmentFee) -> None:
-    """Recalcule le status d'un EnrollmentFee à partir de ses allocations COMPLETED.
+async def paid_for_fees(db: AsyncSession, fees: Iterable[EnrollmentFee]) -> dict[int, Decimal]:
+    """Ce qui est versé sur chacun de ces frais, indexé par frais.
 
-    Source de vérité = `payment_allocations` jointures `payments.status='completed'`
-    (cf. `repo.get_total_paid_for_enrollment_fee`). Idempotent — peut être
-    appelé après create, validate ou cancel sans état préalable.
+    Une requête groupée par inscription — en pratique une seule, puisque les
+    allocations d'un versement portent toutes sur la même. Le calcul est celui
+    de `fees_paid`, le seul : la caisse ne peut pas voir un montant que la
+    famille ne voit pas sur son portail.
+    """
+    verses: dict[int, Decimal] = {}
+    for enrollment_id in {fee.enrollment_id for fee in fees}:
+        verses.update(await fees_paid.paid_by_enrollment(db, enrollment_id))
+    return verses
+
+
+def recompute_fee_status(fee: EnrollmentFee, total_paid: Decimal) -> None:
+    """Recalcule le status d'un EnrollmentFee à partir de ce qui y est versé.
+
+    Pure : l'appelant fournit le total, obtenu par `paid_for_fees` en une
+    requête pour toute l'inscription. La fonction interrogeait auparavant la
+    base elle-même, frais par frais — dans une boucle sur les splits d'un
+    versement, cela faisait un aller-retour par frais alors qu'un seul suffit.
+
+    Idempotent : appelable après create, validate ou cancel sans état préalable.
     """
     if fee.status == EnrollmentFeeStatus.WAIVED.value:
         return
-    total_paid = await repo.get_total_paid_for_enrollment_fee(db, fee.id)
     if total_paid >= fee.amount:
         fee.status = EnrollmentFeeStatus.PAID.value
     elif total_paid > Decimal("0"):

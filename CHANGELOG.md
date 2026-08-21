@@ -19,8 +19,14 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
+- Supprimer définitivement une inscription obéit aux mêmes règles que supprimer un élève : motif obligatoire, passage par la corbeille d'abord, courriel à la direction *(admin, directeur)*
+- Encaisser sur une inscription qui porte plusieurs frais est plus rapide : la caisse interroge la base une fois au lieu d'une fois par frais *(caissier)*
 
 ### Fixed
+- Une inscription pouvait être détruite sans motif, sans passer par la corbeille et sans que personne n'en soit averti *(admin, directeur)*
+- Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent *(comptable, secrétariat)*
+- Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés *(directeur, comptable)*
+- Une famille exonérée après avoir payé restait comptée comme ayant payé dans les chiffres de l'école *(comptable, directeur)*
 - Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit *(comptable, admin)*
 - Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées *(comptable, admin)*
 - Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*

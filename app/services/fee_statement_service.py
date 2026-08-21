@@ -20,6 +20,7 @@ from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 from app.repositories import payment_repository as repo
+from app.services import fees_paid
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
@@ -69,11 +70,16 @@ async def _build_fees_section(
         )
     )
 
+    # Une requête groupée pour toute l'inscription, pas une par frais : le
+    # calcul est le même que celui du portail de la famille, et l'état des
+    # frais ne peut pas annoncer un autre montant que son écran.
+    deja_verse = await fees_paid.paid_by_enrollment(db, enrollment.id)
+
     rows: list[dict] = []
     total_expected = Decimal("0")
     total_paid_all = Decimal("0")
     for fee in fees:
-        paid = await repo.get_total_paid_for_enrollment_fee(db, fee.id)
+        paid = deja_verse.get(fee.id, Decimal("0"))
         remaining = max(fee.amount - paid, Decimal("0"))
         cat_name = ""
         if fee.fee_variant and fee.fee_variant.category:
