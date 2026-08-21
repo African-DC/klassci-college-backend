@@ -14,15 +14,12 @@ qu'il s'est passé quelque chose, mais son montant n'entre dans aucun total.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from app.services.payments.journal_data import PaymentsJournal
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import format_xof
 from app.services.pdf.theme import PDFTheme, method_label, status_label
-
-if TYPE_CHECKING:  # pragma: no cover — import circulaire au runtime
-    from app.services.payments_journal_service import PaymentsJournal
-
 
 _DETAIL_COL_WIDTHS = ["6%", "10%", "19%", "13%", "11%", "10%", "13%", "8%", "10%"]
 

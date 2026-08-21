@@ -9,7 +9,7 @@ export dont on ne peut pas refaire la somme dans le tableur ne sert à rien.
 from __future__ import annotations
 
 import io
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -22,10 +22,8 @@ from app.services.exports._workbook_branding import (
     style_total_row,
     write_header,
 )
+from app.services.payments.journal_data import PaymentsJournal
 from app.services.pdf.theme import method_label, status_label
-
-if TYPE_CHECKING:  # pragma: no cover — import circulaire au runtime
-    from app.services.payments_journal_service import PaymentsJournal
 
 # Le séparateur de milliers est rendu par le tableur selon la locale du
 # lecteur : espace en français, virgule ailleurs. L'écrire en dur donnerait un

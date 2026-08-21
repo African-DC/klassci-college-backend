@@ -22,14 +22,13 @@ Deux invariants portent tout le reste :
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.fee import Payment, PaymentStatus
+from app.models.fee import Payment
 from app.repositories import payment_journal_repository as repo
 from app.repositories.cash_session_repository import METHODS_ORDER
 from app.repositories.payment_filters import PaymentFilters
@@ -38,6 +37,12 @@ from app.services._school_settings_helper import load_school_settings_for_pdf
 from app.services.exports.payments_journal_xlsx import generate_payments_journal_xlsx
 from app.services.payments._cashier import cashier_label, cashier_name
 from app.services.payments._response import student_identity
+from app.services.payments.journal_data import (
+    COMPLETED,
+    GroupTotal,
+    JournalLine,
+    PaymentsJournal,
+)
 from app.services.payments.journal_labels import (
     filters_label as describe_filters,
 )
@@ -49,55 +54,6 @@ from app.services.payments.journal_labels import (
 )
 from app.services.pdf._helpers import enum_value
 from app.services.pdf.payments_journal import generate_payments_journal_pdf
-
-_COMPLETED = PaymentStatus.COMPLETED.value
-
-
-@dataclass(frozen=True, slots=True)
-class JournalLine:
-    """Une ligne du journal, telle qu'elle sera imprimée."""
-
-    id: int
-    created_at: datetime
-    student_name: str
-    student_matricule: str | None
-    fee_label: str
-    method: str
-    reference: str | None
-    amount: Decimal
-    status: str
-    cashier: str
-
-
-@dataclass(frozen=True, slots=True)
-class GroupTotal:
-    """Un sous-total : combien de versements validés, pour quelle somme."""
-
-    key: str
-    count: int
-    total: Decimal
-
-
-@dataclass(slots=True)
-class PaymentsJournal:
-    """Le journal complet, prêt à composer."""
-
-    lines: list[JournalLine]
-    by_method: list[GroupTotal]
-    by_cashier: list[GroupTotal]
-    total_encaisse: Decimal
-    counts_by_status: dict[str, int]
-    period_label: str
-    filters_label: str
-    scope_label: str
-    issued_at: datetime
-    truncated_from: int | None = None
-    school: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def count_encaisse(self) -> int:
-        return self.counts_by_status.get(_COMPLETED, 0)
-
 
 # ---------------------------------------------------------------------------
 # Assemblage
@@ -180,7 +136,7 @@ def build_journal(
     encaisses: list[JournalLine] = []
     for line in lines:
         counts_by_status[line.status] = counts_by_status.get(line.status, 0) + 1
-        if line.status == _COMPLETED:
+        if line.status == COMPLETED:
             encaisses.append(line)
 
     total_encaisse = sum((line.amount for line in encaisses), Decimal("0"))

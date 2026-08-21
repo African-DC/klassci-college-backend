@@ -251,7 +251,7 @@ def test_le_document_montre_le_total_en_francs_lisibles() -> None:
 def test_le_pdf_sort_vraiment_avec_l_en_tete() -> None:
     """Le rendu natif n'est pas disponible partout ; quand il l'est, on vérifie
     que le document se produit réellement."""
-    weasyprint = pytest.importorskip("weasyprint")
+    pytest.importorskip("weasyprint")
     from app.services.pdf.payments_journal import generate_payments_journal_pdf
 
     journal = _journal([_versement(1, montant="50000")])
@@ -259,9 +259,10 @@ def test_le_pdf_sort_vraiment_avec_l_en_tete() -> None:
         contenu = generate_payments_journal_pdf(journal, ECOLE)
     except OSError as exc:  # bibliothèques natives absentes (GTK/Cairo)
         pytest.skip(f"rendu natif indisponible : {exc}")
+        raise  # inatteignable : `skip` lève, mais le dit à qui lit la suite
+
     assert contenu.startswith(b"%PDF")
     assert len(contenu) > 1000
-    assert weasyprint is not None
 
 
 # ---------------------------------------------------------------------------
