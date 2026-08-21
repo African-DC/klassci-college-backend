@@ -45,6 +45,15 @@ class EvaluationResponse(BaseModel):
     created_at: datetime
 
 
+class EvaluationListResponse(BaseModel):
+    """Enveloppe paginée. `total` porte le compte de l'école, pas de la page."""
+
+    items: list[EvaluationResponse]
+    total: int
+    page: int
+    size: int
+
+
 # ---------------------------------------------------------------------------
 # Grade
 # ---------------------------------------------------------------------------

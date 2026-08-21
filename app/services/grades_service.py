@@ -22,10 +22,10 @@ from app.services.curriculum_service import validate_subject_class_pair
 logger = logging.getLogger(__name__)
 
 
-def _build_eval_response(ev: Evaluation, actor_user_id: int | None = None) -> dict[str, Any]:
+def _build_eval_response(ev: Evaluation, counts: repo.EvaluationGradeCounts) -> dict[str, Any]:
     teacher_name = f"{ev.teacher.first_name} {ev.teacher.last_name}" if ev.teacher else ""
-    total = len(ev.grades) if ev.grades is not None else 0
-    graded = sum(1 for g in (ev.grades or []) if g.status == "entered")
+    total = counts.total
+    graded = counts.graded
     return {
         "id": ev.id,
         "title": ev.title,
@@ -53,15 +53,31 @@ async def list_evaluations(
     teacher_id: int | None = None,
     academic_year_id: int | None = None,
     trimester: int | None = None,
-) -> list[dict[str, Any]]:
-    evals = await repo.list_evaluations(
+    page: int = 1,
+    size: int = 20,
+) -> dict[str, Any]:
+    """Une page d'évaluations, avec le total de l'école dans l'enveloppe.
+
+    `total` est celui des filtres demandés, pas celui de la page : un écran
+    qui affiche « 772 évaluations » doit lire l'enveloppe, jamais compter
+    `items`.
+    """
+    evals, total = await repo.list_evaluations_page(
         db,
         class_id=class_id,
         teacher_id=teacher_id,
         academic_year_id=academic_year_id,
         trimester=trimester,
+        page=page,
+        size=size,
     )
-    return [_build_eval_response(ev) for ev in evals]
+    counts = await repo.count_grades_by_evaluation(db, [ev.id for ev in evals])
+    return {
+        "items": [_build_eval_response(ev, counts.get(ev.id, repo.NO_GRADES)) for ev in evals],
+        "total": total,
+        "page": page,
+        "size": size,
+    }
 
 
 async def teacher_exists(db: AsyncSession, teacher_id: int) -> bool:
@@ -111,7 +127,10 @@ async def create_evaluation(
     if not full_eval:
         raise NotFoundError("Evaluation", evaluation.id)
 
-    return _build_eval_response(full_eval)
+    # L'évaluation vient d'être créée avec une note « à saisir » par élève :
+    # les compteurs se lisent sur les lignes déjà chargées.
+    created_counts = repo.EvaluationGradeCounts(total=len(full_eval.grades or []), graded=0)
+    return _build_eval_response(full_eval, created_counts)
 
 
 async def get_grades(db: AsyncSession, eval_id: int) -> list[dict[str, Any]]:
