@@ -18,8 +18,8 @@ les qualifie toutes, leur pourcentage reste en place, et le calcul retombe au
 franc pres sur l'ancien resultat puisqu'aucun montant ferme ne se prelevera
 avant elles.
 
-Revision ID: 0062_flexible_installment_grid
-Revises: 0061_school_life_reference_width
+Revision ID: 0063_flexible_installment_grid
+Revises: 0062_fee_category_uniqueness
 Create Date: 2026-08-21
 """
 
@@ -27,8 +27,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0062_flexible_installment_grid"
-down_revision = "0061_school_life_reference_width"
+revision = "0063_flexible_installment_grid"
+down_revision = "0062_fee_category_uniqueness"
 branch_labels = None
 depends_on = None
 
