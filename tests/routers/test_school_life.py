@@ -130,14 +130,23 @@ def test_the_retake_register_is_served_as_a_page() -> None:
         with patch.object(
             retakes_router.retake_service, "list_authorizations", new_callable=AsyncMock
         ) as service:
-            service.return_value = {"items": [], "total": 0, "page": 2, "size": 20}
+            service.return_value = {
+                "items": [],
+                "total": 412,
+                "reopened_evaluations": 907,
+                "page": 2,
+                "size": 20,
+            }
             response = client.get(
                 "/school-life/retake-authorizations",
                 params={"academic_year_id": 3, "page": 2, "size": 20},
             )
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"items": [], "total": 0, "page": 2, "size": 20}
+    body = response.json()
+    assert body["total"] == 412
+    # Le compte d'épreuves rouvertes accompagne la page sans en dépendre.
+    assert body["reopened_evaluations"] == 907
     assert service.await_args.kwargs["academic_year_id"] == 3
     assert service.await_args.kwargs["page"] == 2
     assert service.await_args.kwargs["size"] == 20

@@ -294,6 +294,19 @@ async def list_authorizations(
             await db.execute(select(func.count()).select_from(RetakeAuthorization).where(*filters))
         ).scalar_one()
     )
+    # Le nombre d'épreuves rouvertes est la mesure que le bureau regarde en
+    # premier, et elle ne se déduit pas d'une page : la compter sur les lignes
+    # affichées reviendrait à la faire varier avec la pagination.
+    reopened = int(
+        (
+            await db.execute(
+                select(func.count())
+                .select_from(RetakeAuthorizationEvaluation)
+                .join(RetakeAuthorizationEvaluation.authorization)
+                .where(*filters)
+            )
+        ).scalar_one()
+    )
 
     stmt = (
         select(RetakeAuthorization)
@@ -323,6 +336,7 @@ async def list_authorizations(
             for row in rows
         ],
         total=total,
+        reopened_evaluations=reopened,
         page=page,
         size=size,
     )

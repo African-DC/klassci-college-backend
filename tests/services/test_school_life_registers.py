@@ -147,20 +147,40 @@ async def test_missed_evaluations_refuses_a_reversed_window() -> None:
 
 
 async def test_retake_register_is_paginated(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Le registre rend une page et le total, jamais tout l'historique."""
+    """Le registre rend une page, et ce que pèse le registre entier."""
     monkeypatch.setattr(retake_service, "actor_name", _async_none)
     monkeypatch.setattr(retake_service, "current_class_names", _async_empty_dict)
-    db = _Session(412, [])
+    db = _Session(412, 907, [])
 
     page = await retake_service.list_authorizations(db, academic_year_id=3, page=2, size=20)
 
+    # Quatre cent douze billets et neuf cent sept épreuves rouvertes sur
+    # l'année, pas sur les vingt lignes affichées.
     assert page.total == 412
+    assert page.reopened_evaluations == 907
     assert page.page == 2
     assert page.size == 20
     assert page.items == []
-    rows_sql = db.statements[1]
+    rows_sql = db.statements[2]
     assert "LIMIT" in rows_sql and "OFFSET" in rows_sql
     assert "retake_authorizations.academic_year_id = " in rows_sql
+
+
+async def test_retake_reopened_count_follows_the_consulted_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le compte d'épreuves rouvertes obéit au trimestre choisi, pas à la page."""
+    monkeypatch.setattr(retake_service, "actor_name", _async_none)
+    monkeypatch.setattr(retake_service, "current_class_names", _async_empty_dict)
+    db = _Session(4, 11, [])
+
+    page = await retake_service.list_authorizations(db, academic_year_id=3, trimester=2)
+
+    assert page.reopened_evaluations == 11
+    reopened_sql = db.statements[1]
+    assert "retake_authorization_evaluations" in reopened_sql
+    assert "retake_authorizations.trimester = " in reopened_sql
+    assert "LIMIT" not in reopened_sql
 
 
 # ---------------------------------------------------------------------------

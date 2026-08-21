@@ -160,8 +160,16 @@ class RetakeAuthorizationResponse(BaseModel):
 
 
 class RetakeAuthorizationList(BaseModel):
+    """Une page du registre des billets, et ce que pèse le registre entier.
+
+    `total` et `reopened_evaluations` portent sur toute la période consultée,
+    pas sur la page : un décompte calculé sur les vingt lignes affichées
+    répondrait « vingt » à un registre qui en compte quatre cents.
+    """
+
     items: list[RetakeAuthorizationResponse]
     total: int
+    reopened_evaluations: int
     page: int
     size: int
 
