@@ -13,6 +13,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève *(admin)*
 
 ### Added
+- Sexe et type de contrat de l'enseignant, permanent, vacataire ou fonctionnaire, saisissables sur sa fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin)*
 - Type de contrat et sexe des enseignants sur leur fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin, directeur)*.
 - Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.
 - Les tableaux que la plateforme ne sait pas remplir sortent vierges avec la mention « à compléter manuellement », jamais garnis de zéros : à la DRENA, un zéro se lit comme un constat *(admin, directeur)*.
