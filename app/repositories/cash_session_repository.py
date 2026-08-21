@@ -9,7 +9,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.cash_session import CashSession, CashSessionStatus
+from app.models.cash_session import LOCKED_STATUSES, CashSession, CashSessionStatus
 from app.models.fee import Payment, PaymentStatus
 from app.models.user import StaffProfile, User
 
@@ -178,13 +178,102 @@ async def cashier_names(db: AsyncSession, user_ids: list[int]) -> dict[int, str]
     return names
 
 
-async def has_closed_session(
-    db: AsyncSession, cashier_user_id: int, business_date: date_type
-) -> bool:
-    """Vrai si la journée de ce caissier est déjà verrouillée."""
+async def is_day_locked(db: AsyncSession, cashier_user_id: int, business_date: date_type) -> bool:
+    """Vrai si la journée de ce caissier est verrouillée, quelle qu'en soit la cause.
+
+    Nommée `has_closed_session` auparavant : le nom laissait croire qu'il
+    fallait une clôture signée, alors qu'une journée clôturée d'office est tout
+    aussi verrouillée — son théorique est figé, et y annuler un versement
+    ferait mentir un montant déjà arrêté.
+    """
     stmt = select(func.count(CashSession.id)).where(
         CashSession.cashier_user_id == cashier_user_id,
         CashSession.business_date == business_date,
-        CashSession.status == CashSessionStatus.CLOSED,
+        CashSession.status.in_(LOCKED_STATUSES),
     )
     return bool((await db.execute(stmt)).scalar_one())
+
+
+async def list_stale_open_sessions(
+    db: AsyncSession, *, before: date_type, limit: int
+) -> list[CashSession]:
+    """Journées encore ouvertes dont la date est révolue, les plus vieilles d'abord.
+
+    `before` est la journée de guichet EN COURS : une caisse du jour est en
+    plein service et ne doit surtout pas être clôturée.
+
+    Bornée : la 0044 a reconstitué en `open` toutes les journées historiques
+    des versements antérieurs à la caisse. Sur une école qui encaisse depuis
+    des mois, la première exécution en trouve des centaines. Les traiter par
+    lots évite une transaction géante, et les suivantes rattrapent le reste.
+    """
+    stmt = (
+        select(CashSession)
+        .where(
+            CashSession.business_date < before,
+            CashSession.status == CashSessionStatus.OPEN,
+        )
+        .options(selectinload(CashSession.cashier))
+        .order_by(CashSession.business_date, CashSession.id)
+        .limit(limit)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def list_sessions_to_regularize(db: AsyncSession, cashier_user_id: int) -> list[CashSession]:
+    """Journées de ce caissier clôturées d'office et pas encore comptées.
+
+    `regularized_at` est nul par construction sur un `auto_closed` : la
+    régularisation repasse la session en `closed`. La condition est écrite
+    quand même — elle documente l'invariant et survivrait à un état hybride.
+    """
+    stmt = (
+        select(CashSession)
+        .where(
+            CashSession.cashier_user_id == cashier_user_id,
+            CashSession.status == CashSessionStatus.AUTO_CLOSED,
+            CashSession.regularized_at.is_(None),
+        )
+        .options(selectinload(CashSession.cashier))
+        .order_by(CashSession.business_date)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def aggregate_days_by_cashier(
+    db: AsyncSession, pairs: list[tuple[int, date_type]]
+) -> dict[tuple[int, date_type], DayAggregate]:
+    """Agrégats de N couples (caissier, journée) en UNE requête.
+
+    Le balayage de minuit traite des dizaines de journées : appeler
+    `aggregate_day` sur chacune rejouerait une requête par ligne, exactement le
+    N+1 que `aggregate_date_by_cashier` avait déjà supprimé du point journalier.
+    """
+    if not pairs:
+        return {}
+    wanted = set(pairs)
+    payment_day = cast(Payment.created_at, Date)
+    stmt = (
+        select(
+            Payment.received_by,
+            payment_day,
+            Payment.method,
+            func.count(Payment.id),
+            func.coalesce(func.sum(Payment.amount), 0),
+        )
+        .where(
+            Payment.received_by.in_(sorted({cashier_id for cashier_id, _ in pairs})),
+            payment_day.in_(sorted({day for _, day in pairs})),
+            Payment.status.in_(_COUNTED_STATUSES),
+        )
+        .group_by(Payment.received_by, payment_day, Payment.method)
+    )
+    grouped: dict[tuple[int, date_type], list[tuple[object, object, object]]] = {}
+    for cashier_id, business_date, method, method_count, method_total in (
+        await db.execute(stmt)
+    ).all():
+        key = (int(cashier_id), business_date)
+        if key not in wanted:
+            continue
+        grouped.setdefault(key, []).append((method, method_count, method_total))
+    return {key: _fold_rows(rows) for key, rows in grouped.items()}

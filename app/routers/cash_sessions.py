@@ -5,13 +5,15 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.datetimes import current_business_date
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.schemas.cash_session import (
     CashSessionCloseRequest,
     CashSessionListResponse,
+    CashSessionRegularizeRequest,
     CashSessionResponse,
 )
-from app.services import cash_session_service
+from app.services import cash_closure_service, cash_session_service
 
 router = APIRouter(prefix="/cash-sessions", tags=["cash-sessions"])
 
@@ -35,7 +37,7 @@ async def get_my_cash_session(
 ) -> CashSessionResponse:
     """Ce que le caissier a encaissé aujourd'hui, ventilé par moyen de paiement."""
     return await cash_session_service.get_my_session(
-        db, current_user.user_id, business_date or date.today()
+        db, current_user.user_id, business_date or current_business_date()
     )
 
 
@@ -55,7 +57,7 @@ async def close_my_cash_session(
 ) -> CashSessionResponse:
     """Fige le théorique espèces, calcule l'écart avec le montant compté, verrouille."""
     return await cash_session_service.close_my_session(
-        db, current_user.user_id, business_date or date.today(), data
+        db, current_user.user_id, business_date or current_business_date(), data
     )
 
 
@@ -74,4 +76,51 @@ async def get_daily_point(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> CashSessionListResponse:
     """Vue comptable : chaque caisse, son total, son écart, son état de clôture."""
-    return await cash_session_service.get_daily_point(db, business_date or date.today())
+    return await cash_session_service.get_daily_point(db, business_date or current_business_date())
+
+
+# NOTE : littérales avant toute route paramétrique. `/me/to-regularize` et
+# `/me/regularize` sont déclarées ici, après `/me` et `/me/close`, mais toutes
+# restent avant la route racine et avant tout `/{id}` futur.
+@router.get(
+    "/me/to-regularize",
+    response_model=list[CashSessionResponse],
+    summary="Mes journées clôturées d'office, en attente de comptage",
+)
+async def list_my_sessions_to_regularize(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("cash-session:manage"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[CashSessionResponse]:
+    """Ce que le caissier doit régulariser, à afficher dès sa connexion.
+
+    Une liste vide est la réponse normale et attendue : la plupart des
+    caissiers clôturent leur journée.
+    """
+    return await cash_closure_service.list_sessions_to_regularize(db, current_user.user_id)
+
+
+@router.post(
+    "/me/regularize",
+    response_model=CashSessionResponse,
+    summary="Régulariser une journée clôturée d'office",
+)
+async def regularize_my_cash_session(
+    data: CashSessionRegularizeRequest,
+    business_date: date = Query(
+        ...,
+        alias="date",
+        description="Journée à régulariser (YYYY-MM-DD). Obligatoire : c'est une journée passée.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("cash-session:manage"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> CashSessionResponse:
+    """Saisit après coup le montant compté et fait naître l'écart réel.
+
+    L'écart se calcule contre le théorique figé la nuit de la clôture d'office,
+    jamais contre un théorique recalculé aujourd'hui.
+    """
+    return await cash_closure_service.regularize_my_session(
+        db, current_user.user_id, business_date, data
+    )
