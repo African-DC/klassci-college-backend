@@ -233,18 +233,6 @@ async def get_total_paid_for_enrollment_fee(db: AsyncSession, enrollment_fee_id:
     return Decimal(str(result.scalar()))
 
 
-async def get_total_paid_for_enrollment(db: AsyncSession, enrollment_id: int) -> Decimal:
-    """Total versé sur une inscription (somme des Payment.amount COMPLETED)."""
-    stmt = select(
-        func.coalesce(func.sum(Payment.amount), 0),
-    ).where(
-        Payment.enrollment_id == enrollment_id,
-        Payment.status == PaymentStatus.COMPLETED.value,
-    )
-    result = await db.execute(stmt)
-    return Decimal(str(result.scalar()))
-
-
 # ---------------------------------------------------------------------------
 # Enrollment loader (avec FOR UPDATE pour la transaction de paiement)
 # ---------------------------------------------------------------------------

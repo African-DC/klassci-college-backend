@@ -71,6 +71,51 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     return {int(fee_id): float(total or 0) for fee_id, total in (await db.execute(stmt)).all()}
 
 
+async def paid_on_mandatory(db: AsyncSession, enrollment_id: int) -> Decimal:
+    """Ce qu'une famille a versé sur les frais obligatoires encore dus.
+
+    Le pendant exact de `installment_repository.mandatory_total`, qui dit ce
+    qui est attendu : même périmètre de frais des deux côtés, sans quoi la
+    soustraction ne veut rien dire.
+
+    Sommer `Payment.amount` — le versement dans son entier — donnait ce
+    résultat-là : une famille verse 25 000 sur l'Inscription, l'école lui
+    accorde ensuite une bourse et exonère l'Inscription. Le montant attendu
+    baisse de 25 000, le montant versé ne bouge pas, et la famille apparaît
+    en avance de 25 000 sur une scolarité qu'elle n'a jamais payée.
+    L'échéancier cesse alors de la signaler en retard — or c'est lui qui
+    commande la retenue des documents administratifs.
+
+    On somme donc les **allocations** posées sur les frais obligatoires non
+    exonérés : l'argent imputé à un frais qui n'est plus dû sort du calcul
+    en même temps que le frais.
+    """
+    from app.models.fee import (
+        EnrollmentFee,
+        EnrollmentFeeStatus,
+        FeeCategory,
+        FeeVariant,
+        Payment,
+        PaymentAllocation,
+        PaymentStatus,
+    )
+
+    stmt = (
+        select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(FeeVariant, FeeVariant.id == EnrollmentFee.fee_variant_id)
+        .join(FeeCategory, FeeCategory.id == FeeVariant.fee_category_id)
+        .where(
+            EnrollmentFee.enrollment_id == enrollment_id,
+            Payment.status == PaymentStatus.COMPLETED.value,
+            FeeCategory.is_mandatory.is_(True),
+            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+        )
+    )
+    return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
+
+
 async def payments_by_enrollment_fee(
     db: AsyncSession, enrollment_id: int
 ) -> dict[int, list[tuple["Payment", Decimal]]]:

@@ -84,7 +84,6 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.services import archive_service, fees_paid
-from app.services.archive_service import ArchiveOutcome
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
@@ -263,63 +262,43 @@ STUDENT_KIND = archive_service.ArchivableKind(
     # survit à la fiche de l'élève, sous identité figée.
     purge_repo.purge_student_keeping_payments,
     load=repo.get_archived_student_by_id,
+    # Figer l'identité sur les versements AVANT que la fiche ne quitte les
+    # écrans : le filtre qui masque l'élève archivé le masque aussi derrière
+    # ses versements, et la colonne « Élève » du bordereau journalier se
+    # viderait du jour au lendemain.
+    before_archive=purge_repo.freeze_student_identity_on_payments,
 )
 
 
-async def archive_student(
-    db: AsyncSession, student_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'eleve dans la corbeille : il quitte les ecrans, rien n'est detruit."""
-    student = await repo.get_student_by_id(db, student_id)
-    if student is None:
-        raise NotFoundError("Student", student_id)
+async def _mandatory_expected_and_paid(
+    db: AsyncSession, enrollment_id: int | None
+) -> tuple[float, float]:
+    """Ce qui est dû et ce qui a été versé sur une inscription, même périmètre.
 
-    # Figer l'identité sur les versements dès maintenant : une fois l'élève
-    # archivé, le filtre qui le masque partout le masque aussi derrière ses
-    # versements, et la colonne « Élève » du bordereau journalier se viderait.
-    await purge_repo.freeze_student_identity_on_payments(db, student)
-
-    return await archive_service.archive(
-        db,
-        student,
-        entity_type="student",
-        label=STUDENT_KIND.label(student),
-        reason=reason,
-        actor_id=actor_id,
-    )
-
-
-async def restore_student(db: AsyncSession, student_id: int, *, actor_id: int) -> None:
-    """Sort l'eleve de la corbeille."""
-    await archive_service.restore_record(db, STUDENT_KIND, student_id, actor_id=actor_id)
-
-
-async def delete_student(
-    db: AsyncSession, student_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime definitivement un eleve deja place dans la corbeille.
-
-    Le passage par la corbeille n'est pas une formalite : c'est ce qui laisse
-    le temps de se raviser. Le court-circuiter transformerait un clic
-    malheureux en perte definitive.
+    Les deux moitiés viennent du même endroit et couvrent les mêmes frais :
+    obligatoires, exonérations exclues. Les calculer séparément est ce qui
+    avait produit une fiche parent où le solde dû et le badge « à jour » se
+    contredisaient — le badge suivait l'échéancier, qui exclut les frais
+    exonérés, le solde non.
     """
-    await archive_service.purge_record(
-        db, STUDENT_KIND, student_id, reason=reason, actor_id=deleted_by
-    )
+    if enrollment_id is None:
+        return 0.0, 0.0
+    from app.repositories import installment_repository as installment_repo
+
+    expected = await installment_repo.mandatory_total(db, enrollment_id)
+    paid = await fees_paid.paid_on_mandatory(db, enrollment_id)
+    return float(expected), float(paid)
 
 
-async def get_student_full(
-    db: AsyncSession, student_id: int, *, finance: FinanceView | None = None
-) -> dict:
+async def get_student_full(db: AsyncSession, student_id: int, *, finance: FinanceView) -> dict:
     """Enriched student profile with user, enrollment, attendance, fees data.
 
-    `finance` dit ce que l'appelant a le droit de lire des montants. Par
-    defaut on ouvre tout : les appels internes (PDF, exports) ne passent pas
-    par une permission, et c'est le routeur qui restreint.
+    `finance` dit ce que l'appelant a le droit de lire des montants, et se
+    passe toujours : un appel interne assume `FinanceView.INTERNAL` en toutes
+    lettres plutôt que de l'obtenir en oubliant l'argument.
     """
     from app.models.attendance import AttendanceRecord
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     # Get student with user
     stmt = select(Student).where(Student.id == student_id).options(selectinload(Student.user))
@@ -384,40 +363,23 @@ async def get_student_full(
             round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
         )
 
-    # Financial summary
-    fees_stmt = (
-        select(
-            func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
-        )
-        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id)
-    )
-    fees_row = (await db.execute(fees_stmt)).one_or_none()
-    expected = float(fees_row.expected) if fees_row else 0.0
-
-    # Somme des versements par l'inscription, pas par `Payment.enrollment_fee_id` :
-    # ce lien est deprecie depuis la migration 0028 et reste vide sur tout
-    # versement passe par les allocations. Le compter faisait apparaitre une
-    # famille a jour comme n'ayant rien verse, et gonflait son reste a payer.
-    paid_stmt = (
-        select(func.coalesce(func.sum(Payment.amount), 0).label("paid"))
-        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id, Payment.status == PaymentStatus.COMPLETED)
-    )
-    paid_row = (await db.execute(paid_stmt)).one_or_none()
-    paid = float(paid_row.paid) if paid_row else 0.0
+    # Situation financière — même périmètre que le badge affiché juste en
+    # dessous : frais obligatoires, exonérations déduites, année en cours.
+    # Un solde calculé sur un autre périmètre que l'état de paiement produit
+    # une fiche qui se contredit elle-même, « 80 000 restants » sous un badge
+    # « à jour ».
+    expected, paid = await _mandatory_expected_and_paid(db, enrollment.id if enrollment else None)
 
     result["fees_expected"] = expected
     result["fees_paid"] = paid
     result["fees_remaining"] = expected - paid
     result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
 
-    view = finance or FinanceView(amounts=True, status=True)
-    if view.status:
+    if finance.status:
         result["fee_status"], result["last_payment_date"] = await payment_pulse(
             db, enrollment.id if enrollment else None
         )
-    result = redact(result, view)
+    result = redact(result, finance)
 
     # Trimester breakdowns — alimentent les charts du tab Parcours.
     current_ay_id = enrollment.academic_year_id if enrollment else None
@@ -733,29 +695,6 @@ async def update_teacher(
     if refreshed is None:
         raise NotFoundError("Teacher", teacher_id)
     return _teacher_to_response(refreshed)
-
-
-async def archive_teacher(
-    db: AsyncSession, teacher_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place l'enseignant dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_teacher(db: AsyncSession, teacher_id: int, *, actor_id: int) -> None:
-    """Sort l'enseignant de la corbeille."""
-    await archive_service.restore_record(db, TEACHER_KIND, teacher_id, actor_id=actor_id)
-
-
-async def delete_teacher(
-    db: AsyncSession, teacher_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(
-        db, TEACHER_KIND, teacher_id, reason=reason, actor_id=deleted_by
-    )
 
 
 async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
@@ -1157,28 +1096,6 @@ async def update_staff(
     return _staff_to_response(refreshed)
 
 
-async def archive_staff(
-    db: AsyncSession, staff_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place le membre du personnel dans la corbeille : la fiche quitte les
-    écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, STAFF_KIND, staff_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_staff(db: AsyncSession, staff_id: int, *, actor_id: int) -> None:
-    """Sort le membre du personnel de la corbeille."""
-    await archive_service.restore_record(db, STAFF_KIND, staff_id, actor_id=actor_id)
-
-
-async def delete_staff(
-    db: AsyncSession, staff_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(db, STAFF_KIND, staff_id, reason=reason, actor_id=deleted_by)
-
-
 async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     """Enriched staff profile with user account info."""
     from app.models.user import StaffProfile
@@ -1271,7 +1188,7 @@ async def _child_financial_context(
     student_id: int,
     academic_year_id: int | None,
     *,
-    finance: FinanceView | None = None,
+    finance: FinanceView,
 ) -> dict:
     """Classe + statut d'inscription + solde (frais) de l'élève pour l'AY courante.
 
@@ -1279,7 +1196,6 @@ async def _child_financial_context(
     l'information la plus utile au secrétariat sur une fiche parent.
     """
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     ctx = {
         "class_name": None,
@@ -1312,40 +1228,22 @@ async def _child_financial_context(
     ctx["enrollment_status"] = enr.status
     ctx["is_enrolled"] = enr.status == "valide"
 
-    expected = (
-        await db.execute(
-            select(func.coalesce(func.sum(EnrollmentFee.amount), 0)).where(
-                EnrollmentFee.enrollment_id == enr.id
-            )
-        )
-    ).scalar() or 0
-    paid = (
-        await db.execute(
-            select(func.coalesce(func.sum(Payment.amount), 0)).where(
-                Payment.enrollment_id == enr.id,
-                Payment.status == PaymentStatus.COMPLETED,
-            )
-        )
-    ).scalar() or 0
-    ctx["fees_expected"] = float(expected)
-    ctx["fees_paid"] = float(paid)
-    ctx["fees_balance"] = float(expected) - float(paid)
+    expected, paid = await _mandatory_expected_and_paid(db, enr.id)
+    ctx["fees_expected"] = expected
+    ctx["fees_paid"] = paid
+    ctx["fees_balance"] = expected - paid
 
-    view = finance or FinanceView(amounts=True, status=True)
-    if view.status:
+    if finance.status:
         ctx["fee_status"], ctx["last_payment_date"] = await payment_pulse(db, enr.id)
     return ctx
 
 
-async def get_parent_full(
-    db: AsyncSession, parent_id: int, *, finance: FinanceView | None = None
-) -> dict:
+async def get_parent_full(db: AsyncSession, parent_id: int, *, finance: FinanceView) -> dict:
     """Enriched parent profile with user account and children list.
 
     Chaque enfant est enrichi (classe, statut d'inscription, solde des frais)
     et un récapitulatif financier agrégé est calculé pour l'AY courante.
     """
-    view = finance or FinanceView(amounts=True, status=True)
     stmt = (
         select(Parent)
         .where(Parent.id == parent_id)
@@ -1384,7 +1282,7 @@ async def get_parent_full(
     enrolled_count = 0
     for link in parent.children:
         s = link.student
-        ctx = await _child_financial_context(db, s.id, ay_id, finance=view)
+        ctx = await _child_financial_context(db, s.id, ay_id, finance=finance)
         children.append(
             {
                 "student_id": s.id,
@@ -1403,13 +1301,13 @@ async def get_parent_full(
             enrolled_count += 1
     # Redaction une seule fois, apres les totaux : le recapitulatif du foyer
     # se calcule sur les vraies valeurs, puis disparait avec elles.
-    result["children"] = [redact(child, view) for child in children]
+    result["children"] = [redact(child, finance) for child in children]
     result["summary"] = {
         "children_count": len(children),
         "enrolled_count": enrolled_count,
-        "total_expected": total_expected if view.amounts else None,
-        "total_paid": total_paid if view.amounts else None,
-        "total_balance": (total_expected - total_paid) if view.amounts else None,
+        "total_expected": total_expected if finance.amounts else None,
+        "total_paid": total_paid if finance.amounts else None,
+        "total_balance": (total_expected - total_paid) if finance.amounts else None,
         "academic_year_name": ay_name,
     }
 
@@ -1500,29 +1398,6 @@ async def update_parent(
     if refreshed is None:
         raise NotFoundError("Parent", parent_id)
     return _parent_to_response(refreshed)
-
-
-async def archive_parent(
-    db: AsyncSession, parent_id: int, *, reason: str | None, actor_id: int
-) -> ArchiveOutcome:
-    """Place le parent dans la corbeille : la fiche quitte les écrans, rien n'est détruit."""
-    return await archive_service.archive_record(
-        db, PARENT_KIND, parent_id, reason=reason, actor_id=actor_id
-    )
-
-
-async def restore_parent(db: AsyncSession, parent_id: int, *, actor_id: int) -> None:
-    """Sort le parent de la corbeille."""
-    await archive_service.restore_record(db, PARENT_KIND, parent_id, actor_id=actor_id)
-
-
-async def delete_parent(
-    db: AsyncSession, parent_id: int, *, deleted_by: int, reason: str | None = None
-) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
-    await archive_service.purge_record(
-        db, PARENT_KIND, parent_id, reason=reason, actor_id=deleted_by
-    )
 
 
 async def link_parent_to_student(

@@ -19,6 +19,7 @@ reconstituer une somme.
 
 from dataclasses import dataclass
 from datetime import date
+from typing import ClassVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,10 +43,21 @@ STATUS_NO_SCHEDULE = "sans_echeancier"
 
 @dataclass(frozen=True, slots=True)
 class FinanceView:
-    """Ce que l'appelant a le droit de voir des finances d'un élève."""
+    """Ce que l'appelant a le droit de voir des finances d'un élève.
+
+    Se passe toujours explicitement. Le paramètre a longtemps été optionnel,
+    et son absence ouvrait tout : un appelant qui oubliait l'argument publiait
+    les montants sans que rien, ni le type ni un test, ne le signale. Un garde
+    dont l'oubli est permissif n'est pas un garde.
+    """
 
     amounts: bool
     status: bool
+
+    #: Ce que voit le logiciel lui-même — PDF, exports, courriels — quand il
+    #: compose un document dont l'accès a déjà été autorisé en amont. À écrire
+    #: en toutes lettres à l'appel : la lecture doit être un choix visible.
+    INTERNAL: ClassVar["FinanceView"]
 
     @classmethod
     def of(cls, *, may_read_payments: bool, may_read_status: bool) -> "FinanceView":
@@ -53,6 +65,9 @@ class FinanceView:
         # comptable parce qu'on ne lui a pas coché la permission la plus
         # faible serait absurde.
         return cls(amounts=may_read_payments, status=may_read_payments or may_read_status)
+
+
+FinanceView.INTERNAL = FinanceView(amounts=True, status=True)
 
 
 def redact(block: dict, view: FinanceView) -> dict:

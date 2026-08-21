@@ -8,7 +8,15 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+- Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
+
 ### Fixed
+- Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*
+- Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais *(secrétariat, comptable)*
+- Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*
+- Un billet d'entrée perdu ou mal imprimé peut être réédité : la réimpression ne modifie plus rien dans le cahier d'appel *(éducateur)*
+- L'observation notée dans le cahier d'appel, « parti à l'infirmerie », est conservée au journal avant d'être remplacée par la mention du billet *(éducateur)*
 - Un doublon sur une contrainte à plusieurs colonnes conseillait « choisissez un autre nom » devant un formulaire qui n'a pas de champ « nom ». Le message se décide maintenant sur la contrainte violée, et non sur l'apparence de la valeur *(admin, comptable)*
 - Deux points d'entrée de l'API annonçaient le dépôt de justificatifs sur une inscription alors qu'aucun code ne les servait : ils échouaient à chaque appel. Les justificatifs se déposent sur la fiche de l'élève, où ils ont toujours fonctionné *(admin)*
 - Les erreurs inattendues affichent enfin leur code de référence à l'écran ; le navigateur bloquait jusqu'ici la réponse et l'utilisateur ne voyait qu'une erreur réseau *(admin)*

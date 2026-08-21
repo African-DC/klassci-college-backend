@@ -5,14 +5,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.fee import (
-    EnrollmentFee,
-    EnrollmentFeeStatus,
-    FeeCategory,
-    FeeVariant,
-    Payment,
-    PaymentStatus,
-)
+from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, FeeCategory, FeeVariant
 from app.models.installment import EnrollmentInstallment, FeeInstallment
 
 
@@ -113,18 +106,5 @@ async def mandatory_total(db: AsyncSession, enrollment_id: int) -> Decimal:
             FeeCategory.is_mandatory.is_(True),
             EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
         )
-    )
-    return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
-
-
-async def total_paid(db: AsyncSession, enrollment_id: int) -> Decimal:
-    """Total réellement encaissé sur l'inscription.
-
-    Seuls les versements `completed` comptent : un versement annulé ou
-    remboursé ne doit pas éteindre une échéance.
-    """
-    stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
-        Payment.enrollment_id == enrollment_id,
-        Payment.status == PaymentStatus.COMPLETED.value,
     )
     return Decimal(str((await db.execute(stmt)).scalar_one() or 0))
