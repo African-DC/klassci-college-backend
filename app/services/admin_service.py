@@ -245,13 +245,25 @@ async def update_student(
 # ---------------------------------------------------------------------------
 
 TEACHER_KIND = archive_service.ArchivableKind(
-    "teacher", "L'enseignant", TeacherProfile, lambda db, r: repo.delete_teacher(db, r)
+    "teacher",
+    "L'enseignant",
+    TeacherProfile,
+    lambda db, r: repo.delete_teacher(db, r),
+    archive_service.owns_user_account,
 )
 STAFF_KIND = archive_service.ArchivableKind(
-    "staff", "Le membre du personnel", StaffProfile, lambda db, r: repo.delete_staff(db, r)
+    "staff",
+    "Le membre du personnel",
+    StaffProfile,
+    lambda db, r: repo.delete_staff(db, r),
+    archive_service.owns_user_account,
 )
 PARENT_KIND = archive_service.ArchivableKind(
-    "parent", "Le parent", Parent, lambda db, r: repo.delete_parent(db, r)
+    "parent",
+    "Le parent",
+    Parent,
+    lambda db, r: repo.delete_parent(db, r),
+    archive_service.owns_user_account,
 )
 STUDENT_KIND = archive_service.ArchivableKind(
     "student",
@@ -261,6 +273,7 @@ STUDENT_KIND = archive_service.ArchivableKind(
     # sauter le RESTRICT sur `payments.enrollment_id`. L'argent encaissé
     # survit à la fiche de l'élève, sous identité figée.
     purge_repo.purge_student_keeping_payments,
+    archive_service.owns_user_account,
     load=repo.get_archived_student_by_id,
     # Figer l'identité sur les versements AVANT que la fiche ne quitte les
     # écrans : le filtre qui masque l'élève archivé le masque aussi derrière
