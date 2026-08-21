@@ -36,7 +36,14 @@ async def replace_year_grid(
             academic_year_id=academic_year_id,
             name=str(row["name"]),
             position=int(row["position"]),  # type: ignore[call-overload]
-            percentage=Decimal(str(row["percentage"])),
+            kind=str(row["kind"]),
+            # L'écriture non retenue reste vide : une tranche en francs qui
+            # garderait un pourcentage résiduel laisserait deux vérités dans
+            # la même ligne, et l'écran finirait par afficher la mauvaise.
+            percentage=(
+                Decimal(str(row["percentage"])) if row.get("percentage") is not None else None
+            ),
+            amount=(Decimal(str(row["amount"])) if row.get("amount") is not None else None),
             due_date=row["due_date"],  # type: ignore[arg-type]
         )
         for row in rows

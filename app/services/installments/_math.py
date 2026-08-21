@@ -18,7 +18,13 @@ def percentages_sum(percentages: list[Decimal]) -> Decimal:
 
 
 def is_complete_grid(percentages: list[Decimal]) -> bool:
-    """Une grille doit couvrir exactement le total dû, ni plus ni moins."""
+    """Les pourcentages d'une grille doivent couvrir exactement l'assiette.
+
+    Ne porte que sur les tranches exprimées en pourcentage : ce sont elles qui
+    se partagent le reste, et elles doivent s'en partager la totalité. Une
+    somme inférieure laisserait une part des frais sans échéance, une somme
+    supérieure réclamerait plus que le montant dû.
+    """
     return bool(percentages) and percentages_sum(percentages) == _HUNDRED
 
 
@@ -39,6 +45,73 @@ def split_by_percentage(total: Decimal, percentages: list[Decimal]) -> list[Deci
 
     amounts.append(total - sum(amounts, Decimal("0")))
     return amounts
+
+
+@dataclass(frozen=True, slots=True)
+class GridLine:
+    """Une ligne de grille prête à être chiffrée, sans rien savoir de la base.
+
+    `is_fixed` distingue les deux écritures possibles : `value` est alors des
+    francs, sinon c'est un pourcentage.
+    """
+
+    is_fixed: bool
+    value: Decimal
+
+
+def resolve_grid_amounts(total: Decimal, lines: list[GridLine]) -> list[Decimal]:
+    """Chiffre une grille mixte sur l'assiette d'un élève, dans l'ordre reçu.
+
+    **La règle, en une phrase : les montants fermes se prélèvent d'abord sur
+    le total obligatoire, les pourcentages se répartissent sur ce qui reste.**
+    Un pourcentage porte donc sur le solde après montants fermes, jamais sur
+    le total. C'est ce qui rend la grille lisible pour une directrice : elle
+    pose en francs ce qu'elle connaît — l'inscription, annoncée telle quelle
+    dans sa brochure — et laisse les pourcentages absorber la scolarité, qui
+    change d'un niveau à l'autre.
+
+    Sur la brochure de l'école pilote, une 6e non affectée doit 125 000 F
+    (inscription 37 000 + scolarité 70 000 + tenue 18 000). La grille
+    « Inscription 37 000 F ferme, puis 35 / 35 / 30 % » donne donc 37 000, puis
+    30 800, 30 800 et 26 400 : les trois pourcentages se partagent les 88 000 F
+    restants, pas les 125 000 du total.
+
+    Deux garde-fous, dans le même esprit que le reste du module :
+
+    - **Un montant ferme ne réclame jamais plus que l'élève ne doit.** Les
+      montants sont prélevés dans l'ordre des échéances et bornés par ce qui
+      reste ; une grille en francs bâtie pour un non affecté ne peut donc pas
+      présenter à un affecté subventionné une dette qu'il n'a pas. Les
+      échéances au-delà tombent à zéro et restent affichées : une ligne
+      annoncée par l'école qui disparaîtrait de l'écran serait plus troublante
+      qu'une ligne à 0 F.
+    - **Ce qui n'est couvert par aucune ligne reste sans échéance.** Une grille
+      faite uniquement de montants fermes qui ne couvrent pas tout le dû laisse
+      un reliquat non planifié ; on ne lui invente pas de date, exactement
+      comme une école sans grille du tout n'accuse personne.
+
+    Une grille entièrement en pourcentages retombe sur l'ancien calcul au franc
+    près : aucun montant ferme n'étant prélevé, le reste vaut le total.
+    """
+    if not lines:
+        return []
+
+    remaining = max(total, Decimal("0"))
+
+    amounts: list[Decimal | None] = [None] * len(lines)
+    for index, line in enumerate(lines):
+        if not line.is_fixed:
+            continue
+        taken = min(max(line.value, Decimal("0")), remaining)
+        amounts[index] = taken
+        remaining -= taken
+
+    percentage_indexes = [i for i, line in enumerate(lines) if not line.is_fixed]
+    shares = split_by_percentage(remaining, [lines[i].value for i in percentage_indexes])
+    for index, share in zip(percentage_indexes, shares, strict=True):
+        amounts[index] = share
+
+    return [amount if amount is not None else Decimal("0") for amount in amounts]
 
 
 @dataclass(frozen=True, slots=True)
