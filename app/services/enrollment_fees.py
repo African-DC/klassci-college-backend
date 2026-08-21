@@ -142,6 +142,12 @@ async def get_mandatory_fee_variants(
 # ---------------------------------------------------------------------------
 
 
+async def _count_enrollment_fees(db: AsyncSession, enrollment_id: int) -> int:
+    """Nombre de lignes de frais portees par une inscription."""
+    stmt = select(EnrollmentFee.id).where(EnrollmentFee.enrollment_id == enrollment_id)
+    return len((await db.execute(stmt)).scalars().all())
+
+
 async def _categories_already_billed(db: AsyncSession, enrollment_id: int) -> set[int]:
     """Catégories déjà facturées à cette inscription.
 
@@ -231,6 +237,7 @@ async def regenerate_enrollment_fees(
 
     await db.flush()
 
+    avant_creation = await _count_enrollment_fees(db, enrollment_id)
     await create_mandatory_enrollment_fees(
         db,
         enrollment_id,
@@ -238,6 +245,7 @@ async def regenerate_enrollment_fees(
         enrollment.academic_year_id,
         enrollment.assignment_status,
     )
+    created_count = await _count_enrollment_fees(db, enrollment_id) - avant_creation
 
     await audit_log(
         db,
@@ -248,6 +256,7 @@ async def regenerate_enrollment_fees(
         new_values={
             "action": "regenerate_fees",
             "deleted": deleted_count,
+            "created": created_count,
             "kept_with_payments": kept_count,
         },
     )
@@ -261,7 +270,8 @@ async def regenerate_enrollment_fees(
         "frais conservés car des versements y sont imputés",
         kept_count,
     )
-    parties = [d.phrase() for d in (supprimes, conserves) if d.count]
+    crees = Dependent("frais créé", "frais créés", created_count)
+    parties = [d.phrase() for d in (crees, supprimes, conserves) if d.count]
     message = (
         f"Frais régénérés : {', '.join(parties)}."
         if parties
@@ -270,6 +280,7 @@ async def regenerate_enrollment_fees(
 
     return {
         "deleted": deleted_count,
+        "created": created_count,
         "kept": kept_count,
         "message": message,
     }
