@@ -27,6 +27,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.academic import SchoolSettings
 from app.models.user import User
@@ -198,7 +199,17 @@ async def _resolve_actor_name(db: AsyncSession, actor_id: int) -> str:
     """
     if not actor_id:
         return "Utilisateur inconnu"
-    user = (await db.execute(select(User).where(User.id == actor_id))).scalar_one_or_none()
+    # Les deux profils sont chargés dans la requête, pas au moment de lire le
+    # nom : sous un moteur asynchrone, un chargement différé lève et le
+    # courriel de trace ne part jamais. L'appelant avale l'exception, si bien
+    # que la suppression réussit et que personne n'est averti — la panne la
+    # plus silencieuse possible sur une fonctionnalité de traçabilité.
+    statement = (
+        select(User)
+        .where(User.id == actor_id)
+        .options(selectinload(User.staff_profile), selectinload(User.teacher_profile))
+    )
+    user = (await db.execute(statement)).scalar_one_or_none()
     if user is None:
         return f"Utilisateur {actor_id}"
 
