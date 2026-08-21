@@ -23,6 +23,7 @@ from app.models.user import Student, User
 from app.repositories.user_repository import get_user_full_name
 from app.services._document_verification_helper import (
     DOCUMENT_RENDER_VERSION,
+    VerificationPayload,
     build_verification,
 )
 from app.services._school_settings_helper import load_school_settings_for_pdf
@@ -167,19 +168,37 @@ async def issue_act_seal(
     context: StudentContext,
     issued_at: datetime,
     source_data: dict[str, Any],
-) -> dict[str, Any]:
+    act_id: int | None,
+) -> VerificationPayload:
     """Crée le sceau numérique d'un acte qui sort de l'établissement.
 
     La référence est calculée ici pour qu'elle corresponde exactement à ce qui
     est signé puis imprimé — un écart entre les deux rendrait la vérification
     publique incompréhensible pour la personne qui tient le papier.
+
+    Elle porte l'identifiant de l'acte, comme le bulletin porte son trimestre.
+    La lignée de sceaux est indexée sur (type de document, référence), et
+    finaliser une révision périme toutes les précédentes de la même référence :
+    sans cet identifiant, le second billet d'annulation de zéro d'un élève
+    invaliderait le premier, et l'enseignant qui scanne le papier du trimestre 1
+    lirait « document remplacé ». `act_id` vaut None pour les actes qui n'ont
+    pas de registre — la demande de dossier scolaire — où une émission
+    corrigée doit effectivement remplacer la précédente.
+
+    Le matricule est exigé : sans lui, tous les élèves non matriculés
+    partageaient la même référence, donc la même lignée. Un rendu échoué
+    laissait alors un sceau en attente qui bloquait le guichet entier pendant
+    cinq minutes, pour tout le monde.
     """
     matricule = (context.student.enrollment_number or "").strip()
-    reference = (
-        f"{ref_prefix}-{issued_at.year}-{matricule}"
-        if matricule
-        else f"{ref_prefix}-{issued_at.year}"
-    )
+    if not matricule:
+        raise BusinessValidationError(
+            f"L'élève {context.student_name} n'a pas de matricule. "
+            "Renseignez-le sur sa fiche avant d'éditer cet acte : la référence du "
+            "document et sa vérification en ligne reposent dessus."
+        )
+    suffix = f"-{act_id}" if act_id is not None else ""
+    reference = f"{ref_prefix}-{issued_at.year}-{matricule}{suffix}"
     return await build_verification(
         db,
         document_type=document_type,

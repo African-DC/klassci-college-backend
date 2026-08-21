@@ -277,6 +277,9 @@ async def compose_document_data(db: AsyncSession, summons_id: int) -> dict[str, 
         context=context,
         issued_at=issued_at,
         source_data=source_data,
+        # Un parent peut être convoqué plusieurs fois dans l'année : chaque
+        # convocation garde sa propre lignée de sceau.
+        act_id=summons.id,
     )
     # La référence rejoint le registre : le parent qui présente son papier au
     # guichet doit pouvoir être retrouvé sans fouiller les dates.

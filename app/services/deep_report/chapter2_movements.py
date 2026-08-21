@@ -235,6 +235,9 @@ def scholarships_table(context: ReportContext) -> ReportTable:
             "Observations",
         ),
         rows=tuple(rows),
+        # Aucun écran ne saisit encore de bourse : sans ligne, on ne sait rien,
+        # et « rien » n'est pas « aucun boursier ».
+        pending=not rows,
         empty_message=(
             f"Aucune bourse enregistrée sur l'année — {PENDING_NOTE.lower()} le cas échéant."
         ),

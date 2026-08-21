@@ -295,6 +295,9 @@ async def compose_document_data(db: AsyncSession, authorization_id: int) -> dict
         context=context,
         issued_at=issued_at,
         source_data=source_data,
+        # Un élève peut avoir un billet par trimestre : sans cet identifiant,
+        # celui du T2 périmerait celui du T1, déjà remis à l'enseignant.
+        act_id=authorization.id,
     )
     authorization.reference = verification["reference"]
     await db.commit()

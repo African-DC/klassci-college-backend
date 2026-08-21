@@ -24,10 +24,38 @@ from app.services.deep_report._types import (
 
 _UNSPECIFIED = "Fonction non renseignée"
 
+# Les deux numéros administratifs existent en base mais n'ont pas encore
+# d'écran de saisie : on ne le signale que s'ils sont vides pour tout le monde.
+_STAFF_UNFILLED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("N° CNPS", "cnps_number"),
+    ("N° autorisation d'enseigner", "teaching_authorization_number"),
+)
+
 
 def build_tables(context: ReportContext) -> tuple[ReportTable, ...]:
     """Tableaux 22 et 23."""
     return (_staff_table(context), _staff_synthesis_table(context))
+
+
+def _staff_note(context: ReportContext) -> str | None:
+    """Avertissement du tableau 22, calculé sur ce qui manque réellement.
+
+    Le canevas réclame les deux numéros administratifs de chaque agent. Les
+    annoncer « à compléter » alors que l'école vient de les saisir ferait
+    douter le lecteur du reste du document : la note ne nomme que les colonnes
+    effectivement vides.
+    """
+    labels = [
+        label
+        for label, attribute in _STAFF_UNFILLED_COLUMNS
+        if not any(str(getattr(member, attribute, "") or "").strip() for member in context.staff)
+    ]
+    if not labels:
+        return None
+    columns = ", ".join(f"« {label} »" for label in labels)
+    return (
+        f"Colonnes {columns} : aucun écran ne permet encore de les saisir — {PENDING_NOTE.lower()}."
+    )
 
 
 def _staff_table(context: ReportContext) -> ReportTable:
@@ -61,6 +89,7 @@ def _staff_table(context: ReportContext) -> ReportTable:
             "Observations",
         ),
         rows=tuple(rows),
+        note=_staff_note(context),
         empty_message="Aucun membre du personnel administratif enregistré.",
     )
 
