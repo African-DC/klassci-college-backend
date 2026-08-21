@@ -3,6 +3,11 @@
 Deux tableaux qui rendent compte de l'encadrement des enseignants pendant le
 trimestre. Le canevas agrège par enseignant et par discipline ; KLASSCI
 enregistre l'événement unitaire et recompose l'agrégat ici.
+
+Aucun écran ne saisit encore ni visite ni formation : tant que rien n'est
+enregistré, les deux tableaux sortent vierges avec la mention d'attente. Un
+tableau vide sans mention se lirait « aucune visite ce trimestre », affirmation
+que personne ici n'est en mesure de faire.
 """
 
 from __future__ import annotations
@@ -75,6 +80,7 @@ def _visits_table(context: ReportContext) -> ReportTable:
             "Observations",
         ),
         rows=tuple(rows),
+        pending=not rows,
         empty_message=_NO_VISIT,
     )
 
@@ -123,5 +129,6 @@ def _trainings_table(context: ReportContext) -> ReportTable:
             "Observations",
         ),
         rows=tuple(rows),
+        pending=not rows,
         empty_message=_NO_TRAINING,
     )
