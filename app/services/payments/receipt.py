@@ -14,6 +14,7 @@ from app.core.exceptions import NotFoundError
 from app.models.fee import Payment
 from app.models.user import User
 from app.repositories import payment_repository as repo
+from app.services import fees_paid
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
@@ -42,11 +43,6 @@ def _fee_description(payment: Payment) -> str:
     return f"Allocation prioritaire sur {len(allocations)} frais"
 
 
-async def _total_paid_for_fee(db: AsyncSession, fee_id: int) -> Decimal:
-    """Total versé sur un frais (toutes allocations COMPLETED). Source de vérité."""
-    return await repo.get_total_paid_for_enrollment_fee(db, fee_id)
-
-
 def _status_after(fee_amount: Decimal, paid_after: Decimal, current_status: str) -> str:
     """Calcule le status apparent à l'instant de l'allocation."""
     if current_status == "waived":
@@ -60,15 +56,24 @@ def _status_after(fee_amount: Decimal, paid_after: Decimal, current_status: str)
 
 async def _build_allocation_breakdown(db: AsyncSession, payment: Payment) -> list[dict]:
     """Liste enrichie pour le tableau PDF — fee_name + amount + cumul + status."""
+    allocations = payment.allocations or []
+    if not allocations or payment.enrollment_id is None:
+        return []
+
+    # Une requête groupée pour toute l'inscription, pas une par frais alloué :
+    # le cumul affiché sur le reçu doit être le même que celui de la fiche de
+    # l'élève, et il l'est parce que c'est le même calcul.
+    deja_verse = await fees_paid.paid_by_enrollment(db, payment.enrollment_id)
+
     breakdown: list[dict] = []
-    for allocation in payment.allocations or []:
+    for allocation in allocations:
         ef = allocation.enrollment_fee
         if ef is None:
             continue
         cat_name = ""
         if ef.fee_variant and ef.fee_variant.category:
             cat_name = ef.fee_variant.category.name
-        paid_after = await _total_paid_for_fee(db, ef.id)
+        paid_after = deja_verse.get(ef.id, Decimal("0"))
         breakdown.append(
             {
                 "fee_name": cat_name,

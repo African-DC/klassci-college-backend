@@ -13,6 +13,7 @@ from app.core.exceptions import BusinessValidationError
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import AllocationPreviewLine, AllocationPreviewResponse
+from app.services import fees_paid
 from app.services.payments._allocation import plan_allocation
 
 
@@ -61,10 +62,13 @@ async def preview_allocation(
             lines=[],
         )
 
-    fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = []
-    for fee in fees:
-        paid = await repo.get_total_paid_for_enrollment_fee(db, fee.id)
-        fees_with_paid.append((fee, paid))
+    # Une requete groupee pour toute l'inscription, pas une par frais : un
+    # apercu sur six frais coutait six allers-retours a la base pendant que
+    # le caissier attendait devant la famille.
+    deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_id)
+    fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
+        (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in fees
+    ]
 
     total_remaining_before = sum(
         (

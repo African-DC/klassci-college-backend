@@ -202,9 +202,19 @@ class OptionalFeeOption(Base, TimestampMixin):
 
 
 class EnrollmentFee(Base, TimestampMixin):
-    """Frais applicable à une inscription spécifique."""
+    """Frais applicable à une inscription spécifique.
+
+    Une catégorie de frais ne produit qu'une seule ligne : la Scolarité T1 est
+    due une fois, quel que soit le nombre de tarifs que l'école a saisis pour
+    elle. La règle vivait dans une fonction Python, et il existe deux chemins
+    d'insertion ; elle vit désormais dans la base, portée par
+    `uq_enrollment_fee_category`.
+    """
 
     __tablename__ = "enrollment_fees"
+    __table_args__ = (
+        UniqueConstraint("enrollment_id", "fee_category_id", name="uq_enrollment_fee_category"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     enrollment_id: Mapped[int] = mapped_column(
@@ -212,6 +222,13 @@ class EnrollmentFee(Base, TimestampMixin):
     )
     fee_variant_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("fee_variants.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    #: Recopiée du tarif : MySQL n'accepte pas de colonne générée ici, une
+    #: expression STORED ne pouvant lire que les colonnes de sa propre ligne.
+    #: Renseignée par les deux chemins d'écriture, et NOT NULL pour qu'un
+    #: troisième chemin qui l'oublierait échoue au lieu de recréer le doublon.
+    fee_category_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     status: Mapped[str] = mapped_column(

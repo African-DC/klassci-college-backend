@@ -8,13 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear
 from app.models.enrollment import Enrollment
-from app.models.fee import EnrollmentFee, Payment, PaymentStatus
+from app.models.fee import Payment, PaymentStatus
+from app.repositories import installment_repository
 from app.repositories import payment_repository as repo
 from app.schemas.payment import (
     PaymentListResponse,
     PaymentResponse,
     PaymentSummaryResponse,
 )
+from app.services import fees_paid
 from app.services.payments._response import payment_to_response
 
 
@@ -111,29 +113,32 @@ async def get_payments_summary(
     *,
     academic_year_id: int | None = None,
 ) -> PaymentSummaryResponse:
-    """Agrège les statistiques de paiement (KPIs dashboard admin)."""
-    expected_stmt = select(
-        func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
-    )
-    if academic_year_id is not None:
-        expected_stmt = expected_stmt.join(
-            Enrollment, EnrollmentFee.enrollment_id == Enrollment.id
-        ).where(Enrollment.academic_year_id == academic_year_id)
+    """Agrège les statistiques de paiement (KPIs dashboard admin).
 
-    expected_row = (await db.execute(expected_stmt)).one()
-    total_expected = float(expected_row.expected)
+    Deux périmètres cohabitent ici, et c'est délibéré :
+
+    - **le recouvrement** — `total_expected`, `total_paid` et le taux qui en
+      découle. Les deux moitiés parlent de la même dette : les frais
+      obligatoires encore dus, et l'argent imputé sur eux. C'est le calcul de
+      la fiche de l'élève et de l'échéancier, appliqué à toute l'école.
+      Auparavant, l'attendu totalisait tous les frais — facultatifs et
+      exonérés compris — face à une somme brute de versements : une famille
+      exonérée après avoir versé restait comptée comme ayant payé, et le taux
+      du tableau de bord contredisait la fiche de l'élève.
+
+    - **la caisse** — `total_pending`, `total_cancelled` et le nombre de
+      versements. Ce sont des versements, pas des dettes : on les compte tels
+      qu'ils ont été enregistrés, versements orphelins compris, pour que le
+      tableau de bord ne dise pas moins que le bordereau du jour. Aucun taux
+      n'en est tiré : ils ne se comparent à aucun attendu.
+    """
+    total_expected = float(
+        await installment_repository.mandatory_total_for_year(db, academic_year_id)
+    )
+    total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, academic_year_id))
 
     pay_stmt = select(
         func.count().label("payment_count"),
-        func.coalesce(
-            func.sum(
-                case(
-                    (Payment.status == PaymentStatus.COMPLETED.value, Payment.amount),
-                    else_=0,
-                )
-            ),
-            0,
-        ).label("total_paid"),
         func.coalesce(
             func.sum(
                 case(
@@ -161,7 +166,6 @@ async def get_payments_summary(
 
     pay_row = (await db.execute(pay_stmt)).one()
 
-    total_paid = float(pay_row.total_paid)
     total_pending = float(pay_row.total_pending)
     total_cancelled = float(pay_row.total_cancelled)
     payment_count = pay_row.payment_count
