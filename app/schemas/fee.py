@@ -182,6 +182,48 @@ class FeeVariantListResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Repercussion d'un tarif modifie sur les inscriptions existantes
+# ---------------------------------------------------------------------------
+
+
+class _FeePropagationImpact(BaseModel):
+    """Le socle chiffre commun a l'apercu et au resultat.
+
+    Les deux reponses portent les memes compteurs, sous les memes noms : c'est
+    ce qui permet a l'ecole de comparer ce qu'on lui avait annonce et ce qui a
+    ete fait.
+    """
+
+    variant_id: int
+    fee_category_id: int
+    category_name: str
+    academic_year_id: int
+    #: Le montant du tarif tel qu'il est aujourd'hui : celui qui sera recopie.
+    amount: Decimal
+    #: Somme des quatre paquets. Une categorie ne produisant qu'une ligne par
+    #: inscription, ce total est aussi le nombre d'inscriptions touchees.
+    enrollments_concerned: int
+    fees_already_up_to_date: int
+    fees_kept_with_payments: int
+    fees_waived: int
+    #: Ecart total de dette en francs, negatif quand le tarif baisse.
+    debt_delta: Decimal
+    message: str
+
+
+class FeePropagationPreview(_FeePropagationImpact):
+    """Ce qui se passerait. Rien n'est ecrit."""
+
+    fees_to_update: int
+
+
+class FeePropagationResult(_FeePropagationImpact):
+    """Ce qui a ete ecrit : le compte des lignes reellement reecrites."""
+
+    fees_updated: int
+
+
+# ---------------------------------------------------------------------------
 # OptionalFeeOption
 # ---------------------------------------------------------------------------
 
