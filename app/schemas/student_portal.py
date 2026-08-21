@@ -3,7 +3,9 @@
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Grades
@@ -79,6 +81,9 @@ class EnrollmentFeeResponse(BaseModel):
 
     id: int
     fee_category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     amount: Decimal
     status: str
     payments: list[PaymentResponse]
@@ -133,6 +138,7 @@ class StudentProfileResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     email: str | None

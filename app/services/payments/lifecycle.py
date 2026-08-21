@@ -20,7 +20,7 @@ from app.schemas.payment import PaymentResponse
 from app.services.payments._allocation import paid_for_fees, recompute_fee_status
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
-from app.services.payments._state import VALID_TRANSITIONS
+from app.services.payments._state import VALID_TRANSITIONS, status_value
 
 
 async def _load_payment_for_transition(db: AsyncSession, payment_id: int) -> Payment:
@@ -40,11 +40,17 @@ async def _load_payment_for_transition(db: AsyncSession, payment_id: int) -> Pay
     return payment
 
 
-def _ensure_transition_allowed(current: str, target: str) -> None:
-    if target not in VALID_TRANSITIONS.get(current, []):
+def _ensure_transition_allowed(current: object, target: str) -> None:
+    """Refuse une transition de statut interdite, en nommant l'état lisible.
+
+    Le message part au guichet : il doit dire « completed », pas
+    « PaymentStatus.COMPLETED ». Voir `status_value`.
+    """
+    current_value = status_value(current)
+    if target not in VALID_TRANSITIONS.get(current_value, []):
         raise HTTPException(
             status_code=409,
-            detail=f"Transition invalide : impossible de passer de '{current}' à '{target}'",
+            detail=f"Transition invalide : impossible de passer de '{current_value}' à '{target}'",
         )
 
 
@@ -79,7 +85,7 @@ async def validate_payment(
             action=AuditAction.UPDATE,
             user_id=validated_by,
             entity_id=payment.id,
-            old_values={"status": current},
+            old_values={"status": status_value(current)},
             new_values={"status": payment.status},
         )
 
@@ -168,7 +174,7 @@ async def cancel_payment(
             action=AuditAction.UPDATE,
             user_id=cancelled_by,
             entity_id=payment.id,
-            old_values={"status": current},
+            old_values={"status": status_value(current)},
             new_values={
                 "status": payment.status,
                 "cancelled_allocations": allocations_snapshot,

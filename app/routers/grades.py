@@ -11,6 +11,7 @@ from app.core.dependencies import get_current_user, get_tenant_db, require_permi
 from app.repositories.user_repository import get_teacher_profile_id
 from app.schemas.grades import (
     EvaluationCreate,
+    EvaluationListResponse,
     EvaluationResponse,
     GradeBatchUpdate,
     GradeResponse,
@@ -26,21 +27,26 @@ router = APIRouter(tags=["grades"])
 # ---------------------------------------------------------------------------
 
 
-@router.get("/evaluations", response_model=list[EvaluationResponse])
+@router.get("/evaluations", response_model=EvaluationListResponse)
 async def list_evaluations(
     class_id: int | None = Query(None),
     teacher_id: int | None = Query(None),
     academic_year_id: int | None = Query(None),
     trimester: int | None = Query(None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     _: None = require_permission("grades:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Any:
+    """Liste paginée des évaluations, filtrable par classe, enseignant, année, trimestre."""
     return await service.list_evaluations(
         db,
         class_id=class_id,
         teacher_id=teacher_id,
         academic_year_id=academic_year_id,
         trimester=trimester,
+        page=page,
+        size=size,
     )
 
 

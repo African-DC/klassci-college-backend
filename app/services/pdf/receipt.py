@@ -1,170 +1,126 @@
-"""Reçu de paiement — PDF A5 premium avec breakdown allocation + theme école dynamique.
+"""Reçu de versement — une A4 portant deux exemplaires identiques.
 
-Refactor 2026-05-18 : utilise `components.py` (header premium, amount_box,
-section_title, premium_table, signature_block, footer) + `PDFTheme` instancié
-depuis `school_settings` pour personnalisation tenant (couleurs école).
+La caisse imprime une feuille et la coupe en deux : un exemplaire part avec la
+famille, l'autre reste au classeur. C'est la pratique du guichet, et elle
+économise une feuille sur deux.
+
+Les deux moitiés sont composées par le même code, à partir des mêmes données :
+elles portent donc le même montant, la même référence et la même situation
+financière. Seule la mention d'exemplaire les distingue, pour qu'un même
+versement ne soit pas classé deux fois.
+
+Le document ne porte pas de sceau numérique KLASSCI — il n'en a jamais porté :
+son identité est le numéro du versement, qui vient de la caisse. Voir la note
+de `build_receipt_html` sur ce choix.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 
-from app.services.pdf import components as ui
-from app.services.pdf._helpers import format_decimal
-from app.services.pdf.theme import PDFTheme, method_label, status_label
+from app.services.pdf import _blocks as ui
+from app.services.pdf import _receipt_parts as parts
+from app.services.pdf._receipt_styles import receipt_styles
+from app.services.pdf.theme import PDFTheme
+
+COPY_FAMILY = "Exemplaire famille"
+COPY_SCHOOL = "Exemplaire établissement"
 
 
-def _allocations_rows(allocations: list[dict[str, Any]]) -> list[list[Any]]:
-    """Compose les rows premium_table pour le breakdown allocation."""
-    rows: list[list[Any]] = []
-    for a in allocations:
-        fee_name = a.get("fee_name", "")
-        amount = a.get("amount")
-        amount_str = (
-            format_decimal(amount)
-            if isinstance(amount, Decimal)
-            else str(amount)
-            if amount is not None
-            else "—"
-        )
-        paid_after = a.get("fee_paid_after")
-        fee_total = a.get("fee_total")
-        cumul = ""
-        if paid_after is not None and fee_total is not None:
-            paid_str = (
-                format_decimal(paid_after) if isinstance(paid_after, Decimal) else str(paid_after)
-            )
-            total_str = (
-                format_decimal(fee_total) if isinstance(fee_total, Decimal) else str(fee_total)
-            )
-            cumul = f"{paid_str} / {total_str}"
-        status_key = a.get("status_after", "")
-        rows.append(
-            [
-                fee_name,
-                {"value": f"+ {amount_str}", "type": "num-emphasis"},
-                {"value": cumul, "type": "muted"},
-                {"value": status_key, "type": "pill"},
-            ]
-        )
-    return rows
+def _document_reference(payment_data: dict[str, Any]) -> str:
+    """Référence du document, identique sur les deux moitiés.
 
-
-def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
-    """Generate a payment receipt PDF — premium template + theme école dynamique.
-
-    payment_data keys: payment_id, amount, method, reference, status, notes,
-        student_name, fee_description, created_at, received_by_name, allocations.
-    school_settings keys: school_name, ministry_code, address, phone, email,
-        logo_url, signature_image_url, head_master_name, head_master_title,
-        primary_color, accent_color, website, motto.
+    Un versement, une référence. Numéroter les exemplaires séparément
+    reviendrait à faire exister deux pièces comptables là où la caisse n'a
+    encaissé qu'une fois.
     """
-    from weasyprint import HTML  # lazy import — voir module docstring
-
-    theme = PDFTheme.from_school(school_settings)
-    school_name = school_settings.get("school_name") or ""
-
-    payment_id = payment_data.get("payment_id", "")
-    amount = payment_data.get("amount")
-    method_key = payment_data.get("method", "")
-    reference = payment_data.get("reference") or ""
-    status_key = payment_data.get("status", "")
-    notes = payment_data.get("notes") or ""
-    student_name = payment_data.get("student_name", "")
-    fee_description = payment_data.get("fee_description", "")
+    payment_id = payment_data.get("payment_id")
     created_at = payment_data.get("created_at")
-    received_by = payment_data.get("received_by_name") or "—"
-    allocations = payment_data.get("allocations") or []
+    year = created_at.year if isinstance(created_at, datetime) else datetime.now().year
+    return f"REC-{year}-{payment_id}" if payment_id else ""
 
-    amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
-    pay_date = (
-        created_at.strftime("%d/%m/%Y à %H:%M")
-        if isinstance(created_at, datetime)
-        else str(created_at or "")
+
+def _half_html(
+    data: dict[str, Any],
+    school: dict[str, Any],
+    *,
+    copy_label: str,
+    entitlements_html: str = "",
+) -> str:
+    """Un exemplaire complet et autonome, sur une moitié de page.
+
+    La contrepartie figure sur les deux exemplaires : c'est elle qu'on oppose
+    au guichet quand la famille revient réclamer une tenue six semaines plus
+    tard, et elle ne sert à rien si seule la souche de l'école la porte.
+    """
+    created_at = data.get("created_at")
+    when = created_at.strftime("%d/%m/%Y") if isinstance(created_at, datetime) else ""
+    doc_number = " · ".join(
+        p for p in (f"N° {data.get('payment_id', '')}".strip(), when) if p.strip()
     )
+    return f"""
+    <div class="rc-half">
+        {parts.header_html(school, doc_number=doc_number, copy_label=copy_label)}
+        <table class="rc-cols"><tr>
+            <td class="rc-col-left">{parts.payment_column_html(data)}</td>
+            <td class="rc-col-right">{parts.situation_column_html(data)}</td>
+        </tr></table>
+        {parts.key_figures_html(data)}
+        {entitlements_html}
+        <div class="rc-bottom">{parts.footer_html(data, school)}</div>
+    </div>
+    """
 
-    # Méthode et statut affichés en FR via les labels
-    method_display = method_label(method_key)
-    status_display = status_label(status_key)
 
-    # Bloc info label/valeur : élève + nature + méthode + ref + statut + notes.
-    # Rendu en table borderless (alignement colonne robuste sous WeasyPrint).
-    info_items: list[tuple[str, Any]] = [
-        ("Élève", student_name),
-        ("Nature", fee_description),
-        ("Méthode", method_display),
-    ]
-    if reference:
-        info_items.append(("Référence", reference))
-    info_items.append(("Statut", {"html": ui.status_pill(status_key, label=status_display)}))
-    if notes:
-        info_items.append(("Notes", notes))
+def build_receipt_html(payment_data: dict[str, Any], school_settings: dict[str, Any]) -> str:
+    """Compose le HTML de l'A4 deux exemplaires.
 
-    info_html = ui.info_table(info_items)
+    Séparé du rendu pour être vérifiable sans WeasyPrint : les tests peuvent
+    compter les pages, comparer les deux moitiés et relire la situation
+    financière sans dépendre des bibliothèques natives d'impression.
 
-    # Allocations section (optionnelle)
-    allocations_section = ""
-    if allocations:
-        rows = _allocations_rows(allocations)
-        allocations_section = ui.section_title(
-            "Détail de l'allocation", theme=theme
-        ) + ui.premium_table(
-            headers=[
-                "Frais",
-                {"label": "Affecté", "align": "right"},
-                {"label": "Cumul après", "align": "right"},
-                "Statut",
-            ],
-            rows=rows,
-            theme=theme,
-            col_widths=["40%", "20%", "22%", "18%"],
-        )
+    Sur le sceau : le reçu n'entre pas au registre des documents vérifiables,
+    contrairement au bulletin ou au certificat. C'est délibéré. Un reçu se
+    réimprime autant de fois que la famille le demande, et chaque impression
+    créerait une inscription au registre pour un seul encaissement. La pièce
+    opposable reste le versement en base, dont le numéro figure ici.
+    """
+    school = school_settings or {}
+    theme = PDFTheme.from_school(school)
+    data = dict(payment_data or {})
+    data.setdefault("document_reference", _document_reference(data))
 
-    # Signatures
-    signatures_html = ui.signature_block(
-        roles=[
-            {"role": "Le Caissier", "name": received_by},
-            {"role": "Le Parent / Tuteur"},
-        ],
+    # Ce que ce versement ouvre — composé une fois, imprimé sur les deux moitiés.
+    contrepartie = ui.entitlements_note(
+        data.get("entitlements") or [],
         theme=theme,
+        title="Ce que ce versement ouvre",
+        overflow=int(data.get("entitlements_overflow") or 0),
     )
 
-    html = f"""
-    <!DOCTYPE html>
+    return f"""<!DOCTYPE html>
     <html lang="fr">
-    <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A5", margin="12mm")}</head>
+    <head><meta charset="UTF-8">{receipt_styles(theme)}</head>
     <body>
-        {ui.page_decoration(theme=theme, watermark_text=school_name)}
-        <div class="pdf-page-body">
-        {
-        ui.premium_header(
-            school_settings,
-            theme=theme,
-            doc_type="REÇU DE VERSEMENT",
-            doc_number=f"N° {payment_id} · {pay_date}",
-        )
-    }
-
-        {ui.amount_box(amount_str, theme=theme, label="Montant versé", currency="XOF")}
-
-        {info_html}
-
-        {allocations_section}
-
-        {signatures_html}
-
-        {
-        ui.premium_footer(
-            school_settings,
-            theme=theme,
-            note="Ce reçu fait foi de paiement. À conserver précieusement.",
-        )
-    }
-        </div>
+        {_half_html(data, school, copy_label=COPY_FAMILY, entitlements_html=contrepartie)}
+        <div class="rc-cut"><span class="rc-cut-label">Découper ici</span></div>
+        {_half_html(data, school, copy_label=COPY_SCHOOL, entitlements_html=contrepartie)}
     </body>
     </html>
     """
 
-    return HTML(string=html).write_pdf()
+
+def generate_receipt_pdf(payment_data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
+    """Rend le reçu en PDF — une A4 portrait, deux exemplaires à découper.
+
+    payment_data : payment_id, amount, method, reference, status, notes,
+        student_name, class_name, academic_year_name, fee_description,
+        created_at, received_by_name, situation, schedule, entitlements,
+        entitlements_overflow.
+    school_settings : school_name, ministry_code, address, phone, email,
+        logo_url, primary_color, accent_color, website.
+    """
+    from weasyprint import HTML  # lazy import — dépendances natives GTK
+
+    return HTML(string=build_receipt_html(payment_data, school_settings)).write_pdf()

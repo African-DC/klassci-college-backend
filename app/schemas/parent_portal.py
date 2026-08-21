@@ -3,7 +3,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Children
@@ -31,6 +33,7 @@ class ChildResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     enrollment_number: str | None
     relationship_type: str
     enrollment: ChildEnrollmentInfo | None = None
@@ -122,6 +125,9 @@ class FeeDetail(BaseModel):
     amount: Decimal
     status: str
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     payments: list[PaymentDetail]
 
 

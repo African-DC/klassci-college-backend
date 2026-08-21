@@ -137,6 +137,52 @@ def info_table(items: list[tuple[str, Any]]) -> str:
     return f'<table class="pdf-info-table">{"".join(rows)}</table>'
 
 
+def entitlements_note(
+    lignes: list[tuple[str, str]],
+    *,
+    theme: PDFTheme,
+    title: str = "CE QUE CES FRAIS OUVRENT",
+    overflow: int = 0,
+) -> str:
+    """Bloc court « ce que la famille obtient », une ligne par frais.
+
+    Dimensionne pour un recu imprime en deux exemplaires sur une A4 coupee au
+    milieu : une demi-page fait 148 mm, dont la situation financiere de
+    l'eleve occupe deja la moitie. Le bloc se tient donc a 7 pt, une ligne par
+    categorie, et ne s'affiche pas du tout quand il n'y a rien a promettre —
+    plutot qu'un titre suivi du vide, qui inquieterait plus qu'il ne rassure.
+
+    `overflow` compte les frais regles ce jour qui n'ont pas trouve leur place :
+    on les annonce en une ligne au lieu de les taire.
+    """
+    lignes_utiles = [(nom, texte) for nom, texte in lignes if texte]
+    if not lignes_utiles:
+        return ""
+
+    corps = "".join(
+        f'<div style="margin:0 0 1mm 0; line-height:1.3;">'
+        f'<span style="font-weight:700; color:{theme.primary};">{esc(nom)}</span>'
+        f'<span style="color:var(--muted);"> · </span>{esc(texte)}</div>'
+        for nom, texte in lignes_utiles
+    )
+    reste = (
+        f'<div style="color:var(--muted); font-style:italic;">'
+        f"et {overflow} autre{'s' if overflow > 1 else ''} frais "
+        f"régl{'és' if overflow > 1 else 'é'} ce jour</div>"
+        if overflow > 0
+        else ""
+    )
+    return (
+        f'<div style="margin:3mm 0 0 0; padding:2mm 2.5mm; font-size:7pt;'
+        f" background:{theme.primary_light}; border-left:0.8mm solid {theme.accent};"
+        f' border-radius:0 1.5mm 1.5mm 0;">'
+        f'<div style="font-size:6.5pt; font-weight:700; letter-spacing:0.4pt;'
+        f' text-transform:uppercase; color:{theme.primary}; margin-bottom:1.2mm;">'
+        f"{esc(title)}</div>"
+        f"{corps}{reste}</div>"
+    )
+
+
 def meta_banner(left: str, right: str = "", *, theme: PDFTheme) -> str:
     """Panneau gradient compact entre header et content principal."""
     right_html = (

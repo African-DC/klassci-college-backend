@@ -1,9 +1,9 @@
 """Chapitre I — B / Résultats scolaires : listes nominatives (tableaux 3, 4, 8).
 
 Le canevas veut une grille par classe, élève par élève, puis la liste des
-majors. Deux colonnes réclamées — lieu de naissance et nationalité — ne sont
-collectées nulle part dans KLASSCI : elles sortent en « — » avec un
-avertissement, plutôt qu'inventées.
+majors. Le lieu de naissance est saisi sur la fiche élève et sort tel quel ;
+la nationalité n'est collectée nulle part dans KLASSCI et sort en « — » avec
+un avertissement, plutôt qu'inventée.
 """
 
 from __future__ import annotations
@@ -24,8 +24,9 @@ from app.services.deep_report._types import (
 _SUBSIDISED = ("affecte", "reaffecte")
 
 _CIVIL_NOTE = (
-    "Colonnes « Lieu de naissance » et « Nationalité » : ces informations ne sont pas "
-    f"collectées par KLASSCI — {PENDING_NOTE.lower()} sur le document imprimé."
+    "Colonne « Nationalité » : cette information n'est pas collectée par KLASSCI — "
+    f"{PENDING_NOTE.lower()} sur le document imprimé. Un lieu de naissance vide est "
+    "un dossier élève à compléter, pas une limite de l'outil."
 )
 _HISTORY_NOTE = (
     "Colonne « Qualité » : aucune année scolaire antérieure n'est enregistrée, "
@@ -135,7 +136,7 @@ def top_students_table(context: ReportContext) -> ReportTable:
                         major.full_name,
                         fmt.sex(major.is_girl),
                         fmt.day(major.birth_date),
-                        MISSING,  # Lieu de naissance — non collecté
+                        fmt.text(major.birth_place),
                         MISSING,  # Nationalité — non collectée
                         fmt.assignment(major.assignment_status),
                         format_average(major.average),
@@ -188,7 +189,7 @@ def _student_row(index: int, line: StudentLine, *, with_status: bool) -> ReportR
         line.full_name,
         fmt.sex(line.is_girl),
         fmt.day(line.birth_date),
-        MISSING,  # Lieu de naissance — non collecté par KLASSCI
+        fmt.text(line.birth_place),
         MISSING,  # Nationalité — non collectée par KLASSCI
         fmt.repeater(line.is_repeater),
     ]

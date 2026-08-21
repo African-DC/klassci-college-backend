@@ -81,6 +81,10 @@ class StudentLine:
         return self.student.birth_date
 
     @property
+    def birth_place(self) -> str | None:
+        return self.student.birth_place
+
+    @property
     def full_name(self) -> str:
         return f"{self.student.last_name} {self.student.first_name}".strip()
 
