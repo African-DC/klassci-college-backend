@@ -782,6 +782,8 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
         "last_name": teacher.last_name,
         "speciality": teacher.speciality,
         "phone": teacher.phone,
+        "genre": teacher.genre,
+        "contract_type": teacher.contract_type,
         "created_at": teacher.created_at,
         "updated_at": teacher.updated_at,
     }
