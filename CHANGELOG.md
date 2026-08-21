@@ -19,6 +19,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Une catégorie de frais dit désormais ce qu'elle donne droit, élément par élément : ce qui se retire au guichet et ce qui s'ouvre comme accès *(admin, comptable)*
 - Le reçu de versement porte, sous le montant, ce que la famille obtient contre les frais réglés ce jour : le parent repart avec la preuve écrite de sa tenue et de ses macarons *(parent, caissier, secrétariat)*
 - L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
+- Le reçu de versement s'imprime en deux exemplaires sur une seule feuille A4, à couper au milieu : un pour la famille, un pour le classeur *(caissier, comptable)*
+- Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
 - La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir *(admin, directeur des études, enseignant)*
