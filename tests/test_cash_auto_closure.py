@@ -363,6 +363,22 @@ def test_a_long_list_of_days_is_summarised_not_enumerated() -> None:
     assert "12/07/2026" not in body
 
 
+def test_one_day_is_announced_in_the_singular() -> None:
+    body = cash_closure_service._notification_body([YESTERDAY])
+
+    assert body.startswith("Votre journée de caisse du 20/08/2026 a été clôturée d'office")
+
+
+def test_several_days_are_announced_in_the_plural() -> None:
+    """« Votre journées de caisse du A, B ont été clôturées » était fautif."""
+    body = cash_closure_service._notification_body([TWO_DAYS_AGO, YESTERDAY])
+
+    assert body.startswith(
+        "Vos journées de caisse des 19/08/2026 et 20/08/2026 ont été clôturées d'office"
+    )
+    assert "Votre journées" not in body
+
+
 # ---------------------------------------------------------------------------
 # Régularisation
 # ---------------------------------------------------------------------------

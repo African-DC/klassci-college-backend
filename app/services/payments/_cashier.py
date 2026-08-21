@@ -14,12 +14,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.repositories.user_repository import get_user_full_name
+from app.repositories.user_repository import (
+    UNNAMED_PERSON,
+    format_person_name,
+    get_user_full_name,
+)
 
 #: Ce que porte une ligne dont l'encaisseur n'est plus identifiable. Le
 #: versement, lui, reste : il a été compté, et les bordereaux déjà signés le
 #: disent.
-UNKNOWN_CASHIER = "—"
+UNKNOWN_CASHIER = UNNAMED_PERSON
 
 
 def cashier_name(user: Any | None) -> str | None:
@@ -35,13 +39,7 @@ def cashier_name(user: Any | None) -> str | None:
         return None
 
     first_name, last_name = get_user_full_name(user)
-    complet = " ".join(part for part in (first_name, last_name) if part).strip()
-    if complet:
-        return complet
-
-    email = getattr(user, "email", None) or ""
-    local = email.split("@")[0].strip()
-    return local or UNKNOWN_CASHIER
+    return format_person_name(first_name, last_name, getattr(user, "email", None))
 
 
 def cashier_label(user: Any | None) -> str:
