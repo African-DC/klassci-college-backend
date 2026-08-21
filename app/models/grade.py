@@ -14,6 +14,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -86,6 +87,10 @@ class Evaluation(Base, TimestampMixin):
     """Évaluation (contrôle, devoir, examen) pour une classe."""
 
     __tablename__ = "evaluations"
+    # L'écran liste par classe et trimestre, trié par date décroissante.
+    __table_args__ = (
+        Index("idx_evaluations_class_trimester_date", "class_id", "trimester", "date"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any
+from typing import Any, NamedTuple
 
-from sqlalchemy import case, select, update
+from sqlalchemy import Select, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -72,13 +72,57 @@ async def get_students_for_class(
 # ---------------------------------------------------------------------------
 
 
+class EvaluationGradeCounts(NamedTuple):
+    """Compteurs d'une évaluation, comptés en SQL et non en mémoire."""
+
+    total: int
+    graded: int
+
+
+NO_GRADES = EvaluationGradeCounts(total=0, graded=0)
+
+
 def _eval_options() -> list[Any]:
+    """Chargement complet, notes comprises.
+
+    Réservé aux lectures qui exploitent réellement `Evaluation.grades` :
+    la fiche d'une évaluation et le relevé de notes PDF. La liste
+    paginée, elle, ne rapatrie jamais les notes (cf. `_eval_light_options`).
+    """
     return [
         selectinload(Evaluation.subject),
         selectinload(Evaluation.class_),
         selectinload(Evaluation.teacher),
         selectinload(Evaluation.grades),
     ]
+
+
+def _eval_light_options() -> list[Any]:
+    """Les seules relations que la liste affiche : matière, classe, enseignant."""
+    return [
+        selectinload(Evaluation.subject),
+        selectinload(Evaluation.class_),
+        selectinload(Evaluation.teacher),
+    ]
+
+
+def _filter_evaluations(
+    stmt: Select[Any],
+    *,
+    class_id: int | None,
+    teacher_id: int | None,
+    academic_year_id: int | None,
+    trimester: int | None,
+) -> Select[Any]:
+    if class_id is not None:
+        stmt = stmt.where(Evaluation.class_id == class_id)
+    if teacher_id is not None:
+        stmt = stmt.where(Evaluation.teacher_id == teacher_id)
+    if academic_year_id is not None:
+        stmt = stmt.where(Evaluation.academic_year_id == academic_year_id)
+    if trimester is not None:
+        stmt = stmt.where(Evaluation.trimester == trimester)
+    return stmt
 
 
 async def get_evaluation_by_id(db: AsyncSession, eval_id: int) -> Evaluation | None:
@@ -95,17 +139,89 @@ async def list_evaluations(
     academic_year_id: int | None = None,
     trimester: int | None = None,
 ) -> list[Evaluation]:
+    """Toutes les évaluations correspondant aux filtres, notes comprises.
+
+    Sans limite : appelée par le relevé de notes PDF et le récapitulatif de
+    classe, qui ont besoin de la totalité d'un trimestre pour une classe. La
+    liste exposée par l'API passe par `list_evaluations_page`.
+    """
     stmt = select(Evaluation).options(*_eval_options()).order_by(Evaluation.date.desc())
-    if class_id is not None:
-        stmt = stmt.where(Evaluation.class_id == class_id)
-    if teacher_id is not None:
-        stmt = stmt.where(Evaluation.teacher_id == teacher_id)
-    if academic_year_id is not None:
-        stmt = stmt.where(Evaluation.academic_year_id == academic_year_id)
-    if trimester is not None:
-        stmt = stmt.where(Evaluation.trimester == trimester)
+    stmt = _filter_evaluations(
+        stmt,
+        class_id=class_id,
+        teacher_id=teacher_id,
+        academic_year_id=academic_year_id,
+        trimester=trimester,
+    )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def list_evaluations_page(
+    db: AsyncSession,
+    *,
+    class_id: int | None = None,
+    teacher_id: int | None = None,
+    academic_year_id: int | None = None,
+    trimester: int | None = None,
+    page: int = 1,
+    size: int = 20,
+) -> tuple[list[Evaluation], int]:
+    """Une page d'évaluations et le total de l'école pour ces filtres.
+
+    Le total vient d'un COUNT sur la même clause WHERE : il ne dépend donc
+    pas de la taille de la page. Les notes ne sont pas chargées, leurs
+    compteurs étant obtenus par `count_grades_by_evaluation`.
+    """
+    base = _filter_evaluations(
+        select(Evaluation),
+        class_id=class_id,
+        teacher_id=teacher_id,
+        academic_year_id=academic_year_id,
+        trimester=trimester,
+    )
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = (
+        base.options(*_eval_light_options())
+        # `id` départage les évaluations d'une même journée : sans lui, deux
+        # pages successives peuvent réafficher ou sauter une ligne.
+        .order_by(Evaluation.date.desc(), Evaluation.id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
+
+
+async def count_grades_by_evaluation(
+    db: AsyncSession, eval_ids: list[int]
+) -> dict[int, EvaluationGradeCounts]:
+    """Compte, par évaluation, ses élèves et ceux dont la note est saisie.
+
+    Deux nombres par évaluation : les rapatrier ligne à ligne coûtait toutes
+    les notes de l'école pour afficher « 12 / 35 ». Une évaluation dont
+    aucune note n'existe est simplement absente du résultat ; l'appelant lit
+    alors `NO_GRADES`.
+    """
+    if not eval_ids:
+        return {}
+    stmt = (
+        select(
+            Grade.evaluation_id,
+            func.count().label("total"),
+            func.sum(case((Grade.status == GradeStatus.ENTERED.value, 1), else_=0)).label("graded"),
+        )
+        .where(Grade.evaluation_id.in_(eval_ids))
+        .group_by(Grade.evaluation_id)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {
+        int(evaluation_id): EvaluationGradeCounts(total=int(total or 0), graded=int(graded or 0))
+        for evaluation_id, total, graded in rows
+    }
 
 
 async def create_evaluation(
