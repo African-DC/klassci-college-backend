@@ -290,14 +290,12 @@ async def _mandatory_expected_and_paid(
     return float(expected), float(paid)
 
 
-async def get_student_full(
-    db: AsyncSession, student_id: int, *, finance: FinanceView | None = None
-) -> dict:
+async def get_student_full(db: AsyncSession, student_id: int, *, finance: FinanceView) -> dict:
     """Enriched student profile with user, enrollment, attendance, fees data.
 
-    `finance` dit ce que l'appelant a le droit de lire des montants. Par
-    defaut on ouvre tout : les appels internes (PDF, exports) ne passent pas
-    par une permission, et c'est le routeur qui restreint.
+    `finance` dit ce que l'appelant a le droit de lire des montants, et se
+    passe toujours : un appel interne assume `FinanceView.INTERNAL` en toutes
+    lettres plutôt que de l'obtenir en oubliant l'argument.
     """
     from app.models.attendance import AttendanceRecord
     from app.models.enrollment import Enrollment
@@ -377,12 +375,11 @@ async def get_student_full(
     result["fees_remaining"] = expected - paid
     result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
 
-    view = finance or FinanceView(amounts=True, status=True)
-    if view.status:
+    if finance.status:
         result["fee_status"], result["last_payment_date"] = await payment_pulse(
             db, enrollment.id if enrollment else None
         )
-    result = redact(result, view)
+    result = redact(result, finance)
 
     # Trimester breakdowns — alimentent les charts du tab Parcours.
     current_ay_id = enrollment.academic_year_id if enrollment else None
@@ -1189,7 +1186,7 @@ async def _child_financial_context(
     student_id: int,
     academic_year_id: int | None,
     *,
-    finance: FinanceView | None = None,
+    finance: FinanceView,
 ) -> dict:
     """Classe + statut d'inscription + solde (frais) de l'élève pour l'AY courante.
 
@@ -1234,21 +1231,17 @@ async def _child_financial_context(
     ctx["fees_paid"] = paid
     ctx["fees_balance"] = expected - paid
 
-    view = finance or FinanceView(amounts=True, status=True)
-    if view.status:
+    if finance.status:
         ctx["fee_status"], ctx["last_payment_date"] = await payment_pulse(db, enr.id)
     return ctx
 
 
-async def get_parent_full(
-    db: AsyncSession, parent_id: int, *, finance: FinanceView | None = None
-) -> dict:
+async def get_parent_full(db: AsyncSession, parent_id: int, *, finance: FinanceView) -> dict:
     """Enriched parent profile with user account and children list.
 
     Chaque enfant est enrichi (classe, statut d'inscription, solde des frais)
     et un récapitulatif financier agrégé est calculé pour l'AY courante.
     """
-    view = finance or FinanceView(amounts=True, status=True)
     stmt = (
         select(Parent)
         .where(Parent.id == parent_id)
@@ -1287,7 +1280,7 @@ async def get_parent_full(
     enrolled_count = 0
     for link in parent.children:
         s = link.student
-        ctx = await _child_financial_context(db, s.id, ay_id, finance=view)
+        ctx = await _child_financial_context(db, s.id, ay_id, finance=finance)
         children.append(
             {
                 "student_id": s.id,
@@ -1306,13 +1299,13 @@ async def get_parent_full(
             enrolled_count += 1
     # Redaction une seule fois, apres les totaux : le recapitulatif du foyer
     # se calcule sur les vraies valeurs, puis disparait avec elles.
-    result["children"] = [redact(child, view) for child in children]
+    result["children"] = [redact(child, finance) for child in children]
     result["summary"] = {
         "children_count": len(children),
         "enrolled_count": enrolled_count,
-        "total_expected": total_expected if view.amounts else None,
-        "total_paid": total_paid if view.amounts else None,
-        "total_balance": (total_expected - total_paid) if view.amounts else None,
+        "total_expected": total_expected if finance.amounts else None,
+        "total_paid": total_paid if finance.amounts else None,
+        "total_balance": (total_expected - total_paid) if finance.amounts else None,
         "academic_year_name": ay_name,
     }
 
