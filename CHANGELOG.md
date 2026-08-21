@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Wave, MTN MoMo, Orange Money et Moov Money se saisissent et se totalisent séparément à la caisse, au lieu d'un « mobile money » unique que le comptable devait démêler pour rapprocher ses relevés *(caissier, comptable)*
+- Chaque profil qui encaisse se voit attribuer ses propres moyens de paiement depuis Paramètres : retirer les espèces au comptable prend deux clics, et l'écran prévient qu'autoriser les espèces engage une journée de caisse à ouvrir et à compter *(directeur, admin)*
+- Le formulaire d'encaissement ne propose que les moyens que la personne peut réellement utiliser : plus de choix offert puis refusé au moment d'enregistrer *(caissier, comptable, secrétariat)*
 - Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
 - Le caissier retrouve à sa connexion ses journées clôturées d'office et les régularise en saisissant ce qu'il avait compté, ce qui fait naître l'écart réel *(caissier)*
 - Le point journalier distingue les caisses arrêtées par leur caissier de celles clôturées d'office, dont l'écart reste inconnu tant que personne n'a compté *(comptable, directeur)*
@@ -16,12 +19,16 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
 
 ### Changed
+- Seules les espèces exigent désormais une journée de caisse ouverte. Un comptable enregistre un virement ou un versement Wave sans qu'une caisse s'ouvre à son nom, alors qu'il n'a aucun tiroir à compter le soir *(comptable, caissier)*
+- Les versements enregistrés autrefois en « Mobile Money » gardent ce libellé sur les reçus déjà remis et dans les états : personne ne peut deviner après coup quel opérateur c'était, et le réécrire ferait mentir un papier détenu par une famille *(comptable, parent)*
 - Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler *(élève, parent)*
 - Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes *(élève, parent)*
 - Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant *(comptable, caissier)*
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le récapitulatif par moyen de paiement du bordereau journalier et de l'écran caisse omettait tout moyen qu'il ne connaissait pas, alors que le total continuait de le compter : la somme des lignes ne collait plus au total imprimé juste en dessous *(caissier, comptable)*
+- Un versement enregistré depuis l'ancien écran de paiement passait même sur une journée de caisse déjà clôturée, ce que le nouvel écran refusait déjà *(caissier)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
 - La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*

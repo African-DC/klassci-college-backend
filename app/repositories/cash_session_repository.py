@@ -9,6 +9,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.payment_methods import DISPLAY_ORDER
 from app.models.cash_session import LOCKED_STATUSES, CashSession, CashSessionStatus
 from app.models.fee import Payment, PaymentStatus
 from app.models.user import StaffProfile, User
@@ -17,9 +18,10 @@ from app.models.user import StaffProfile, User
 # ils ne comptent ni dans le total encaissé ni dans le théorique espèces.
 _COUNTED_STATUSES = (PaymentStatus.COMPLETED.value, PaymentStatus.PENDING.value)
 
-# Ordre d'affichage des moyens de paiement. Source unique : le PDF du bordereau
-# l'importe d'ici plutôt que d'en garder une copie.
-METHODS_ORDER: tuple[str, ...] = ("cash", "mobile_money", "bank_transfer", "cheque")
+# Ordre d'affichage des moyens de paiement. La liste elle-même vit dans
+# `app.core.payment_methods` ; ce ré-export garde les importeurs existants
+# valides sans laisser deux listes se contredire.
+METHODS_ORDER: tuple[str, ...] = DISPLAY_ORDER
 
 
 @dataclass(frozen=True, slots=True)

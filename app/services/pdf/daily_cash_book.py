@@ -18,7 +18,7 @@ from decimal import Decimal
 from typing import Any
 
 # Ordre partage avec l ecran caisse : une seule source de verite.
-from app.repositories.cash_session_repository import METHODS_ORDER as _METHODS_ORDER
+from app.core.payment_methods import ordered_methods
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import enum_value, format_decimal
 from app.services.pdf.theme import PDFTheme, method_label
@@ -51,17 +51,22 @@ def _payment_rows(payments: list[dict[str, Any]]) -> list[list[Any]]:
 
 
 def _totals_rows(totals_by_method: dict[str, Decimal]) -> list[list[Any]]:
-    """Rows pour récap par méthode."""
-    rows: list[list[Any]] = []
-    for m in _METHODS_ORDER:
-        amount = totals_by_method.get(m, Decimal("0"))
-        rows.append(
-            [
-                method_label(m),
-                {"value": format_decimal(amount), "type": "num"},
-            ]
-        )
-    return rows
+    """Rows pour récap par méthode — ce qui a été encaissé, dans l'ordre métier.
+
+    Les lignes viennent des montants réellement collectés, l'ordre seulement
+    de `DISPLAY_ORDER`. Parcourir la constante pour y piocher les montants
+    omettait purement et simplement du récapitulatif tout moyen qui n'y
+    figurait pas, pendant que « Total encaissé ce jour » continuait de le
+    compter : le bordereau se contredisait lui-même, et c'est le document que
+    la comptabilité contresigne.
+    """
+    return [
+        [
+            method_label(m),
+            {"value": format_decimal(totals_by_method[m]), "type": "num"},
+        ]
+        for m in ordered_methods(totals_by_method)
+    ]
 
 
 def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
@@ -121,6 +126,7 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         headers=["Méthode", {"label": "Total XOF", "align": "right"}],
         rows=_totals_rows(totals_by_method),
         theme=theme,
+        empty_message="Aucun versement encaissé ce jour.",
     )
 
     detail_section = ui.section_title("Détail des versements", theme=theme) + ui.premium_table(

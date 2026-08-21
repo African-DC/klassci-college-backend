@@ -16,6 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.core.payment_methods import PAYMENT_METHOD_LABELS_FR as _PAYMENT_METHOD_LABELS_FR
+from app.core.payment_methods import method_label as _method_label
+
 # ---------------------------------------------------------------------------
 # Palette KLASSCI par défaut (fallback si school.primary_color is NULL)
 # ---------------------------------------------------------------------------
@@ -149,12 +152,10 @@ STATUS_LABELS_FR: dict[str, str] = {
 }
 
 
-PAYMENT_METHOD_LABELS_FR: dict[str, str] = {
-    "cash": "Espèces",
-    "mobile_money": "Mobile Money",
-    "bank_transfer": "Virement bancaire",
-    "cheque": "Chèque",
-}
+#: Re-export : la table vit dans `app.core.payment_methods`, seul endroit ou
+#: la liste des moyens est tenue a jour. En garder une copie ici avait pour
+#: seul effet garanti de la laisser vieillir.
+PAYMENT_METHOD_LABELS_FR: dict[str, str] = _PAYMENT_METHOD_LABELS_FR
 
 
 MENTION_LABELS_FR: dict[str, str] = {
@@ -180,7 +181,7 @@ def status_label(key: str) -> str:
 
 def method_label(key: str) -> str:
     """Renvoie le label FR d'une méthode (cash → Espèces). Fallback sur la clé."""
-    return PAYMENT_METHOD_LABELS_FR.get(key, key)
+    return _method_label(key)
 
 
 def mention_label(value: Any) -> str:
