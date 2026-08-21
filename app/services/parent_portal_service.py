@@ -33,6 +33,7 @@ from app.services import (
     document_release_service,
     fees_paid,
 )
+from app.services import fee_entitlements as entitlements
 
 logger = logging.getLogger(__name__)
 
@@ -266,15 +267,15 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
         fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
         total_paid += fee_paid
 
-        category_name = (
-            ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"
-        )
+        categorie = ef.fee_variant.category if ef.fee_variant else None
+        category_name = categorie.name if categorie else "N/A"
         fees.append(
             FeeDetail(
                 id=ef.id,
                 amount=ef.amount,
                 status=ef.status,
                 category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 payments=payments,
             )
         )

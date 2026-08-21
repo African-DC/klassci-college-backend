@@ -20,6 +20,7 @@ from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 from app.repositories import payment_repository as repo
+from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
@@ -81,12 +82,17 @@ async def _build_fees_section(
     for fee in fees:
         paid = deja_verse.get(fee.id, Decimal("0"))
         remaining = max(fee.amount - paid, Decimal("0"))
-        cat_name = ""
-        if fee.fee_variant and fee.fee_variant.category:
-            cat_name = fee.fee_variant.category.name
+        categorie = fee.fee_variant.category if fee.fee_variant else None
+        cat_name = categorie.name if categorie else ""
         rows.append(
             {
                 "category_name": cat_name,
+                # L'état des frais est la pièce que la famille garde : il doit
+                # dire ce que chaque ligne achète, pas seulement ce qu'elle coûte.
+                "entitlements": entitlements.receipt_line(
+                    entitlements.read(categorie),
+                    categorie.description if categorie else None,
+                ),
                 "amount": fee.amount,
                 "paid": paid,
                 "remaining": remaining,
