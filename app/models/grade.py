@@ -162,10 +162,6 @@ class Bulletin(Base, TimestampMixin):
     """Bulletin scolaire trimestriel généré pour un élève."""
 
     __tablename__ = "bulletins"
-    # Ordre par défaut de la liste : année, trimestre, rang.
-    __table_args__ = (
-        Index("idx_bulletins_year_trimester_rank", "academic_year_id", "trimester", "rank"),
-    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     student_id: Mapped[int] = mapped_column(
