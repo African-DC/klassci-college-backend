@@ -10,6 +10,7 @@ from app.core.exceptions import NotFoundError
 from app.models.enrollment import Enrollment
 from app.repositories import installment_repository as repo
 from app.schemas.installment import EnrollmentScheduleResponse, ScheduleLine
+from app.services import fees_paid
 from app.services.installments._math import compute_arrears, split_by_percentage
 
 # Trois provenances possibles pour un échéancier, dans cet ordre de priorité.
@@ -39,7 +40,7 @@ async def resolve_schedule(
     year_id = await _academic_year_id(db, enrollment_id)
 
     total_mandatory = await repo.mandatory_total(db, enrollment_id)
-    paid = await repo.total_paid(db, enrollment_id)
+    paid = await fees_paid.paid_on_mandatory(db, enrollment_id)
 
     negotiated = await repo.list_enrollment_plan(db, enrollment_id)
     if negotiated:

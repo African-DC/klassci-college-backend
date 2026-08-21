@@ -270,6 +270,26 @@ STUDENT_KIND = archive_service.ArchivableKind(
 )
 
 
+async def _mandatory_expected_and_paid(
+    db: AsyncSession, enrollment_id: int | None
+) -> tuple[float, float]:
+    """Ce qui est dû et ce qui a été versé sur une inscription, même périmètre.
+
+    Les deux moitiés viennent du même endroit et couvrent les mêmes frais :
+    obligatoires, exonérations exclues. Les calculer séparément est ce qui
+    avait produit une fiche parent où le solde dû et le badge « à jour » se
+    contredisaient — le badge suivait l'échéancier, qui exclut les frais
+    exonérés, le solde non.
+    """
+    if enrollment_id is None:
+        return 0.0, 0.0
+    from app.repositories import installment_repository as installment_repo
+
+    expected = await installment_repo.mandatory_total(db, enrollment_id)
+    paid = await fees_paid.paid_on_mandatory(db, enrollment_id)
+    return float(expected), float(paid)
+
+
 async def get_student_full(
     db: AsyncSession, student_id: int, *, finance: FinanceView | None = None
 ) -> dict:
@@ -281,7 +301,6 @@ async def get_student_full(
     """
     from app.models.attendance import AttendanceRecord
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     # Get student with user
     stmt = select(Student).where(Student.id == student_id).options(selectinload(Student.user))
@@ -346,28 +365,12 @@ async def get_student_full(
             round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
         )
 
-    # Financial summary
-    fees_stmt = (
-        select(
-            func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
-        )
-        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id)
-    )
-    fees_row = (await db.execute(fees_stmt)).one_or_none()
-    expected = float(fees_row.expected) if fees_row else 0.0
-
-    # Somme des versements par l'inscription, pas par `Payment.enrollment_fee_id` :
-    # ce lien est deprecie depuis la migration 0028 et reste vide sur tout
-    # versement passe par les allocations. Le compter faisait apparaitre une
-    # famille a jour comme n'ayant rien verse, et gonflait son reste a payer.
-    paid_stmt = (
-        select(func.coalesce(func.sum(Payment.amount), 0).label("paid"))
-        .join(Enrollment, Payment.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id, Payment.status == PaymentStatus.COMPLETED)
-    )
-    paid_row = (await db.execute(paid_stmt)).one_or_none()
-    paid = float(paid_row.paid) if paid_row else 0.0
+    # Situation financière — même périmètre que le badge affiché juste en
+    # dessous : frais obligatoires, exonérations déduites, année en cours.
+    # Un solde calculé sur un autre périmètre que l'état de paiement produit
+    # une fiche qui se contredit elle-même, « 80 000 restants » sous un badge
+    # « à jour ».
+    expected, paid = await _mandatory_expected_and_paid(db, enrollment.id if enrollment else None)
 
     result["fees_expected"] = expected
     result["fees_paid"] = paid
@@ -1194,7 +1197,6 @@ async def _child_financial_context(
     l'information la plus utile au secrétariat sur une fiche parent.
     """
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     ctx = {
         "class_name": None,
@@ -1227,24 +1229,10 @@ async def _child_financial_context(
     ctx["enrollment_status"] = enr.status
     ctx["is_enrolled"] = enr.status == "valide"
 
-    expected = (
-        await db.execute(
-            select(func.coalesce(func.sum(EnrollmentFee.amount), 0)).where(
-                EnrollmentFee.enrollment_id == enr.id
-            )
-        )
-    ).scalar() or 0
-    paid = (
-        await db.execute(
-            select(func.coalesce(func.sum(Payment.amount), 0)).where(
-                Payment.enrollment_id == enr.id,
-                Payment.status == PaymentStatus.COMPLETED,
-            )
-        )
-    ).scalar() or 0
-    ctx["fees_expected"] = float(expected)
-    ctx["fees_paid"] = float(paid)
-    ctx["fees_balance"] = float(expected) - float(paid)
+    expected, paid = await _mandatory_expected_and_paid(db, enr.id)
+    ctx["fees_expected"] = expected
+    ctx["fees_paid"] = paid
+    ctx["fees_balance"] = expected - paid
 
     view = finance or FinanceView(amounts=True, status=True)
     if view.status:
