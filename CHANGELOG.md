@@ -11,14 +11,24 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Added
 - Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
 - Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
+- Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
+- Le caissier retrouve à sa connexion ses journées clôturées d'office et les régularise en saisissant ce qu'il avait compté, ce qui fait naître l'écart réel *(caissier)*
+- Le point journalier distingue les caisses arrêtées par leur caissier de celles clôturées d'office, dont l'écart reste inconnu tant que personne n'a compté *(comptable, directeur)*
+- L'élève et le parent téléchargent le bulletin depuis leur portail : l'élève le sien, le parent celui de ses enfants, sans passer par le droit qui ouvre les bulletins de toute l'école *(élève, parent)*
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
 
 ### Changed
+- Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler *(élève, parent)*
+- Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes *(élève, parent)*
 - Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant *(comptable, caissier)*
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
 - Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
+- Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
+- Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
+- La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*
+- La régénération des frais annonçait « aucun frais à régénérer » après en avoir créé : elle ne comptait que les suppressions *(admin)*
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
 ### Security

@@ -153,6 +153,12 @@ class BulletinDetail(BaseModel):
     is_published: bool
     generated_at: datetime | None
 
+    # Retenue pour impayé. Quand elle est active, moyenne, rang et mention
+    # valent `None` : le bulletin est annoncé, pas divulgué.
+    is_withheld: bool = False
+    withheld_reason: str | None = None
+    withheld_amount: float | None = None
+
 
 class ChildBulletinsResponse(BaseModel):
     student_id: int

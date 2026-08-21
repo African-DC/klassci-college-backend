@@ -105,7 +105,7 @@ async def _ensure_cashier_may_cancel(db: AsyncSession, payment: Payment, cashier
                 "Demandez la correction à la comptabilité."
             ),
         )
-    if await cash_repo.has_closed_session(db, cashier_id, payment.created_at.date()):
+    if await cash_repo.is_day_locked(db, cashier_id, payment.created_at.date()):
         raise HTTPException(
             status_code=409,
             detail=(

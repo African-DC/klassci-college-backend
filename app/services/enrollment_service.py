@@ -60,6 +60,8 @@ def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
         student_first_name=enrollment.student.first_name if enrollment.student else None,
         student_last_name=enrollment.student.last_name if enrollment.student else None,
         class_name=enrollment.class_.name if enrollment.class_ else None,
+        assignment_status=enrollment.assignment_status,
+        assignment_decision_number=enrollment.assignment_decision_number,
     )
 
 
@@ -334,7 +336,7 @@ async def create_enrollment_with_student(
         if class_ is None:
             raise BusinessValidationError(f"Class {data.class_id} not found")
         enrolled_count = await repo.count_active_enrollments_for_class(
-            db, data.class_id, data.academic_year_id
+            db, data.class_id, academic_year_id
         )
         if enrolled_count >= class_.max_students:
             raise BusinessValidationError(
@@ -444,7 +446,7 @@ async def create_enrollment_with_student(
             db,
             enrollment.id,
             data.class_id,
-            data.academic_year_id,
+            academic_year_id,
             enrollment.assignment_status,
         )
 

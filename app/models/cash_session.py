@@ -25,7 +25,31 @@ if TYPE_CHECKING:
 
 class CashSessionStatus(str, enum.Enum):
     OPEN = "open"
+    # Clôturée par le caissier, qui a compté son tiroir : `counted_amount` et
+    # `variance` sont renseignés, et l'écart engage celui qui l'a signé.
     CLOSED = "closed"
+    # Clôturée d'office à minuit parce que personne ne l'avait clôturée. La
+    # journée est verrouillée pour que la comptabilité du lendemain reparte
+    # propre, mais PERSONNE N'A COMPTÉ : `counted_amount` et `variance`
+    # restent nuls. Un troisième état plutôt qu'un drapeau à côté de `closed`
+    # parce que tout le code qui lit ce statut décide quelque chose — bloquer
+    # un encaissement, compter une caisse au point journalier, afficher un
+    # écart. Un drapeau les laisserait tous traiter en silence une journée
+    # non comptée comme une journée comptée dont l'écart vaudrait zéro.
+    AUTO_CLOSED = "auto_closed"
+
+
+# Journées verrouillées : plus aucun encaissement ni annulation dessus. Écrit
+# une fois ici plutôt que comparé à `CLOSED` sur chaque site d'appel, sinon la
+# clôture d'office rouvrirait en silence toutes les gardes existantes.
+LOCKED_STATUSES: frozenset[str] = frozenset(
+    {CashSessionStatus.CLOSED.value, CashSessionStatus.AUTO_CLOSED.value}
+)
+
+
+def is_locked(status: str | CashSessionStatus) -> bool:
+    """Accepte l'énum comme la chaîne : SQLAlchemy rend l'un ou l'autre."""
+    return str(getattr(status, "value", status)) in LOCKED_STATUSES
 
 
 class CashSession(Base, TimestampMixin):
@@ -38,6 +62,12 @@ class CashSession(Base, TimestampMixin):
     La clôture est en revanche un geste explicite : le caissier compte ses
     espèces, saisit le montant, et le système affiche l'écart avec le
     théorique. C'est ce geste qui verrouille la journée.
+
+    Une journée oubliée est clôturée d'office à minuit (`auto_closed`) pour
+    que la comptabilité du lendemain reparte sur une caisse propre. Le
+    théorique est figé comme sur une clôture normale, mais le montant compté
+    reste vide et l'écart inconnu : signer un caissier sur un chiffre qu'il
+    n'a pas produit serait un faux. Il régularise le lendemain.
     """
 
     __tablename__ = "cash_sessions"
@@ -67,8 +97,16 @@ class CashSession(Base, TimestampMixin):
     # Espèces théoriques calculées AU MOMENT de la clôture. Figé : recalculer
     # après coup ferait bouger un écart déjà constaté et signé.
     expected_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
-    # counted - expected. Négatif = manquant, positif = excédent.
+    # counted - expected. Négatif = manquant, positif = excédent. Reste NUL sur
+    # une clôture d'office : l'écart y est INCONNU, et écrire zéro affirmerait
+    # que le tiroir tombait juste alors que personne ne l'a ouvert.
     variance: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+
+    # Horodatage du comptage saisi APRÈS une clôture d'office. Renseigné, il
+    # dit à la fois « cette journée a été clôturée d'office » et « le caissier
+    # a régularisé le tel jour » — deux faits qu'un statut seul perdrait, la
+    # session repassant alors en `closed`.
+    regularized_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

@@ -38,6 +38,10 @@ def _make_enrollment(status: EnrollmentStatus, enrollment_id: int = 1) -> Simple
         notes=None,
         created_by=1,
         enrollment_fees=[],
+        # Le double doit porter ce que le modèle porte : la fiche relit ces
+        # deux champs, et les omettre ici masquerait leur absence en réponse.
+        assignment_status=None,
+        assignment_decision_number=None,
         created_at=now,
         updated_at=now,
     )

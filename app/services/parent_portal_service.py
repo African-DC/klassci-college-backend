@@ -26,7 +26,13 @@ from app.schemas.parent_portal import (
     ParentDashboardResponse,
     PaymentDetail,
 )
-from app.services import fees_paid
+from app.services import (
+    bulletin_access,
+    bulletin_document_service,
+    bulletin_visibility,
+    document_release_service,
+    fees_paid,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -285,28 +291,80 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
 async def get_child_bulletins(
     db: AsyncSession, user_id: int, student_id: int
 ) -> ChildBulletinsResponse:
-    """Retourne les bulletins publiés d'un enfant."""
+    """Retourne les bulletins publiés d'un enfant, vidés de leur contenu si impayé.
+
+    Même porte que le téléchargement, appliquée à la consultation : rendre ici
+    la moyenne, le rang et la mention pendant que le PDF est retenu
+    reviendrait à publier le bulletin en refusant de l'imprimer.
+
+    Les bulletins retenus restent dans la liste. Les faire disparaître ferait
+    croire au parent qu'aucun bulletin n'a été édité, et l'enverrait
+    téléphoner au secrétariat pour une panne imaginaire.
+    """
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
     bulletins = await repo.get_student_bulletins(db, student_id)
 
+    release = await document_release_service.evaluate_release(db, student_id)
+    withholding = bulletin_visibility.Withholding.from_release(release)
+
     bulletin_details = [
         BulletinDetail(
-            id=b.id,
-            trimester=b.trimester,
-            average=b.average,
-            rank=b.rank,
-            mention=b.mention,
-            class_name=b.class_.name if b.class_ else "N/A",
-            academic_year_name=b.academic_year.name if b.academic_year else "N/A",
-            is_published=b.is_published,
-            generated_at=b.generated_at,
+            **withholding.apply(
+                {
+                    "id": b.id,
+                    "trimester": b.trimester,
+                    "average": b.average,
+                    "rank": b.rank,
+                    "mention": b.mention,
+                    "class_name": b.class_.name if b.class_ else "N/A",
+                    "academic_year_name": b.academic_year.name if b.academic_year else "N/A",
+                    "is_published": b.is_published,
+                    "generated_at": b.generated_at,
+                }
+            )
         )
         for b in bulletins
     ]
 
     return ChildBulletinsResponse(student_id=student_id, bulletins=bulletin_details)
+
+
+async def get_child_bulletin_pdf(
+    db: AsyncSession, user_id: int, student_id: int, bulletin_id: int
+) -> bytes:
+    """Rend le PDF d'un bulletin publie d'un enfant du parent connecte.
+
+    Le lien de filiation absent rend ici un 404 sur le bulletin, la ou les
+    autres routes du portail rendent un 403 sur l'enfant. Ce n'est pas une
+    incoherence : les autres routes se lisent sur une page ou le parent a
+    choisi son enfant dans sa propre liste, et un 403 lui dit clairement
+    « cet enfant n'est pas le votre ». Ici, l'identifiant du bulletin est un
+    entier qu'on peut incrementer, et distinguer « n'existe pas » de
+    « existe mais pas a vous » suffirait a cartographier les bulletins de
+    l'ecole. Un seul refus, indistinct, pour les deux.
+
+    L'appartenance passe avant la porte de paiement, qui annonce en 402 le
+    montant impaye et l'identifiant de l'eleve : interrogee sur l'enfant d'une
+    autre famille, elle en revelerait la situation financiere. Un parent ne
+    peut pas non plus lever cette retenue : la derogation se demande au
+    secretariat, qui en porte le motif au journal.
+    """
+    parent = await _get_parent_for_user(db, user_id)
+    link = await repo.get_parent_student_link(db, parent.id, student_id)
+    if link is None:
+        raise NotFoundError("Bulletin", bulletin_id)
+
+    await bulletin_access.ensure_owned_and_published(db, bulletin_id, student_id=student_id)
+    await document_release_service.ensure_bulletin_releasable(
+        db,
+        bulletin_id,
+        actor_id=user_id,
+        may_override=False,
+        override_reason=None,
+    )
+    return await bulletin_document_service.get_bulletin_pdf(db, bulletin_id)
 
 
 async def get_child_timetable(
