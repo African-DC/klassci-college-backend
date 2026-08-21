@@ -36,16 +36,24 @@ async def list_summons(
     trimester: int | None = Query(None, ge=1, le=3),
     student_id: int | None = Query(None),
     outcome: str | None = Query(None, description="pending, attended ou missed"),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     _: None = require_permission("documents:parent-summons"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ParentSummonsRegister:
-    """Registre des convocations : qui a été convoqué, et qui est venu."""
+    """Registre des convocations : qui a été convoqué, et qui est venu.
+
+    Le décompte renvoyé porte sur l'année, le trimestre et l'élève consultés,
+    jamais sur la suite filtrée ni sur la seule page affichée.
+    """
     return await summons_service.list_register(
         db,
         academic_year_id=academic_year_id,
         trimester=trimester,
         student_id=student_id,
         outcome=outcome,
+        page=page,
+        size=size,
     )
 
 
