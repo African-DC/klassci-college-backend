@@ -44,9 +44,7 @@ def _inscription(eid: int, statut: EnrollmentStatus) -> SimpleNamespace:
     )
 
 
-@pytest.mark.parametrize(
-    "statut", [EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION]
-)
+@pytest.mark.parametrize("statut", [EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION])
 def test_une_inscription_engagee_ressort_comme_en_attente(statut: EnrollmentStatus) -> None:
     reponse = _student_to_response(_eleve(_inscription(7, statut)))
 
