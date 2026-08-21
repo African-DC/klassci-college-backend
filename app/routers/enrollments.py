@@ -19,7 +19,8 @@ from app.schemas.enrollment import (
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import enrollment_archive, enrollment_fees, enrollment_service
+from app.services import archive_service, enrollment_fees, enrollment_service
+from app.services.enrollment_archive import ENROLLMENT_KIND
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -133,6 +134,10 @@ async def update_enrollment(
     )
 
 
+# Les trois gestes de corbeille passent par `archive_service`, comme ceux de
+# l'élève, du parent, de l'enseignant et du personnel : motif obligatoire,
+# passage par la corbeille avant toute destruction, journal et courriel. Seule
+# l'adresse reste propre à l'inscription, le front l'appelle ici.
 @router.post("/{enrollment_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
 async def archive_enrollment(
     enrollment_id: int,
@@ -142,8 +147,8 @@ async def archive_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Place une inscription dans la corbeille. Réversible."""
-    await enrollment_archive.archive_enrollment(
-        db, enrollment_id, reason=data.reason, actor_id=current_user.user_id
+    await archive_service.archive_record(
+        db, ENROLLMENT_KIND, enrollment_id, reason=data.reason, actor_id=current_user.user_id
     )
 
 
@@ -155,28 +160,31 @@ async def restore_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Sort une inscription de la corbeille."""
-    await enrollment_archive.restore_enrollment(db, enrollment_id, actor_id=current_user.user_id)
+    await archive_service.restore_record(
+        db, ENROLLMENT_KIND, enrollment_id, actor_id=current_user.user_id
+    )
 
 
-@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{enrollment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description=(
+        "Réservé à la direction : c'est le seul geste du logiciel qui ne se rattrape pas. "
+        "Le motif voyage dans le corps de la requête, jamais dans l'URL : une URL finit "
+        "dans les journaux d'accès du serveur et chez les intermédiaires, et « exclu pour "
+        "vol » n'a rien à y faire."
+    ),
+)
 async def delete_enrollment(
     enrollment_id: int,
-    reason: str | None = Query(
-        None,
-        max_length=500,
-        description="Motif obligatoire. Il figure au journal et dans le courriel à la direction.",
-    ),
+    data: ArchiveRequest,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("archive:purge"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime définitivement une inscription déjà placée dans la corbeille.
-
-    Réservé à l'administration : c'est le seul geste du logiciel qui ne se
-    rattrape pas.
-    """
-    await enrollment_archive.delete_enrollment(
-        db, enrollment_id, deleted_by=current_user.user_id, reason=reason
+    """Supprime définitivement une inscription déjà placée dans la corbeille."""
+    await archive_service.purge_record(
+        db, ENROLLMENT_KIND, enrollment_id, reason=data.reason, actor_id=current_user.user_id
     )
 
 
