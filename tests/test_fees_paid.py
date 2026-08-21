@@ -108,7 +108,7 @@ def test_les_ecrans_qui_affichent_un_montant_passent_par_le_calcul_canonique() -
         "parent_portal_service",
         "student_portal_service",
         "admin_service",
-        "enrollment_service",
+        "enrollment_fees",
     ):
         source = (_APP / "services" / f"{module}.py").read_text(encoding="utf-8")
         assert "fees_paid" in source, f"{module} doit passer par le calcul canonique"

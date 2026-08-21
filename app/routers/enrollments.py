@@ -20,7 +20,7 @@ from app.schemas.enrollment import (
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import enrollment_service
+from app.services import enrollment_archive, enrollment_fees, enrollment_service
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -107,7 +107,7 @@ async def get_applicable_fee_variants(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_service.get_applicable_fee_variants(db, class_id, academic_year_id)
+    return await enrollment_fees.get_applicable_fee_variants(db, class_id, academic_year_id)
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)
@@ -143,7 +143,7 @@ async def archive_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Place une inscription dans la corbeille. Réversible."""
-    await enrollment_service.archive_enrollment(
+    await enrollment_archive.archive_enrollment(
         db, enrollment_id, reason=data.reason, actor_id=current_user.user_id
     )
 
@@ -156,7 +156,7 @@ async def restore_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Sort une inscription de la corbeille."""
-    await enrollment_service.restore_enrollment(db, enrollment_id, actor_id=current_user.user_id)
+    await enrollment_archive.restore_enrollment(db, enrollment_id, actor_id=current_user.user_id)
 
 
 @router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -176,7 +176,7 @@ async def delete_enrollment(
     Réservé à l'administration : c'est le seul geste du logiciel qui ne se
     rattrape pas.
     """
-    await enrollment_service.delete_enrollment(
+    await enrollment_archive.delete_enrollment(
         db, enrollment_id, deleted_by=current_user.user_id, reason=reason
     )
 

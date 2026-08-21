@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.archive_filter import register_archive_filter
 from app.core.config import settings
-from app.core.exceptions import register_exception_handlers
+from app.core.exceptions import UnexpectedErrorMiddleware, register_exception_handlers
 from app.core.middleware import TenantMiddleware
 from app.core.sentry import init_sentry
 from app.routers.accounts import router as accounts_router
@@ -76,9 +76,12 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- Middleware (ordre : dernier ajouté = premier exécuté) ---
 # TenantMiddleware ajouté en 1er → s'exécute en dernier (inner layer)
-# CORSMiddleware ajouté en 2ème → s'exécute en premier (outer layer)
-# Ainsi les preflight CORS sont traités avant la résolution tenant.
+# UnexpectedErrorMiddleware en 2ème → couvre le routage ET la résolution tenant
+# CORSMiddleware ajouté en 3ème → s'exécute en premier (outer layer)
+# Ainsi les preflight CORS sont traités avant la résolution tenant, et une
+# panne imprévue ressort avec ses en-têtes CORS, donc lisible par le navigateur.
 app.add_middleware(TenantMiddleware)
+app.add_middleware(UnexpectedErrorMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
