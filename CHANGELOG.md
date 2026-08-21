@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Fixed
+- Deux points d'entrée de l'API annonçaient le dépôt de justificatifs sur une inscription alors qu'aucun code ne les servait : ils échouaient à chaque appel. Les justificatifs se déposent sur la fiche de l'élève, où ils ont toujours fonctionné *(admin)*
 - Les erreurs inattendues affichent enfin leur code de référence à l'écran ; le navigateur bloquait jusqu'ici la réponse et l'utilisateur ne voyait qu'une erreur réseau *(admin)*
 - La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève *(admin)*
 
