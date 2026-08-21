@@ -20,12 +20,28 @@ Revises: 0064_cash_auto_closure
 Create Date: 2026-08-21
 """
 
+import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0065_grade_list_indexes"
 down_revision = "0064_cash_auto_closure"
 branch_labels = None
 depends_on = None
+
+
+def _index_exists(nom: str, table: str) -> bool:
+    """MySQL 8 ne connait pas `DROP INDEX IF EXISTS` : on demande d'abord."""
+    bind = op.get_bind()
+    trouve = bind.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.STATISTICS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i "
+            "LIMIT 1"
+        ),
+        {"t": table, "i": nom},
+    ).scalar()
+    return trouve is not None
 
 
 def upgrade() -> None:
@@ -39,8 +55,25 @@ def upgrade() -> None:
         "bulletins",
         ["academic_year_id", "trimester", "rank"],
     )
+    # Le `downgrade` pose un index dedie pour garder la cle etrangere couverte.
+    # Une fois le composite recree, il fait double emploi : le retirer rend la
+    # base identique qu'on y arrive a neuf ou par un aller-retour.
+    if _index_exists("idx_bulletins_academic_year_id", "bulletins"):
+        op.drop_index("idx_bulletins_academic_year_id", table_name="bulletins")
 
 
 def downgrade() -> None:
+    # `idx_bulletins_year_trimester_rank` commence par `academic_year_id`, qui
+    # porte une cle etrangere. En le creant, MySQL a supprime l'index qu'il
+    # avait genere lui-meme pour cette cle : le composite est devenu le seul a
+    # la couvrir, et MySQL refuse alors qu'on le retire — erreur 1553,
+    # « needed in a foreign key constraint ». On rend donc a la cle un index a
+    # elle AVANT de retirer le composite, sans quoi tout `downgrade` casse, et
+    # avec lui le provisionnement d'un etablissement, qui rejoue la chaine.
+    #
+    # `evaluations` n'a pas ce probleme : elle porte deja son propre
+    # `idx_evaluations_class_id`, declare a la creation de la table.
+    if not _index_exists("idx_bulletins_academic_year_id", "bulletins"):
+        op.create_index("idx_bulletins_academic_year_id", "bulletins", ["academic_year_id"])
     op.drop_index("idx_bulletins_year_trimester_rank", table_name="bulletins")
     op.drop_index("idx_evaluations_class_trimester_date", table_name="evaluations")

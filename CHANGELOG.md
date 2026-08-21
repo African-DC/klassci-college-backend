@@ -26,6 +26,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le retour arrière d'une migration échouait, ce qui empêchait aussi la mise en service d'un nouvel établissement puisqu'elle rejoue toute la chaîne *(devops)*
 - Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier *(comptable, directeur)*
 - Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel *(comptable, caissier)*
 - Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier *(comptable)*
