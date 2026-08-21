@@ -8,15 +8,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.enrollment import Enrollment
+from app.models.installment import FeeInstallment, FeeInstallmentKind
 from app.repositories import installment_repository as repo
 from app.schemas.installment import EnrollmentScheduleResponse, ScheduleLine
 from app.services import fees_paid
-from app.services.installments._math import compute_arrears, split_by_percentage
+from app.services.installments._math import GridLine, compute_arrears, resolve_grid_amounts
 
 # Trois provenances possibles pour un échéancier, dans cet ordre de priorité.
 SOURCE_NEGOTIATED = "negotiated"
 SOURCE_STANDARD = "standard"
 SOURCE_NONE = "none"
+
+
+def _to_grid_line(row: FeeInstallment) -> GridLine:
+    """Traduit une ligne de grille en donnée de calcul, sans lire son nom.
+
+    La colonne non renseignée vaut zéro plutôt que `None` : une tranche dont
+    l'écriture a été vidée en base ne doit pas faire tomber l'échéancier de
+    toute une école, elle doit compter pour rien.
+    """
+    is_fixed = row.kind == FeeInstallmentKind.FIXED.value
+    raw = row.amount if is_fixed else row.percentage
+    return GridLine(is_fixed=is_fixed, value=Decimal(str(raw)) if raw is not None else Decimal("0"))
 
 
 async def _academic_year_id(db: AsyncSession, enrollment_id: int) -> int:
@@ -50,9 +63,7 @@ async def resolve_schedule(
         grid = await repo.list_year_grid(db, year_id)
         if grid:
             source = SOURCE_STANDARD
-            amounts = split_by_percentage(
-                total_mandatory, [Decimal(str(g.percentage)) for g in grid]
-            )
+            amounts = resolve_grid_amounts(total_mandatory, [_to_grid_line(g) for g in grid])
             rows = [
                 (g.name, g.position, amount, g.due_date)
                 for g, amount in zip(grid, amounts, strict=True)
@@ -66,6 +77,12 @@ async def resolve_schedule(
 
     arrears = compute_arrears([(due, amount) for _n, _p, amount, due in rows], paid, today)
 
+    # Ce que la grille ne planifie pas : une somme en francs qui ne couvre pas
+    # tout le dû laisse un reliquat sans date. On l'affiche plutôt que de le
+    # taire, sans le compter en retard — aucune échéance ne le réclame.
+    scheduled = sum((amount for _n, _p, amount, _d in rows), Decimal("0"))
+    unscheduled = max(Decimal("0"), total_mandatory - scheduled)
+
     return EnrollmentScheduleResponse(
         enrollment_id=enrollment_id,
         source=source,
@@ -78,6 +95,7 @@ async def resolve_schedule(
         next_due_amount=(
             float(arrears.next_due_amount) if arrears.next_due_amount is not None else None
         ),
+        unscheduled_amount=float(unscheduled),
         lines=[
             ScheduleLine(
                 name=name,

@@ -8,10 +8,12 @@ tranches découpent le **total obligatoire** dans le temps.
 
 Deux niveaux :
 
-- `FeeInstallment` — la grille de l'établissement pour une année scolaire,
-  exprimée en **pourcentages** du total obligatoire. Un pourcentage suit
-  automatiquement une 6e et une Terminale qui n'ont pas les mêmes frais, là
-  où des montants fixes se désynchroniseraient au premier changement de tarif.
+- `FeeInstallment` — la grille de l'établissement pour une année scolaire.
+  Chaque ligne s'exprime **au choix** en pourcentage ou en montant ferme, et
+  une même grille mélange les deux : l'école pose en francs ce qu'elle sait
+  déjà (« Inscription 37 000 F, payable à la rentrée ») et laisse les
+  pourcentages absorber ce qui varie d'un niveau à l'autre. Un pourcentage
+  porte sur ce qui reste **après** les montants fermes, jamais sur le total.
 - `EnrollmentInstallment` — l'échéancier **négocié** avec une famille, en
   montants fixes cette fois, puisqu'il résulte d'un accord précis.
 
@@ -20,6 +22,7 @@ gouvernée par la priorité des catégories. Les tranches ne servent qu'à dire
 ce qui est dû à quelle date, donc à calculer un retard honnête.
 """
 
+import enum
 from datetime import date as date_type
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -36,15 +39,28 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear
     from app.models.enrollment import Enrollment
 
 
+class FeeInstallmentKind(str, enum.Enum):
+    """Les deux façons d'exprimer une tranche.
+
+    `PERCENTAGE` — une part de l'assiette, qui suit toute seule une 6e et une
+    Terminale n'ayant pas les mêmes frais.
+    `FIXED` — une somme en francs, annoncée telle quelle dans la brochure
+    (« Inscription : 37 000 F »), identique pour tous les élèves de l'année.
+    """
+
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+
+
 class FeeInstallment(Base, TimestampMixin):
-    """Une tranche de la grille standard, en pourcentage du total obligatoire."""
+    """Une tranche de la grille standard, en pourcentage ou en montant ferme."""
 
     __tablename__ = "fee_installments"
     __table_args__ = (
@@ -61,10 +77,21 @@ class FeeInstallment(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     # Ordre d'échéance. Sert aussi de clé d'unicité avec l'année.
     position: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    # Part du total obligatoire, en pourcentage. La somme de la grille doit
-    # faire exactement 100 — contrôle applicatif, car une contrainte SQL ne
-    # peut pas porter sur l'ensemble des lignes d'une année.
-    percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    # `percentage` par défaut : c'est ainsi que toutes les grilles existantes
+    # ont été saisies, et le défaut serveur les laisse intactes.
+    kind: Mapped[str] = mapped_column(
+        ValueEnum(FeeInstallmentKind, name="fee_installment_kind"),
+        nullable=False,
+        default=FeeInstallmentKind.PERCENTAGE,
+        server_default=FeeInstallmentKind.PERCENTAGE.value,
+    )
+    # Renseigné pour les tranches en pourcentage seulement. Part de l'assiette
+    # **restante** après les montants fermes, pas du total : la somme des
+    # pourcentages doit faire exactement 100 — contrôle applicatif, car une
+    # contrainte SQL ne peut pas porter sur l'ensemble des lignes d'une année.
+    percentage: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    # Renseigné pour les tranches en montant ferme seulement.
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
     due_date: Mapped[date_type] = mapped_column(Date, nullable=False)
 
     academic_year: Mapped["AcademicYear"] = relationship()

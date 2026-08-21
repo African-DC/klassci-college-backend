@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import NotFoundError
+from app.models.installment import FeeInstallmentKind
 from app.repositories import installment_repository as repo
 from app.schemas.installment import (
     EnrollmentPlanUpdate,
@@ -33,7 +34,9 @@ async def list_grid(db: AsyncSession, academic_year_id: int) -> list[FeeInstallm
             academic_year_id=r.academic_year_id,
             name=r.name,
             position=r.position,
-            percentage=float(r.percentage),
+            kind=r.kind,
+            percentage=float(r.percentage) if r.percentage is not None else None,
+            amount=float(r.amount) if r.amount is not None else None,
             due_date=r.due_date,
         )
         for r in rows
@@ -47,14 +50,37 @@ async def replace_grid(
     *,
     updated_by: int,
 ) -> list[FeeInstallmentResponse]:
-    """Remplace la grille d'une année. La somme doit faire exactement 100 %."""
-    percentages = [Decimal(str(i.percentage)) for i in data.installments]
-    if not is_complete_grid(percentages):
+    """Remplace la grille d'une année.
+
+    Deux écritures cohabitent, et la validation suit cette division :
+
+    - **Les pourcentages, s'il y en a, doivent totaliser exactement 100 %.**
+      Ils se partagent le reste après montants fermes ; en laisser une part
+      dehors reviendrait à ne planifier qu'une partie de la scolarité.
+    - **Les montants fermes ne sont pas contraints en somme.** On ne peut pas
+      les comparer au total dû ici : ce total n'existe pas au niveau d'une
+      année, il change avec le niveau, la série et l'affectation de chaque
+      élève. Refuser une grille sur la base d'un total inventé bloquerait des
+      écoles pour un chiffre faux ; le garde-fou vit donc là où l'assiette est
+      connue, à la résolution de l'échéancier, où un montant ferme ne peut
+      jamais réclamer plus que l'élève ne doit. L'écran, lui, annonce la somme
+      des montants fermes et la simule sur un niveau représentatif, pour que
+      la directrice voie ses chiffres avant d'enregistrer.
+
+    Une grille faite uniquement de montants fermes est donc légitime : c'est le
+    cas d'une école qui affiche un échéancier identique pour tous ses élèves.
+    """
+    percentages = [
+        Decimal(str(i.percentage))
+        for i in data.installments
+        if i.kind is FeeInstallmentKind.PERCENTAGE and i.percentage is not None
+    ]
+    if percentages and not is_complete_grid(percentages):
         total = percentages_sum(percentages)
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Les tranches totalisent {total} % au lieu de 100 %. "
+                f"Les tranches en pourcentage totalisent {total} % au lieu de 100 %. "
                 "Une grille incomplète laisserait une part des frais sans échéance, "
                 "et une grille excédentaire réclamerait plus que le montant dû."
             ),
@@ -69,7 +95,9 @@ async def replace_grid(
                 {
                     "name": i.name,
                     "position": i.position,
+                    "kind": i.kind.value,
                     "percentage": i.percentage,
+                    "amount": i.amount,
                     "due_date": i.due_date,
                 }
                 for i in data.installments
