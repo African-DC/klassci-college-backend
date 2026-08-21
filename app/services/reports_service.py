@@ -319,26 +319,37 @@ async def list_bulletins(
     trimester: int | None = None,
     academic_year_id: int | None = None,
     is_published: bool | None = None,
+    page: int = 1,
+    size: int = 20,
 ) -> BulletinListResponse:
-    """Liste les bulletins, filtrables. Tous les filtres sont optionnels."""
-    bulletins = await repo.list_bulletins(
+    """Une page de bulletins. Tous les filtres sont optionnels.
+
+    `total` est le nombre de bulletins correspondant aux filtres pour toute
+    l'école, indépendant de la page affichée : un écran qui annonce un
+    effectif doit lire l'enveloppe et jamais compter `items`.
+    """
+    bulletins, total = await repo.list_bulletins_page(
         db,
         class_id=class_id,
         trimester=trimester,
         academic_year_id=academic_year_id,
         is_published=is_published,
+        page=page,
+        size=size,
     )
-    # Cache total_students per unique (class_id, academic_year_id) pair to avoid N+1
-    counts: dict[tuple[int, int], int] = {}
-    for b in bulletins:
-        key = (b.class_id, b.academic_year_id)
-        if key not in counts:
-            counts[key] = await repo.count_enrolled_students(db, b.class_id, b.academic_year_id)
+    counts = await repo.count_enrolled_students_by_class_year(
+        db,
+        sorted({b.class_id for b in bulletins}),
+        sorted({b.academic_year_id for b in bulletins}),
+    )
     return BulletinListResponse(
         items=[
-            _bulletin_to_response(b, counts[(b.class_id, b.academic_year_id)]) for b in bulletins
+            _bulletin_to_response(b, counts.get((b.class_id, b.academic_year_id), 0))
+            for b in bulletins
         ],
-        total=len(bulletins),
+        total=total,
+        page=page,
+        size=size,
     )
 
 

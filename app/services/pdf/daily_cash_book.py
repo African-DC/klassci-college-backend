@@ -13,7 +13,7 @@ Refactor 2026-05-18 : utilise `components.py` + `PDFTheme.from_school`.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -23,9 +23,50 @@ from app.services.pdf import components as ui
 from app.services.pdf._helpers import enum_value, format_decimal
 from app.services.pdf.theme import PDFTheme, method_label
 
+_JOURS_FR = (
+    "lundi",
+    "mardi",
+    "mercredi",
+    "jeudi",
+    "vendredi",
+    "samedi",
+    "dimanche",
+)
+_MOIS_FR = (
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+)
 
-def _payment_rows(payments: list[dict[str, Any]]) -> list[list[Any]]:
-    """Rows premium_table : N° / Heure / Élève / Méthode / Référence / Montant / Statut."""
+
+def french_long_date(value: date | datetime | None) -> str:
+    """« vendredi 21 août 2026 ».
+
+    `strftime("%A %d %B %Y")` suit la locale du processus : sur le serveur,
+    la locale C, d'où « Friday 21 August 2026 » en tête d'une pièce comptable
+    française. Les noms sont donc portés ici, sans dépendre d'un `setlocale`
+    global qui affecterait tout le processus.
+    """
+    if value is None:
+        return ""
+    return f"{_JOURS_FR[value.weekday()]} {value.day} {_MOIS_FR[value.month - 1]} {value.year}"
+
+
+def _payment_rows(payments: list[dict[str, Any]], *, with_cashier: bool) -> list[list[Any]]:
+    """Rows premium_table : N° / Heure / [Caissier] / Élève / Méthode / Réf / Montant / Statut.
+
+    La colonne « Caissier » n'apparaît que sur le bordereau consolidé : sur
+    celui d'une seule caisse, elle répéterait le même nom à chaque ligne.
+    """
     rows: list[list[Any]] = []
     for p in payments:
         created_at = p.get("created_at")
@@ -36,17 +77,36 @@ def _payment_rows(payments: list[dict[str, Any]]) -> list[list[Any]]:
         amount = p.get("amount")
         amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
         status_key = enum_value(p.get("status", "completed")) or "completed"
-        rows.append(
-            [
-                f"#{p.get('id', '')}",
-                {"value": time_str, "type": "muted"},
-                student_name,
-                method_label(method_key),
-                {"value": reference, "type": "muted"},
-                {"value": amount_str, "type": "num-emphasis"},
-                {"value": status_key, "type": "pill"},
-            ]
-        )
+        row: list[Any] = [
+            f"#{p.get('id', '')}",
+            {"value": time_str, "type": "muted"},
+        ]
+        if with_cashier:
+            row.append({"value": p.get("cashier_name") or "—", "type": "muted"})
+        row += [
+            student_name,
+            method_label(method_key),
+            {"value": reference, "type": "muted"},
+            {"value": amount_str, "type": "num-emphasis"},
+            {"value": status_key, "type": "pill"},
+        ]
+        rows.append(row)
+    return rows
+
+
+def _by_cashier_rows(by_cashier: list[Any]) -> list[list[Any]]:
+    """Une ligne par caisse : versements, ventilation par moyen, total."""
+    rows: list[list[Any]] = []
+    for entry in by_cashier:
+        cells: list[Any] = [
+            entry.cashier_name,
+            {"value": str(entry.count), "type": "num"},
+        ]
+        for method in _METHODS_ORDER:
+            amount = entry.by_method.get(method, Decimal("0"))
+            cells.append({"value": format_decimal(amount), "type": "num"})
+        cells.append({"value": format_decimal(entry.total), "type": "num-emphasis"})
+        rows.append(cells)
     return rows
 
 
@@ -67,10 +127,19 @@ def _totals_rows(totals_by_method: dict[str, Decimal]) -> list[list[Any]]:
 def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str, Any]) -> bytes:
     """Génère le bordereau journalier pour une date donnée.
 
+    Deux documents en un, selon `consolidated` :
+    - la caisse d'une personne, qu'elle imprime pour clôturer sa journée ;
+    - la consolidation de toutes les caisses, que le comptable édite pour son
+      point journalier — avec la ventilation par caisse et par moyen.
+
     data keys :
         date: datetime.date (du bordereau)
-        cashier_name: str
-        payments: list[{id, created_at, student_name, method, reference, amount, status}]
+        consolidated: bool — True = toutes les caisses
+        cashier_name: str | None — la caisse concernée, si une seule
+        issued_by_name: str — qui a édité le document
+        payments: list[{id, created_at, student_name, cashier_name, method,
+                        reference, amount, status}]
+        by_cashier: list[CashierDayTotals] — ventilation, si consolidé
         totals_by_method: {cash: Decimal, mobile_money: Decimal, ...}
         total_general: Decimal
         count_completed: int
@@ -82,14 +151,12 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
     theme = PDFTheme.from_school(school_settings)
     school_name = school_settings.get("school_name") or ""
 
-    date_val = data.get("date")
-    date_str = (
-        date_val.strftime("%A %d %B %Y")
-        if isinstance(date_val, datetime)
-        else (date_val.strftime("%A %d %B %Y") if date_val else "")
-    )
+    date_str = french_long_date(data.get("date"))
 
-    cashier_name = data.get("cashier_name", "—")
+    consolidated = bool(data.get("consolidated"))
+    by_cashier = data.get("by_cashier", []) or []
+    issued_by_name = data.get("issued_by_name") or "—"
+    cashier_name = data.get("cashier_name") or "—"
     payments = data.get("payments", []) or []
     totals_by_method = data.get("totals_by_method", {}) or {}
     total_general = data.get("total_general", Decimal("0"))
@@ -98,8 +165,17 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
     issued_at = data.get("issued_at") or datetime.utcnow()
     issued_str = issued_at.strftime("%d/%m/%Y %H:%M")
 
-    meta_left = f"<strong>Caissier :</strong> {ui.esc(cashier_name)}"
-    meta_right = f"Édité le {ui.esc(issued_str)}"
+    # Sur le document consolidé, nommer un caissier serait faux : il couvre
+    # toutes les caisses de la journée. Il portait jusqu'ici le nom de la
+    # personne qui l'imprimait — le comptable se retrouvait désigné caissier
+    # sur une pièce qui récapitule le travail de trois autres.
+    if consolidated:
+        nb = len(by_cashier)
+        caisses = f"{nb} caisse{'s' if nb > 1 else ''}" if nb else "aucune caisse"
+        meta_left = f"<strong>Toutes les caisses</strong> · {ui.esc(caisses)}"
+    else:
+        meta_left = f"<strong>Caissier :</strong> {ui.esc(cashier_name)}"
+    meta_right = f"Édité le {ui.esc(issued_str)} par {ui.esc(issued_by_name)}"
 
     # Sous-ligne du total : counts validés/annulés
     counts_pieces = [
@@ -123,28 +199,52 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         theme=theme,
     )
 
+    # Ventilation par caisse : le cœur du point journalier du comptable.
+    # Inutile sur le bordereau d'un seul caissier, où elle répéterait
+    # exactement le récapitulatif par méthode.
+    cashier_section = ""
+    if consolidated:
+        cashier_section = ui.section_title(
+            "Récapitulatif par caisse", theme=theme
+        ) + ui.premium_table(
+            headers=[
+                "Caissier",
+                {"label": "Versements", "align": "right"},
+                *({"label": method_label(method), "align": "right"} for method in _METHODS_ORDER),
+                {"label": "Total XOF", "align": "right"},
+            ],
+            rows=_by_cashier_rows(by_cashier),
+            theme=theme,
+            empty_message="Aucune caisse n'a encaissé ce jour.",
+        )
+
+    detail_headers: list[Any] = ["N°", "Heure"]
+    if consolidated:
+        detail_headers.append("Caissier")
+    detail_headers += [
+        "Élève",
+        "Méthode",
+        "Référence",
+        {"label": "Montant", "align": "right"},
+        "Statut",
+    ]
+
     detail_section = ui.section_title("Détail des versements", theme=theme) + ui.premium_table(
-        headers=[
-            "N°",
-            "Heure",
-            "Élève",
-            "Méthode",
-            "Référence",
-            {"label": "Montant", "align": "right"},
-            "Statut",
-        ],
-        rows=_payment_rows(payments),
+        headers=detail_headers,
+        rows=_payment_rows(payments, with_cashier=consolidated),
         theme=theme,
         empty_message="Aucun versement encaissé ce jour.",
     )
 
-    signatures = ui.signature_block(
-        roles=[
-            {"role": "Le Caissier", "name": cashier_name},
-            {"role": "La Comptabilité"},
-        ],
-        theme=theme,
+    # Qui signe quoi : le caissier arrête sa propre caisse, le comptable
+    # arrête la consolidation. Faire signer « Le Caissier » sous un document
+    # qui couvre trois caisses n'engage personne.
+    signature_roles = (
+        [{"role": "La Comptabilité", "name": issued_by_name}, {"role": "La Direction"}]
+        if consolidated
+        else [{"role": "Le Caissier", "name": cashier_name}, {"role": "La Comptabilité"}]
     )
+    signatures = ui.signature_block(roles=signature_roles, theme=theme)
 
     html = f"""
     <!DOCTYPE html>
@@ -168,6 +268,8 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         {counts_line}
 
         {method_section}
+
+        {cashier_section}
 
         {detail_section}
 

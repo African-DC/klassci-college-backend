@@ -1,4 +1,4 @@
-﻿"""Bootstrap the system tenant `local` and the platform superadmin.
+"""Bootstrap the system tenant `local` and the platform superadmin.
 
 Idempotent. Used on first production boot after MySQL is healthy.
 """
@@ -42,7 +42,9 @@ async def _ensure_superadmin(url: str) -> None:
             await _seed_permissions_and_roles(db)
             role_row = await db.execute(text("SELECT id FROM roles WHERE name = 'super_admin'"))
             role_id = role_row.scalar_one()
-            existing = await db.execute(text("SELECT id FROM users WHERE email = :email"), {"email": EMAIL})
+            existing = await db.execute(
+                text("SELECT id FROM users WHERE email = :email"), {"email": EMAIL}
+            )
             user_id = existing.scalar_one_or_none()
             hashed = hash_password(PASSWORD)
             if user_id is None:

@@ -10,7 +10,9 @@ Architecture (refactor 2026-05-17) :
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.fee import FeeEntitlement
 
 _ALLOWED_METHODS = {"cash", "mobile_money", "bank_transfer", "cheque"}
 
@@ -83,6 +85,9 @@ class PaymentAllocationResponse(BaseModel):
     enrollment_fee_id: int
     amount: Decimal
     fee_category_name: str | None = None
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int | None = None
     enrollment_fee_status_after: str | None = None
 
@@ -158,6 +163,9 @@ class AllocationPreviewLine(BaseModel):
 
     enrollment_fee_id: int
     fee_category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int
     fee_total: Decimal
     fee_paid_before: Decimal

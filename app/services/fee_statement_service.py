@@ -20,7 +20,7 @@ from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 from app.repositories import payment_repository as repo
-from app.services import fees_paid
+from app.services import fee_situation, fees_paid
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
@@ -60,42 +60,31 @@ def _student_full_name(student: Student) -> str:
 async def _build_fees_section(
     db: AsyncSession, enrollment: Enrollment
 ) -> tuple[list[dict], Decimal, Decimal]:
-    """Compose les rows fees + retourne total_expected & total_paid (mandatory uniquement)."""
-    fees = list(enrollment.enrollment_fees or [])
-    # Tri stable par priorité catégorie ASC puis id
-    fees.sort(
-        key=lambda f: (
-            f.fee_variant.category.priority if f.fee_variant and f.fee_variant.category else 100,
-            f.id,
-        )
-    )
+    """Compose les rows fees + retourne total_expected & total_paid.
 
-    # Une requête groupée pour toute l'inscription, pas une par frais : le
-    # calcul est le même que celui du portail de la famille, et l'état des
-    # frais ne peut pas annoncer un autre montant que son écran.
+    Le tri, la soustraction et les totaux vivent dans `fee_situation`, partagé
+    avec le reçu de versement : l'état des frais et le reçu que la famille
+    emporte ne peuvent pas annoncer deux restes à payer différents.
+
+    Une requête groupée pour toute l'inscription, pas une par frais.
+    """
     deja_verse = await fees_paid.paid_by_enrollment(db, enrollment.id)
+    situation = fee_situation.situation_from_fees(enrollment.enrollment_fees or [], deja_verse)
 
-    rows: list[dict] = []
-    total_expected = Decimal("0")
-    total_paid_all = Decimal("0")
-    for fee in fees:
-        paid = deja_verse.get(fee.id, Decimal("0"))
-        remaining = max(fee.amount - paid, Decimal("0"))
-        cat_name = ""
-        if fee.fee_variant and fee.fee_variant.category:
-            cat_name = fee.fee_variant.category.name
-        rows.append(
-            {
-                "category_name": cat_name,
-                "amount": fee.amount,
-                "paid": paid,
-                "remaining": remaining,
-                "status": enum_value(fee.status),
-            }
-        )
-        total_expected += fee.amount
-        total_paid_all += paid
-    return rows, total_expected, total_paid_all
+    rows = [
+        {
+            "category_name": line.category_name,
+            # L'etat des frais est la piece que la famille garde : il doit dire
+            # ce que chaque ligne achete, pas seulement ce qu'elle coute.
+            "entitlements": line.entitlements,
+            "amount": line.due,
+            "paid": line.paid,
+            "remaining": line.remaining,
+            "status": line.status,
+        }
+        for line in situation.lines
+    ]
+    return rows, situation.total_due, situation.total_paid
 
 
 async def _build_payments_section(db: AsyncSession, enrollment_id: int) -> list[dict]:

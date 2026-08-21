@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
+- Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
 - Le lieu de naissance de l'élève se saisit à la création, à la modification et à l'inscription, et se retrouve sur le certificat de scolarité, l'attestation de fréquentation et la fiche d'inscription, sous la forme « né(e) le ... à ... » attendue par l'administration *(secrétariat, admin, parent)*
 - Les listes nominatives du rapport de fin de trimestre remplissent enfin leur colonne « Lieu de naissance », qui sortait vide faute d'être collectée *(directeur, admin)*
 - Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
@@ -16,14 +18,30 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le point journalier distingue les caisses arrêtées par leur caissier de celles clôturées d'office, dont l'écart reste inconnu tant que personne n'a compté *(comptable, directeur)*
 - L'élève et le parent téléchargent le bulletin depuis leur portail : l'élève le sien, le parent celui de ses enfants, sans passer par le droit qui ouvre les bulletins de toute l'école *(élève, parent)*
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
+- Une catégorie de frais dit désormais ce qu'elle donne droit, élément par élément : ce qui se retire au guichet et ce qui s'ouvre comme accès *(admin, comptable)*
+- Le reçu de versement porte, sous le montant, ce que la famille obtient contre les frais réglés ce jour : le parent repart avec la preuve écrite de sa tenue et de ses macarons *(parent, caissier, secrétariat)*
+- L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
+- Le reçu de versement s'imprime en deux exemplaires sur une seule feuille A4, à couper au milieu : un pour la famille, un pour le classeur *(caissier, comptable)*
+- Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
+- La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir *(admin, directeur des études, enseignant)*
+- Le « 12 / 35 » d'une évaluation est compté par la base et non plus en chargeant les 30 000 notes de l'école *(admin, enseignant)*
 - Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler *(élève, parent)*
 - Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes *(élève, parent)*
 - Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant *(comptable, caissier)*
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier *(comptable, directeur)*
+- Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel *(comptable, caissier)*
+- Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier *(comptable)*
+- La date du bordereau s'écrivait en anglais, « Friday 21 August 2026 », en tête d'une pièce comptable française *(comptable, caissier)*
+- Un refus de changement de statut affichait au guichet « impossible de passer de 'PaymentStatus.COMPLETED' », un nom technique interne, et le journal d'audit financier en gardait la trace *(caissier, comptable)*
+- La notification de clôture d'office s'accordait mal au pluriel : « Votre journées de caisse du 19/08, 20/08 ont été clôturées » *(caissier)*
+- Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien *(devops)*
+- Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
+- Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas *(admin, directeur)*
 - Le certificat de scolarité déclarait l'élève né dans sa ville de résidence : faute de lieu de naissance en base, il recopiait le domicile. Un élève né à Bouaké et habitant Cocody était certifié « né à Cocody » sur une pièce officielle *(secrétariat, parent, directeur)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*

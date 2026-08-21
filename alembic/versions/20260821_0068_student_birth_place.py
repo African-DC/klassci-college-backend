@@ -16,7 +16,7 @@ cette migration corrige.
 laxiste.
 
 Revision ID: 0065_student_birth_place
-Revises: 0064_cash_auto_closure
+Revises: 0067_fee_category_entitlements
 Create Date: 2026-08-21
 """
 
@@ -24,8 +24,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0065_student_birth_place"
-down_revision = "0064_cash_auto_closure"
+revision = "0068_student_birth_place"
+down_revision = "0067_fee_category_entitlements"
 branch_labels = None
 depends_on = None
 
