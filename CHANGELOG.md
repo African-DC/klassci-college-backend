@@ -12,6 +12,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
 
 ### Fixed
+- Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit *(comptable, admin)*
+- Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées *(comptable, admin)*
 - Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul *(comptable, caissier)*
 - Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais *(secrétariat, comptable)*
 - Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit *(éducateur)*
