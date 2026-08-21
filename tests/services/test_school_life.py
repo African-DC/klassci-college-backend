@@ -211,23 +211,30 @@ def test_summons_outcome_accepts_the_three_known_suites(outcome: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _attendance_record(status: AttendanceStatus, absence_day: date) -> SimpleNamespace:
+def _attendance_record(
+    status: AttendanceStatus, absence_day: date, *, notes: str | None = None
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=77,
         student_id=42,
         status=status,
-        notes=None,
+        notes=notes,
         context=SimpleNamespace(date=absence_day),
     )
 
 
-def _patch_entry_slip(monkeypatch: pytest.MonkeyPatch, record: SimpleNamespace) -> None:
-    """Isole le service de la base : on teste sa règle, pas SQLAlchemy."""
+def _patch_entry_slip(monkeypatch: pytest.MonkeyPatch, record: SimpleNamespace) -> AsyncMock:
+    """Isole le service de la base : on teste sa règle, pas SQLAlchemy.
+
+    Rend le journal d'audit simulé, pour vérifier ce qui y est écrit.
+    """
+    audit = AsyncMock(return_value=None)
     monkeypatch.setattr(entry_slip_service, "_load_record", AsyncMock(return_value=record))
     monkeypatch.setattr(
         entry_slip_service, "load_student_context", AsyncMock(return_value=_context())
     )
-    monkeypatch.setattr(entry_slip_service, "audit_log", AsyncMock(return_value=None))
+    monkeypatch.setattr(entry_slip_service, "audit_log", audit)
+    return audit
 
 
 async def test_entry_slip_refused_on_a_student_marked_present(
@@ -239,25 +246,9 @@ async def test_entry_slip_refused_on_a_student_marked_present(
     db = SimpleNamespace(commit=AsyncMock())
 
     with pytest.raises(BusinessValidationError) as excinfo:
-        await entry_slip_service.close_absence_and_compose(
-            db, 77, resume_date=None, notes=None, actor_id=1
-        )
+        await entry_slip_service.compose(db, 77, resume_date=None, notes=None)
     assert "absence ou un retard" in str(excinfo.value)
     assert record.status is AttendanceStatus.PRESENT
-
-
-async def test_entry_slip_refused_when_already_excused(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Deux billets sur la même journée feraient croire à deux absences."""
-    record = _attendance_record(AttendanceStatus.EXCUSED, date(2026, 5, 18))
-    _patch_entry_slip(monkeypatch, record)
-    db = SimpleNamespace(commit=AsyncMock())
-
-    with pytest.raises(BusinessValidationError):
-        await entry_slip_service.close_absence_and_compose(
-            db, 77, resume_date=None, notes=None, actor_id=1
-        )
 
 
 async def test_entry_slip_refuses_a_resume_date_before_the_absence(
@@ -268,10 +259,37 @@ async def test_entry_slip_refuses_a_resume_date_before_the_absence(
     db = SimpleNamespace(commit=AsyncMock())
 
     with pytest.raises(BusinessValidationError) as excinfo:
-        await entry_slip_service.close_absence_and_compose(
-            db, 77, resume_date=date(2026, 5, 17), notes=None, actor_id=1
-        )
+        await entry_slip_service.compose(db, 77, resume_date=date(2026, 5, 17), notes=None)
     assert "précéder l'absence" in str(excinfo.value)
+
+
+async def test_composing_the_slip_does_not_touch_the_register_yet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le cahier d'appel ne bouge pas tant que le papier n'est pas produit.
+
+    C'est tout l'objet de la séparation : si la fabrication du PDF échoue —
+    et elle échoue, cette panne est connue sur ce projet — l'absence doit
+    rester ouverte, donc réessayable. Régulariser d'abord laissait l'élève
+    « excusé » sans billet, et la relance était refusée.
+    """
+    record = _attendance_record(AttendanceStatus.ABSENT, date(2026, 5, 18))
+    audit = _patch_entry_slip(monkeypatch, record)
+    db = SimpleNamespace(commit=AsyncMock())
+
+    slip = await entry_slip_service.compose(
+        db, 77, resume_date=date(2026, 5, 20), notes="Certificat médical remis"
+    )
+
+    assert record.status is AttendanceStatus.ABSENT
+    assert record.notes is None
+    db.commit.assert_not_awaited()
+    audit.assert_not_awaited()
+    assert slip.payload["absence_date"] == date(2026, 5, 18)
+    assert slip.payload["resume_date"] == date(2026, 5, 20)
+    assert slip.payload["reference"].startswith("BE-")
+    # Pièce interne : aucun sceau numérique n'est émis.
+    assert "verification" not in slip.payload
 
 
 async def test_entry_slip_closes_the_absence_and_dates_the_resumption(
@@ -282,18 +300,14 @@ async def test_entry_slip_closes_the_absence_and_dates_the_resumption(
     _patch_entry_slip(monkeypatch, record)
     db = SimpleNamespace(commit=AsyncMock())
 
-    data = await entry_slip_service.close_absence_and_compose(
-        db, 77, resume_date=date(2026, 5, 20), notes="Certificat médical remis", actor_id=1
+    slip = await entry_slip_service.compose(
+        db, 77, resume_date=date(2026, 5, 20), notes="Certificat médical remis"
     )
+    await entry_slip_service.close_absence(db, slip, actor_id=1)
 
     assert record.status is AttendanceStatus.EXCUSED
     assert "billet d'entrée" in record.notes
     assert "Certificat médical remis" in record.notes
-    assert data["absence_date"] == date(2026, 5, 18)
-    assert data["resume_date"] == date(2026, 5, 20)
-    assert data["reference"].startswith("BE-")
-    # Pièce interne : aucun sceau numérique n'est émis.
-    assert "verification" not in data
     db.commit.assert_awaited_once()
 
 
@@ -305,11 +319,51 @@ async def test_entry_slip_defaults_the_resumption_to_today(
     _patch_entry_slip(monkeypatch, record)
     db = SimpleNamespace(commit=AsyncMock())
 
-    data = await entry_slip_service.close_absence_and_compose(
-        db, 77, resume_date=None, notes=None, actor_id=1
+    slip = await entry_slip_service.compose(db, 77, resume_date=None, notes=None)
+    assert slip.payload["resume_date"] == date.today()
+    assert isinstance(slip.payload["issued_at"], datetime)
+
+
+async def test_the_replaced_note_reaches_the_audit_journal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """« Parti à l'infirmerie » est une observation de terrain, et le billet
+    l'écrase. Sans copie au journal, elle disparaîtrait pour de bon."""
+    record = _attendance_record(
+        AttendanceStatus.ABSENT, date(2026, 5, 18), notes="Parti à l'infirmerie à 10h"
     )
-    assert data["resume_date"] == date.today()
-    assert isinstance(data["issued_at"], datetime)
+    audit = _patch_entry_slip(monkeypatch, record)
+    db = SimpleNamespace(commit=AsyncMock())
+
+    slip = await entry_slip_service.compose(db, 77, resume_date=None, notes=None)
+    await entry_slip_service.close_absence(db, slip, actor_id=1)
+
+    anciennes = audit.await_args.kwargs["old_values"]
+    assert anciennes["notes"] == "Parti à l'infirmerie à 10h"
+    assert anciennes["status"] == AttendanceStatus.ABSENT.value
+    assert record.notes != "Parti à l'infirmerie à 10h"
+
+
+async def test_an_already_excused_absence_can_be_reprinted_without_rewriting_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un papier se perd, une imprimante bourre. Refuser la réimpression
+    privait l'élève de sa réadmission ; l'autoriser n'écrit rien de plus,
+    donc ne régularise pas deux fois."""
+    record = _attendance_record(
+        AttendanceStatus.EXCUSED, date(2026, 5, 18), notes="Régularisée par billet du 18/05/2026"
+    )
+    audit = _patch_entry_slip(monkeypatch, record)
+    db = SimpleNamespace(commit=AsyncMock())
+
+    slip = await entry_slip_service.compose(db, 77, resume_date=None, notes=None)
+    await entry_slip_service.close_absence(db, slip, actor_id=1)
+
+    assert slip.payload["reference"] == f"BE-{slip.payload['issued_at'].year}-77"
+    assert record.status is AttendanceStatus.EXCUSED
+    assert record.notes == "Régularisée par billet du 18/05/2026"
+    db.commit.assert_not_awaited()
+    audit.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

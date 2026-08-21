@@ -66,26 +66,30 @@ async def issue_entry_slip(
     _: None = require_permission("documents:entry-slip"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
-    """Ferme l'absence visée et imprime le billet de réadmission.
+    """Imprime le billet de réadmission, puis ferme l'absence visée.
 
     Verbe POST et non GET : l'appel modifie le cahier d'appel. Le billet ne
     porte pas de sceau numérique — c'est une pièce interne imprimée par
     dizaines chaque matin, sa référence en pied suffit à la retrouver.
+
+    Rappeler l'endpoint sur une absence déjà régularisée réimprime le même
+    billet sans rien réécrire : un papier perdu ou un bourrage d'imprimante
+    ne doit pas priver l'élève de sa réadmission.
     """
-    data = await entry_slip_service.close_absence_and_compose(
-        db,
-        record_id,
-        resume_date=payload.resume_date,
-        notes=payload.notes,
-        actor_id=current_user.user_id,
+    slip = await entry_slip_service.compose(
+        db, record_id, resume_date=payload.resume_date, notes=payload.notes
     )
-    settings = data["school_settings"]
+    settings = slip.payload["school_settings"]
 
     async def _generate() -> bytes:
-        return generate_entry_slip_pdf(data, settings)
+        pdf = generate_entry_slip_pdf(slip.payload, settings)
+        # Le cahier d'appel ne bascule qu'une fois le papier en main : un
+        # rendu qui échoue laisse l'absence ouverte, donc réessayable.
+        await entry_slip_service.close_absence(db, slip, actor_id=current_user.user_id)
+        return pdf
 
     return await pdf_response(
         _generate,
-        filename=f"billet-entree-{data['student_last_name']}.pdf",
+        filename=f"billet-entree-{slip.payload['student_last_name']}.pdf",
         error_context=f"billet d'entrée pour l'appel {record_id}",
     )
