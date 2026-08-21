@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -153,6 +153,38 @@ async def create_summons(
     )
 
 
+async def _register_summary(db: AsyncSession, scope: list[Any]) -> SummonsRegisterSummary:
+    """Décompte des suites sur tout le registre consulté, filtre de suite exclu.
+
+    Un `COUNT ... GROUP BY outcome` plutôt qu'un comptage sur les lignes
+    rendues : c'est la seule façon d'avoir les quatre chiffres justes quand la
+    page n'en montre que vingt, et ça évite surtout la tautologie de l'ancien
+    calcul, qui répondait « Tuteur absent 8 sur 8 » à qui venait de cliquer
+    « Tuteur absent ».
+
+    Le périmètre (année, trimestre, élève) est bien appliqué, lui : il définit
+    quel registre on consulte. La suite donnée n'est qu'une loupe posée
+    dessus.
+    """
+    rows = (
+        await db.execute(
+            select(ParentSummons.outcome, func.count())
+            .where(*scope)
+            .group_by(ParentSummons.outcome)
+        )
+    ).all()
+    counts = {
+        (outcome.value if hasattr(outcome, "value") else outcome): int(count)
+        for outcome, count in rows
+    }
+    return SummonsRegisterSummary(
+        total=sum(counts.values()),
+        attended=counts.get(SummonsOutcome.ATTENDED.value, 0),
+        missed=counts.get(SummonsOutcome.MISSED.value, 0),
+        pending=counts.get(SummonsOutcome.PENDING.value, 0),
+    )
+
+
 async def list_register(
     db: AsyncSession,
     *,
@@ -160,25 +192,47 @@ async def list_register(
     trimester: int | None = None,
     student_id: int | None = None,
     outcome: str | None = None,
+    page: int = 1,
+    size: int = 20,
 ) -> ParentSummonsRegister:
-    """Registre des convocations, avec le décompte des suites données."""
+    """Une page du registre, et le décompte de tout le registre consulté.
+
+    Paginé : un bureau qui convoque cinq tuteurs par jour écrit neuf cents
+    lignes par an, et le registre n'est jamais purgé. Sans borne, l'écran
+    chargeait toutes les années d'un coup pour n'en montrer que le haut.
+    """
+    scope: list[Any] = []
+    if academic_year_id is not None:
+        scope.append(ParentSummons.academic_year_id == academic_year_id)
+    if trimester is not None:
+        scope.append(ParentSummons.trimester == trimester)
+    if student_id is not None:
+        scope.append(ParentSummons.student_id == student_id)
+
+    summary = await _register_summary(db, scope)
+
+    filters = list(scope)
+    if outcome is not None:
+        filters.append(ParentSummons.outcome == outcome)
+
+    total = int(
+        (
+            await db.execute(select(func.count()).select_from(ParentSummons).where(*filters))
+        ).scalar_one()
+    )
+
     stmt = (
         select(ParentSummons)
+        .where(*filters)
         .options(
             selectinload(ParentSummons.student),
             selectinload(ParentSummons.parent),
             selectinload(ParentSummons.academic_year),
         )
         .order_by(ParentSummons.summons_date.desc(), ParentSummons.id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
     )
-    if academic_year_id is not None:
-        stmt = stmt.where(ParentSummons.academic_year_id == academic_year_id)
-    if trimester is not None:
-        stmt = stmt.where(ParentSummons.trimester == trimester)
-    if student_id is not None:
-        stmt = stmt.where(ParentSummons.student_id == student_id)
-    if outcome is not None:
-        stmt = stmt.where(ParentSummons.outcome == outcome)
 
     rows = list((await db.execute(stmt)).scalars().all())
     class_names = await current_class_names(db, {row.student_id for row in rows})
@@ -193,15 +247,7 @@ async def list_register(
         )
         for row in rows
     ]
-    return ParentSummonsRegister(
-        items=items,
-        summary=SummonsRegisterSummary(
-            total=len(items),
-            attended=sum(1 for i in items if i.outcome == SummonsOutcome.ATTENDED.value),
-            missed=sum(1 for i in items if i.outcome == SummonsOutcome.MISSED.value),
-            pending=sum(1 for i in items if i.outcome == SummonsOutcome.PENDING.value),
-        ),
-    )
+    return ParentSummonsRegister(items=items, summary=summary, total=total, page=page, size=size)
 
 
 async def get_summons(db: AsyncSession, summons_id: int) -> ParentSummonsResponse:

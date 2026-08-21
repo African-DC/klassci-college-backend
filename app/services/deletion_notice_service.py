@@ -115,10 +115,19 @@ def compose_notice(
             "Cette fiche et les données qui en dépendaient ont été détruites. "
             "Elle ne peut plus être restaurée."
         )
+        # « Fiche supprimée » et « fiche supprimée, accès révoqué » ne disent
+        # pas la même chose au lendemain d'un licenciement. Le message dit
+        # laquelle des deux a eu lieu, en toutes lettres.
+        acces = outcome.access.sentence()
     else:
         consequence = (
             "Cette fiche a quitté les écrans mais rien n'a été détruit. "
             "Elle peut être restaurée depuis la corbeille."
+        )
+        acces = (
+            "L'accès au logiciel n'est pas touché : le compte de connexion, "
+            "s'il en existe un, continue de fonctionner. C'est ce qui permet "
+            "de revenir en arrière sans avoir mis quelqu'un dehors entre-temps."
         )
 
     lignes = [
@@ -130,6 +139,8 @@ def compose_notice(
         f"Motif indiqué : {outcome.reason}",
         "",
         consequence,
+        "",
+        acces,
     ]
 
     if outcome.carried_away:
@@ -170,6 +181,7 @@ def compose_notice(
         f"<tr><td><strong>Motif indiqué</strong></td><td>{outcome.reason}</td></tr>"
         "</table>"
         f"<p>{consequence}</p>"
+        f"<p><strong>{acces}</strong></p>"
         f"{emporte_html}"
         "<p><em>Ce message est envoyé automatiquement à chaque suppression. "
         "Conservez-le : il est la trace de l'acte hors du logiciel.</em></p>"

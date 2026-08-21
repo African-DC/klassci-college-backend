@@ -28,6 +28,7 @@ from app.core.datetimes import utcnow_naive
 from app.core.exceptions import NotFoundError
 from app.models.archivable import ArchivableMixin
 from app.repositories import admin_repository as repo
+from app.services.account_access import NO_ACCOUNT, AccessRevocation, revoke_access
 from app.services.deletion import Dependent
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,10 @@ class ArchiveOutcome:
     occurred_at: datetime | None = None
     #: Phrases toutes faites — « 3 inscriptions », « 12 frais d'élève ».
     carried_away: tuple[str, ...] = field(default_factory=tuple)
+    #: Ce qu'est devenu le compte de connexion de la fiche. Toujours
+    #: `NO_ACCOUNT` pour un archivage : mettre une fiche de côté ne met
+    #: personne dehors.
+    access: AccessRevocation = NO_ACCOUNT
 
 
 def _clean_reason(reason: str | None) -> str:
@@ -181,11 +186,16 @@ async def record_permanent_deletion(
     reason: str | None,
     actor_id: int,
     carried_away: Sequence[Dependent] | None = None,
+    access: AccessRevocation = NO_ACCOUNT,
 ) -> ArchiveOutcome:
     """Journalise la suppression définitive avant qu'elle n'ait lieu.
 
     Écrit avant, délibérément : une fois la fiche partie, on ne peut plus
     relire son nom pour l'inscrire au journal.
+
+    Le sort du compte de connexion est journalisé avec le reste : celui qui
+    relit la ligne six mois plus tard veut savoir si la personne pouvait
+    encore entrer, pas seulement si sa fiche était partie.
 
     Le courriel, lui, ne part pas d'ici : l'appelant le déclenche par
     `notify()` une fois la destruction validée. Annoncer par écrit une
@@ -202,7 +212,11 @@ async def record_permanent_deletion(
         user_id=actor_id,
         entity_id=entity_id,
         old_values={"label": label},
-        new_values={"permanent": True, "emporte": list(phrases)},
+        new_values={
+            "permanent": True,
+            "emporte": list(phrases),
+            **access.as_audit_values(),
+        },
         notes=cleaned,
     )
     logger.warning(
@@ -217,6 +231,7 @@ async def record_permanent_deletion(
         actor_id=actor_id,
         occurred_at=utcnow_naive(),
         carried_away=phrases,
+        access=access,
     )
 
 
@@ -245,6 +260,25 @@ async def notify(db: AsyncSession, outcome: ArchiveOutcome) -> None:
 # ---------------------------------------------------------------------------
 
 
+def owns_user_account(record: ArchivableMixin) -> int | None:
+    """La fiche porte elle-même le compte : `staff_profiles.user_id` et ses pairs.
+
+    Rend `None` quand la colonne est vide — un élève inscrit sans identifiants,
+    un parent que l'école n'a jamais ouvert au portail.
+    """
+    return getattr(record, "user_id", None)
+
+
+def carries_no_account(_record: ArchivableMixin) -> None:
+    """La fiche n'ouvre aucun accès par elle-même : il n'y a rien à révoquer.
+
+    Le cas de l'inscription. Elle porte bien un `created_by`, mais c'est le
+    compte de la secrétaire qui l'a saisie : couper celui-là au motif qu'on
+    supprime une inscription mettrait dehors la mauvaise personne.
+    """
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class ArchivableKind:
     """Ce qu'il faut savoir d'une entité pour la mettre à la corbeille.
@@ -268,6 +302,12 @@ class ArchivableKind:
     #: versements portait la fiche. Rendre `None` quand il n'y a rien à
     #: dénombrer.
     delete: Callable[[AsyncSession, ArchivableMixin], Awaitable[Sequence[Dependent] | None]]
+    #: Où trouver le compte de connexion que la fiche ouvrait, pour le couper
+    #: quand elle disparaît pour de bon. Sans valeur par défaut, exprès :
+    #: ajouter une sorte de fiche oblige à répondre « celle-ci donne un accès »
+    #: ou « celle-ci n'en donne aucun ». L'écart s'était déjà reformé deux fois
+    #: sur ce projet parce que le geste était à recopier au lieu d'être exigé.
+    account_of: Callable[[ArchivableMixin], int | None]
     naming: Callable[[ArchivableMixin], str] | None = None
     load: Callable[[AsyncSession, int], Awaitable[ArchivableMixin | None]] | None = None
     #: Ce qu'il faut figer avant que la fiche ne quitte les écrans. L'élève en
@@ -331,15 +371,25 @@ async def restore_record(
 async def purge_record(
     db: AsyncSession, kind: ArchivableKind, record_id: int, *, reason: str | None, actor_id: int
 ) -> None:
-    """Supprime définitivement une fiche déjà placée dans la corbeille."""
+    """Supprime définitivement une fiche déjà placée dans la corbeille.
+
+    La fiche part et, avec elle, le droit d'entrer qu'elle donnait. Une école
+    qui renvoie sa comptable et supprime sa fiche doit pouvoir compter là-dessus
+    sans passer derrière : le compte est désactivé et ses jetons révoqués dans
+    la même transaction que la destruction.
+    """
     record = await _load(db, kind, record_id)
     label = kind.label(record)
     ensure_archived_first(record, label=label)
     # Le motif est validé avant la première destruction, pas après.
     reason = ensure_reason(reason)
+    # Lu AVANT la destruction : une fois la fiche partie, plus rien ne dit quel
+    # compte elle ouvrait.
+    account_id = kind.account_of(record)
 
     async with db.begin_nested():
         carried_away = await kind.delete(db, record)
+        access = await revoke_access(db, account_id)
         outcome = await record_permanent_deletion(
             db,
             entity_type=kind.entity_type,
@@ -348,6 +398,7 @@ async def purge_record(
             reason=reason,
             actor_id=actor_id,
             carried_away=carried_away,
+            access=access,
         )
     await db.commit()
     # Le courriel part APRÈS la destruction, jamais avant : annoncer par écrit

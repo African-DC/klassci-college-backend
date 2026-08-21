@@ -18,11 +18,19 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Fixed
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
+### Security
+- Supprimer définitivement une fiche coupe désormais l'accès au logiciel : le compte de connexion est désactivé et ses jetons révoqués dans le même geste. Une comptable renvoyée dont on supprime la fiche le lundi ne se reconnecte plus le mardi avec son mot de passe, ni depuis une session restée ouverte *(admin, directeur)*
+- Le journal d'audit et le courriel de traçabilité disent maintenant ce qu'est devenu le compte : « fiche supprimée, accès révoqué » n'est pas la même information que « fiche supprimée » *(admin, directeur)*
+
+### Changed
+- Le registre des convocations et celui des billets d'annulation de zéro se consultent par pages : ils s'empilent d'une année sur l'autre et chargeaient jusqu'ici tout leur historique pour n'en montrer que le haut *(éducateur, secrétariat)*
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
 - Supprimer définitivement une inscription obéit aux mêmes règles que supprimer un élève : motif obligatoire, passage par la corbeille d'abord, courriel à la direction *(admin, directeur)*
 - Encaisser sur une inscription qui porte plusieurs frais est plus rapide : la caisse interroge la base une fois au lieu d'une fois par frais *(caissier)*
 
 ### Fixed
+- L'éducateur et le secrétariat peuvent enfin délivrer un billet d'annulation de zéro : l'écran demandait les évaluations manquées par le cahier de notes de la classe, que ni l'un ni l'autre n'a le droit de lire, et refusait donc leur premier clic *(éducateur, secrétariat)*
+- Les quatre compteurs du registre des convocations décrivent l'année consultée et non le filtre en cours : cliquer « Tuteur absent » affichait « Convocations 8, Tuteur venu 0, Tuteur absent 8 » *(éducateur)*
 - Une inscription pouvait être détruite sans motif, sans passer par la corbeille et sans que personne n'en soit averti *(admin, directeur)*
 - Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent *(comptable, secrétariat)*
 - Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés *(directeur, comptable)*
@@ -40,6 +48,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève *(admin)*
 
 ### Added
+- Les évaluations manquées d'un élève sur une période s'obtiennent directement, sans passer par le cahier de notes de sa classe : le formulaire du billet d'annulation de zéro les affiche en une requête au lieu d'une quarantaine *(éducateur, secrétariat)*
 - Sexe et type de contrat de l'enseignant, permanent, vacataire ou fonctionnaire, saisissables sur sa fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin)*
 - Type de contrat et sexe des enseignants sur leur fiche. Les deux synthèses du rapport de fin de trimestre qui restaient vierges faute de ces informations se remplissent désormais seules *(admin, directeur)*.
 - Rapport de fin de trimestre pour la DEEP, au canevas officiel des 27 tableaux, téléchargeable en un clic pour le trimestre choisi *(admin, directeur)*.

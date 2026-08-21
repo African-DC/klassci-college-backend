@@ -11,6 +11,7 @@ from app.services.archive_service import (
     ArchivableKind,
     _clean_reason,
     ensure_archived_first,
+    owns_user_account,
 )
 
 
@@ -162,7 +163,11 @@ def _kind_bidon(record: object) -> ArchivableKind:
     async def _supprime(_db: object, _record: object) -> None:  # pragma: no cover
         raise AssertionError("la suppression ne doit pas être atteinte")
 
-    return ArchivableKind("essai", "La fiche", _Personne, _supprime, load=_charge)
+    # `_Personne` ne porte pas de `user_id` : la mecanique verra une fiche
+    # sans compte de connexion, et n'aura donc rien a revoquer.
+    return ArchivableKind(
+        "essai", "La fiche", _Personne, _supprime, owns_user_account, load=_charge
+    )
 
 
 def test_le_registre_couvre_les_quatre_fiches_de_personnes() -> None:
@@ -208,6 +213,7 @@ async def test_le_prealable_court_avant_que_la_fiche_ne_soit_archivee() -> None:
         kind.article,
         kind.model,
         kind.delete,
+        kind.account_of,
         load=kind.load,
         before_archive=_prealable,
     )
