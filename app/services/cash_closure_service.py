@@ -69,16 +69,34 @@ def _french_date(day: date_type) -> str:
     return day.strftime("%d/%m/%Y")
 
 
-def _notification_body(days: list[date_type]) -> str:
+def _enumerate_days(days: list[date_type]) -> str:
+    """« 20/08/2026 », « 21/06/2026 et 20/08/2026 », « A, B et 3 autres ».
+
+    Le dernier séparateur est un « et » et non une virgule : la notification
+    est lue par le caissier, pas parsée par une machine.
+    """
     listed = [_french_date(day) for day in days[:_MAX_DATES_LISTED]]
     remainder = len(days) - len(listed)
     if remainder > 0:
-        listed.append(f"et {remainder} autre{'s' if remainder > 1 else ''}")
-    enumeration = ", ".join(listed)
-    plural = "s" if len(days) > 1 else ""
+        listed.append(f"{remainder} autre{'s' if remainder > 1 else ''}")
+    if len(listed) == 1:
+        return listed[0]
+    return f"{', '.join(listed[:-1])} et {listed[-1]}"
+
+
+def _notification_body(days: list[date_type]) -> str:
+    """Corps de la notification, accordé au nombre de journées concernées.
+
+    L'accord était fautif au pluriel : « Votre journées de caisse du 21/06,
+    20/08 ont été clôturées ». Le possessif et l'article se déclinent avec le
+    reste — c'est un message que le caissier voit tous les matins où il a
+    oublié de clôturer, et une faute d'accord y est visible longtemps.
+    """
+    several = len(days) > 1
     return (
-        f"Votre journée{plural} de caisse du {enumeration} "
-        f"{'ont' if len(days) > 1 else 'a'} été clôturée{plural} d'office à minuit, "
+        f"{'Vos journées' if several else 'Votre journée'} de caisse "
+        f"{'des' if several else 'du'} {_enumerate_days(days)} "
+        f"{'ont' if several else 'a'} été clôturée{'s' if several else ''} d'office à minuit, "
         "sans comptage du tiroir. L'écart reste inconnu tant que vous n'avez pas "
         "saisi ce que vous avez compté. Rendez-vous sur « Ma caisse » pour régulariser."
     )
