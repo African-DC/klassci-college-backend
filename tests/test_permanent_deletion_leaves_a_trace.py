@@ -22,6 +22,8 @@ class _Fiche:
     archived_at: object = "2026-08-20"
     archived_by: object = 1
     archive_reason: object = "doublon de saisie"
+    #: Aucun compte de connexion : ces tests-la ne portent que sur la trace.
+    user_id: int | None = None
 
 
 class _Session:
@@ -57,7 +59,14 @@ def kind() -> tuple[archive_service.ArchivableKind, list[int]]:
         return _Fiche()
 
     return (
-        archive_service.ArchivableKind("teacher", "L'enseignant", _Fiche, _delete, load=_load),
+        archive_service.ArchivableKind(
+            "teacher",
+            "L'enseignant",
+            _Fiche,
+            _delete,
+            archive_service.owns_user_account,
+            load=_load,
+        ),
         detruit,
     )
 

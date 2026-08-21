@@ -54,6 +54,11 @@ ENROLLMENT_KIND = archive_service.ArchivableKind(
     "L'inscription",
     Enrollment,
     lambda db, r: repo.delete_enrollment(db, r),
+    # Seule des cinq fiches archivables à n'ouvrir aucun accès : on se connecte
+    # en tant qu'élève, jamais en tant qu'inscription. Supprimer une
+    # inscription ne doit donc rien couper — l'élève reste élève, et il lui
+    # reste souvent une autre inscription en cours.
+    archive_service.carries_no_account,
     naming=_enrollment_label,
     load=_load_enrollment_for_bin,
 )

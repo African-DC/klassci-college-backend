@@ -8,6 +8,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Security
+- Supprimer définitivement une fiche coupe désormais l'accès au logiciel : le compte de connexion est désactivé et ses jetons révoqués dans le même geste. Une comptable renvoyée dont on supprime la fiche le lundi ne se reconnecte plus le mardi avec son mot de passe, ni depuis une session restée ouverte *(admin, directeur)*
+- Le journal d'audit et le courriel de traçabilité disent maintenant ce qu'est devenu le compte : « fiche supprimée, accès révoqué » n'est pas la même information que « fiche supprimée » *(admin, directeur)*
+
 ### Changed
 - Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur *(admin, directeur)*
 
