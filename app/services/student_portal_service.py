@@ -255,6 +255,7 @@ async def get_profile(db: AsyncSession, user_id: int) -> StudentProfileResponse:
         first_name=student.first_name,
         last_name=student.last_name,
         birth_date=student.birth_date,
+        birth_place=student.birth_place,
         genre=student.genre,
         enrollment_number=student.enrollment_number,
         email=email,

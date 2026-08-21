@@ -99,6 +99,7 @@ async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
                 first_name=student.first_name,
                 last_name=student.last_name,
                 birth_date=student.birth_date,
+                birth_place=student.birth_place,
                 enrollment_number=student.enrollment_number,
                 relationship_type=link.relationship_type,
                 enrollment=enrollment_info,

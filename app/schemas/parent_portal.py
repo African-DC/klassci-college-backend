@@ -31,6 +31,7 @@ class ChildResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     enrollment_number: str | None
     relationship_type: str
     enrollment: ChildEnrollmentInfo | None = None

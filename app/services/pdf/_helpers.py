@@ -10,10 +10,44 @@ import base64
 import enum
 import logging
 import os
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Mention d'etat civil absente sur une piece officielle
+# ---------------------------------------------------------------------------
+
+# Points de suite. Une piece officielle ivoirienne doit porter la mention
+# « ne(e) le ... a ... » : la supprimer rend le document non conforme, et y
+# imprimer « None », un vide ou une valeur approchante le rend faux. On imprime
+# donc la ligne a completer et parapher a la main au secretariat, comme sur les
+# imprimes prefectoraux.
+OFFICIAL_BLANK = "……………………"
+
+
+def birth_mention(student: Mapping[str, Any]) -> tuple[str, str]:
+    """Date et lieu de naissance prêts à imprimer sur une pièce officielle.
+
+    Retourne `(date, lieu)` déjà formatés. Deux garanties, qui sont la
+    raison d'être de cette fonction :
+
+    - **aucun repli sur `city` / `commune`.** Ce sont le domicile actuel.
+      Un élève né à Bouaké et domicilié à Cocody n'est pas « né à Cocody »,
+      et un certificat qui l'affirme est un faux, opposable à
+      l'administration qui le réclame.
+    - **jamais `None` ni de vide.** L'information manquante sort en points
+      de suite, la ligne que le secrétariat complète et paraphe à la main,
+      comme sur les imprimés préfectoraux. Retirer la mention rendrait le
+      document non conforme ; la laisser vide le rendrait illisible.
+    """
+    birth_date = student.get("birth_date")
+    date_str = birth_date.strftime("%d/%m/%Y") if birth_date else OFFICIAL_BLANK
+    place = (student.get("birth_place") or "").strip() or OFFICIAL_BLANK
+    return date_str, place
 
 
 # ---------------------------------------------------------------------------

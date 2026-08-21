@@ -35,7 +35,7 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
 
     data keys (composé par enrollment_form_service) :
         enrollment_id, enrollment_number, status,
-        student: {first_name, last_name, genre, birth_date, birthplace,
+        student: {first_name, last_name, genre, birth_date, birth_place,
                   photo_url, city, commune, address},
         class_name, level_name, academic_year_name,
         parents: list[{first_name, last_name, phone, email, relationship_label}],

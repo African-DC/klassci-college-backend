@@ -324,6 +324,7 @@ async def get_student_full(db: AsyncSession, student_id: int, *, finance: Financ
         "first_name": student.first_name,
         "last_name": student.last_name,
         "birth_date": student.birth_date,
+        "birth_place": student.birth_place,
         "genre": student.genre,
         "enrollment_number": student.enrollment_number,
         "photo_url": student.photo_url,

@@ -131,6 +131,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None

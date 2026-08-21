@@ -31,7 +31,7 @@ async def list_students(tenant_slug: str, *, limit: int, offset: int) -> list[di
         tenant_slug,
         """
         SELECT id, first_name, last_name, enrollment_number, genre, birth_date,
-               photo_url, city, commune, created_at
+               birth_place, photo_url, city, commune, created_at
         FROM students
         ORDER BY last_name, first_name
         LIMIT :limit OFFSET :offset

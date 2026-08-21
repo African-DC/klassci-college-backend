@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from app.services.pdf import components as ui
-from app.services.pdf._helpers import esc
+from app.services.pdf._helpers import birth_mention, esc
 from app.services.pdf.theme import PDFTheme
 
 
@@ -22,6 +22,9 @@ def _body_paragraph(
     *,
     signatory_html: str,
     full_name: str,
+    ne_form: str,
+    birth_date_str: str,
+    birthplace: str,
     matricule: str,
     inscrit_form: str,
     class_name: str,
@@ -36,7 +39,9 @@ def _body_paragraph(
         f"<p style='text-align:center; font-size:15px; margin:18px 0; "
         f"font-family:var(--font-serif,Georgia,serif); color:var(--primary);'>"
         f"<strong>{esc(full_name)}</strong></p>"
-        f"<p>matricule <strong>{esc(matricule)}</strong>, est régulièrement "
+        f"<p>{esc(ne_form)} le <strong>{esc(birth_date_str)}</strong> à "
+        f"<strong>{esc(birthplace)}</strong>, matricule "
+        f"<strong>{esc(matricule)}</strong>, est régulièrement "
         f"{esc(inscrit_form)} en classe de <strong>{esc(class_name)}</strong> "
         f"au titre de l'année scolaire <strong>{esc(academic_year_name)}</strong>.</p>"
         f"<p>Au {esc(issued_str)}, son taux de fréquentation s'élève à "
@@ -51,7 +56,8 @@ def generate_attendance_certificate_pdf(
     """Generate the official attestation de frequentation PDF — theme dynamique.
 
     data keys :
-        student: dict with first_name, last_name, genre, enrollment_number
+        student: dict with first_name, last_name, genre, enrollment_number,
+                 birth_date, birth_place
         class_name: str
         academic_year_name: str
         attendance: dict with total, present, absent, late, excused, attendance_rate
@@ -67,6 +73,10 @@ def generate_attendance_certificate_pdf(
     full_name = f"{first_name} {last_name}".strip()
     genre = student.get("genre")
     matricule = student.get("enrollment_number") or "..."
+    # L'attestation est opposable à une administration qui identifie l'élève
+    # par « né(e) le ... à ... » : sans cette mention elle peut être refusée
+    # au guichet.
+    birth_date_str, birthplace = birth_mention(student)
 
     class_name = data.get("class_name") or ""
     academic_year_name = data.get("academic_year_name") or ""
@@ -74,6 +84,7 @@ def generate_attendance_certificate_pdf(
     issued_str = issued_at.strftime("%d/%m/%Y") if isinstance(issued_at, datetime) else ""
 
     inscrit_form = "inscrite" if genre == "F" else "inscrit"
+    ne_form = "née" if genre == "F" else "né"
 
     attendance = data.get("attendance", {}) or {}
     total = int(attendance.get("total", 0) or 0)
@@ -90,6 +101,9 @@ def generate_attendance_certificate_pdf(
     body_html = _body_paragraph(
         signatory_html=ui.signatory_clause(head_master_name, head_master_title),
         full_name=full_name,
+        ne_form=ne_form,
+        birth_date_str=birth_date_str,
+        birthplace=birthplace,
         matricule=matricule,
         inscrit_form=inscrit_form,
         class_name=class_name,
