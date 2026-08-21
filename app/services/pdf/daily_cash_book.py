@@ -94,7 +94,20 @@ def _payment_rows(payments: list[dict[str, Any]], *, with_cashier: bool) -> list
     return rows
 
 
-def _by_cashier_rows(by_cashier: list[Any]) -> list[list[Any]]:
+def _cashier_methods(by_cashier: list[Any]) -> list[str]:
+    """Les colonnes du tableau par caisse, dans l'ordre metier.
+
+    Tirees de ce qui a reellement ete encaisse, jamais d'une constante : un
+    moyen absent de la liste figee disparaissait des colonnes pendant que le
+    total continuait de le compter, et le bordereau se contredisait.
+    """
+    presents: set[str] = set()
+    for entry in by_cashier:
+        presents.update(str(k) for k in (getattr(entry, "by_method", None) or {}))
+    return ordered_methods(presents)
+
+
+def _by_cashier_rows(by_cashier: list[Any], methods: list[str]) -> list[list[Any]]:
     """Une ligne par caisse : versements, ventilation par moyen, total."""
     rows: list[list[Any]] = []
     for entry in by_cashier:
@@ -102,7 +115,7 @@ def _by_cashier_rows(by_cashier: list[Any]) -> list[list[Any]]:
             entry.cashier_name,
             {"value": str(entry.count), "type": "num"},
         ]
-        for method in _METHODS_ORDER:
+        for method in methods:
             amount = entry.by_method.get(method, Decimal("0"))
             cells.append({"value": format_decimal(amount), "type": "num"})
         cells.append({"value": format_decimal(entry.total), "type": "num-emphasis"})
@@ -210,16 +223,19 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
     # exactement le récapitulatif par méthode.
     cashier_section = ""
     if consolidated:
+        # Une seule liste de colonnes pour l'en-tete et les cellules : deux
+        # parcours separes finissent par decaler les montants d'une colonne.
+        cashier_methods = _cashier_methods(by_cashier)
         cashier_section = ui.section_title(
             "Récapitulatif par caisse", theme=theme
         ) + ui.premium_table(
             headers=[
                 "Caissier",
                 {"label": "Versements", "align": "right"},
-                *({"label": method_label(method), "align": "right"} for method in _METHODS_ORDER),
+                *({"label": method_label(method), "align": "right"} for method in cashier_methods),
                 {"label": "Total XOF", "align": "right"},
             ],
-            rows=_by_cashier_rows(by_cashier),
+            rows=_by_cashier_rows(by_cashier, cashier_methods),
             theme=theme,
             empty_message="Aucune caisse n'a encaissé ce jour.",
         )

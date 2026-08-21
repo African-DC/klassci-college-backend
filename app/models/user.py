@@ -172,6 +172,11 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Lieu de naissance : sur toute piece officielle ivoirienne un eleve est
+    # identifie par « ne(e) le ... a ... ». Distinct de `city`/`commune`, qui
+    # sont le domicile actuel : un eleve ne a Bouake et habitant Cocody n'est
+    # pas « ne a Cocody ». Facultatif, les anciens dossiers ne le portent pas.
+    birth_place: Mapped[str | None] = mapped_column(String(150), nullable=True)
     genre: Mapped[str | None] = mapped_column(ValueEnum(Genre, name="genre"), nullable=True)
     enrollment_number: Mapped[str | None] = mapped_column(
         String(50), nullable=True, unique=True, index=True

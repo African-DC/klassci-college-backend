@@ -18,6 +18,7 @@ class StudentCreate(BaseModel):
     email: str
     password: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None
@@ -35,6 +36,7 @@ class StudentUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     user_id: int | None = None
@@ -72,6 +74,7 @@ class StudentResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
@@ -194,6 +197,7 @@ class StudentFullResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None

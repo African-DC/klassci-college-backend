@@ -25,7 +25,15 @@ REQUIRED_COLUMNS = {
     "class_name",
 }
 
-CSV_TEMPLATE = "first_name,last_name,birth_date,genre,enrollment_number,class_name\nJean,Dupont,2010-05-15,M,MAT001,6eme A\nMarie,Koné,2011-03-22,F,,6eme B\n"
+# `birth_place` figure dans le modèle mais volontairement PAS dans
+# REQUIRED_COLUMNS : les fichiers déjà constitués par les écoles ne le portent
+# pas, et rejeter un import de rentrée entier pour une colonne facultative
+# serait disproportionné. Colonne absente ou vide == lieu de naissance inconnu.
+CSV_TEMPLATE = (
+    "first_name,last_name,birth_date,birth_place,genre,enrollment_number,class_name\n"
+    "Jean,Dupont,2010-05-15,Abidjan,M,MAT001,6eme A\n"
+    "Marie,Koné,2011-03-22,Bouaké,F,,6eme B\n"
+)
 
 
 def _parse_birth_date(value: str) -> date | None:
@@ -66,11 +74,13 @@ def _validate_row(row: dict[str, str], row_num: int) -> tuple[dict | None, str |
         return None, f"Row {row_num}: class_name is required"
 
     enrollment_number = row.get("enrollment_number", "").strip() or None
+    birth_place = row.get("birth_place", "").strip() or None
 
     return {
         "first_name": first_name,
         "last_name": last_name,
         "birth_date": birth_date,
+        "birth_place": birth_place,
         "genre": genre or None,
         "enrollment_number": enrollment_number,
         "class_name": class_name,
@@ -168,6 +178,7 @@ async def import_students_from_csv(
                     first_name=data["first_name"],
                     last_name=data["last_name"],
                     birth_date=data["birth_date"],
+                    birth_place=data["birth_place"],
                     genre=data["genre"],
                     enrollment_number=data["enrollment_number"],
                 )

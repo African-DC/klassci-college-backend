@@ -11,6 +11,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Added
 - Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
 - Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
+- Le lieu de naissance de l'élève se saisit à la création, à la modification et à l'inscription, et se retrouve sur le certificat de scolarité, l'attestation de fréquentation et la fiche d'inscription, sous la forme « né(e) le ... à ... » attendue par l'administration *(secrétariat, admin, parent)*
+- Les listes nominatives du rapport de fin de trimestre remplissent enfin leur colonne « Lieu de naissance », qui sortait vide faute d'être collectée *(directeur, admin)*
 - Wave, MTN MoMo, Orange Money et Moov Money se saisissent et se totalisent séparément à la caisse, au lieu d'un « mobile money » unique que le comptable devait démêler pour rapprocher ses relevés *(caissier, comptable)*
 - Chaque profil qui encaisse se voit attribuer ses propres moyens de paiement depuis Paramètres : retirer les espèces au comptable prend deux clics, et l'écran prévient qu'autoriser les espèces engage une journée de caisse à ouvrir et à compter *(directeur, admin)*
 - Le formulaire d'encaissement ne propose que les moyens que la personne peut réellement utiliser : plus de choix offert puis refusé au moment d'enregistrer *(caissier, comptable, secrétariat)*
@@ -45,6 +47,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien *(devops)*
 - Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
 - Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas *(admin, directeur)*
+- Le certificat de scolarité déclarait l'élève né dans sa ville de résidence : faute de lieu de naissance en base, il recopiait le domicile. Un élève né à Bouaké et habitant Cocody était certifié « né à Cocody » sur une pièce officielle *(secrétariat, parent, directeur)*
 - Le récapitulatif par moyen de paiement du bordereau journalier et de l'écran caisse omettait tout moyen qu'il ne connaissait pas, alors que le total continuait de le compter : la somme des lignes ne collait plus au total imprimé juste en dessous *(caissier, comptable)*
 - Un versement enregistré depuis l'ancien écran de paiement passait même sur une journée de caisse déjà clôturée, ce que le nouvel écran refusait déjà *(caissier)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*

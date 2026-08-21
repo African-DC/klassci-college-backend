@@ -138,6 +138,7 @@ class StudentProfileResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     email: str | None

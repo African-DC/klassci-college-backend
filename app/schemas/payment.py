@@ -12,9 +12,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.fee import FeeEntitlement
-
 from app.core.payment_methods import SELECTABLE_METHODS
+from app.schemas.fee import FeeEntitlement
 
 #: Ce qu'un formulaire peut soumettre. `mobile_money` en est volontairement
 #: absent : la valeur reste lisible en base mais n'est plus saisissable depuis
