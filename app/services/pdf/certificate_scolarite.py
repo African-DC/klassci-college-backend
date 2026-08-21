@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from app.services.pdf import components as ui
-from app.services.pdf._helpers import esc
+from app.services.pdf._helpers import birth_mention, esc
 from app.services.pdf.theme import PDFTheme
 
 
@@ -59,8 +59,8 @@ def generate_certificate_scolarite_pdf(
     """Generate the official certificat de scolarite PDF — theme école dynamique.
 
     data keys (from student_documents_service.compose_certificate_data):
-        student: dict with first_name, last_name, birth_date, genre,
-                 enrollment_number, city, commune
+        student: dict with first_name, last_name, birth_date, birth_place,
+                 genre, enrollment_number, city, commune
         class_name: str
         academic_year_name: str
         issued_at: datetime
@@ -73,12 +73,9 @@ def generate_certificate_scolarite_pdf(
     first_name = student.get("first_name", "") or ""
     last_name = student.get("last_name", "") or ""
     full_name = f"{first_name} {last_name}".strip()
-    birth_date = student.get("birth_date")
-    birth_date_str = birth_date.strftime("%d/%m/%Y") if birth_date else "..."
+    birth_date_str, birthplace = birth_mention(student)
     genre = student.get("genre")
     matricule = student.get("enrollment_number") or "..."
-    # Lieu de naissance : on n'a pas de champ dédié, on utilise la ville
-    birthplace = student.get("city") or student.get("commune") or "..."
 
     class_name = data.get("class_name") or ""
     academic_year_name = data.get("academic_year_name") or ""
