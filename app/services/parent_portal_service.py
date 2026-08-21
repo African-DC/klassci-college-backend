@@ -29,6 +29,7 @@ from app.schemas.parent_portal import (
 from app.services import (
     bulletin_access,
     bulletin_document_service,
+    bulletin_visibility,
     document_release_service,
     fees_paid,
 )
@@ -290,23 +291,39 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
 async def get_child_bulletins(
     db: AsyncSession, user_id: int, student_id: int
 ) -> ChildBulletinsResponse:
-    """Retourne les bulletins publiés d'un enfant."""
+    """Retourne les bulletins publiés d'un enfant, vidés de leur contenu si impayé.
+
+    Même porte que le téléchargement, appliquée à la consultation : rendre ici
+    la moyenne, le rang et la mention pendant que le PDF est retenu
+    reviendrait à publier le bulletin en refusant de l'imprimer.
+
+    Les bulletins retenus restent dans la liste. Les faire disparaître ferait
+    croire au parent qu'aucun bulletin n'a été édité, et l'enverrait
+    téléphoner au secrétariat pour une panne imaginaire.
+    """
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
     bulletins = await repo.get_student_bulletins(db, student_id)
 
+    release = await document_release_service.evaluate_release(db, student_id)
+    withholding = bulletin_visibility.Withholding.from_release(release)
+
     bulletin_details = [
         BulletinDetail(
-            id=b.id,
-            trimester=b.trimester,
-            average=b.average,
-            rank=b.rank,
-            mention=b.mention,
-            class_name=b.class_.name if b.class_ else "N/A",
-            academic_year_name=b.academic_year.name if b.academic_year else "N/A",
-            is_published=b.is_published,
-            generated_at=b.generated_at,
+            **withholding.apply(
+                {
+                    "id": b.id,
+                    "trimester": b.trimester,
+                    "average": b.average,
+                    "rank": b.rank,
+                    "mention": b.mention,
+                    "class_name": b.class_.name if b.class_ else "N/A",
+                    "academic_year_name": b.academic_year.name if b.academic_year else "N/A",
+                    "is_published": b.is_published,
+                    "generated_at": b.generated_at,
+                }
+            )
         )
         for b in bulletins
     ]

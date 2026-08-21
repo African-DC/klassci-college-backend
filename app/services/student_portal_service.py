@@ -32,6 +32,7 @@ from app.schemas.student_portal import (
 from app.services import (
     bulletin_access,
     bulletin_document_service,
+    bulletin_visibility,
     document_release_service,
     fees_paid,
 )
@@ -165,21 +166,37 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
 
 
 async def get_bulletins(db: AsyncSession, user_id: int) -> StudentBulletinsListResponse:
-    """Retourne les bulletins publies de l'eleve."""
+    """Retourne les bulletins publies de l'eleve, vides de contenu si impaye.
+
+    La meme porte que le telechargement, appliquee a la consultation : rendre
+    ici la moyenne, le rang et la mention pendant que le PDF est retenu
+    reviendrait a publier le bulletin en refusant de l'imprimer.
+
+    Les bulletins retenus restent dans la liste. Les faire disparaitre ferait
+    croire a la famille qu'aucun bulletin n'a ete edite, et l'enverrait
+    telephoner au secretariat pour une panne imaginaire.
+    """
     student = await _get_student_for_user(db, user_id)
     bulletins = await repo.get_published_bulletins_for_student(db, student.id)
 
+    release = await document_release_service.evaluate_release(db, student.id)
+    withholding = bulletin_visibility.Withholding.from_release(release)
+
     items = [
         BulletinResponse(
-            id=b.id,
-            trimester=b.trimester,
-            average=b.average,
-            rank=b.rank,
-            mention=b.mention,
-            class_name=b.class_.name,
-            academic_year_name=b.academic_year.name,
-            file_url=b.file_url,
-            generated_at=b.generated_at,
+            **withholding.apply(
+                {
+                    "id": b.id,
+                    "trimester": b.trimester,
+                    "average": b.average,
+                    "rank": b.rank,
+                    "mention": b.mention,
+                    "class_name": b.class_.name,
+                    "academic_year_name": b.academic_year.name,
+                    "file_url": b.file_url,
+                    "generated_at": b.generated_at,
+                }
+            )
         )
         for b in bulletins
     ]
