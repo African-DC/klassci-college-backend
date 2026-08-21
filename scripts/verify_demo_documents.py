@@ -125,6 +125,18 @@ _ANY_BULLETIN = """
     WHERE b.average IS NOT NULL ORDER BY b.trimester, b.id LIMIT 1
 """
 
+#: Une famille en retard sur son échéancier : c'est sur elle que le statut de
+#: retenue dit quelque chose. Interrogé sur un bon payeur, il répondrait
+#: « rien de retenu », ce qui ne prouverait pas que le calcul fonctionne.
+_LATE_STUDENT = """
+    SELECT e.student_id
+    FROM enrollments e
+    JOIN academic_years ay ON ay.id = e.academic_year_id AND ay.is_current = 1
+    JOIN enrollment_fees ef ON ef.enrollment_id = e.id
+    WHERE e.status = 'valide' AND ef.status <> 'paid'
+    GROUP BY e.student_id ORDER BY COUNT(*) DESC LIMIT 1
+"""
+
 _CASH_DAY = """
     SELECT DATE(created_at) FROM payments
     WHERE status = 'completed' AND method = 'cash'
@@ -166,6 +178,8 @@ async def resolve_ids(tenant: str) -> dict[str, Any]:
             if not found.get("bulletin_id"):
                 found["bulletin_id"] = (await db.execute(text(_ANY_BULLETIN))).scalar_one_or_none()
                 found["needs_override"] = True
+
+            found["late_student_id"] = (await db.execute(text(_LATE_STUDENT))).scalar_one_or_none()
 
             cash_day = (await db.execute(text(_CASH_DAY))).scalar_one_or_none()
             found["cash_date"] = str(cash_day) if cash_day else None
@@ -337,11 +351,11 @@ def build_probes(ids: dict[str, Any]) -> list[Probe]:
         ),
         Probe(
             21,
-            "Synthèse de classe",
+            "Statut de retenue d'un élève",
             "GET",
-            f"/reports/classes/{class_id}/synthesis",
-            params={"trimester": 1, "academic_year_id": year},
-            skip_reason=missing("class_id", "academic_year_id"),
+            f"/students/{ids.get('late_student_id') or student_id}/documents/release-status",
+            kind="json",
+            skip_reason=missing("student_id"),
         ),
     ]
 
