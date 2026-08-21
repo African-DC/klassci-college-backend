@@ -9,8 +9,9 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.datetimes import utcnow_naive
 from app.core.exceptions import NotFoundError
-from app.models.cash_session import CashSession, CashSessionStatus
+from app.models.cash_session import CashSession, CashSessionStatus, is_locked
 from app.repositories import cash_session_repository as repo
 from app.repositories.cash_session_repository import METHODS_ORDER, DayAggregate
 from app.schemas.cash_session import (
@@ -42,16 +43,21 @@ def _method_totals(aggregate: DayAggregate) -> list[CashMethodTotal]:
     ]
 
 
-def _to_response(
-    session: CashSession, *, cashier_name: str, aggregate: DayAggregate
+def to_response(
+    session: CashSession, *, cashier_name: str, aggregate: DayAggregate | None
 ) -> CashSessionResponse:
     """Assemble une session avec ses agrégats.
+
+    `aggregate` accepte `None` : une journée sans aucun versement n'a pas de
+    ligne d'agrégat, et retomber sur des zéros vaut mieux que de la faire
+    disparaître de l'écran.
 
     Une session clôturée garde `expected_amount`, `counted_amount` et
     `variance` figés au moment de la clôture : les recalculer ferait bouger un
     écart déjà constaté et signé.
     """
-    status = session.status if isinstance(session.status, str) else session.status.value
+    aggregate = aggregate or DayAggregate()
+    status = str(getattr(session.status, "value", session.status))
     return CashSessionResponse(
         id=session.id,
         cashier_user_id=session.cashier_user_id,
@@ -67,6 +73,7 @@ def _to_response(
             float(session.expected_amount) if session.expected_amount is not None else None
         ),
         variance=float(session.variance) if session.variance is not None else None,
+        regularized_at=session.regularized_at,
         notes=session.notes,
         payments_count=aggregate.count,
         total_collected=float(aggregate.total),
@@ -88,7 +95,7 @@ async def ensure_open_session(db: AsyncSession, cashier_user_id: int, when: date
     if session is None:
         await repo.create_session(db, cashier_user_id, business_date, opened_at=when)
         return
-    if session.status == CashSessionStatus.CLOSED:
+    if is_locked(session.status):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -123,7 +130,7 @@ async def get_my_session(
 
     aggregate = await repo.aggregate_day(db, cashier_user_id, business_date)
     names = await repo.cashier_names(db, [cashier_user_id])
-    return _to_response(session, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate)
+    return to_response(session, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate)
 
 
 async def close_my_session(
@@ -136,7 +143,15 @@ async def close_my_session(
     session = await repo.get_session(db, cashier_user_id, business_date)
     if session is None:
         raise NotFoundError("CashSession", 0)
-    if session.status == CashSessionStatus.CLOSED:
+    if session.status == CashSessionStatus.AUTO_CLOSED:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cette journée a été clôturée d'office à minuit. Régularisez-la en "
+                "saisissant ce que vous avez compté."
+            ),
+        )
+    if is_locked(session.status):
         raise HTTPException(status_code=409, detail="Cette journée de caisse est déjà clôturée.")
 
     aggregate = await repo.aggregate_day(db, cashier_user_id, business_date)
@@ -145,7 +160,7 @@ async def close_my_session(
 
     async with db.begin_nested():
         session.status = CashSessionStatus.CLOSED
-        session.closed_at = datetime.now()
+        session.closed_at = utcnow_naive()
         session.expected_amount = expected
         session.counted_amount = counted
         session.variance = counted - expected
@@ -170,9 +185,7 @@ async def close_my_session(
     if refreshed is None:
         raise NotFoundError("CashSession", session.id)
     names = await repo.cashier_names(db, [cashier_user_id])
-    return _to_response(
-        refreshed, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate
-    )
+    return to_response(refreshed, cashier_name=names.get(cashier_user_id, "—"), aggregate=aggregate)
 
 
 async def get_daily_point(db: AsyncSession, business_date: date_type) -> CashSessionListResponse:
@@ -186,7 +199,7 @@ async def get_daily_point(db: AsyncSession, business_date: date_type) -> CashSes
     names = await repo.cashier_names(db, [s.cashier_user_id for s in sessions])
 
     items = [
-        _to_response(
+        to_response(
             session,
             cashier_name=names.get(session.cashier_user_id, "—"),
             aggregate=aggregates.get(session.cashier_user_id, DayAggregate()),
@@ -202,4 +215,5 @@ async def get_daily_point(db: AsyncSession, business_date: date_type) -> CashSes
         total_variance=sum(i.variance or 0.0 for i in items),
         open_count=sum(1 for i in items if i.status == CashSessionStatus.OPEN.value),
         closed_count=sum(1 for i in items if i.status == CashSessionStatus.CLOSED.value),
+        auto_closed_count=sum(1 for i in items if i.status == CashSessionStatus.AUTO_CLOSED.value),
     )
