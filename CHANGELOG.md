@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Installation d'une année scolaire de démonstration complète, de la 6e à la Terminale : élèves, familles, notes, bulletins, versements et vie scolaire *(super-admin, admin)*
+- Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
 - Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
 - Le caissier retrouve à sa connexion ses journées clôturées d'office et les régularise en saisissant ce qu'il avait compté, ce qui fait naître l'écart réel *(caissier)*
 - Le point journalier distingue les caisses arrêtées par leur caissier de celles clôturées d'office, dont l'écart reste inconnu tant que personne n'a compté *(comptable, directeur)*
@@ -29,6 +31,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Un refus de changement de statut affichait au guichet « impossible de passer de 'PaymentStatus.COMPLETED' », un nom technique interne, et le journal d'audit financier en gardait la trace *(caissier, comptable)*
 - La notification de clôture d'office s'accordait mal au pluriel : « Votre journées de caisse du 19/08, 20/08 ont été clôturées » *(caissier)*
 - Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien *(devops)*
+- Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
+- Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas *(admin, directeur)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
 - La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*
