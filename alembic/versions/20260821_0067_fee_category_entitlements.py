@@ -15,7 +15,7 @@ saisi ensuite prend le dessus.
 que la lecture traite comme « rien de promis ».
 
 Revision ID: 0065_fee_category_entitlements
-Revises: 0064_cash_auto_closure
+Revises: 0066_drop_bulletins_year_ix
 Create Date: 2026-08-21
 """
 
@@ -23,8 +23,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0065_fee_category_entitlements"
-down_revision = "0064_cash_auto_closure"
+revision = "0067_fee_category_entitlements"
+down_revision = "0066_drop_bulletins_year_ix"
 branch_labels = None
 depends_on = None
 
