@@ -29,7 +29,12 @@ from app.schemas.student_portal import (
     StudentTimetableResponse,
     TimetableSlotResponse,
 )
-from app.services import fees_paid
+from app.services import (
+    bulletin_access,
+    bulletin_document_service,
+    document_release_service,
+    fees_paid,
+)
 
 
 async def _get_student_for_user(db: AsyncSession, user_id: int) -> Student:
@@ -179,6 +184,32 @@ async def get_bulletins(db: AsyncSession, user_id: int) -> StudentBulletinsListR
         for b in bulletins
     ]
     return StudentBulletinsListResponse(items=items, total=len(items))
+
+
+async def get_bulletin_pdf(db: AsyncSession, user_id: int, bulletin_id: int) -> bytes:
+    """Rend le PDF d'un bulletin publie de l'eleve connecte.
+
+    L'ordre des trois controles compte. L'appartenance passe avant la porte de
+    paiement : celle-ci repond 402 en annoncant le montant reste impaye et
+    l'identifiant de l'eleve concerne. Interrogee sur le bulletin d'un
+    camarade, elle revelerait donc a la fois son existence et la situation
+    financiere de sa famille.
+
+    La famille ne peut jamais lever la retenue pour impaye : la derogation se
+    demande au secretariat, qui porte un motif au journal. Sans cette porte
+    ici, une famille retenue au guichet obtiendrait le document en ouvrant son
+    propre portail, et la retenue ne serait plus qu'un decor.
+    """
+    student = await _get_student_for_user(db, user_id)
+    await bulletin_access.ensure_owned_and_published(db, bulletin_id, student_id=student.id)
+    await document_release_service.ensure_bulletin_releasable(
+        db,
+        bulletin_id,
+        actor_id=user_id,
+        may_override=False,
+        override_reason=None,
+    )
+    return await bulletin_document_service.get_bulletin_pdf(db, bulletin_id)
 
 
 async def get_profile(db: AsyncSession, user_id: int) -> StudentProfileResponse:

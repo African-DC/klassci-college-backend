@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- L'élève et le parent téléchargent le bulletin depuis leur portail : l'élève le sien, le parent celui de ses enfants, sans passer par le droit qui ouvre les bulletins de toute l'école *(élève, parent)*
 - Une tranche de paiement s'exprime au choix en pourcentage ou en montant ferme, et les deux se mélangent dans la même grille : « Inscription 37 000 F à la rentrée », puis 35 / 35 / 30 % du reste *(admin, comptable)*
 
 ### Changed

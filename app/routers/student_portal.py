@@ -3,9 +3,11 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.attendance import StudentAttendanceResponse
 from app.schemas.student_portal import (
     StudentBulletinsListResponse,
@@ -67,6 +69,25 @@ async def get_bulletins(
 ) -> StudentBulletinsListResponse:
     """Bulletins publies de l'eleve."""
     return await student_portal_service.get_bulletins(db, current_user.user_id)
+
+
+@router.get("/bulletins/{bulletin_id}/pdf")
+async def get_bulletin_pdf(
+    bulletin_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """PDF d'un bulletin publie de l'eleve connecte.
+
+    Pas de `require_permission("reports:read")` ici : ce droit ouvre les
+    bulletins de toute l'ecole, et un eleve n'a a lire que les siens. La garde
+    est l'appartenance, verifiee dans le service.
+    """
+    return await pdf_response(
+        lambda: student_portal_service.get_bulletin_pdf(db, current_user.user_id, bulletin_id),
+        filename=f"bulletin_{bulletin_id}.pdf",
+        error_context=f"bulletin {bulletin_id}",
+    )
 
 
 @router.get("/attendance", response_model=StudentAttendanceResponse)
