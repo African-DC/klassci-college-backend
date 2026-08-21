@@ -12,6 +12,7 @@ une relecture de son intention.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -25,6 +26,7 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
 from app.models.fee import Payment
+from app.repositories import payment_journal_repository
 from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
 from app.schemas.payment import (
     CashierOption,
@@ -137,6 +139,40 @@ def test_le_cloisonnement_descend_jusque_dans_la_requete() -> None:
 
 def test_sans_cloisonnement_la_requete_ne_borne_pas_la_caisse() -> None:
     assert "WHERE" not in _sql(PaymentFilters())
+
+
+def test_la_requete_d_export_porte_le_meme_cloisonnement_que_la_liste() -> None:
+    """Le maillon manquant entre « l'endpoint pose le filtre » et « le document
+    ne contient que ces lignes » : c'est la requête de l'export elle-même qui
+    doit le porter, pas une intention en amont."""
+
+    class _SessionQuiEnregistre:
+        """Session factice qui garde la requête qu'on lui soumet."""
+
+        def __init__(self) -> None:
+            self.requetes: list[str] = []
+
+        async def execute(self, stmt: object) -> object:
+            self.requetes.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+            class _Vide:
+                def scalars(self) -> _Vide:
+                    return self
+
+                def all(self) -> list[object]:
+                    return []
+
+            return _Vide()
+
+    session = _SessionQuiEnregistre()
+    asyncio.run(
+        payment_journal_repository.list_for_journal(
+            session,  # type: ignore[arg-type]
+            PaymentFilters(received_by=12),
+        )
+    )
+    assert session.requetes, "l'export doit interroger la base"
+    assert "payments.received_by = 12" in session.requetes[0]
 
 
 def test_la_periode_descend_aussi_dans_la_requete() -> None:
