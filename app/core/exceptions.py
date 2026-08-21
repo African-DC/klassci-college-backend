@@ -43,6 +43,19 @@ class PermissionDeniedError(AppException):
         super().__init__(status_code=403, detail=detail, code="PERMISSION_DENIED")
 
 
+class PaymentMethodNotAllowedError(AppException):
+    """Refus d'encaissement par un moyen que l'appelant n'a pas le droit de saisir.
+
+    Un `PermissionDeniedError` nu répondrait « Permission denied:
+    payments:method:cash » à quelqu'un qui a une famille devant son guichet.
+    Le détail porte donc le moyen refusé, ce que la personne PEUT faire, et
+    vers qui l'envoyer.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=403, detail=detail, code="PAYMENT_METHOD_NOT_ALLOWED")
+
+
 class ConflictError(AppException):
     def __init__(self, detail: str) -> None:
         super().__init__(status_code=409, detail=detail, code="CONFLICT")

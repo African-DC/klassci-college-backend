@@ -13,11 +13,14 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.payment_methods import DRAWER_METHODS
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
 from app.services import cash_session_service, fees_paid
+from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
     paid_for_fees,
     plan_allocation,
@@ -28,29 +31,26 @@ from app.services.payments._response import payment_to_response
 from app.services.payments._state import logger
 
 
-async def _ensure_method_accepted(db: AsyncSession, method: str) -> None:
-    """Refuse un moyen de paiement que l'établissement n'accepte pas.
+async def _guard_method_and_drawer(
+    db: AsyncSession, actor: TokenData, method: str, *, when: datetime
+) -> None:
+    """Les deux conditions à remplir avant d'écrire quoi que ce soit.
 
-    La colonne vaut `NULL` tant que l'école n'a rien configuré, et signifie
-    alors « tous acceptés » : les établissements déjà en service ne doivent
-    pas voir leurs encaissements bloqués par une option qu'ils n'ont jamais
-    remplie.
+    D'abord le droit d'encaisser par ce moyen (établissement puis rôle), ensuite
+    le tiroir. Les deux hors transaction, pour que le refus remonte tel quel.
+
+    **Le tiroir ne concerne que les espèces.** La journée de caisse existe parce
+    qu'un billet se compte le soir et qu'un écart se constate ; un virement ou
+    un versement Wave laisse une trace bancaire ou opérateur et n'a rien à
+    compter. La règle était jusqu'ici seulement supposée : ce flux ouvrait une
+    journée de caisse pour TOUT versement, y compris un virement encaissé par un
+    comptable qui n'a même pas `cash-session:manage` et ne pourra donc jamais la
+    clôturer — pendant que le flux legacy, lui, n'en ouvrait aucune et laissait
+    passer des espèces sur une journée déjà clôturée.
     """
-    from sqlalchemy import select
-
-    from app.models.academic import SchoolSettings
-
-    stmt = select(SchoolSettings.enabled_payment_methods).limit(1)
-    configured = (await db.execute(stmt)).scalar_one_or_none()
-    if not configured:
-        return
-
-    accepted = {key.strip() for key in configured.split(",") if key.strip()}
-    if method not in accepted:
-        raise BusinessValidationError(
-            f"L'établissement n'accepte pas ce moyen de paiement. "
-            f"Moyens acceptés : {', '.join(sorted(accepted))}."
-        )
+    await payment_methods.ensure_method_allowed(db, actor, method)
+    if method in DRAWER_METHODS:
+        await cash_session_service.ensure_open_session(db, actor.user_id, when)
 
 
 async def record_enrollment_payment(
@@ -58,7 +58,7 @@ async def record_enrollment_payment(
     enrollment_id: int,
     data: EnrollmentPaymentCreate,
     *,
-    received_by: int,
+    actor: TokenData,
 ) -> PaymentResponse:
     """Enregistre un versement à la caisse, auto-alloué par priorité.
 
@@ -68,12 +68,8 @@ async def record_enrollment_payment(
     - Override manuel → pas en P0 (priorité stricte).
     - Audit log unique avec breakdown allocation.
     """
-    await _ensure_method_accepted(db, data.method)
-
-    # Ouvre la journée de caisse au premier versement, et refuse d'encaisser
-    # sur une journée déjà clôturée : l'écart signé le serait sur un total
-    # devenu faux. Hors transaction pour que le refus remonte tel quel.
-    await cash_session_service.ensure_open_session(db, received_by, datetime.now())
+    received_by = actor.user_id
+    await _guard_method_and_drawer(db, actor, data.method, when=datetime.now())
 
     async with db.begin_nested():
         enrollment = await repo.get_enrollment_for_update(db, enrollment_id)
@@ -105,8 +101,10 @@ async def record_enrollment_payment(
 
         splits, _surplus = plan_allocation(data.amount, fees_with_paid)
 
-        # Cash/mobile_money complete immédiatement. bank_transfer/cheque
-        # pourraient passer en pending dans une seconde itération (validation manuelle).
+        # Tous les moyens complètent immédiatement : la caissière ne saisit un
+        # versement qu'une fois l'argent reçu ou le transfert confirmé sur son
+        # téléphone. Un état « en attente » pour le virement et le chèque
+        # relèverait d'un rapprochement bancaire, qui n'existe pas encore.
         payment = await repo.create_payment(
             db,
             enrollment_id=enrollment_id,
@@ -169,7 +167,7 @@ async def create_payment(
     db: AsyncSession,
     data: PaymentCreate,
     *,
-    received_by: int,
+    actor: TokenData,
 ) -> PaymentResponse:
     """LEGACY — paiement ciblant un frais spécifique.
 
@@ -182,6 +180,9 @@ async def create_payment(
         "Préférer POST /enrollments/{id}/payments (auto-allocation).",
         data.enrollment_fee_id,
     )
+
+    received_by = actor.user_id
+    await _guard_method_and_drawer(db, actor, data.method, when=datetime.now())
 
     async with db.begin_nested():
         enrollment_fee = await repo.get_enrollment_fee_for_update(db, data.enrollment_fee_id)

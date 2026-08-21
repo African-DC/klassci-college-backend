@@ -12,9 +12,13 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.payment_methods import SELECTABLE_METHODS
 from app.schemas.fee import FeeEntitlement
 
-_ALLOWED_METHODS = {"cash", "mobile_money", "bank_transfer", "cheque"}
+#: Ce qu'un formulaire peut soumettre. `mobile_money` en est volontairement
+#: absent : la valeur reste lisible en base mais n'est plus saisissable depuis
+#: que les quatre operateurs ivoiriens sont distingues.
+_ALLOWED_METHODS = set(SELECTABLE_METHODS)
 
 
 # ---------------------------------------------------------------------------
@@ -185,3 +189,25 @@ class AllocationPreviewResponse(BaseModel):
     can_record: bool
     reject_reason: str | None
     lines: list[AllocationPreviewLine]
+
+
+# ---------------------------------------------------------------------------
+# Moyens de paiement disponibles pour l'appelant
+# ---------------------------------------------------------------------------
+
+
+class PaymentMethodOption(BaseModel):
+    """Une entrée du sélecteur d'encaissement."""
+
+    key: str
+    label: str
+
+
+class PaymentMethodListResponse(BaseModel):
+    """Ce que l'appelant peut saisir, déjà dans l'ordre d'affichage.
+
+    L'ordre vient du serveur et suit la fréquence réelle au guichet ; l'écran
+    n'a pas à le recalculer, et surtout pas à le retrier alphabétiquement.
+    """
+
+    items: list[PaymentMethodOption]

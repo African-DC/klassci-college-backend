@@ -13,6 +13,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Contrôle automatique que les vingt et un documents officiels s'impriment vraiment sur un établissement de démonstration, avant de le présenter *(super-admin)*
 - Le lieu de naissance de l'élève se saisit à la création, à la modification et à l'inscription, et se retrouve sur le certificat de scolarité, l'attestation de fréquentation et la fiche d'inscription, sous la forme « né(e) le ... à ... » attendue par l'administration *(secrétariat, admin, parent)*
 - Les listes nominatives du rapport de fin de trimestre remplissent enfin leur colonne « Lieu de naissance », qui sortait vide faute d'être collectée *(directeur, admin)*
+- Wave, MTN MoMo, Orange Money et Moov Money se saisissent et se totalisent séparément à la caisse, au lieu d'un « mobile money » unique que le comptable devait démêler pour rapprocher ses relevés *(caissier, comptable)*
+- Chaque profil qui encaisse se voit attribuer ses propres moyens de paiement depuis Paramètres : retirer les espèces au comptable prend deux clics, et l'écran prévient qu'autoriser les espèces engage une journée de caisse à ouvrir et à compter *(directeur, admin)*
+- Le formulaire d'encaissement ne propose que les moyens que la personne peut réellement utiliser : plus de choix offert puis refusé au moment d'enregistrer *(caissier, comptable, secrétariat)*
 - Corriger le montant d'un frais propose de le répercuter sur les inscriptions déjà enregistrées, avec l'impact chiffré avant de confirmer : lignes à mettre à jour, lignes conservées parce qu'un versement y est imputé, et écart total de dette en francs. Répondre non ne change rien *(admin, comptable)*
 - Une journée de caisse oubliée est clôturée d'office à minuit, sans montant compté ni écart inventé : la comptabilité du lendemain repart sur une caisse arrêtée *(caissier, comptable)*
 - Le caissier retrouve à sa connexion ses journées clôturées d'office et les régularise en saisissant ce qu'il avait compté, ce qui fait naître l'écart réel *(caissier)*
@@ -28,6 +31,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Changed
 - La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir *(admin, directeur des études, enseignant)*
 - Le « 12 / 35 » d'une évaluation est compté par la base et non plus en chargeant les 30 000 notes de l'école *(admin, enseignant)*
+- Seules les espèces exigent désormais une journée de caisse ouverte. Un comptable enregistre un virement ou un versement Wave sans qu'une caisse s'ouvre à son nom, alors qu'il n'a aucun tiroir à compter le soir *(comptable, caissier)*
+- Les versements enregistrés autrefois en « Mobile Money » gardent ce libellé sur les reçus déjà remis et dans les états : personne ne peut deviner après coup quel opérateur c'était, et le réécrire ferait mentir un papier détenu par une famille *(comptable, parent)*
 - Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler *(élève, parent)*
 - Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes *(élève, parent)*
 - Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant *(comptable, caissier)*
@@ -44,6 +49,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier *(admin, directeur des études)*
 - Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas *(admin, directeur)*
 - Le certificat de scolarité déclarait l'élève né dans sa ville de résidence : faute de lieu de naissance en base, il recopiait le domicile. Un élève né à Bouaké et habitant Cocody était certifié « né à Cocody » sur une pièce officielle *(secrétariat, parent, directeur)*
+- Le récapitulatif par moyen de paiement du bordereau journalier et de l'écran caisse omettait tout moyen qu'il ne connaissait pas, alors que le total continuait de le compter : la somme des lignes ne collait plus au total imprimé juste en dessous *(caissier, comptable)*
+- Un versement enregistré depuis l'ancien écran de paiement passait même sur une journée de caisse déjà clôturée, ce que le nouvel écran refusait déjà *(caissier)*
 - Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser *(secrétariat, caissier, comptable)*
 - Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie *(secrétariat, admin)*
 - La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante *(secrétariat)*

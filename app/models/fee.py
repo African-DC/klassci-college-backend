@@ -29,10 +29,27 @@ if TYPE_CHECKING:
 
 
 class PaymentMethod(str, enum.Enum):
+    """Moyens de paiement stockes en base.
+
+    L'ordre des membres suit `app.core.payment_methods.DISPLAY_ORDER` : la
+    frequence reelle au guichet, pas l'alphabet.
+
+    `MOBILE_MONEY` est une valeur HISTORIQUE. Elle a precede la distinction des
+    quatre operateurs ivoiriens et reste lisible pour les versements
+    enregistres avant : on ne peut pas deviner apres coup lequel etait Wave et
+    lequel etait Moov Money, et une migration qui trancherait a leur place
+    produirait un livre de caisse faux. Elle n'est plus saisissable — voir
+    `SELECTABLE_METHODS`.
+    """
+
     CASH = "cash"
-    MOBILE_MONEY = "mobile_money"
+    WAVE = "wave"
+    MTN_MOMO = "mtn_momo"
+    ORANGE_MONEY = "orange_money"
+    MOOV_MONEY = "moov_money"
     BANK_TRANSFER = "bank_transfer"
     CHEQUE = "cheque"
+    MOBILE_MONEY = "mobile_money"
 
 
 class PaymentStatus(str, enum.Enum):
