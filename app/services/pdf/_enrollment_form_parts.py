@@ -17,6 +17,16 @@ from app.services.pdf import components as ui
 from app.services.pdf._helpers import esc, format_decimal, image_to_datauri
 
 
+def _initiales(nom: str) -> str:
+    """Les initiales, quand aucune photo n'a ete deposee."""
+    morceaux = [m for m in nom.replace("-", " ").split() if m]
+    if not morceaux:
+        return "?"
+    if len(morceaux) == 1:
+        return morceaux[0][:2].upper()
+    return (morceaux[0][0] + morceaux[-1][0]).upper()
+
+
 def student_identity_block(student: dict[str, Any]) -> str:
     """Photo (90×110) + info_grid identité élève."""
     last_name = esc(student.get("last_name", ""))
@@ -39,13 +49,14 @@ def student_identity_block(student: dict[str, Any]) -> str:
         if photo_data
         else (
             '<div style="width:90px; height:110px; background:var(--soft-bg); '
-            "border:1px solid var(--border); border-radius:4px; "
+            "border:1px solid rgba(0, 0, 0, 0.10); border-radius:4px; "
             "display:flex; align-items:center; justify-content:center; "
-            'color:var(--muted); font-size:10px;">Photo</div>'
+            "color:var(--primary); font-family:var(--font-display); "
+            f'font-size:30px; font-weight:700;">{esc(_initiales(full_name))}</div>'
         )
     )
 
-    info = ui.info_grid(
+    info = ui.info_table(
         items=[
             ("Nom et prénoms", full_name),
             ("Sexe", genre_label),
@@ -54,14 +65,15 @@ def student_identity_block(student: dict[str, Any]) -> str:
             ("Ville · Commune", f"{city} · {commune}"),
             ("Adresse", address),
         ],
-        columns=1,
     )
 
     return f"""
-    <div style="display:flex; gap:14px; align-items:flex-start; margin-bottom:10px;">
-        <div style="flex:0 0 auto;">{photo_html}</div>
-        <div style="flex:1;">{info}</div>
-    </div>
+    <table style="width:100%; border-collapse:collapse; margin-bottom:10px;">
+      <tr>
+        <td style="width:104px; padding:0 14px 0 0; vertical-align:top;">{photo_html}</td>
+        <td style="vertical-align:top;">{info}</td>
+      </tr>
+    </table>
     """
 
 

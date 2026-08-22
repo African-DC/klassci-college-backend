@@ -47,6 +47,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Sur la fiche d'inscription, les intitulés étaient collés à leurs valeurs (« SEXEFéminin ») et le cadre photo affichait le mot « Photo » *(admin, parent)*
 - La décision du conseil s'imprimait en identifiant technique (« CouncilDecision.PASSAGE ») sur le bulletin remis aux familles *(parent)*
 - Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement *(caissier, parent)*
 - La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements *(caissier)*
