@@ -138,7 +138,7 @@ def generate_grade_sheet_pdf(
     )
     subject_label = ui.esc(subject_name) if subject_name else "_______________"
     trimester_label = f"Trimestre {trimester}" if trimester else "_______________"
-    meta_right = f"Matière : {subject_label} &nbsp;·&nbsp; Trimestre : {trimester_label}"
+    meta_right = f"Matière : {subject_label} &nbsp;·&nbsp; {trimester_label}"
 
     table = (
         '<table class="pdf-table sheet-table">'

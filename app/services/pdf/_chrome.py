@@ -20,12 +20,38 @@ from app.services.pdf._helpers import esc, image_to_datauri
 from app.services.pdf.theme import PDFTheme, font_face_css
 
 
-def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 15mm") -> str:
-    """Bloc <style> : @font-face + CSS variables + classes utilitaires globales."""
+def base_styles(
+    theme: PDFTheme,
+    *,
+    page_size: str = "A4",
+    margin: str = "16mm 15mm",
+    paginate: bool = False,
+) -> str:
+    """Bloc <style> : @font-face + CSS variables + classes utilitaires globales.
+
+    `paginate` numerote les feuilles. Reserve aux documents qui en comptent
+    plusieurs : « Page 1 / 1 » sur un certificat serait du bruit, alors qu'un
+    registre de vingt-sept pages sans numero ne se repere pas et ne montre
+    pas qu'il lui en manque une.
+    """
+    pagination = (
+        f"""
+        @page {{
+            @bottom-right {{
+                content: "Page " counter(page) " / " counter(pages);
+                font-family: var(--font-body); font-size: 7.5px;
+                color: {theme.muted};
+            }}
+        }}
+        """
+        if paginate
+        else ""
+    )
     return f"""
     <style>
         {font_face_css()}
         @page {{ size: {page_size}; margin: {margin}; }}
+        {pagination}
         :root {{
             --primary: {theme.primary};
             --accent: {theme.accent};
@@ -271,11 +297,15 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .pdf-progress-fill {{ height: 100%; background: var(--primary); }}
 
         /* Signatures — colonnes sobres (pas de boîte pointillée) */
+        /* Sans separation, les trois blocs se touchent et leurs traits de
+           signature se soudent en un seul filet continu : on ne voit plus
+           ou signe le professeur et ou signe le chef d'etablissement. */
         .pdf-signatures {{
-            display: flex; justify-content: space-between; gap: 18px;
+            display: flex; justify-content: space-between;
             margin-top: 26px;
         }}
         .pdf-signature {{ flex: 1; text-align: center; }}
+        .pdf-signature + .pdf-signature {{ margin-left: 22px; }}
         .pdf-signature-role {{
             color: var(--ink); font-size: 9.5px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.3px;
@@ -560,7 +590,11 @@ def signature_block(roles: list[dict[str, Any]], *, theme: PDFTheme) -> str:
     cards: list[str] = []
     for r in roles:
         role_label = esc(r.get("role", ""))
-        name = esc(r.get("name") or "")
+        # Un tiret sous un trait de signature n'apprend rien et se lit comme
+        # un champ casse : sans nom connu, la ligne reste nue, prete a etre
+        # signee a la main.
+        brut = str(r.get("name") or "").strip()
+        name = esc(brut) if brut not in ("—", "-", "–") else ""
         subline = esc(r.get("subline") or "")
         cards.append(
             f"""

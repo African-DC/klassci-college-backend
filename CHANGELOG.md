@@ -47,6 +47,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le cahier de textes est désormais numéroté : sur vingt-sept pages, on ne pouvait ni se repérer ni voir qu'il en manquait une *(enseignant, admin)*
+- Les traits de signature se soudaient en un seul filet : on ne voyait plus où signait le professeur et où signait le chef d'établissement *(tous)*
 - L'emploi du temps s'arrêtait au dernier jour occupé : un vendredi sans créneau disparaissait de la semaine *(admin, enseignant, élève)*
 - Les feuilles d'appel et de notes n'avaient aucune case où écrire : les colonnes n'existaient qu'en en-tête *(enseignant)*
 - Le bulletin annonçait le code de l'établissement comme une direction régionale *(parent, admin)*
