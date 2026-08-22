@@ -32,6 +32,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
+- Le bulletin est refait sur le modèle officiel ivoirien : identité avec photo, points par discipline, total, progression d'un trimestre à l'autre, distinctions et sanctions à cocher *(parent, élève, enseignant)*
 - Le bulletin porte la photo de l'élève, ou ses initiales, ainsi que son matricule, sa date et son lieu de naissance, comme le bulletin officiel ivoirien *(parent, élève)*
 - Le bulletin affiche la colonne des points (moyenne × coefficient) et la ligne de total : le parent peut refaire le calcul de la moyenne générale *(parent, enseignant)*
 - La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir *(admin, directeur des études, enseignant)*
@@ -296,6 +297,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée *(admin)* (#76).
 
 ### Removed
+- L'emblème dessiné qui tenait lieu d'armoiries sur les actes de vie scolaire : les documents officiels ivoiriens n'en portent pas *(admin)*
 
 - Génération asynchrone des bulletins via Celery + Puppeteer : flow orphelin depuis le pivot architectural d'avril 2026. La génération sync via WeasyPrint reste seule porte d'entrée *(devops, super-admin)* (#103).
 - Endpoints `POST /bulletins/generate` et `GET /bulletins/tasks/{task_id}` exposés à la racine : remplacés par les endpoints `/reports/bulletins/*` qui retournent directement les bulletins générés sans détour Celery (#103).

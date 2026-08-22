@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.models.grade import Bulletin
 from app.repositories import reports_repository as repo
 from app.services._document_verification_helper import (
     DOCUMENT_RENDER_VERSION,
@@ -29,6 +31,41 @@ from app.services.reports_subject_stats import (
 
 def _student_full_name(student: Any) -> str:
     return f"{student.first_name} {student.last_name}"
+
+
+_ORDINAUX = {1: "1er trimestre", 2: "2e trimestre", 3: "3e trimestre"}
+
+
+async def _trimester_history(db: AsyncSession, bulletin: Bulletin) -> list[dict[str, object]]:
+    """Les moyennes de l'élève sur les trimestres déjà bouclés.
+
+    « 13,59 » ne dit rien seul. « 12,84 puis 13,59, du 7e au 3e rang » dit à un
+    parent que son enfant progresse, et c'est la question qu'il pose vraiment.
+    Seuls les trimestres jusqu'à celui-ci sont retenus : un bulletin ne montre
+    pas l'avenir.
+    """
+    stmt = (
+        select(Bulletin)
+        .where(
+            Bulletin.student_id == bulletin.student_id,
+            Bulletin.academic_year_id == bulletin.academic_year_id,
+            Bulletin.trimester <= bulletin.trimester,
+        )
+        .order_by(Bulletin.trimester.asc())
+    )
+    precedents = (await db.execute(stmt)).scalars().all()
+    lignes: list[dict[str, object]] = []
+    for b in precedents:
+        # « 1er », pas « 1e » : le premier de la classe le lira.
+        rang = None if not b.rank else ("1er" if b.rank == 1 else f"{b.rank}e")
+        lignes.append(
+            {
+                "label": _ORDINAUX.get(b.trimester, f"Trimestre {b.trimester}"),
+                "average": b.average,
+                "rank": rang,
+            }
+        )
+    return lignes
 
 
 async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
@@ -95,6 +132,7 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
         "subject_averages": subject_averages,
         "class_stats": class_stats,
         "absences": absences,
+        "trimester_history": await _trimester_history(db, bulletin),
         "generated_at": bulletin.generated_at,
         "school_settings": school,
         "template_version": DOCUMENT_RENDER_VERSION,
