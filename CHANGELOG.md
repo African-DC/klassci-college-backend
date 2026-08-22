@@ -42,6 +42,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement *(caissier, parent)*
 - La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements *(caissier)*
 - La recherche par nom d'élève et le filtre par catégorie de frais étaient acceptés puis ignorés : le tableau ne bougeait pas *(caissier, comptable)*
 - Un export des versements ne déverse plus que la caisse de celui qui le demande : un caissier obtenait jusqu'ici les mêmes documents qu'un comptable, alors que son écran ne lui montre que ses propres encaissements *(caissier, comptable, directeur)*

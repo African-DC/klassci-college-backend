@@ -39,6 +39,11 @@ def _payment_full_options():
         selectinload(Payment.enrollment)
         .selectinload(Enrollment.student)
         .selectinload(Student.user),
+        # Pour l'en-tete du recu, qui nomme la classe et l'annee. Sans elles,
+        # le `getattr` du service declenche un chargement paresseux hors
+        # contexte : MissingGreenlet, et la famille repart sans son recu.
+        selectinload(Payment.enrollment).selectinload(Enrollment.class_),
+        selectinload(Payment.enrollment).selectinload(Enrollment.academic_year),
         # Pour les allocations enrichies dans la response
         selectinload(Payment.allocations)
         .selectinload(PaymentAllocation.enrollment_fee)
