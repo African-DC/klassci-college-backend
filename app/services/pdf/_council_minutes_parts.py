@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.pdf._helpers import format_decimal
+from app.services.pdf.theme import decision_label
 
 
 def count_decisions(decisions: list[dict[str, Any]], target: str) -> int:
@@ -35,8 +36,12 @@ def decision_rows(decisions: list[dict[str, Any]]) -> list[list[Any]]:
                 {"value": avg_str, "type": "num"},
                 {"value": rank_str, "type": "num"},
                 {"value": str(absences), "type": "num"},
-                d.get("auto_decision", "") or "—",
-                {"value": str(final).lower(), "type": "pill", "label": str(final).title() or "—"},
+                decision_label(d.get("auto_decision"), court=True),
+                {
+                    "value": str(final).lower(),
+                    "type": "pill",
+                    "label": decision_label(final, court=True),
+                },
                 {"value": d.get("override_reason", "") or "", "type": "muted"},
             ]
         )

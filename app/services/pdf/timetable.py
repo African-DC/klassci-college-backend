@@ -167,8 +167,15 @@ def generate_timetable_pdf(
     for day in _DAYS_ORDER:
         slots_by_day[day].sort(key=lambda x: x.get("start_time", "00:00"))
 
-    # N'afficher que les jours qui ont au moins un cours (compacité horizontale).
-    active_days = [d for d in _DAYS_ORDER if slots_by_day[d]] or _DAYS_ORDER[:5]
+    # La semaine de classe entiere, du lundi au vendredi, meme si un jour est
+    # vide. Ne montrer que les jours remplis faisait disparaitre le vendredi
+    # d'un emploi du temps incomplet : on lisait « pas de cours ce jour-la »
+    # la ou il fallait lire « creneaux pas encore poses ».
+    # Le samedi ne s'ajoute que s'il porte un cours : toutes les ecoles n'en
+    # font pas, et une colonne vide de plus mangerait la largeur des autres.
+    active_days = [*_DAYS_ORDER[:5]]
+    if slots_by_day.get("saturday"):
+        active_days.append("saturday")
 
     # Couleurs par matière (résolues une fois, réutilisées grille + légende).
     color_cache: dict[str, tuple[str, str, str]] = {}

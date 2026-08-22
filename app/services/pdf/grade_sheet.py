@@ -44,6 +44,17 @@ def _sheet_styles() -> str:
         .sheet-table td.cell-mat { text-align: center; font-family: 'Courier New', monospace; }
         .sheet-table td.cell-blank { text-align: center; }
         .sheet-table td.cell-moy { text-align: center; background: var(--soft-bg); }
+        /* Une feuille qu'on remplit au stylo a besoin de cases. Sans filet
+           vertical, les colonnes n'existaient qu'en en-tete : l'enseignant
+           n'avait aucun reperage pour cocher en face du bon eleve, et sur ce
+           document la grille EST la fonction. */
+        .sheet-table thead th.cell-blank,
+        .sheet-table td.cell-blank {{
+            border-left: 0.75px solid var(--border);
+        }}
+        .sheet-table tbody td {{
+            border-bottom: 0.75px solid var(--border);
+        }}
     </style>
     """
 
@@ -127,7 +138,7 @@ def generate_grade_sheet_pdf(
     )
     subject_label = ui.esc(subject_name) if subject_name else "_______________"
     trimester_label = f"Trimestre {trimester}" if trimester else "_______________"
-    meta_right = f"Matière : {subject_label} &nbsp;·&nbsp; Trimestre : {trimester_label}"
+    meta_right = f"Matière : {subject_label} &nbsp;·&nbsp; {trimester_label}"
 
     table = (
         '<table class="pdf-table sheet-table">'

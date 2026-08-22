@@ -68,11 +68,11 @@ def counter_kpis(counts: dict[str, Any]) -> list[dict[str, Any]]:
         {
             "label": "Garçons",
             "value": str(counts.get("boys", 0)),
-            "tone": "accent",
+            "tone": "primary",
         },
         {
             "label": "Filles",
             "value": str(counts.get("girls", 0)),
-            "tone": "success",
+            "tone": "primary",
         },
     ]
