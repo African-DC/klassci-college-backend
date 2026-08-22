@@ -42,6 +42,17 @@ def _sheet_styles() -> str:
         .sheet-table td.cell-num {{ text-align: center; color: var(--muted); }}
         .sheet-table td.cell-mat {{ text-align: center; font-family: 'Courier New', monospace; }}
         .sheet-table td.cell-blank {{ text-align: center; }}
+        /* Une feuille qu'on remplit au stylo a besoin de cases. Sans filet
+           vertical, les colonnes n'existaient qu'en en-tete : l'enseignant
+           n'avait aucun reperage pour cocher en face du bon eleve, et sur ce
+           document la grille EST la fonction. */
+        .sheet-table thead th.cell-blank,
+        .sheet-table td.cell-blank {{
+            border-left: 0.75px solid var(--border);
+        }}
+        .sheet-table tbody td {{
+            border-bottom: 0.75px solid var(--border);
+        }}
         .sheet-legend {{
             margin-top: 10px; font-size: 8.5px; color: var(--muted);
             letter-spacing: 0.2px;

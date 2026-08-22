@@ -32,6 +32,11 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
+- L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement *(tous)*
+- Le bulletin porte l'en-tête administratif ivoirien : autorité à gauche, titre encadré au centre, année à droite, puis le bloc établissement *(parent, admin)*
+- Le bulletin est refait sur le modèle officiel ivoirien : identité avec photo, points par discipline, total, progression d'un trimestre à l'autre, distinctions et sanctions à cocher *(parent, élève, enseignant)*
+- Le bulletin porte la photo de l'élève, ou ses initiales, ainsi que son matricule, sa date et son lieu de naissance, comme le bulletin officiel ivoirien *(parent, élève)*
+- Le bulletin affiche la colonne des points (moyenne × coefficient) et la ligne de total : le parent peut refaire le calcul de la moyenne générale *(parent, enseignant)*
 - La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir *(admin, directeur des études, enseignant)*
 - Le « 12 / 35 » d'une évaluation est compté par la base et non plus en chargeant les 30 000 notes de l'école *(admin, enseignant)*
 - Seules les espèces exigent désormais une journée de caisse ouverte. Un comptable enregistre un virement ou un versement Wave sans qu'une caisse s'ouvre à son nom, alors qu'il n'a aucun tiroir à compter le soir *(comptable, caissier)*
@@ -42,6 +47,19 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le cahier de textes est désormais numéroté : sur vingt-sept pages, on ne pouvait ni se repérer ni voir qu'il en manquait une *(enseignant, admin)*
+- Les traits de signature se soudaient en un seul filet : on ne voyait plus où signait le professeur et où signait le chef d'établissement *(tous)*
+- L'emploi du temps s'arrêtait au dernier jour occupé : un vendredi sans créneau disparaissait de la semaine *(admin, enseignant, élève)*
+- Les feuilles d'appel et de notes n'avaient aucune case où écrire : les colonnes n'existaient qu'en en-tête *(enseignant)*
+- Le bulletin annonçait le code de l'établissement comme une direction régionale *(parent, admin)*
+- Le relevé de notes coupait l'intitulé des évaluations à dix-sept signes *(enseignant)*
+- Le procès-verbal du conseil imprimait « passage » en minuscules au lieu de la décision en toutes lettres *(admin, enseignant)*
+- Les montants du bordereau de caisse s'écrivaient sans séparateur de milliers (« 155000.00 » au lieu de « 155 000 ») *(caissier, comptable)*
+- Un compteur à zéro s'affichait en vert ou en orange, comme s'il annonçait une réussite ou une alerte *(tous)*
+- Sur tous les documents, les cartes de compteurs, les blocs des responsables légaux et les intitulés de champ se touchaient au lieu d'être espacés *(tous)*
+- Les mentions d'État en tête de document se lisaient comme un filigrane : la République prend désormais le premier rang, la devise et le ministère suivent *(tous)*
+- Sur la fiche d'inscription, les intitulés étaient collés à leurs valeurs (« SEXEFéminin ») et le cadre photo affichait le mot « Photo » *(admin, parent)*
+- La décision du conseil s'imprimait en identifiant technique (« CouncilDecision.PASSAGE ») sur le bulletin remis aux familles *(parent)*
 - Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement *(caissier, parent)*
 - La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements *(caissier)*
 - La recherche par nom d'élève et le filtre par catégorie de frais étaient acceptés puis ignorés : le tableau ne bougeait pas *(caissier, comptable)*
@@ -293,6 +311,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée *(admin)* (#76).
 
 ### Removed
+- L'emblème dessiné qui tenait lieu d'armoiries sur les actes de vie scolaire : les documents officiels ivoiriens n'en portent pas *(admin)*
 
 - Génération asynchrone des bulletins via Celery + Puppeteer : flow orphelin depuis le pivot architectural d'avril 2026. La génération sync via WeasyPrint reste seule porte d'entrée *(devops, super-admin)* (#103).
 - Endpoints `POST /bulletins/generate` et `GET /bulletins/tasks/{task_id}` exposés à la racine : remplacés par les endpoints `/reports/bulletins/*` qui retournent directement les bulletins générés sans détour Celery (#103).

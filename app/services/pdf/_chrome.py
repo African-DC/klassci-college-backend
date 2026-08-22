@@ -15,16 +15,43 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.pdf._eyebrow import eyebrow_html
 from app.services.pdf._helpers import esc, image_to_datauri
 from app.services.pdf.theme import PDFTheme, font_face_css
 
 
-def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 15mm") -> str:
-    """Bloc <style> : @font-face + CSS variables + classes utilitaires globales."""
+def base_styles(
+    theme: PDFTheme,
+    *,
+    page_size: str = "A4",
+    margin: str = "16mm 15mm",
+    paginate: bool = False,
+) -> str:
+    """Bloc <style> : @font-face + CSS variables + classes utilitaires globales.
+
+    `paginate` numerote les feuilles. Reserve aux documents qui en comptent
+    plusieurs : « Page 1 / 1 » sur un certificat serait du bruit, alors qu'un
+    registre de vingt-sept pages sans numero ne se repere pas et ne montre
+    pas qu'il lui en manque une.
+    """
+    pagination = (
+        f"""
+        @page {{
+            @bottom-right {{
+                content: "Page " counter(page) " / " counter(pages);
+                font-family: var(--font-body); font-size: 7.5px;
+                color: {theme.muted};
+            }}
+        }}
+        """
+        if paginate
+        else ""
+    )
     return f"""
     <style>
         {font_face_css()}
         @page {{ size: {page_size}; margin: {margin}; }}
+        {pagination}
         :root {{
             --primary: {theme.primary};
             --accent: {theme.accent};
@@ -58,23 +85,50 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .mono {{ font-family: 'Courier New', monospace; font-size: 9px; }}
 
         /* ============ En-tête : eyebrow RCI + masthead + filet ============ */
-        .doc-eyebrow {{
-            text-align: center; font-size: 8px; color: var(--muted);
-            text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
+        /* Trois faits institutionnels sur une seule ligne capitalisee et
+           interlettree se lisaient comme un filigrane. La Republique porte le
+           poids, la devise et le ministere suivent en bas de casse. */
+        .doc-eyebrow {{ text-align: center; margin-bottom: 9px; }}
+        .doc-eyebrow-etat {{
+            font-size: 8px; font-weight: 700; color: var(--ink);
+            text-transform: uppercase; letter-spacing: 1.4px;
         }}
+        .doc-eyebrow-suite {{
+            font-size: 7.5px; color: var(--muted); margin-top: 1.5px;
+        }}
+        /* En-tete des documents : une carte, pas une ligne flottante.
+           Rayons concentriques — carte 15px, retrait 9px, pastille 6px :
+           15 = 6 + 9. Des rayons qui ne s'emboitent pas sont ce qui fait
+           qu'un bloc imbrique « sonne faux » sans qu'on sache dire pourquoi. */
+        /* Un tableau, pas un flex : WeasyPrint ne rend fiablement ni le
+           `gap` ni `overflow:hidden` sur un conteneur flex, et le monogramme
+           debordait sa pastille en chevauchant le nom de l'etablissement. */
         .masthead {{
-            display: flex; align-items: center; gap: 20px;
-            padding-bottom: 10px;
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            background: var(--soft-bg);
+            margin-bottom: 9px;
         }}
-        .masthead-logo {{ flex: 0 0 auto; padding-right: 4px; }}
-        .masthead-id {{ flex: 1; }}
+        .masthead td {{ padding: 9px; vertical-align: middle; }}
+        .masthead-logo {{ width: 46px; }}
+        .masthead-logo img,
+        .masthead-logo .pdf-monogram {{
+            width: 46px; height: 46px;
+            border-radius: 6px;
+            object-fit: contain;
+            /* Contour noir pur a faible opacite : une teinte prendrait la
+               couleur du fond et se lirait comme une salissure sur le bord. */
+            border: 1px solid rgba(0, 0, 0, 0.10);
+        }}
+        .masthead-id {{ padding-left: 3px; }}
         .masthead-name {{
             font-family: var(--font-display); font-weight: 700;
-            font-size: 17px; color: var(--primary); line-height: 1.15;
-            letter-spacing: 0.2px;
+            font-size: 15px; color: var(--primary); line-height: 1.2;
+            letter-spacing: 0.1px;
         }}
         .masthead-meta {{
-            font-size: 8.5px; color: var(--muted); margin-top: 3px; line-height: 1.5;
+            font-size: 8px; color: var(--muted); margin-top: 2px; line-height: 1.45;
         }}
         .doc-filet {{
             height: 0; border-bottom: 1.5px solid var(--primary); margin: 0;
@@ -168,7 +222,11 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .pdf-keyfigure-value.is-focal {{ color: var(--accent); }}
 
         /* KPI cards (rétrocompat generators) — allégées */
-        .pdf-kpis {{ display: flex; gap: 10px; margin: 8px 0 14px; }}
+        /* `gap` en flex n'est rendu qu'a partir de WeasyPrint 67 et nous
+           sommes en 62.3 : les elements se touchaient. Une marge sur le
+           frere suivant, elle, est rendue, et n'ajoute rien en bout. */
+        .pdf-kpis {{ display: flex; margin: 8px 0 14px; }}
+        .pdf-kpis > * + * {{ margin-left: 10px; }}
         .pdf-kpi {{
             flex: 1; padding: 9px 12px; border: 0.75px solid var(--border);
             border-radius: 5px; text-align: center;
@@ -205,9 +263,10 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;
             font-size: 10px; margin: 6px 0;
         }}
-        .pdf-info-row {{ display: flex; gap: 8px; padding: 2px 0; }}
+        .pdf-info-row {{ display: flex; padding: 2px 0; }}
         .pdf-info-label {{
             color: var(--muted); width: 130px; font-weight: 600;
+            margin-right: 8px;
             text-transform: uppercase; letter-spacing: 0.2px; font-size: 8.5px;
         }}
         .pdf-info-value {{ flex: 1; color: var(--ink); }}
@@ -238,11 +297,15 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .pdf-progress-fill {{ height: 100%; background: var(--primary); }}
 
         /* Signatures — colonnes sobres (pas de boîte pointillée) */
+        /* Sans separation, les trois blocs se touchent et leurs traits de
+           signature se soudent en un seul filet continu : on ne voit plus
+           ou signe le professeur et ou signe le chef d'etablissement. */
         .pdf-signatures {{
-            display: flex; justify-content: space-between; gap: 18px;
+            display: flex; justify-content: space-between;
             margin-top: 26px;
         }}
         .pdf-signature {{ flex: 1; text-align: center; }}
+        .pdf-signature + .pdf-signature {{ margin-left: 22px; }}
         .pdf-signature-role {{
             color: var(--ink); font-size: 9.5px; font-weight: 600;
             text-transform: uppercase; letter-spacing: 0.3px;
@@ -254,7 +317,7 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* Footer */
         .pdf-footer {{
-            margin-top: 20px; padding-top: 9px;
+            margin-top: 12px; padding-top: 7px;
             border-top: 0.75px solid var(--border);
             font-size: 8px; color: var(--muted);
             display: flex; justify-content: space-between; gap: 12px;
@@ -268,13 +331,14 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* ============ Sceau numérique institutionnel ======================== */
         .pdf-verify {{
-            margin-top: 18px; padding: 12px 15px;
+            margin-top: 10px; padding: 8px 13px;
             border: 0.75px solid var(--border); border-radius: 5px;
             background: var(--soft-bg);
-            display: flex; align-items: center; gap: 16px;
+            display: flex; align-items: center;
         }}
         .pdf-verify-cev {{
-            width: 62px; height: 62px; flex: 0 0 62px;
+            width: 50px; height: 50px; flex: 0 0 50px;
+            margin-right: 16px;
             border: 0.75px solid var(--border); border-radius: 3px; background: #fff;
             padding: 2px; box-sizing: border-box;
         }}
@@ -313,10 +377,9 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* Monogramme (fallback identité si pas de logo) */
         .pdf-monogram {{
-            width: 58px; height: 58px; border-radius: 5px;
-            background: var(--primary); color: #fff; display: flex;
-            align-items: center; justify-content: center; font-size: 20px;
-            font-weight: 700; letter-spacing: 1px;
+            background: var(--primary); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700; letter-spacing: 0.5px;
             font-family: var(--font-display);
         }}
     </style>
@@ -333,12 +396,8 @@ CI_BANNER_HTML = """
 
 
 def _eyebrow_html() -> str:
-    """Ligne unique RCI/MENA (remplace le bandeau 3 lignes)."""
-    return (
-        '<div class="doc-eyebrow">République de Côte d\'Ivoire'
-        " · Union — Discipline — Travail"
-        " · Ministère de l'Éducation Nationale et de l'Alphabétisation</div>"
-    )
+    """Les mentions d'Etat, composees dans `_eyebrow`."""
+    return eyebrow_html()
 
 
 def premium_header(
@@ -362,10 +421,7 @@ def premium_header(
     eyebrow = _eyebrow_html() if show_ci_banner else ""
 
     if logo_data:
-        logo_html = (
-            f'<img src="{logo_data}" alt="Logo" '
-            f'style="max-height:58px; max-width:150px; object-fit:contain;" />'
-        )
+        logo_html = f'<img src="{logo_data}" alt="" />'
     else:
         words = [w for w in (school.get("school_name") or "E").split() if w]
         initials = "".join(w[0] for w in words[:2]).upper() or "E"
@@ -389,14 +445,13 @@ def premium_header(
     meta_html = f'<div class="masthead-meta">{"<br/>".join(meta_lines)}</div>' if meta_lines else ""
 
     masthead = f"""
-    <div class="masthead">
-        <div class="masthead-logo">{logo_html}</div>
-        <div class="masthead-id">
+    <table class="masthead"><tr>
+        <td class="masthead-logo">{logo_html}</td>
+        <td class="masthead-id">
             <div class="masthead-name">{school_name}</div>
             {meta_html}
-        </div>
-    </div>
-    <div class="doc-filet"></div>
+        </td>
+    </tr></table>
     """
 
     title_block = ""
@@ -535,7 +590,11 @@ def signature_block(roles: list[dict[str, Any]], *, theme: PDFTheme) -> str:
     cards: list[str] = []
     for r in roles:
         role_label = esc(r.get("role", ""))
-        name = esc(r.get("name") or "")
+        # Un tiret sous un trait de signature n'apprend rien et se lit comme
+        # un champ casse : sans nom connu, la ligne reste nue, prete a etre
+        # signee a la main.
+        brut = str(r.get("name") or "").strip()
+        name = esc(brut) if brut not in ("—", "-", "–") else ""
         subline = esc(r.get("subline") or "")
         cards.append(
             f"""

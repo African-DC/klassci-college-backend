@@ -23,25 +23,6 @@ _MINISTRY_LINE = "MINISTÈRE DE L'ÉDUCATION NATIONALE ET DE L'ALPHABÉTISATION"
 _REPUBLIC_LINE = "RÉPUBLIQUE DE CÔTE D'IVOIRE"
 _REPUBLIC_DEVISE = "UNION - DISCIPLINE - TRAVAIL"
 
-# Emblème de repli quand l'établissement n'a pas encore déposé le fichier
-# officiel des armoiries. Volontairement stylisé et sobre : imprimer une
-# reproduction approximative des armoiries de la République serait pire qu'un
-# symbole assumé comme tel.
-_FALLBACK_EMBLEM_SVG = """
-<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" class="acte-emblem-svg">
-  <circle cx="32" cy="32" r="30" fill="none" stroke="currentColor" stroke-width="1.4"/>
-  <ellipse cx="32" cy="29" rx="10" ry="13" fill="currentColor"/>
-  <ellipse cx="17" cy="26" rx="9" ry="12" fill="currentColor"/>
-  <ellipse cx="47" cy="26" rx="9" ry="12" fill="currentColor"/>
-  <path d="M32 39 q -3 9 0 14 q 2 3 5 1" fill="none" stroke="currentColor"
-        stroke-width="3.2" stroke-linecap="round"/>
-  <path d="M25 40 q -3 6 -6 8" fill="none" stroke="currentColor"
-        stroke-width="1.6" stroke-linecap="round"/>
-  <path d="M39 40 q 3 6 6 8" fill="none" stroke="currentColor"
-        stroke-width="1.6" stroke-linecap="round"/>
-</svg>
-"""
-
 
 def official_act_styles(theme: PDFTheme) -> str:
     """CSS propre aux actes : en-tête trois colonnes, corps aéré, blancs à remplir."""
@@ -49,9 +30,10 @@ def official_act_styles(theme: PDFTheme) -> str:
     return """
     <style>
         .acte-masthead {
-            display: flex; align-items: flex-start; gap: 12px;
+            display: flex; align-items: flex-start;
             padding-bottom: 8px;
         }
+        .acte-masthead > * + * { margin-left: 12px; }
         .acte-col { font-size: 8.5px; line-height: 1.55; color: var(--ink); }
         .acte-col-left { flex: 1 1 37%; }
         .acte-col-center { flex: 0 0 24%; text-align: center; }
@@ -73,7 +55,6 @@ def official_act_styles(theme: PDFTheme) -> str:
         }
         .acte-emblem { color: var(--primary); margin: 4px auto 3px; }
         .acte-emblem img { max-height: 46px; max-width: 46px; object-fit: contain; }
-        .acte-emblem-svg { width: 46px; height: 46px; display: block; margin: 0 auto; }
         .acte-year {
             font-weight: 700; font-size: 8.5px; text-transform: uppercase;
             letter-spacing: 0.3px; margin-top: 3px;
@@ -125,11 +106,18 @@ def official_act_styles(theme: PDFTheme) -> str:
 
 
 def _emblem_html(school: dict[str, Any]) -> str:
-    """Armoiries déposées par l'établissement, ou emblème de repli."""
+    """Les armoiries que l'établissement a déposées, et rien d'autre.
+
+    Il n'y a pas de repli dessiné. Le bulletin trimestriel officiel ivoirien ne
+    porte aucune armoirie : seulement les mentions en toutes lettres et le logo
+    de l'école. Les armoiries de la République sont réservées aux actes de
+    l'État, et une reproduction approximative sur un document d'établissement
+    privé est à la fois inexacte et superflue.
+    """
     data = image_to_datauri(school.get("coat_of_arms_url"))
-    if data:
-        return f'<div class="acte-emblem"><img src="{data}" alt="Armoiries" /></div>'
-    return f'<div class="acte-emblem">{_FALLBACK_EMBLEM_SVG}</div>'
+    if not data:
+        return ""
+    return f'<div class="acte-emblem"><img src="{data}" alt="Armoiries" /></div>'
 
 
 def _logo_html(school: dict[str, Any]) -> str:

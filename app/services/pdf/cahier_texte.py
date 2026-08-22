@@ -1,4 +1,4 @@
-"""Cahier de texte — PDF A4 paysage structuré depuis l'emploi du temps.
+"""Cahier de textes — PDF A4 paysage structuré depuis l'emploi du temps.
 
 Restitue, pour une période donnée, la liste datée des séances de la classe
 (expansion de l'EDT sur les jours réels) avec deux colonnes larges laissées
@@ -119,7 +119,7 @@ def generate_cahier_texte_pdf(
     <html lang="fr">
     <head>
         <meta charset="UTF-8">
-        {ui.base_styles(theme, page_size="A4 landscape", margin="12mm")}
+        {ui.base_styles(theme, paginate=True, page_size="A4 landscape", margin="12mm")}
         {_cahier_styles()}
     </head>
     <body>
@@ -128,7 +128,7 @@ def generate_cahier_texte_pdf(
         ui.premium_header(
             school,
             theme=theme,
-            doc_type="CAHIER DE TEXTE",
+            doc_type="CAHIER DE TEXTES",
             doc_subtitle=subtitle,
         )
     }
