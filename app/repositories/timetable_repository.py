@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.academic import Room
 from app.models.timetable import TeacherAvailability, Timetable, TimetableSlot
+from app.models.user import TeacherProfile
 
 # ---------------------------------------------------------------------------
 # TimetableSlot — lecture
@@ -55,25 +56,37 @@ async def list_slots(
 # ---------------------------------------------------------------------------
 
 
-async def check_teacher_conflict(
+async def find_teacher_conflict(
     db: AsyncSession,
     teacher_id: int,
     day: str,
     start_time: time,
     end_time: time,
     exclude_slot_id: int | None = None,
-) -> bool:
-    """Retourne True si l'enseignant est déjà occupé sur ce créneau."""
-    stmt = select(TimetableSlot).where(
-        TimetableSlot.teacher_id == teacher_id,
-        TimetableSlot.day == day,
-        TimetableSlot.start_time < end_time,
-        TimetableSlot.end_time > start_time,
+) -> TimetableSlot | None:
+    """Le cours qui occupe déjà l'enseignant sur ce créneau, s'il existe.
+
+    Rend le créneau et non un booléen : un message qui dit « déjà occupé »
+    sans dire par quoi oblige le secrétariat à ouvrir l'emploi du temps de
+    chaque classe pour trouver lequel. La classe et la matière sont chargées
+    ici, une fois, plutôt que relues par l'appelant.
+    """
+    stmt = (
+        select(TimetableSlot)
+        .options(
+            selectinload(TimetableSlot.class_),
+            selectinload(TimetableSlot.subject),
+        )
+        .where(
+            TimetableSlot.teacher_id == teacher_id,
+            TimetableSlot.day == day,
+            TimetableSlot.start_time < end_time,
+            TimetableSlot.end_time > start_time,
+        )
     )
     if exclude_slot_id is not None:
         stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
-    result = (await db.execute(stmt)).scalar_one_or_none()
-    return result is not None
+    return (await db.execute(stmt)).scalars().first()
 
 
 async def check_class_conflict(
@@ -274,6 +287,83 @@ async def create_teacher_availability(
     db.add(av)
     await db.flush()
     return av
+
+
+async def get_teacher_profile(db: AsyncSession, teacher_id: int) -> TeacherProfile | None:
+    """Le profil d'un enseignant — pour nommer quelqu'un dans un message."""
+    stmt = select(TeacherProfile).where(TeacherProfile.id == teacher_id)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def find_teacher_unavailability(
+    db: AsyncSession,
+    teacher_id: int,
+    day: str,
+    start_time: time,
+    end_time: time,
+) -> tuple[str, TeacherAvailability | None] | None:
+    """Ce qui, dans les plages declarees, empeche ce creneau.
+
+    La table se lit en liste blanche, exactement comme le generateur
+    automatique la lit deja (`get_unavailable_slot_indices`) et comme la grille
+    de la fiche enseignant l'affiche : tant qu'un enseignant n'a rien declare,
+    il est reponse disponible partout ; des qu'il a declare quelque chose, seul
+    ce qui est marque disponible l'est. Deux lectures differentes de la meme
+    table donnaient une grille toute rouge et une creation pourtant acceptee.
+
+    Renvoie `None` quand rien n'empeche, sinon le motif et la ligne en cause :
+    « closed » pour une plage explicitement fermee, « not_open » quand le
+    creneau tombe simplement hors de ce qui a ete ouvert. Les deux ne se disent
+    pas pareil a l'ecran.
+    """
+    recouvre = (
+        TeacherAvailability.start_time < end_time,
+        TeacherAvailability.end_time > start_time,
+    )
+
+    fermeture = (
+        (
+            await db.execute(
+                select(TeacherAvailability).where(
+                    TeacherAvailability.teacher_id == teacher_id,
+                    TeacherAvailability.day == day,
+                    TeacherAvailability.available.is_(False),
+                    *recouvre,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if fermeture is not None:
+        return "closed", fermeture
+
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(TeacherAvailability)
+            .where(TeacherAvailability.teacher_id == teacher_id)
+        )
+    ).scalar() or 0
+    if total == 0:
+        return None
+
+    couvert = (
+        (
+            await db.execute(
+                select(TeacherAvailability).where(
+                    TeacherAvailability.teacher_id == teacher_id,
+                    TeacherAvailability.day == day,
+                    TeacherAvailability.available.is_(True),
+                    TeacherAvailability.start_time <= start_time,
+                    TeacherAvailability.end_time >= end_time,
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    return None if couvert is not None else ("not_open", None)
 
 
 async def update_teacher_availability(

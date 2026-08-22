@@ -359,7 +359,7 @@ def test_list_teacher_availabilities() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.timetable.timetable_service.list_teacher_availabilities",
+            "app.routers.timetable.teacher_availability_service.list_for_teacher",
             new_callable=AsyncMock,
             return_value=[SAMPLE_AVAILABILITY],
         ):
@@ -379,7 +379,7 @@ def test_create_teacher_availability() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.timetable.timetable_service.create_teacher_availability",
+            "app.routers.timetable.teacher_availability_service.create",
             new_callable=AsyncMock,
             return_value=SAMPLE_AVAILABILITY,
         ):
@@ -400,7 +400,7 @@ def test_delete_teacher_availability() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.timetable.timetable_service.delete_teacher_availability",
+            "app.routers.timetable.teacher_availability_service.remove",
             new_callable=AsyncMock,
             return_value=None,
         ):

@@ -8,15 +8,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
-from app.models.timetable import TeacherAvailability, TimetableSlot
+from app.models.timetable import TimetableSlot
 from app.repositories import timetable_repository as repo
 from app.schemas.timetable import (
     GenerateTimetableRequest,
     GenerateTimetableResponse,
     TaskStatusResponse,
-    TeacherAvailabilityCreate,
-    TeacherAvailabilityResponse,
-    TeacherAvailabilityUpdate,
     TimetableSlotCreate,
     TimetableSlotResponse,
     TimetableSlotUpdate,
@@ -51,19 +48,6 @@ def _to_slot_response(slot: TimetableSlot) -> TimetableSlotResponse:
     )
 
 
-def _to_availability_response(av: TeacherAvailability) -> TeacherAvailabilityResponse:
-    """Convertit une TeacherAvailability ORM en TeacherAvailabilityResponse."""
-    return TeacherAvailabilityResponse(
-        id=av.id,
-        teacher_id=av.teacher_id,
-        day=av.day,
-        start_time=av.start_time.strftime("%H:%M"),
-        end_time=av.end_time.strftime("%H:%M"),
-        available=av.available,
-        preferred=av.preferred,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Slot CRUD
 # ---------------------------------------------------------------------------
@@ -94,6 +78,73 @@ async def get_slot(db: AsyncSession, slot_id: int) -> TimetableSlotResponse:
     return _to_slot_response(slot)
 
 
+_JOURS_FR = {
+    "monday": "lundi",
+    "tuesday": "mardi",
+    "wednesday": "mercredi",
+    "thursday": "jeudi",
+    "friday": "vendredi",
+    "saturday": "samedi",
+}
+
+
+def _plage(debut: time, fin: time) -> str:
+    return f"{debut.strftime('%H:%M')} à {fin.strftime('%H:%M')}"
+
+
+async def _nom_enseignant(db: AsyncSession, teacher_id: int) -> str:
+    """Le nom de l'enseignant, pour un message qu'un humain doit comprendre."""
+    prof = await repo.get_teacher_profile(db, teacher_id)
+    if prof is None:
+        return f"L'enseignant #{teacher_id}"
+    return f"{prof.first_name} {prof.last_name}".strip() or f"L'enseignant #{teacher_id}"
+
+
+async def _verifier_enseignant_libre(
+    db: AsyncSession,
+    *,
+    teacher_id: int,
+    day: str,
+    start: time,
+    end: time,
+    exclude_slot_id: int | None = None,
+) -> None:
+    """Refuse un créneau si l'enseignant est pris, en disant par quoi.
+
+    Deux empêchements distincts, deux messages distincts : un cours déjà posé
+    ailleurs se règle en déplaçant l'un des deux ; une indisponibilité que
+    l'enseignant a déclarée lui-même se règle en lui parlant. « Créneau
+    indisponible » obligeait le secrétariat à deviner lequel des deux.
+    """
+    jour = _JOURS_FR.get(day, day)
+
+    conflit = await repo.find_teacher_conflict(
+        db, teacher_id, day, start, end, exclude_slot_id=exclude_slot_id
+    )
+    if conflit is not None:
+        nom = await _nom_enseignant(db, teacher_id)
+        classe = conflit.class_.name if conflit.class_ else "une autre classe"
+        matiere = conflit.subject.name if conflit.subject else "un cours"
+        raise ConflictError(
+            f"{nom} a déjà {matiere} avec la {classe} le {jour} de "
+            f"{_plage(conflit.start_time, conflit.end_time)}."
+        )
+
+    empechement = await repo.find_teacher_unavailability(db, teacher_id, day, start, end)
+    if empechement is not None:
+        motif, plage_fermee = empechement
+        nom = await _nom_enseignant(db, teacher_id)
+        if motif == "closed" and plage_fermee is not None:
+            raise ConflictError(
+                f"{nom} est déclaré indisponible le {jour} de "
+                f"{_plage(plage_fermee.start_time, plage_fermee.end_time)}."
+            )
+        raise ConflictError(
+            f"{nom} n'est pas déclaré disponible le {jour} de {_plage(start, end)}. "
+            "Ouvrez cette plage dans ses disponibilités si le cours doit y tenir."
+        )
+
+
 async def create_slot(
     db: AsyncSession,
     data: TimetableSlotCreate,
@@ -104,26 +155,24 @@ async def create_slot(
     end = _parse_time(data.end_time)
 
     if start >= end:
-        raise BusinessValidationError("start_time must be before end_time")
+        raise BusinessValidationError("L'heure de fin doit être après l'heure de début.")
 
     # Résoudre la salle par nom si fourni
     room_id: int | None = None
     if data.room is not None:
         room = await repo.get_room_by_name(db, data.room)
         if room is None:
-            raise BusinessValidationError(f"Room '{data.room}' not found")
+            raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
     # Vérifier les conflits
-    if await repo.check_teacher_conflict(db, data.teacher_id, data.day.value, start, end):
-        raise ConflictError(
-            f"Teacher {data.teacher_id} already has a class on {data.day.value} "
-            f"at {data.start_time}–{data.end_time}"
-        )
+    await _verifier_enseignant_libre(
+        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
+    )
     if await repo.check_class_conflict(db, data.class_id, data.day.value, start, end):
         raise ConflictError(
-            f"Class {data.class_id} already has a class on {data.day.value} "
-            f"at {data.start_time}–{data.end_time}"
+            f"Cette classe a déjà cours le {_JOURS_FR.get(data.day.value, data.day.value)} "
+            f"de {_plage(start, end)}."
         )
 
     slot = await repo.create_slot(
@@ -173,7 +222,7 @@ async def update_slot(
     new_teacher_id = data.teacher_id if data.teacher_id is not None else slot.teacher_id
 
     if new_start >= new_end:
-        raise BusinessValidationError("start_time must be before end_time")
+        raise BusinessValidationError("L'heure de fin doit être après l'heure de début.")
 
     # Résoudre la salle
     new_room_id: int | None
@@ -183,20 +232,27 @@ async def update_slot(
         else:
             room = await repo.get_room_by_name(db, data.room)
             if room is None:
-                raise BusinessValidationError(f"Room '{data.room}' not found")
+                raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
             new_room_id = room.id
     else:
         new_room_id = slot.room_id
 
     # Vérifier les conflits (en excluant le slot courant)
-    if await repo.check_teacher_conflict(
-        db, new_teacher_id, new_day, new_start, new_end, exclude_slot_id=slot_id
-    ):
-        raise ConflictError(f"Teacher {new_teacher_id} already has a class on {new_day}")
+    await _verifier_enseignant_libre(
+        db,
+        teacher_id=new_teacher_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
+        exclude_slot_id=slot_id,
+    )
     if await repo.check_class_conflict(
         db, slot.class_id, new_day, new_start, new_end, exclude_slot_id=slot_id
     ):
-        raise ConflictError(f"Class {slot.class_id} already has a class on {new_day}")
+        raise ConflictError(
+            f"Cette classe a déjà cours le {_JOURS_FR.get(new_day, new_day)} "
+            f"de {_plage(new_start, new_end)}."
+        )
 
     old_values = {
         "day": slot.day,
@@ -638,71 +694,3 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
         day_start=day_start,
         day_end=day_end,
     )
-
-
-# ---------------------------------------------------------------------------
-# Teacher availability
-# ---------------------------------------------------------------------------
-
-
-async def list_teacher_availabilities(
-    db: AsyncSession, teacher_id: int
-) -> list[TeacherAvailabilityResponse]:
-    """Retourne les disponibilités d'un enseignant."""
-    avs = await repo.list_teacher_availabilities(db, teacher_id)
-    return [_to_availability_response(av) for av in avs]
-
-
-async def create_teacher_availability(
-    db: AsyncSession,
-    teacher_id: int,
-    data: TeacherAvailabilityCreate,
-) -> TeacherAvailabilityResponse:
-    """Crée une entrée de disponibilité enseignant."""
-    start = _parse_time(data.start_time)
-    end = _parse_time(data.end_time)
-    if start >= end:
-        raise BusinessValidationError("start_time must be before end_time")
-
-    av = await repo.create_teacher_availability(
-        db,
-        teacher_id=teacher_id,
-        day=data.day.value,
-        start_time=start,
-        end_time=end,
-        available=data.available,
-        preferred=data.preferred,
-    )
-    await db.commit()
-    return _to_availability_response(av)
-
-
-async def update_teacher_availability(
-    db: AsyncSession,
-    av_id: int,
-    data: TeacherAvailabilityUpdate,
-) -> TeacherAvailabilityResponse:
-    """Met à jour une disponibilité enseignant (available/preferred)."""
-    av = await repo.get_teacher_availability_by_id(db, av_id)
-    if av is None:
-        raise NotFoundError("TeacherAvailability", av_id)
-    av = await repo.update_teacher_availability(
-        db,
-        av,
-        available=data.available,
-        preferred=data.preferred,
-    )
-    await db.commit()
-    return _to_availability_response(av)
-
-
-async def delete_teacher_availability(
-    db: AsyncSession,
-    av_id: int,
-) -> None:
-    """Supprime une disponibilité enseignant ou lève 404."""
-    av = await repo.get_teacher_availability_by_id(db, av_id)
-    if av is None:
-        raise NotFoundError("TeacherAvailability", av_id)
-    await repo.delete_teacher_availability(db, av)
-    await db.commit()

@@ -35,6 +35,16 @@ async def _get_teacher_for_user(db: AsyncSession, user_id: int) -> TeacherProfil
     return teacher
 
 
+async def resolve_teacher_id(db: AsyncSession, user_id: int) -> int:
+    """L'enseignant derriere un compte connecte.
+
+    Expose pour les endpoints qui delegent ensuite a un autre service : ils ont
+    besoin de l'identifiant enseignant, pas du profil entier, et surtout pas de
+    le rechercher eux-memes avec une autre regle que celle du portail.
+    """
+    return (await _get_teacher_for_user(db, user_id)).id
+
+
 async def get_classes(db: AsyncSession, user_id: int) -> TeacherClassesListResponse:
     """Retourne les classes assignées à l'enseignant via timetable_slots."""
     teacher = await _get_teacher_for_user(db, user_id)
