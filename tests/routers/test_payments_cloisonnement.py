@@ -32,6 +32,7 @@ from app.schemas.payment import (
     CashierOption,
     PaymentListResponse,
     PaymentResponse,
+    PaymentSummaryResponse,
 )
 from app.services.payments.scope import cashier_scope
 
@@ -141,6 +142,39 @@ def test_sans_cloisonnement_la_requete_ne_borne_pas_la_caisse() -> None:
     assert "WHERE" not in _sql(PaymentFilters())
 
 
+def test_la_recherche_couvre_le_nom_fige_sur_le_versement() -> None:
+    """Le nom vivant ne suffit pas : un versement dont la fiche eleve a ete
+    supprimee ne se retrouve plus que par ce que le versement a garde."""
+    sql = _sql(PaymentFilters(search="Traore"))
+    assert "student_name_snapshot" in sql
+    assert "student_matricule_snapshot" in sql
+    assert "payments.reference" in sql
+    assert "%Traore%" in sql
+
+
+def test_la_recherche_couvre_aussi_le_nom_vivant_de_l_eleve() -> None:
+    sql = _sql(PaymentFilters(search="Traore"))
+    assert "students.first_name" in sql
+    assert "students.last_name" in sql
+
+
+def test_la_recherche_vide_ne_filtre_rien() -> None:
+    """Une barre de recherche effacee doit rendre toute la liste, pas zero."""
+    assert "WHERE" not in _sql(PaymentFilters(search=""))
+
+
+def test_la_categorie_passe_par_les_allocations_pas_par_la_colonne_depreciee() -> None:
+    """`payments.enrollment_fee_id` n'est plus ecrit depuis 2026-05-17 : s'en
+    servir ferait disparaitre tous les versements recents du filtre."""
+    sql = _sql(PaymentFilters(fee_category_id=3))
+    assert "payment_allocations" in sql
+    assert "fee_variants.fee_category_id = 3" in sql
+    # La colonne depreciee figure parmi les colonnes lues ; ce qui compte est
+    # qu'elle ne serve pas de critere.
+    where = sql[sql.index("WHERE") :]
+    assert "payments.enrollment_fee_id" not in where
+
+
 def test_la_requete_d_export_porte_le_meme_cloisonnement_que_la_liste() -> None:
     """Le maillon manquant entre « l'endpoint pose le filtre » et « le document
     ne contient que ces lignes » : c'est la requête de l'export elle-même qui
@@ -193,6 +227,68 @@ def test_la_periode_descend_aussi_dans_la_requete() -> None:
 # ---------------------------------------------------------------------------
 
 
+BANDEAU_ECOLE = PaymentSummaryResponse(
+    total_expected=8_000_000.0,
+    total_paid=4_500_000.0,
+    total_pending=0.0,
+    total_cancelled=0.0,
+    payment_count=128,
+    completion_rate=56.3,
+)
+
+
+def test_le_bandeau_d_une_caissiere_est_borne_a_sa_caisse(caissiere: TestClient) -> None:
+    """Le symptome d'origine : « 128 versements » au-dessus d'un tableau qui
+    n'en contenait que trois. Le bandeau parlait de l'ecole, la liste de sa
+    caisse."""
+    with patch(
+        "app.routers.payments.payment_service.get_payments_summary",
+        new_callable=AsyncMock,
+        return_value=BANDEAU_ECOLE,
+    ) as bandeau:
+        reponse = caissiere.get("/payments/summary")
+
+    assert reponse.status_code == 200
+    assert bandeau.call_args.kwargs["received_by"] == CAISSIERE.user_id
+
+
+def test_le_bandeau_du_comptable_reste_celui_de_l_ecole(comptable: TestClient) -> None:
+    with patch(
+        "app.routers.payments.payment_service.get_payments_summary",
+        new_callable=AsyncMock,
+        return_value=BANDEAU_ECOLE,
+    ) as bandeau:
+        reponse = comptable.get("/payments/summary")
+
+    assert reponse.status_code == 200
+    assert bandeau.call_args.kwargs["received_by"] is None
+
+
+def test_le_recouvrement_revient_vide_et_non_a_zero_pour_une_caissiere(
+    caissiere: TestClient,
+) -> None:
+    """Un zero se lirait « rien n'est du », ce qui est faux : c'est un chiffre
+    d'ecole, il n'a pas de version pour une personne."""
+    borne = PaymentSummaryResponse(
+        total_expected=None,
+        total_paid=95_000.0,
+        total_pending=0.0,
+        total_cancelled=0.0,
+        payment_count=3,
+        completion_rate=None,
+    )
+    with patch(
+        "app.routers.payments.payment_service.get_payments_summary",
+        new_callable=AsyncMock,
+        return_value=borne,
+    ):
+        corps = caissiere.get("/payments/summary").json()
+
+    assert corps["total_expected"] is None
+    assert corps["completion_rate"] is None
+    assert corps["payment_count"] == 3
+
+
 def test_la_liste_d_une_caissiere_est_bornee_a_sa_caisse(caissiere: TestClient) -> None:
     with patch(
         "app.routers.payments.payment_service.list_payments",
@@ -202,7 +298,7 @@ def test_la_liste_d_une_caissiere_est_bornee_a_sa_caisse(caissiere: TestClient) 
         reponse = caissiere.get("/payments")
 
     assert reponse.status_code == 200
-    assert liste.call_args.kwargs["received_by"] == CAISSIERE.user_id
+    assert liste.call_args.kwargs["filters"].received_by == CAISSIERE.user_id
 
 
 def test_une_caissiere_ne_peut_pas_demander_la_caisse_d_une_collegue(
@@ -216,7 +312,7 @@ def test_une_caissiere_ne_peut_pas_demander_la_caisse_d_une_collegue(
         reponse = caissiere.get("/payments?received_by=999")
 
     assert reponse.status_code == 200
-    assert liste.call_args.kwargs["received_by"] == CAISSIERE.user_id
+    assert liste.call_args.kwargs["filters"].received_by == CAISSIERE.user_id
 
 
 def test_le_comptable_lit_toutes_les_caisses(comptable: TestClient) -> None:
@@ -228,7 +324,7 @@ def test_le_comptable_lit_toutes_les_caisses(comptable: TestClient) -> None:
         reponse = comptable.get("/payments")
 
     assert reponse.status_code == 200
-    assert liste.call_args.kwargs["received_by"] is None
+    assert liste.call_args.kwargs["filters"].received_by is None
 
 
 def test_le_comptable_peut_isoler_la_caisse_d_une_personne(comptable: TestClient) -> None:
@@ -240,7 +336,7 @@ def test_le_comptable_peut_isoler_la_caisse_d_une_personne(comptable: TestClient
         reponse = comptable.get("/payments?received_by=12")
 
     assert reponse.status_code == 200
-    assert liste.call_args.kwargs["received_by"] == 12
+    assert liste.call_args.kwargs["filters"].received_by == 12
 
 
 def test_la_liste_nomme_qui_a_encaisse(comptable: TestClient) -> None:

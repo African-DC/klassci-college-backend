@@ -45,6 +45,12 @@ async def list_payments(
     received_by: int | None = Query(
         None, description="N'afficher que la caisse de cet encaisseur."
     ),
+    search: str | None = Query(
+        None, description="Nom ou matricule de l'eleve, ou reference du versement."
+    ),
+    fee_category_id: int | None = Query(
+        None, description="Ne garder que les versements imputes sur cette categorie."
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     current_user: TokenData = Depends(get_current_user),
@@ -60,15 +66,19 @@ async def list_payments(
     """
     return await payment_service.list_payments(
         db,
-        status=status_filter,
-        method=method,
-        enrollment_fee_id=enrollment_fee_id,
-        date_from=date_from,
-        date_to=date_to,
-        received_by=cashier_scope(
-            requested_received_by=received_by,
-            can_read_all=can_read_all,
-            current_user_id=current_user.user_id,
+        filters=PaymentFilters(
+            status=status_filter,
+            method=method,
+            enrollment_fee_id=enrollment_fee_id,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            fee_category_id=fee_category_id,
+            received_by=cashier_scope(
+                requested_received_by=received_by,
+                can_read_all=can_read_all,
+                current_user_id=current_user.user_id,
+            ),
         ),
         page=page,
         size=size,
@@ -114,11 +124,30 @@ async def list_my_payment_methods(
 @router.get("/summary", response_model=PaymentSummaryResponse)
 async def get_payments_summary(
     academic_year_id: int | None = Query(None),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentSummaryResponse:
-    """Agrège les statistiques de paiement (total attendu, payé, en attente, annulé)."""
-    return await payment_service.get_payments_summary(db, academic_year_id=academic_year_id)
+    """Les chiffres du bandeau, sur le meme perimetre que le tableau dessous.
+
+    Sans cloisonnement, une caissiere lisait « 128 versements » au-dessus d'un
+    tableau qui n'en contenait que trois : le bandeau parlait de l'ecole, la
+    liste de sa caisse. Les deux suivent desormais la meme regle.
+
+    Le recouvrement de l'etablissement ne lui est pas servi pour autant. Il
+    revient vide plutot qu'a zero : un zero se lirait « rien n'est du », ce
+    qui serait faux.
+    """
+    return await payment_service.get_payments_summary(
+        db,
+        academic_year_id=academic_year_id,
+        received_by=cashier_scope(
+            requested_received_by=None,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+    )
 
 
 # NOTE: /cashiers MUST be defined BEFORE /{payment_id}

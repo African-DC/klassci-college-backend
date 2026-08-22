@@ -329,6 +329,22 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
     # Le caissier encaisse au guichet. Il ne voit que ses propres versements :
     # le cloisonnement est applique cote service, `payments:read` ne suffit pas
     # a lui ouvrir les caisses des collegues.
+    #
+    # Ce cloisonnement porte sur ce qui ENUMERE des versements : la liste, le
+    # bandeau de chiffres, les deux exports. La lecture d'UN versement designe
+    # par son identifiant en est volontairement exclue, ainsi que la
+    # reimpression de son recu et l'historique des frais d'un eleve.
+    #
+    # Pourquoi : au guichet, un parent revient reclamer un duplicata et c'est
+    # la caissiere presente qui reimprime, pas forcement celle qui avait
+    # encaisse. Et prendre un versement sans pouvoir lire ce que la famille a
+    # deja paye ferait travailler a l'aveugle. Cet historique parle de la
+    # dette d'un eleve, pas de la caisse d'une personne.
+    #
+    # Tranche le 2026-08-22 avec le proprietaire du produit. Si la decision
+    # change, le cloisonnement se pose avec `app.services.payments.scope` et
+    # doit repondre 404, pas 403 : un 403 confirmerait l'existence du
+    # versement d'un collegue.
     "cashier": {
         "description": "Caissier / Caissière",
         "permissions": [
