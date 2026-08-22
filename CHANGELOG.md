@@ -32,6 +32,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
+- L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement *(tous)*
+- Le bulletin porte l'en-tête administratif ivoirien : autorité à gauche, titre encadré au centre, année à droite, puis le bloc établissement *(parent, admin)*
 - Le bulletin est refait sur le modèle officiel ivoirien : identité avec photo, points par discipline, total, progression d'un trimestre à l'autre, distinctions et sanctions à cocher *(parent, élève, enseignant)*
 - Le bulletin porte la photo de l'élève, ou ses initiales, ainsi que son matricule, sa date et son lieu de naissance, comme le bulletin officiel ivoirien *(parent, élève)*
 - Le bulletin affiche la colonne des points (moyenne × coefficient) et la ligne de total : le parent peut refaire le calcul de la moyenne générale *(parent, enseignant)*

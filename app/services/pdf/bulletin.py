@@ -99,6 +99,85 @@ def _photo_cell(nom: str, photo_url: str | None) -> str:
     return f'<div class="bul-photo bul-photo-init">{esc(_initials(nom))}</div>'
 
 
+_REPUBLIQUE = "RÉPUBLIQUE DE CÔTE D'IVOIRE"
+_DEVISE = "Union — Discipline — Travail"
+_MINISTERE = "MINISTÈRE DE L'ÉDUCATION NATIONALE ET DE L'ALPHABÉTISATION"
+
+_TRIMESTRE_LABELS = {1: "1er trimestre", 2: "2e trimestre", 3: "3e trimestre"}
+
+
+def _masthead(school: dict[str, Any], d: dict[str, Any]) -> str:
+    """L'en-tête du bulletin trimestriel ivoirien.
+
+    Trois colonnes puis un bloc établissement encadré, comme le document
+    officiel : l'autorité à gauche, le titre encadré au centre, l'année à
+    droite. Ce n'est pas une préférence graphique — c'est la disposition qu'un
+    parent, un proviseur et un inspecteur reconnaissent au premier coup d'œil,
+    et la reconnaître fait la moitié de la confiance qu'on accorde au papier.
+    """
+    direction = (school.get("regional_direction") or school.get("ministry_code") or "").strip()
+    direction_html = (
+        f'<div class="bul-mh-autorite">DIRECTION RÉGIONALE {esc(direction)}</div>'
+        if direction
+        else ""
+    )
+
+    trimestre = d.get("trimester")
+    trimestre_txt = _TRIMESTRE_LABELS.get(trimestre, f"Trimestre {trimestre}")
+
+    logo = image_to_datauri(school.get("logo_url"))
+    if logo:
+        logo_html = f'<img class="bul-mh-logo-img" src="{logo}" alt="" />'
+    else:
+        mots = [m for m in (school.get("school_name") or "E").split() if m]
+        logo_html = (
+            f'<div class="bul-mh-mono">{esc("".join(m[0] for m in mots[:2]).upper() or "E")}</div>'
+        )
+
+    def ligne(cle: str, valeur: str) -> str:
+        if not valeur:
+            return ""
+        return (
+            f'<div class="bul-mh-ligne"><span class="bul-mh-cle">{esc(cle)}</span>'
+            f'<span class="bul-mh-val">{esc(valeur)}</span></div>'
+        )
+
+    return f"""
+    <table class="bul-mh"><tr>
+      <td class="bul-mh-gauche">
+        <div class="bul-mh-autorite">{esc(_REPUBLIQUE)}</div>
+        <div class="bul-mh-devise">{esc(_DEVISE)}</div>
+        <div class="bul-mh-autorite bul-mh-ministere">{esc(_MINISTERE)}</div>
+        {direction_html}
+      </td>
+      <td class="bul-mh-centre">
+        <div class="bul-mh-cartouche">
+          <div class="bul-mh-titre">Bulletin trimestriel de notes</div>
+          <div class="bul-mh-trimestre">{esc(trimestre_txt)}</div>
+        </div>
+      </td>
+      <td class="bul-mh-droite">
+        <div class="bul-mh-cle">Année scolaire</div>
+        <div class="bul-mh-annee">{esc(d.get("academic_year_name") or "")}</div>
+      </td>
+    </tr></table>
+
+    <table class="bul-etab"><tr>
+      <td class="bul-etab-logo">{logo_html}</td>
+      <td class="bul-etab-id">
+        <div class="bul-etab-nom">{esc(school.get("school_name") or "Établissement")}</div>
+        {ligne("Adresse", school.get("address") or "")}
+        {ligne("Téléphone", school.get("phone") or "")}
+      </td>
+      <td class="bul-etab-admin">
+        {ligne("Code", school.get("ministry_code") or "")}
+        {ligne("Statut", school.get("status") or "Privé")}
+        {ligne("E-mail", school.get("email") or "")}
+      </td>
+    </tr></table>
+    """
+
+
 def _coef(valeur: float) -> str:
     """Un coefficient s'écrit en entier.
 
@@ -122,14 +201,7 @@ def _identity(d: dict[str, Any]) -> str:
     naissance = d.get("birth_date")
     ne_le = naissance.strftime("%d/%m/%Y") if hasattr(naissance, "strftime") else ""
     lieu = d.get("birth_place") or ""
-    if ne_le and lieu:
-        naissance_txt = f"{ne_le} à {lieu}"
-    else:
-        naissance_txt = ne_le or lieu or "—"
-
-    rang = d.get("rank")
-    effectif = d.get("total_students") or 0
-    numero = f"{rang} / {effectif}" if rang and effectif else "—"
+    naissance_txt = ne_le or "—"
 
     paires = [
         ("Matricule", d.get("matricule") or "—"),
@@ -137,7 +209,7 @@ def _identity(d: dict[str, Any]) -> str:
         ("Genre", _GENRE_LABELS.get(str(d.get("genre") or ""), "—")),
         ("Classe", d.get("class_name") or "—"),
         ("Année scolaire", d.get("academic_year_name") or "—"),
-        ("Bulletin N°", numero),
+        ("Lieu de naissance", lieu or "—"),
     ]
     milieu = (len(paires) + 1) // 2
     colonnes = ""
@@ -419,19 +491,89 @@ def _styles(theme: PDFTheme) -> str:
         font-feature-settings: "tnum" 1;
       }}
 
+      /* Masthead administratif */
+      .bul-mh {{ margin-bottom: 7px; }}
+      .bul-mh > tr > td {{ vertical-align: top; }}
+      .bul-mh-gauche {{ width: 40%; }}
+      .bul-mh-centre {{ width: 36%; padding: 0 10px; }}
+      .bul-mh-droite {{ width: 24%; text-align: right; }}
+      .bul-mh-autorite {{
+        font-size: 7.5px; font-weight: 700; letter-spacing: 0.35px;
+        text-transform: uppercase; color: var(--ink); line-height: 1.4;
+      }}
+      .bul-mh-ministere {{ margin-top: 2px; }}
+      .bul-mh-devise {{
+        font-size: 7.5px; font-style: italic; color: var(--muted); line-height: 1.4;
+      }}
+      .bul-mh-cartouche {{
+        border: 1.2px solid var(--primary);
+        padding: 5px 8px 6px;
+        text-align: center;
+      }}
+      .bul-mh-titre {{
+        font-family: var(--font-display);
+        font-size: 10px; font-weight: 700; color: var(--primary);
+        text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2;
+      }}
+      .bul-mh-trimestre {{
+        font-family: var(--font-display);
+        font-size: 12.5px; font-weight: 700; color: var(--ink);
+        margin-top: 1px;
+      }}
+      .bul-mh-annee {{
+        font-family: var(--font-display);
+        font-size: 12px; font-weight: 700; color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }}
+
+      /* Bloc établissement */
+      .bul-etab {{
+        width: 100%;
+        border: 1px solid var(--bul-filet);
+        margin-bottom: 7px;
+      }}
+      .bul-etab > tr > td {{ padding: 6px 9px; vertical-align: middle; }}
+      .bul-etab-logo {{ width: 58px; }}
+      .bul-mh-logo-img {{
+        width: 46px; height: 46px; object-fit: contain;
+        /* Noir pur a faible opacite : une teinte se lirait comme une
+           salissure sur le bord de l'image. */
+        border: 1px solid rgba(0, 0, 0, 0.10);
+      }}
+      .bul-mh-mono {{
+        width: 46px; height: 46px;
+        display: flex; align-items: center; justify-content: center;
+        background: var(--primary); color: #fff;
+        font-family: var(--font-display);
+        font-size: 17px; font-weight: 700; letter-spacing: 0.5px;
+      }}
+      .bul-etab-id {{ border-right: 1px solid var(--bul-filet); padding-right: 14px; }}
+      .bul-etab-admin {{ width: 38%; }}
+      .bul-etab-nom {{
+        font-family: var(--font-display);
+        font-size: 13px; font-weight: 700; color: var(--primary);
+        line-height: 1.2; margin-bottom: 3px;
+      }}
+      .bul-mh-ligne {{ line-height: 1.5; }}
+      .bul-mh-cle {{
+        font-size: 7px; font-weight: 700; letter-spacing: 0.6px;
+        text-transform: uppercase; color: var(--muted); margin-right: 6px;
+      }}
+      .bul-mh-val {{ font-size: 8.5px; color: var(--ink); }}
+
       /* Bandes de section */
       .bul-bande {{
         background: var(--bul-trame-forte);
         border-top: 1px solid var(--bul-filet);
         border-bottom: 1px solid var(--bul-filet);
-        padding: 3px 8px;
+        padding: 2.5px 8px;
         font-size: 7.5px; font-weight: 700;
         letter-spacing: 1.1px; text-transform: uppercase;
         color: var(--primary);
       }}
 
       /* Identité */
-      .bul-identite > tr > td {{ padding: 8px 9px; vertical-align: middle; }}
+      .bul-identite > tr > td {{ padding: 6px 9px; vertical-align: middle; }}
       .bul-nom {{
         font-family: var(--font-display);
         font-size: 15px; font-weight: 700; color: var(--primary);
@@ -464,7 +606,7 @@ def _styles(theme: PDFTheme) -> str:
       }}
       .bul-notes th.bul-th-g {{ text-align: left; }}
       .bul-notes td {{
-        padding: 4.5px 7px;
+        padding: 3.5px 7px;
         border-bottom: 1px solid var(--bul-trame-forte);
       }}
       .bul-matiere {{ font-weight: 600; color: var(--ink); }}
@@ -483,7 +625,7 @@ def _styles(theme: PDFTheme) -> str:
       /* Compartiments */
       .bul-compartiments > tr > td {{ vertical-align: top; }}
       .bul-comp {{
-        padding: 7px 9px;
+        padding: 6px 9px;
         border-right: 1px solid var(--bul-filet);
         width: 33.33%;
       }}
@@ -499,7 +641,7 @@ def _styles(theme: PDFTheme) -> str:
         border-top: 1px solid var(--bul-filet);
         border-bottom: 1px solid var(--bul-filet);
       }}
-      .bul-verdict > tr > td {{ padding: 7px 9px; vertical-align: middle; }}
+      .bul-verdict > tr > td {{ padding: 5px 9px; vertical-align: middle; }}
       .bul-verdict-cle {{ width: 42%; }}
       .bul-verdict-item {{ width: 29%; border-left: 1px solid var(--bul-filet); }}
       .bul-verdict-label {{
@@ -522,7 +664,7 @@ def _styles(theme: PDFTheme) -> str:
       /* Conseil */
       .bul-conseil > tr > td {{ vertical-align: top; }}
       .bul-conseil-col {{
-        width: 50%; padding: 7px 9px;
+        width: 50%; padding: 6px 9px;
         border-right: 1px solid var(--bul-filet);
       }}
       .bul-case {{ padding: 1.5px 0; color: var(--ink); }}
@@ -533,20 +675,20 @@ def _styles(theme: PDFTheme) -> str:
       }}
       .bul-decision {{
         border-top: 1px solid var(--bul-filet);
-        padding: 6px 9px;
+        padding: 5px 9px;
       }}
       .bul-decision-cle {{
         font-size: 7px; font-weight: 700; letter-spacing: 0.8px;
         text-transform: uppercase; color: var(--muted); margin-right: 10px;
       }}
       .bul-decision-val {{ font-weight: 700; color: var(--primary); font-size: 10px; }}
-      .bul-appreciation {{ border-top: 1px solid var(--bul-filet); padding: 6px 9px; }}
+      .bul-appreciation {{ border-top: 1px solid var(--bul-filet); padding: 5px 9px; }}
       .bul-appreciation-txt {{ margin-top: 2px; line-height: 1.45; color: var(--ink); }}
 
       /* Signatures */
       .bul-signatures {{ border-top: 1px solid var(--bul-filet); }}
       .bul-signatures td {{
-        width: 33.33%; padding: 7px 9px 26px;
+        width: 33.33%; padding: 6px 9px 18px;
         border-right: 1px solid var(--bul-filet);
         vertical-align: top;
       }}
@@ -577,7 +719,6 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
 
     theme = PDFTheme.from_school(school_settings)
     school_name = school_settings.get("school_name") or ""
-    trimestre = bulletin_data.get("trimester", "")
     data = dict(bulletin_data)
     data.setdefault("school_city", school_settings.get("city") or "")
 
@@ -585,19 +726,13 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-      {ui.base_styles(theme, page_size="A4", margin="13mm 12mm")}
+      {ui.base_styles(theme, page_size="A4", margin="11mm 12mm")}
       {_styles(theme)}
     </head>
     <body>
         {ui.page_decoration(theme=theme, watermark_text=school_name)}
         <div class="pdf-page-body">
-        {
-        ui.premium_header(
-            school_settings,
-            theme=theme,
-            doc_type=f"BULLETIN TRIMESTRIEL DE NOTES — {trimestre}{'er' if str(trimestre) == '1' else 'e'} TRIMESTRE",
-        )
-    }
+        {_masthead(school_settings, data)}
 
         <div class="bul">
           {_band("Identité de l'élève")}

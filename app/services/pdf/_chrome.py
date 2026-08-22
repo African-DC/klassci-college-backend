@@ -62,19 +62,39 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             text-align: center; font-size: 8px; color: var(--muted);
             text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
         }}
+        /* En-tete des documents : une carte, pas une ligne flottante.
+           Rayons concentriques — carte 15px, retrait 9px, pastille 6px :
+           15 = 6 + 9. Des rayons qui ne s'emboitent pas sont ce qui fait
+           qu'un bloc imbrique « sonne faux » sans qu'on sache dire pourquoi. */
+        /* Un tableau, pas un flex : WeasyPrint ne rend fiablement ni le
+           `gap` ni `overflow:hidden` sur un conteneur flex, et le monogramme
+           debordait sa pastille en chevauchant le nom de l'etablissement. */
         .masthead {{
-            display: flex; align-items: center; gap: 20px;
-            padding-bottom: 10px;
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            background: var(--soft-bg);
+            margin-bottom: 9px;
         }}
-        .masthead-logo {{ flex: 0 0 auto; padding-right: 4px; }}
-        .masthead-id {{ flex: 1; }}
+        .masthead > tr > td {{ padding: 9px; vertical-align: middle; }}
+        .masthead-logo {{ width: 46px; }}
+        .masthead-logo img,
+        .masthead-logo .pdf-monogram {{
+            width: 46px; height: 46px;
+            border-radius: 6px;
+            object-fit: contain;
+            /* Contour noir pur a faible opacite : une teinte prendrait la
+               couleur du fond et se lirait comme une salissure sur le bord. */
+            border: 1px solid rgba(0, 0, 0, 0.10);
+        }}
+        .masthead-id {{ padding-left: 3px; }}
         .masthead-name {{
             font-family: var(--font-display); font-weight: 700;
-            font-size: 17px; color: var(--primary); line-height: 1.15;
-            letter-spacing: 0.2px;
+            font-size: 15px; color: var(--primary); line-height: 1.2;
+            letter-spacing: 0.1px;
         }}
         .masthead-meta {{
-            font-size: 8.5px; color: var(--muted); margin-top: 3px; line-height: 1.5;
+            font-size: 8px; color: var(--muted); margin-top: 2px; line-height: 1.45;
         }}
         .doc-filet {{
             height: 0; border-bottom: 1.5px solid var(--primary); margin: 0;
@@ -313,10 +333,9 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* Monogramme (fallback identité si pas de logo) */
         .pdf-monogram {{
-            width: 58px; height: 58px; border-radius: 5px;
-            background: var(--primary); color: #fff; display: flex;
-            align-items: center; justify-content: center; font-size: 20px;
-            font-weight: 700; letter-spacing: 1px;
+            background: var(--primary); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; font-weight: 700; letter-spacing: 0.5px;
             font-family: var(--font-display);
         }}
     </style>
@@ -362,10 +381,7 @@ def premium_header(
     eyebrow = _eyebrow_html() if show_ci_banner else ""
 
     if logo_data:
-        logo_html = (
-            f'<img src="{logo_data}" alt="Logo" '
-            f'style="max-height:58px; max-width:150px; object-fit:contain;" />'
-        )
+        logo_html = f'<img src="{logo_data}" alt="" />'
     else:
         words = [w for w in (school.get("school_name") or "E").split() if w]
         initials = "".join(w[0] for w in words[:2]).upper() or "E"
@@ -389,14 +405,13 @@ def premium_header(
     meta_html = f'<div class="masthead-meta">{"<br/>".join(meta_lines)}</div>' if meta_lines else ""
 
     masthead = f"""
-    <div class="masthead">
-        <div class="masthead-logo">{logo_html}</div>
-        <div class="masthead-id">
+    <table class="masthead"><tr>
+        <td class="masthead-logo">{logo_html}</td>
+        <td class="masthead-id">
             <div class="masthead-name">{school_name}</div>
             {meta_html}
-        </div>
-    </div>
-    <div class="doc-filet"></div>
+        </td>
+    </tr></table>
     """
 
     title_block = ""
