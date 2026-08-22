@@ -20,7 +20,7 @@ from typing import Any
 # Ordre partage avec l ecran caisse : une seule source de verite.
 from app.core.payment_methods import ordered_methods
 from app.services.pdf import components as ui
-from app.services.pdf._helpers import enum_value, format_decimal
+from app.services.pdf._helpers import enum_value, format_xof
 from app.services.pdf.theme import PDFTheme, method_label
 
 _JOURS_FR = (
@@ -75,7 +75,7 @@ def _payment_rows(payments: list[dict[str, Any]], *, with_cashier: bool) -> list
         method_key = enum_value(p.get("method", "")) or ""
         reference = p.get("reference") or "—"
         amount = p.get("amount")
-        amount_str = format_decimal(amount) if isinstance(amount, Decimal) else str(amount or "—")
+        amount_str = format_xof(amount) if isinstance(amount, Decimal) else str(amount or "—")
         status_key = enum_value(p.get("status", "completed")) or "completed"
         row: list[Any] = [
             f"#{p.get('id', '')}",
@@ -117,8 +117,8 @@ def _by_cashier_rows(by_cashier: list[Any], methods: list[str]) -> list[list[Any
         ]
         for method in methods:
             amount = entry.by_method.get(method, Decimal("0"))
-            cells.append({"value": format_decimal(amount), "type": "num"})
-        cells.append({"value": format_decimal(entry.total), "type": "num-emphasis"})
+            cells.append({"value": format_xof(amount), "type": "num"})
+        cells.append({"value": format_xof(entry.total), "type": "num-emphasis"})
         rows.append(cells)
     return rows
 
@@ -136,7 +136,7 @@ def _totals_rows(totals_by_method: dict[str, Decimal]) -> list[list[Any]]:
     return [
         [
             method_label(m),
-            {"value": format_decimal(totals_by_method[m]), "type": "num"},
+            {"value": format_xof(totals_by_method[m]), "type": "num"},
         ]
         for m in ordered_methods(totals_by_method)
     ]
@@ -193,7 +193,11 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         meta_left = f"<strong>Toutes les caisses</strong> · {ui.esc(caisses)}"
     else:
         meta_left = f"<strong>Caissier :</strong> {ui.esc(cashier_name)}"
-    meta_right = f"Édité le {ui.esc(issued_str)} par {ui.esc(issued_by_name)}"
+    # « par — » se lit comme un champ casse. Sans nom, on n'annonce pas
+    # l'auteur : la date suffit, et le bordereau porte deja la signature.
+    meta_right = f"Édité le {ui.esc(issued_str)}"
+    if issued_by_name and issued_by_name.strip() not in ("—", "-"):
+        meta_right += f" par {ui.esc(issued_by_name)}"
 
     # Sous-ligne du total : counts validés/annulés
     counts_pieces = [
@@ -208,7 +212,7 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
     )
 
     total_str = (
-        format_decimal(total_general) if isinstance(total_general, Decimal) else str(total_general)
+        format_xof(total_general) if isinstance(total_general, Decimal) else str(total_general)
     )
 
     method_section = ui.section_title("Récapitulatif par méthode", theme=theme) + ui.premium_table(

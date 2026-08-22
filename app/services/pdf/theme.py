@@ -221,3 +221,39 @@ def appreciation_label(average: Any) -> str:
     if value >= 8:
         return "Passable"
     return "Insuffisant"
+
+
+_DECISION_LABELS = {
+    "passage": "Admis en classe supérieure",
+    "repechage": "Repêché par le conseil",
+    "redoublement": "Redouble la classe",
+    "exclusion": "Exclu de l'établissement",
+}
+
+
+_DECISION_LABELS_COURTS = {
+    "passage": "Admis",
+    "repechage": "Repêché",
+    "redoublement": "Redouble",
+    "exclusion": "Exclu",
+}
+
+
+def decision_label(value: Any, *, court: bool = False) -> str:
+    """Le libellé français d'une décision de conseil de classe.
+
+    Le procès-verbal imprimait « passage » en minuscules, tel que la base le
+    stocke. C'est une pièce d'archive que le conseil signe : elle doit dire ce
+    qu'elle décide, pas le nom interne de la décision.
+
+    `court` pour une colonne de tableau. « Admis en classe supérieure » y casse
+    sur deux lignes à chaque élève et pousse le procès-verbal sur une seconde
+    feuille ; le bulletin, lui, a la place de la phrase entière.
+    """
+    from app.services.pdf._helpers import enum_value
+
+    brut = str(enum_value(value) or "").strip()
+    if not brut:
+        return "—"
+    table = _DECISION_LABELS_COURTS if court else _DECISION_LABELS
+    return table.get(brut, brut)

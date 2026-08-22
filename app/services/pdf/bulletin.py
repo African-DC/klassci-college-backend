@@ -28,14 +28,7 @@ from typing import Any
 
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import esc, format_decimal, image_to_datauri
-from app.services.pdf.theme import PDFTheme
-
-_DECISION_LABELS = {
-    "passage": "Admis en classe supérieure",
-    "repechage": "Repêché par le conseil",
-    "redoublement": "Redouble la classe",
-    "exclusion": "Exclu de l'établissement",
-}
+from app.services.pdf.theme import PDFTheme, decision_label
 
 _GENRE_LABELS = {"M": "Masculin", "F": "Féminin"}
 
@@ -421,7 +414,7 @@ def _mentions_conseil(d: dict[str, Any]) -> str:
     decision = d.get("council_decision")
     decision_html = ""
     if decision:
-        libelle = _DECISION_LABELS.get(str(decision), str(decision))
+        libelle = decision_label(decision)
         decision_html = (
             '<div class="bul-decision">'
             '<span class="bul-decision-cle">Décision du conseil de classe</span>'

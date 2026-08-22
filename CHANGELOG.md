@@ -47,6 +47,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le procès-verbal du conseil imprimait « passage » en minuscules au lieu de la décision en toutes lettres *(admin, enseignant)*
+- Les montants du bordereau de caisse s'écrivaient sans séparateur de milliers (« 155000.00 » au lieu de « 155 000 ») *(caissier, comptable)*
+- Un compteur à zéro s'affichait en vert ou en orange, comme s'il annonçait une réussite ou une alerte *(tous)*
 - Sur tous les documents, les cartes de compteurs, les blocs des responsables légaux et les intitulés de champ se touchaient au lieu d'être espacés *(tous)*
 - Les mentions d'État en tête de document se lisaient comme un filigrane : la République prend désormais le premier rang, la devise et le ministère suivent *(tous)*
 - Sur la fiche d'inscription, les intitulés étaient collés à leurs valeurs (« SEXEFéminin ») et le cadre photo affichait le mot « Photo » *(admin, parent)*

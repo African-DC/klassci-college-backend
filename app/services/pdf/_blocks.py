@@ -47,6 +47,11 @@ def amount_box(
     """
 
 
+def _valeur_non_nulle(valeur: str) -> bool:
+    """Vrai si la valeur affichee porte autre chose que des zeros."""
+    return any(c in "123456789" for c in str(valeur))
+
+
 def kpi_card(
     label: str,
     value: str,
@@ -54,7 +59,15 @@ def kpi_card(
     theme: PDFTheme,
     tone: str = "primary",
 ) -> str:
-    """KPI card unique. `tone` parmi primary/accent/success/warn."""
+    """KPI card unique. `tone` parmi primary/accent/success/warn.
+
+    Un ton semantique sur une valeur nulle est retrograde en neutre : « 0 %
+    de reussite » ou « 0 XOF verse » ecrit en vert dit « tout va bien », et
+    l'oeil lit la couleur avant le chiffre. Mieux vaut pas de signal qu'un
+    signal faux.
+    """
+    if tone in ("success", "warn") and not _valeur_non_nulle(value):
+        tone = "primary"
     value_class = (
         f"pdf-kpi-value pdf-kpi-value-{esc(tone)}" if tone != "primary" else "pdf-kpi-value"
     )
