@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- L'enseignant déclare lui-même ses plages d'indisponibilité depuis son portail, et l'administration peut les saisir à sa place quand il a prévenu de vive voix *(enseignant, directeur des études, secrétariat)*
+- Poser un créneau montre la semaine de l'enseignant choisi avant de choisir l'horaire : ses cours dans les autres classes et ses plages fermées *(directeur des études, secrétariat, admin)*
 - Chaque versement dit qui l'a encaissé : le nom du caissier apparaît dans la liste, dans le reçu et dans les deux exports, et la comptabilité peut isoler une caisse pour la contrôler *(comptable, directeur, caissier)*
 - Le journal des versements s'exporte en PDF au gabarit officiel de l'établissement, avec récapitulatif par moyen de paiement et par caissier, et signatures caissier / comptabilité *(comptable, caissier)*
 - Le même journal s'exporte en classeur Excel aux couleurs et au logo de l'école, en deux feuilles : le détail ligne à ligne et le récapitulatif, montants calculables et en-têtes répétées à l'impression *(comptable)*
@@ -42,6 +44,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un créneau refusé dit enfin pourquoi : quel enseignant, à quelle heure, et avec quelle classe il est déjà pris, au lieu d'un refus sans explication *(directeur des études, secrétariat, admin)*
+- La grille de disponibilités d'un enseignant affichait sa semaine fermée alors que la saisie manuelle d'un créneau l'acceptait quand même : les deux appliquent désormais la même règle que la génération automatique *(directeur des études, admin)*
 - Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement *(caissier, parent)*
 - La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements *(caissier)*
 - La recherche par nom d'élève et le filtre par catégorie de frais étaient acceptés puis ignorés : le tableau ne bougeait pas *(caissier, comptable)*

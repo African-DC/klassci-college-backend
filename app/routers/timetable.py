@@ -13,11 +13,12 @@ from app.schemas.timetable import (
     TeacherAvailabilityCreate,
     TeacherAvailabilityResponse,
     TeacherAvailabilityUpdate,
+    TeacherWeekResponse,
     TimetableSlotCreate,
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
-from app.services import timetable_service
+from app.services import teacher_availability_service, timetable_service
 
 router = APIRouter(prefix="/timetable", tags=["timetable"])
 
@@ -176,7 +177,12 @@ async def delete_slot(
 
 
 # ---------------------------------------------------------------------------
-# Teacher availability sub-router
+# Disponibilites enseignant, cote administration
+#
+# `timetable:write` et non un role en dur : chez ROSTAN c'est le directeur des
+# etudes qui saisit ce que l'enseignant lui a dit de vive voix, ailleurs c'est
+# le secretariat. L'ecran d'ajout de creneau et la fiche enseignant tapent tous
+# les deux ici.
 # ---------------------------------------------------------------------------
 
 teachers_router = APIRouter(prefix="/teachers", tags=["timetable"])
@@ -191,8 +197,25 @@ async def list_teacher_availabilities(
     _: None = require_permission("timetable:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[TeacherAvailabilityResponse]:
-    """Retourne les disponibilités d'un enseignant."""
-    return await timetable_service.list_teacher_availabilities(db, teacher_id)
+    """Retourne les plages declarees pour un enseignant."""
+    return await teacher_availability_service.list_for_teacher(db, teacher_id)
+
+
+@teachers_router.get("/{teacher_id}/week", response_model=TeacherWeekResponse)
+async def get_teacher_week(
+    teacher_id: int,
+    academic_year_id: int | None = Query(None),
+    _: None = require_permission("timetable:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> TeacherWeekResponse:
+    """La semaine occupee d'un enseignant : cours ailleurs et plages fermees.
+
+    Sert a montrer l'empechement **avant** le choix de l'horaire, plutot que de
+    le refuser apres coup.
+    """
+    return await teacher_availability_service.week_for_teacher(
+        db, teacher_id, academic_year_id=academic_year_id
+    )
 
 
 @teachers_router.post(
@@ -206,8 +229,8 @@ async def create_teacher_availability(
     _: None = require_permission("timetable:write"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> TeacherAvailabilityResponse:
-    """Déclare une disponibilité pour un enseignant."""
-    return await timetable_service.create_teacher_availability(db, teacher_id, data)
+    """Declare une plage pour un enseignant."""
+    return await teacher_availability_service.create(db, teacher_id, data)
 
 
 availability_router = APIRouter(prefix="/teacher-availabilities", tags=["timetable"])
@@ -223,8 +246,8 @@ async def update_teacher_availability(
     _: None = require_permission("timetable:write"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> TeacherAvailabilityResponse:
-    """Met à jour une disponibilité enseignant (available/preferred)."""
-    return await timetable_service.update_teacher_availability(db, av_id, data)
+    """Rouvre ou referme une plage."""
+    return await teacher_availability_service.update(db, av_id, data)
 
 
 @availability_router.delete("/{av_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -233,5 +256,5 @@ async def delete_teacher_availability(
     _: None = require_permission("timetable:write"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime une disponibilité enseignant."""
-    await timetable_service.delete_teacher_availability(db, av_id)
+    """Supprime une plage."""
+    await teacher_availability_service.remove(db, av_id)

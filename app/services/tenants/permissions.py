@@ -73,6 +73,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "timetable:read", "name": "View timetable"},
     {"slug": "timetable:write", "name": "Edit timetable"},
     {"slug": "timetable:generate", "name": "Generate timetable"},
+    {
+        "slug": "timetable:availability:self_declare",
+        "name": "Declare own availability",
+    },
     # Operations (5)
     {"slug": "payments:read", "name": "View payments"},
     {"slug": "payments:create", "name": "Create payments"},
@@ -261,6 +265,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "attendance:create",
             "attendance:update",
             "timetable:read",
+            "timetable:availability:self_declare",
             "reports:read",
             "teacher:attendance:self_declare",
             "leave:request",
