@@ -79,8 +79,11 @@ def _eval_header_cell(evaluation: dict[str, Any]) -> str:
     title = str(evaluation.get("title") or "").strip()
     if not title:
         title = _TYPE_LABELS.get(str(evaluation.get("type") or ""), "Évaluation")
-    if len(title) > 18:
-        title = title[:17].rstrip() + "…"
+    # Coupe seulement ce qui deborde vraiment : a dix-sept signes,
+    # « Controle - Geometrie » devenait « Controle - Geomet… » et deux
+    # epreuves du meme chapitre cessaient de se distinguer.
+    if len(title) > 38:
+        title = title[:37].rstrip() + "…"
     coef = evaluation.get("coefficient") or 1
     date_val = evaluation.get("date")
     date_str = date_val.strftime("%d/%m") if hasattr(date_val, "strftime") else ""

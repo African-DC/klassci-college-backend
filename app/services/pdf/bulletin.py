@@ -108,7 +108,10 @@ def _masthead(school: dict[str, Any], d: dict[str, Any]) -> str:
     parent, un proviseur et un inspecteur reconnaissent au premier coup d'œil,
     et la reconnaître fait la moitié de la confiance qu'on accorde au papier.
     """
-    direction = (school.get("regional_direction") or school.get("ministry_code") or "").strip()
+    # Pas de repli sur le code de l'etablissement : ce numero identifie l'ecole,
+    # pas une direction regionale. L'annoncer comme telle est faux sur une piece
+    # officielle, et le repli le faisait silencieusement.
+    direction = (school.get("regional_direction") or "").strip()
     direction_html = (
         f'<div class="bul-mh-autorite">DIRECTION RÉGIONALE {esc(direction)}</div>'
         if direction

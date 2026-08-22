@@ -47,6 +47,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- L'emploi du temps s'arrêtait au dernier jour occupé : un vendredi sans créneau disparaissait de la semaine *(admin, enseignant, élève)*
+- Les feuilles d'appel et de notes n'avaient aucune case où écrire : les colonnes n'existaient qu'en en-tête *(enseignant)*
+- Le bulletin annonçait le code de l'établissement comme une direction régionale *(parent, admin)*
+- Le relevé de notes coupait l'intitulé des évaluations à dix-sept signes *(enseignant)*
 - Le procès-verbal du conseil imprimait « passage » en minuscules au lieu de la décision en toutes lettres *(admin, enseignant)*
 - Les montants du bordereau de caisse s'écrivaient sans séparateur de milliers (« 155000.00 » au lieu de « 155 000 ») *(caissier, comptable)*
 - Un compteur à zéro s'affichait en vert ou en orange, comme s'il annonçait une réussite ou une alerte *(tous)*
