@@ -18,6 +18,7 @@ from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
 from app.services.attendance_service import get_student_attendance_summary
+from app.services.pdf._helpers import enum_value
 from app.services.pdf_service import generate_bulletin_pdf
 from app.services.reports_subject_stats import (
     compute_general_stats,
@@ -71,16 +72,25 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
     ).strip()
     issued_at = bulletin.generated_at or datetime.utcnow()
     suffix = matricule or str(bulletin.id)
+    eleve = bulletin.student
     source_data = {
         "student_name": student_name,
+        # L'identite que porte le bulletin officiel ivoirien. Le parent verifie
+        # d'abord que le document est bien celui de son enfant : matricule,
+        # date et lieu de naissance sont ce qui le lui dit.
+        "matricule": matricule,
+        "birth_date": getattr(eleve, "birth_date", None) if eleve else None,
+        "birth_place": (getattr(eleve, "birth_place", None) or "") if eleve else "",
+        "genre": enum_value(getattr(eleve, "genre", None)) if eleve else None,
+        "photo_url": (getattr(eleve, "photo_url", None) or "") if eleve else "",
         "class_name": class_name,
         "trimester": bulletin.trimester,
         "academic_year_name": academic_year_name,
         "average": bulletin.average,
         "rank": bulletin.rank,
         "total_students": total_students,
-        "mention": bulletin.mention,
-        "council_decision": bulletin.council_decision,
+        "mention": enum_value(bulletin.mention),
+        "council_decision": enum_value(bulletin.council_decision),
         "teacher_comment": bulletin.teacher_comment,
         "subject_averages": subject_averages,
         "class_stats": class_stats,
