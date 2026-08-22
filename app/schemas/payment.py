@@ -157,14 +157,20 @@ class PaymentSummaryResponse(BaseModel):
     versements, pas des dettes — versements orphelins compris, pour ne pas
     dire moins que le bordereau de caisse du jour. Ils ne se comparent pas à
     `total_expected`.
+
+    Pour un caissier, tout ce qui compte des versements est ramené à sa
+    propre caisse, et le recouvrement n'est pas servi du tout.
     """
 
-    total_expected: float
+    #: Vide pour un appelant cloisonne sur sa caisse : le recouvrement est un
+    #: chiffre d'ecole, il ne se restreint pas a une personne. Vide et non zero,
+    #: parce qu'un zero se lirait « rien n'est du ».
+    total_expected: float | None
     total_paid: float
     total_pending: float
     total_cancelled: float
     payment_count: int
-    completion_rate: float
+    completion_rate: float | None
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,6 @@ Architecture (refactor 2026-05-17) :
   Payment + N PaymentAllocation en transaction.
 """
 
-from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -81,35 +80,25 @@ async def get_payment_with_allocations(db: AsyncSession, payment_id: int) -> Pay
 async def list_payments(
     db: AsyncSession,
     *,
-    status: str | None = None,
-    method: str | None = None,
-    enrollment_fee_id: int | None = None,
-    enrollment_id: int | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    received_by: int | None = None,
+    filters: PaymentFilters,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[Payment], int]:
     """Retourne une page de paiements avec le total.
 
-    `received_by` cloisonne un caissier sur sa propre caisse. Le filtre est
-    appliqué ici, dans la requête, et non après coup sur la page : filtrer en
-    Python laisserait le total et la pagination compter les versements des
-    collègues, et le caissier verrait « 128 versements » en n'en lisant que
-    les siens.
+    Les critères arrivent composés : l'écran et les deux exports passent le
+    même objet, donc un filtre ajouté vaut pour les trois. Les recopier ici
+    en paramètres separés avait déjà laissé la recherche et la catégorie hors
+    de la requête, acceptées par l'API et silencieusement ignorées.
+
+    `filters.received_by` cloisonne un caissier sur sa propre caisse. Il est
+    appliqué dans la requête, pas après coup sur la page : filtrer en Python
+    laisserait le total et la pagination compter les versements des collègues,
+    et le caissier verrait « 128 versements » en n'en lisant que les siens.
     """
     base = apply_payment_filters(
         select(Payment).options(*_payment_full_options()),
-        PaymentFilters(
-            status=status,
-            method=method,
-            enrollment_fee_id=enrollment_fee_id,
-            enrollment_id=enrollment_id,
-            date_from=date_from,
-            date_to=date_to,
-            received_by=received_by,
-        ),
+        filters,
     )
 
     count_stmt = select(func.count()).select_from(base.subquery())

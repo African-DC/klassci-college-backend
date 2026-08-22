@@ -11,6 +11,7 @@ from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
 from app.repositories import installment_repository
 from app.repositories import payment_repository as repo
+from app.repositories.payment_filters import PaymentFilters
 from app.schemas.payment import (
     PaymentListResponse,
     PaymentResponse,
@@ -23,33 +24,16 @@ from app.services.payments._response import payment_to_response
 async def list_payments(
     db: AsyncSession,
     *,
-    status: str | None = None,
-    method: str | None = None,
-    enrollment_fee_id: int | None = None,
-    enrollment_id: int | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    received_by: int | None = None,
+    filters: PaymentFilters,
     page: int = 1,
     size: int = 20,
 ) -> PaymentListResponse:
     """Retourne une page de paiements.
 
-    `received_by` est passé par le routeur quand l'appelant n'a pas
-    `payments:read:all` : un caissier ne lit que sa propre caisse.
+    Les critères sont composés par le routeur, qui y résout au passage la
+    caisse que l'appelant a le droit de lire.
     """
-    payments, total = await repo.list_payments(
-        db,
-        status=status,
-        method=method,
-        enrollment_fee_id=enrollment_fee_id,
-        enrollment_id=enrollment_id,
-        date_from=date_from,
-        date_to=date_to,
-        received_by=received_by,
-        page=page,
-        size=size,
-    )
+    payments, total = await repo.list_payments(db, filters=filters, page=page, size=size)
     return PaymentListResponse(
         items=[payment_to_response(p) for p in payments],
         total=total,
@@ -112,6 +96,7 @@ async def get_payments_summary(
     db: AsyncSession,
     *,
     academic_year_id: int | None = None,
+    received_by: int | None = None,
 ) -> PaymentSummaryResponse:
     """Agrège les statistiques de paiement (KPIs dashboard admin).
 
@@ -131,11 +116,40 @@ async def get_payments_summary(
       qu'ils ont été enregistrés, versements orphelins compris, pour que le
       tableau de bord ne dise pas moins que le bordereau du jour. Aucun taux
       n'en est tiré : ils ne se comparent à aucun attendu.
+
+    `received_by` ne restreint que la seconde moitié. Le recouvrement n'a pas
+    de version « pour une personne » : il se lit sur les frais dus, pas sur
+    qui a tenu le guichet. Pour un appelant cloisonné il n'est donc pas
+    calculé du tout, et `total_paid` change de sens — ce qu'il a encaissé,
+    et non ce que l'école a recouvré.
     """
-    total_expected = float(
-        await installment_repository.mandatory_total_for_year(db, academic_year_id)
-    )
-    total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, academic_year_id))
+    cloisonne = received_by is not None
+
+    total_expected: float | None = None
+    completion_rate: float | None = None
+    if not cloisonne:
+        total_expected = float(
+            await installment_repository.mandatory_total_for_year(db, academic_year_id)
+        )
+        total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, academic_year_id))
+    else:
+        encaisse_stmt = select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Payment.status == PaymentStatus.COMPLETED.value, Payment.amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+        ).where(Payment.received_by == received_by)
+        if academic_year_id is not None:
+            encaisse_stmt = encaisse_stmt.select_from(Payment).outerjoin(
+                Enrollment, Payment.enrollment_id == Enrollment.id
+            )
+            encaisse_stmt = encaisse_stmt.where(await _belongs_to_year(db, academic_year_id))
+        total_paid = float((await db.execute(encaisse_stmt)).scalar() or 0)
 
     pay_stmt = select(
         func.count().label("payment_count"),
@@ -163,13 +177,16 @@ async def get_payments_summary(
             Enrollment, Payment.enrollment_id == Enrollment.id
         )
         pay_stmt = pay_stmt.where(await _belongs_to_year(db, academic_year_id))
+    if cloisonne:
+        pay_stmt = pay_stmt.where(Payment.received_by == received_by)
 
     pay_row = (await db.execute(pay_stmt)).one()
 
     total_pending = float(pay_row.total_pending)
     total_cancelled = float(pay_row.total_cancelled)
     payment_count = pay_row.payment_count
-    completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
+    if total_expected is not None:
+        completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
 
     return PaymentSummaryResponse(
         total_expected=total_expected,

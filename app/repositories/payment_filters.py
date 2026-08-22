@@ -16,9 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, or_, select
 
-from app.models.fee import Payment, PaymentAllocation
+from app.models.enrollment import Enrollment
+from app.models.fee import EnrollmentFee, FeeVariant, Payment, PaymentAllocation
+from app.models.user import Student
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +39,10 @@ class PaymentFilters:
     date_from: datetime | None = None
     date_to: datetime | None = None
     received_by: int | None = None
+    #: Texte libre saisi dans la barre de recherche de l'ecran.
+    search: str | None = None
+    #: Categorie de frais, atteinte par les allocations du versement.
+    fee_category_id: int | None = None
 
 
 def apply_payment_filters[S: Select](stmt: S, filters: PaymentFilters) -> S:
@@ -57,6 +63,41 @@ def apply_payment_filters[S: Select](stmt: S, filters: PaymentFilters) -> S:
                 select(PaymentAllocation.payment_id).where(
                     PaymentAllocation.enrollment_fee_id == filters.enrollment_fee_id
                 )
+            )
+        )
+    if filters.fee_category_id is not None:
+        # Meme chemin que `enrollment_fee_id`, un cran plus haut : allocation,
+        # frais, variante, categorie. `payments.enrollment_fee_id` est
+        # deprecie depuis 2026-05-17 et ne sert pas de raccourci.
+        stmt = stmt.where(
+            Payment.id.in_(
+                select(PaymentAllocation.payment_id)
+                .join(EnrollmentFee, PaymentAllocation.enrollment_fee_id == EnrollmentFee.id)
+                .join(FeeVariant, EnrollmentFee.fee_variant_id == FeeVariant.id)
+                .where(FeeVariant.fee_category_id == filters.fee_category_id)
+            )
+        )
+    if filters.search:
+        # Le nom fige sur le versement compte autant que le nom vivant : c'est
+        # le seul moyen de retrouver un encaissement dont la fiche eleve a ete
+        # supprimee, et c'est precisement ce qu'une caisse doit pouvoir faire.
+        motif = f"%{filters.search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Payment.student_name_snapshot.ilike(motif),
+                Payment.student_matricule_snapshot.ilike(motif),
+                Payment.reference.ilike(motif),
+                Payment.enrollment_id.in_(
+                    select(Enrollment.id)
+                    .join(Student, Enrollment.student_id == Student.id)
+                    .where(
+                        or_(
+                            Student.first_name.ilike(motif),
+                            Student.last_name.ilike(motif),
+                            Student.enrollment_number.ilike(motif),
+                        )
+                    )
+                ),
             )
         )
     if filters.date_from is not None:
