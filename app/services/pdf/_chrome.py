@@ -288,13 +288,14 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* ============ Sceau numérique institutionnel ======================== */
         .pdf-verify {{
-            margin-top: 18px; padding: 12px 15px;
+            margin-top: 11px; padding: 10px 14px;
             border: 0.75px solid var(--border); border-radius: 5px;
             background: var(--soft-bg);
-            display: flex; align-items: center; gap: 16px;
+            display: flex; align-items: center;
         }}
         .pdf-verify-cev {{
             width: 62px; height: 62px; flex: 0 0 62px;
+            margin-right: 16px;
             border: 0.75px solid var(--border); border-radius: 3px; background: #fff;
             padding: 2px; box-sizing: border-box;
         }}

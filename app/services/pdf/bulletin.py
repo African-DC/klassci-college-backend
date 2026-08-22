@@ -260,20 +260,20 @@ def _disciplines(subject_averages: list[dict[str, Any]]) -> str:
                 points = None
         coef_total += coef
 
-        prof = sa.get("teacher_name")
-        prof_html = f'<div class="bul-prof">{esc(prof)}</div>' if prof else ""
+        prof = sa.get("teacher_name") or ""
         rang = sa.get("rang") if sa.get("rang") is not None else sa.get("rank")
         moy_classe = sa.get("class_avg")
 
         lignes += (
             "<tr>"
-            f'<td class="bul-matiere">{esc(sa.get("subject_name", ""))}{prof_html}</td>'
+            f'<td class="bul-matiere">{esc(sa.get("subject_name", ""))}</td>'
             f'<td class="bul-n bul-n-fort">{format_decimal(moyenne)}</td>'
             f'<td class="bul-n">{_coef(coef)}</td>'
             f'<td class="bul-n">{format_decimal(points) if points is not None else "—"}</td>'
             f'<td class="bul-n">{esc(str(rang)) if rang else "—"}</td>'
             f'<td class="bul-n bul-n-doux">'
             f"{format_decimal(moy_classe) if moy_classe is not None else '—'}</td>"
+            f'<td class="bul-prof">{esc(prof)}</td>'
             f'<td class="bul-appr">{esc(ui.appreciation_label(moyenne))}</td>'
             "</tr>"
         )
@@ -291,21 +291,23 @@ def _disciplines(subject_averages: list[dict[str, Any]]) -> str:
             '<td class="bul-n"></td>'
             f'<td class="bul-n">{_coef(coef_total)}</td>'
             f'<td class="bul-n">{format_decimal(points_total)}</td>'
-            '<td class="bul-n"></td><td class="bul-n"></td><td class="bul-appr"></td>'
+            '<td class="bul-n"></td><td class="bul-n"></td>'
+            '<td class="bul-prof"></td><td class="bul-appr"></td>'
             "</tr>"
         )
 
     return f"""
     <table class="bul-notes">
       <colgroup>
-        <col style="width:29%"/><col style="width:10%"/><col style="width:8%"/>
-        <col style="width:11%"/><col style="width:8%"/><col style="width:11%"/>
-        <col style="width:23%"/>
+        <col style="width:24%"/><col style="width:8%"/><col style="width:6%"/>
+        <col style="width:9%"/><col style="width:6%"/><col style="width:9%"/>
+        <col style="width:20%"/><col style="width:18%"/>
       </colgroup>
       <thead><tr>
         <th class="bul-th-g">Discipline</th>
         <th>Moy. /20</th><th>Coef.</th><th>Points</th>
         <th>Rang</th><th>Moy. classe</th>
+        <th class="bul-th-g">Professeur</th>
         <th class="bul-th-g">Appréciation</th>
       </tr></thead>
       <tbody>{lignes}{total}</tbody>
@@ -532,7 +534,7 @@ def _styles(theme: PDFTheme) -> str:
         border: 1px solid var(--bul-filet);
         margin-bottom: 7px;
       }}
-      .bul-etab > tr > td {{ padding: 6px 9px; vertical-align: middle; }}
+      .bul-etab > tr > td {{ padding: 8px 11px; vertical-align: middle; }}
       .bul-etab-logo {{ width: 58px; }}
       .bul-mh-logo-img {{
         width: 46px; height: 46px; object-fit: contain;
@@ -566,14 +568,14 @@ def _styles(theme: PDFTheme) -> str:
         background: var(--bul-trame-forte);
         border-top: 1px solid var(--bul-filet);
         border-bottom: 1px solid var(--bul-filet);
-        padding: 2.5px 8px;
+        padding: 3px 11px;
         font-size: 7.5px; font-weight: 700;
         letter-spacing: 1.1px; text-transform: uppercase;
         color: var(--primary);
       }}
 
       /* Identité */
-      .bul-identite > tr > td {{ padding: 6px 9px; vertical-align: middle; }}
+      .bul-identite > tr > td {{ padding: 8px 11px; vertical-align: middle; }}
       .bul-nom {{
         font-family: var(--font-display);
         font-size: 15px; font-weight: 700; color: var(--primary);
@@ -585,17 +587,19 @@ def _styles(theme: PDFTheme) -> str:
       .bul-val {{ font-weight: 600; color: var(--ink); white-space: nowrap; }}
       .bul-id-photo {{ width: 76px; text-align: right; }}
       .bul-photo {{
-        width: 66px; height: 82px; object-fit: cover;
+        width: 62px; height: 72px; object-fit: cover;
         border: 1px solid var(--bul-filet);
       }}
       .bul-photo-init {{
         display: flex; align-items: center; justify-content: center;
         background: var(--bul-trame); color: var(--primary);
         font-family: var(--font-display);
-        font-size: 25px; font-weight: 700; letter-spacing: 1px;
+        font-size: 22px; font-weight: 700; letter-spacing: 1px;
       }}
 
       /* Disciplines */
+      .bul-notes th:first-child, .bul-notes td:first-child {{ padding-left: 11px; }}
+      .bul-notes th:last-child, .bul-notes td:last-child {{ padding-right: 11px; }}
       .bul-notes th {{
         background: var(--bul-trame);
         border-bottom: 1px solid var(--bul-filet);
@@ -606,11 +610,11 @@ def _styles(theme: PDFTheme) -> str:
       }}
       .bul-notes th.bul-th-g {{ text-align: left; }}
       .bul-notes td {{
-        padding: 3.5px 7px;
+        padding: 3px 7px;
         border-bottom: 1px solid var(--bul-trame-forte);
       }}
       .bul-matiere {{ font-weight: 600; color: var(--ink); }}
-      .bul-prof {{ font-weight: 400; font-size: 7.5px; color: var(--muted); }}
+      .bul-prof {{ font-size: 8px; color: var(--muted); }}
       .bul-n-fort {{ font-weight: 700; }}
       .bul-n-doux {{ color: var(--muted); }}
       .bul-appr {{ color: var(--muted); }}
@@ -625,7 +629,7 @@ def _styles(theme: PDFTheme) -> str:
       /* Compartiments */
       .bul-compartiments > tr > td {{ vertical-align: top; }}
       .bul-comp {{
-        padding: 6px 9px;
+        padding: 7px 11px;
         border-right: 1px solid var(--bul-filet);
         width: 33.33%;
       }}
@@ -641,7 +645,7 @@ def _styles(theme: PDFTheme) -> str:
         border-top: 1px solid var(--bul-filet);
         border-bottom: 1px solid var(--bul-filet);
       }}
-      .bul-verdict > tr > td {{ padding: 5px 9px; vertical-align: middle; }}
+      .bul-verdict > tr > td {{ padding: 6px 11px; vertical-align: middle; }}
       .bul-verdict-cle {{ width: 42%; }}
       .bul-verdict-item {{ width: 29%; border-left: 1px solid var(--bul-filet); }}
       .bul-verdict-label {{
@@ -664,7 +668,7 @@ def _styles(theme: PDFTheme) -> str:
       /* Conseil */
       .bul-conseil > tr > td {{ vertical-align: top; }}
       .bul-conseil-col {{
-        width: 50%; padding: 6px 9px;
+        width: 50%; padding: 7px 11px;
         border-right: 1px solid var(--bul-filet);
       }}
       .bul-case {{ padding: 1.5px 0; color: var(--ink); }}
@@ -675,20 +679,20 @@ def _styles(theme: PDFTheme) -> str:
       }}
       .bul-decision {{
         border-top: 1px solid var(--bul-filet);
-        padding: 5px 9px;
+        padding: 6px 11px;
       }}
       .bul-decision-cle {{
         font-size: 7px; font-weight: 700; letter-spacing: 0.8px;
         text-transform: uppercase; color: var(--muted); margin-right: 10px;
       }}
       .bul-decision-val {{ font-weight: 700; color: var(--primary); font-size: 10px; }}
-      .bul-appreciation {{ border-top: 1px solid var(--bul-filet); padding: 5px 9px; }}
+      .bul-appreciation {{ border-top: 1px solid var(--bul-filet); padding: 6px 11px; }}
       .bul-appreciation-txt {{ margin-top: 2px; line-height: 1.45; color: var(--ink); }}
 
       /* Signatures */
       .bul-signatures {{ border-top: 1px solid var(--bul-filet); }}
       .bul-signatures td {{
-        width: 33.33%; padding: 6px 9px 18px;
+        width: 33.33%; padding: 7px 11px 26px;
         border-right: 1px solid var(--bul-filet);
         vertical-align: top;
       }}
@@ -726,7 +730,7 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-      {ui.base_styles(theme, page_size="A4", margin="11mm 12mm")}
+      {ui.base_styles(theme, page_size="A4", margin="11mm 12mm 9mm")}
       {_styles(theme)}
     </head>
     <body>
