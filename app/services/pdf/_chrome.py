@@ -76,7 +76,7 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             background: var(--soft-bg);
             margin-bottom: 9px;
         }}
-        .masthead > tr > td {{ padding: 9px; vertical-align: middle; }}
+        .masthead td {{ padding: 9px; vertical-align: middle; }}
         .masthead-logo {{ width: 46px; }}
         .masthead-logo img,
         .masthead-logo .pdf-monogram {{
@@ -274,7 +274,7 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* Footer */
         .pdf-footer {{
-            margin-top: 20px; padding-top: 9px;
+            margin-top: 12px; padding-top: 7px;
             border-top: 0.75px solid var(--border);
             font-size: 8px; color: var(--muted);
             display: flex; justify-content: space-between; gap: 12px;
@@ -288,13 +288,13 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
 
         /* ============ Sceau numérique institutionnel ======================== */
         .pdf-verify {{
-            margin-top: 11px; padding: 10px 14px;
+            margin-top: 10px; padding: 8px 13px;
             border: 0.75px solid var(--border); border-radius: 5px;
             background: var(--soft-bg);
             display: flex; align-items: center;
         }}
         .pdf-verify-cev {{
-            width: 62px; height: 62px; flex: 0 0 62px;
+            width: 50px; height: 50px; flex: 0 0 50px;
             margin-right: 16px;
             border: 0.75px solid var(--border); border-radius: 3px; background: #fff;
             padding: 2px; box-sizing: border-box;

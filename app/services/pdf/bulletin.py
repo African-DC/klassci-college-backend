@@ -495,10 +495,17 @@ def _styles(theme: PDFTheme) -> str:
 
       /* Masthead administratif */
       .bul-mh {{ margin-bottom: 7px; }}
-      .bul-mh > tr > td {{ vertical-align: top; }}
+      /* Selecteur descendant, pas `> tr` : un <tbody> implicite s'intercale
+         entre la table et ses lignes, et le combinateur enfant ne trouvait
+         rien. Les retraits tombaient donc a zero sur ces blocs. */
+      .bul-mh td {{ vertical-align: top; }}
       .bul-mh-gauche {{ width: 40%; }}
       .bul-mh-centre {{ width: 36%; padding: 0 10px; }}
       .bul-mh-droite {{ width: 24%; text-align: right; }}
+      /* La cle porte une marge droite pour les paires en ligne du bloc
+         etablissement ; ici elle decalait « Annee scolaire » du bord et
+         cassait l'alignement avec le millesime dessous. */
+      .bul-mh-droite .bul-mh-cle {{ margin-right: 0; }}
       .bul-mh-autorite {{
         font-size: 7.5px; font-weight: 700; letter-spacing: 0.35px;
         text-transform: uppercase; color: var(--ink); line-height: 1.4;
@@ -534,7 +541,7 @@ def _styles(theme: PDFTheme) -> str:
         border: 1px solid var(--bul-filet);
         margin-bottom: 7px;
       }}
-      .bul-etab > tr > td {{ padding: 8px 11px; vertical-align: middle; }}
+      .bul-etab td {{ padding: 7px 11px; vertical-align: middle; }}
       .bul-etab-logo {{ width: 58px; }}
       .bul-mh-logo-img {{
         width: 46px; height: 46px; object-fit: contain;
@@ -575,19 +582,21 @@ def _styles(theme: PDFTheme) -> str:
       }}
 
       /* Identité */
-      .bul-identite > tr > td {{ padding: 8px 11px; vertical-align: middle; }}
+      .bul-identite td {{ padding: 7px 11px; vertical-align: middle; }}
       .bul-nom {{
         font-family: var(--font-display);
         font-size: 15px; font-weight: 700; color: var(--primary);
         letter-spacing: 0.2px; margin-bottom: 5px;
       }}
-      .bul-id-grille td.bul-id-col {{ vertical-align: top; padding-right: 22px; }}
+      .bul-id-grille td.bul-id-col {{
+        vertical-align: top; padding: 0 22px 0 0;
+      }}
       .bul-paires td {{ padding: 1.2px 0; }}
       .bul-cle {{ color: var(--muted); padding-right: 12px; white-space: nowrap; }}
       .bul-val {{ font-weight: 600; color: var(--ink); white-space: nowrap; }}
       .bul-id-photo {{ width: 76px; text-align: right; }}
       .bul-photo {{
-        width: 62px; height: 72px; object-fit: cover;
+        width: 58px; height: 68px; object-fit: cover;
         border: 1px solid var(--bul-filet);
       }}
       .bul-photo-init {{
@@ -627,9 +636,9 @@ def _styles(theme: PDFTheme) -> str:
       }}
 
       /* Compartiments */
-      .bul-compartiments > tr > td {{ vertical-align: top; }}
+      .bul-compartiments td {{ vertical-align: top; }}
       .bul-comp {{
-        padding: 7px 11px;
+        padding: 6px 11px;
         border-right: 1px solid var(--bul-filet);
         width: 33.33%;
       }}
@@ -645,7 +654,7 @@ def _styles(theme: PDFTheme) -> str:
         border-top: 1px solid var(--bul-filet);
         border-bottom: 1px solid var(--bul-filet);
       }}
-      .bul-verdict > tr > td {{ padding: 6px 11px; vertical-align: middle; }}
+      .bul-verdict td {{ padding: 5px 11px; vertical-align: middle; }}
       .bul-verdict-cle {{ width: 42%; }}
       .bul-verdict-item {{ width: 29%; border-left: 1px solid var(--bul-filet); }}
       .bul-verdict-label {{
@@ -666,9 +675,9 @@ def _styles(theme: PDFTheme) -> str:
       .bul-sur {{ font-size: 10px; font-weight: 400; color: var(--muted); }}
 
       /* Conseil */
-      .bul-conseil > tr > td {{ vertical-align: top; }}
+      .bul-conseil td {{ vertical-align: top; }}
       .bul-conseil-col {{
-        width: 50%; padding: 7px 11px;
+        width: 50%; padding: 6px 11px;
         border-right: 1px solid var(--bul-filet);
       }}
       .bul-case {{ padding: 1.5px 0; color: var(--ink); }}
@@ -692,7 +701,7 @@ def _styles(theme: PDFTheme) -> str:
       /* Signatures */
       .bul-signatures {{ border-top: 1px solid var(--bul-filet); }}
       .bul-signatures td {{
-        width: 33.33%; padding: 7px 11px 26px;
+        width: 33.33%; padding: 7px 11px 28px;
         border-right: 1px solid var(--bul-filet);
         vertical-align: top;
       }}
@@ -730,7 +739,7 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
     <!DOCTYPE html>
     <html lang="fr">
     <head><meta charset="UTF-8">
-      {ui.base_styles(theme, page_size="A4", margin="11mm 12mm 9mm")}
+      {ui.base_styles(theme, page_size="A4", margin="11mm 12mm 7mm")}
       {_styles(theme)}
     </head>
     <body>
@@ -753,7 +762,10 @@ def generate_bulletin_pdf(bulletin_data: dict[str, Any], school_settings: dict[s
 
         {
         ui.premium_footer(
-            school_settings,
+            # Sans l'identite de l'ecole : le bloc etablissement l'annonce deja
+            # en tete, nom, adresse, telephone et courriel compris. La repeter
+            # au pied volait trois lignes a un document qui les compte.
+            {},
             theme=theme,
             reference=bulletin_data.get("reference"),
             note="Bulletin à conserver précieusement.",
