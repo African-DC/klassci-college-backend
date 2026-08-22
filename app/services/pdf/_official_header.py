@@ -30,9 +30,10 @@ def official_act_styles(theme: PDFTheme) -> str:
     return """
     <style>
         .acte-masthead {
-            display: flex; align-items: flex-start; gap: 12px;
+            display: flex; align-items: flex-start;
             padding-bottom: 8px;
         }
+        .acte-masthead > * + * { margin-left: 12px; }
         .acte-col { font-size: 8.5px; line-height: 1.55; color: var(--ink); }
         .acte-col-left { flex: 1 1 37%; }
         .acte-col-center { flex: 0 0 24%; text-align: center; }

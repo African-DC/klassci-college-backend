@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.pdf._eyebrow import eyebrow_html
 from app.services.pdf._helpers import esc, image_to_datauri
 from app.services.pdf.theme import PDFTheme, font_face_css
 
@@ -58,9 +59,16 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .mono {{ font-family: 'Courier New', monospace; font-size: 9px; }}
 
         /* ============ En-tête : eyebrow RCI + masthead + filet ============ */
-        .doc-eyebrow {{
-            text-align: center; font-size: 8px; color: var(--muted);
-            text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 8px;
+        /* Trois faits institutionnels sur une seule ligne capitalisee et
+           interlettree se lisaient comme un filigrane. La Republique porte le
+           poids, la devise et le ministere suivent en bas de casse. */
+        .doc-eyebrow {{ text-align: center; margin-bottom: 9px; }}
+        .doc-eyebrow-etat {{
+            font-size: 8px; font-weight: 700; color: var(--ink);
+            text-transform: uppercase; letter-spacing: 1.4px;
+        }}
+        .doc-eyebrow-suite {{
+            font-size: 7.5px; color: var(--muted); margin-top: 1.5px;
         }}
         /* En-tete des documents : une carte, pas une ligne flottante.
            Rayons concentriques — carte 15px, retrait 9px, pastille 6px :
@@ -188,7 +196,11 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
         .pdf-keyfigure-value.is-focal {{ color: var(--accent); }}
 
         /* KPI cards (rétrocompat generators) — allégées */
-        .pdf-kpis {{ display: flex; gap: 10px; margin: 8px 0 14px; }}
+        /* `gap` en flex n'est rendu qu'a partir de WeasyPrint 67 et nous
+           sommes en 62.3 : les elements se touchaient. Une marge sur le
+           frere suivant, elle, est rendue, et n'ajoute rien en bout. */
+        .pdf-kpis {{ display: flex; margin: 8px 0 14px; }}
+        .pdf-kpis > * + * {{ margin-left: 10px; }}
         .pdf-kpi {{
             flex: 1; padding: 9px 12px; border: 0.75px solid var(--border);
             border-radius: 5px; text-align: center;
@@ -225,9 +237,10 @@ def base_styles(theme: PDFTheme, *, page_size: str = "A4", margin: str = "16mm 1
             display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px;
             font-size: 10px; margin: 6px 0;
         }}
-        .pdf-info-row {{ display: flex; gap: 8px; padding: 2px 0; }}
+        .pdf-info-row {{ display: flex; padding: 2px 0; }}
         .pdf-info-label {{
             color: var(--muted); width: 130px; font-weight: 600;
+            margin-right: 8px;
             text-transform: uppercase; letter-spacing: 0.2px; font-size: 8.5px;
         }}
         .pdf-info-value {{ flex: 1; color: var(--ink); }}
@@ -353,12 +366,8 @@ CI_BANNER_HTML = """
 
 
 def _eyebrow_html() -> str:
-    """Ligne unique RCI/MENA (remplace le bandeau 3 lignes)."""
-    return (
-        '<div class="doc-eyebrow">République de Côte d\'Ivoire'
-        " · Union — Discipline — Travail"
-        " · Ministère de l'Éducation Nationale et de l'Alphabétisation</div>"
-    )
+    """Les mentions d'Etat, composees dans `_eyebrow`."""
+    return eyebrow_html()
 
 
 def premium_header(

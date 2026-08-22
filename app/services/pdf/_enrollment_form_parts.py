@@ -127,11 +127,12 @@ def parents_grid(parents: list[dict[str, Any]]) -> str:
         None,
     )
     return (
-        '<div style="display:flex; gap:10px; margin-bottom:6px;">'
-        + parent_card("Père", pere)
-        + parent_card("Mère", mere)
-        + parent_card("Tuteur", tuteur)
-        + "</div>"
+        '<table style="width:100%; border-collapse:separate; border-spacing:10px 0;'
+        ' margin:0 -10px 6px -10px;"><tr>'
+        + f'<td style="width:33.33%; vertical-align:top;">{parent_card("Père", pere)}</td>'
+        + f'<td style="width:33.33%; vertical-align:top;">{parent_card("Mère", mere)}</td>'
+        + f'<td style="width:33.33%; vertical-align:top;">{parent_card("Tuteur", tuteur)}</td>'
+        + "</tr></table>"
     )
 
 
