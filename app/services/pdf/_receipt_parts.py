@@ -225,10 +225,7 @@ def situation_column_html(data: dict[str, Any]) -> str:
         </tr></thead>
         <tbody>{_situation_rows(situation)}</tbody>
     </table>
-    <div class="rc-note">
-        Cumul de tous les versements encaissés, versement du jour compris
-        (<strong>{esc(versement_du_jour)}</strong>).
-    </div>
+    <div class="rc-note">{_note_cumul(data, versement_du_jour)}</div>
     {_schedule_note(data)}
     """
 
@@ -253,6 +250,25 @@ def key_figures_html(data: dict[str, Any]) -> str:
         for label, value, focal in cells
     )
     return f'<table class="rc-keys"><tr>{tds}</tr></table>'
+
+
+def _note_cumul(data: dict[str, Any], versement: str) -> str:
+    """Ce que le cumul a le droit d'affirmer.
+
+    « Versement du jour compris » devient faux dès que le versement est annulé :
+    le total affiché juste au-dessus l'exclut, puisqu'il ne compte que les
+    encaissements valides. La phrase nommait alors le montant annulé comme
+    inclus, sur le document même qu'une famille brandira au guichet.
+    """
+    if data.get("status") == "cancelled":
+        return (
+            "Cumul de tous les versements encaissés. Le versement annulé "
+            f"(<strong>{esc(versement)}</strong>) n'y figure pas."
+        )
+    return (
+        "Cumul de tous les versements encaissés, versement du jour compris "
+        f"(<strong>{esc(versement)}</strong>)."
+    )
 
 
 def _libelle_montant(data: dict[str, Any]) -> str:

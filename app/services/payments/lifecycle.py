@@ -1,6 +1,6 @@
 """Transitions de statut Payment : validate (pending → completed) + cancel.
 
-Cancel d'un paiement alloué à N fees cascade DELETE allocations (FK) puis
+Cancel d'un paiement alloué à N fees garde ses allocations et recalcule
 recompute chaque fee.status. Audit log obligatoire avec breakdown
 (snapshot des allocations avant suppression) — décision Marcel #4.
 """
@@ -122,6 +122,14 @@ async def _ensure_cashier_may_cancel(db: AsyncSession, payment: Payment, cashier
         )
 
 
+#: La longueur minimale d'un motif d'annulation, une fois les espaces réduits.
+#: L'écran mesure la même chose, sur la même chaîne normalisée.
+MOTIF_MINIMUM = 10
+
+#: La colonne fait 500 caractères ; au-delà MySQL tronquerait sans le dire.
+MOTIF_MAXIMUM = 500
+
+
 def _motif_valide(motif: str) -> str:
     """Un motif court n'est pas un motif.
 
@@ -130,12 +138,12 @@ def _motif_valide(motif: str) -> str:
     phrase, pas un mot.
     """
     propre = " ".join(motif.split())
-    if len(propre) < 10:
+    if len(propre) < MOTIF_MINIMUM:
         raise BusinessValidationError(
             "Indiquez le motif de l'annulation en une phrase : elle figurera sur "
             "le bordereau de caisse et sur le reçu."
         )
-    return propre[:500]
+    return propre[:MOTIF_MAXIMUM]
 
 
 async def cancel_payment(
@@ -154,12 +162,21 @@ async def cancel_payment(
     encaisserait puis effacerait. Le motif est donc obligatoire : il figure sur
     le bordereau et sur le reçu réimprimé.
 
-    Les allocations sont défaites et les statuts de TOUS les frais touchés
-    recalculés dans la même transaction : un solde à moitié rendu serait pire
-    qu'un solde faux, parce qu'il aurait l'air juste.
+    **Les allocations survivent** — c'est l'historique de la famille, et le
+    guichet le lui montre. Elles cessent de compter parce que tous les totaux
+    joignent `Payment` et filtrent `status == 'completed'` : ne jamais écrire
+    un consommateur d'allocations sans ce filtre, sous peine de ressusciter de
+    l'argent annulé dans un solde.
 
-    À l'annulation d'un payment alloué à N fees, cascade DELETE allocations
-    + recalcule chaque fee.status. Audit log obligatoire avec breakdown.
+    Les statuts de TOUS les frais touchés sont recalculés dans la même
+    transaction : un solde à moitié rendu serait pire qu'un solde faux, parce
+    qu'il aurait l'air juste.
+
+    Ne sert que le cas où **aucun argent n'a bougé** : une saisie en trop, un
+    double. Un encaissement réel mais non dû se rembourse ou se reporte en
+    avoir — l'annuler ferait disparaître un billet qui est dans le tiroir, et
+    la caisse serait en excédent inexpliqué à la clôture. Une imputation sur
+    le mauvais frais se ré-affecte. Ni l'un ni l'autre n'existe encore.
 
     `may_cancel_any` est sans valeur par défaut à dessein : c'est un garde de
     sécurité, et un défaut permissif le désactiverait en silence chez le

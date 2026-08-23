@@ -4,15 +4,16 @@ Une annulation d'encaissement est exactement l'écriture qu'un contrôle vient
 relire. Sans phrase qui la justifie, elle ne se défend pas — et un caissier qui
 pourrait annuler sans rien écrire pourrait encaisser puis effacer.
 
-Ces tests portent sur la garde du motif, qui est la seule chose que le geste
-d'annulation ajoute au modèle : le reste — défaire les allocations, recalculer
-les statuts, écrire l'audit — existait déjà et est couvert ailleurs.
+Ces tests portent sur la seule garde du motif. La réversibilité elle-même —
+le solde qui revient exactement à zéro, les allocations qui survivent — est
+couverte par `tests/services/test_payment_cancel_reversal.py`, écrit en même
+temps : elle ne l'était pas, malgré ce que cette phrase affirmait avant.
 """
 
 import pytest
 
 from app.core.exceptions import BusinessValidationError
-from app.services.payments.lifecycle import _motif_valide
+from app.services.payments.lifecycle import MOTIF_MAXIMUM, _motif_valide
 
 
 def test_un_motif_ecrit_est_conserve_tel_quel() -> None:
@@ -39,6 +40,11 @@ def test_le_motif_est_normalise_avant_d_etre_mesure() -> None:
 
 
 def test_un_motif_tres_long_est_borne_a_la_colonne() -> None:
-    """La colonne fait 500 caractères : au-delà, MySQL tronquerait sans le dire."""
+    """La colonne fait 500 caractères : au-delà, MySQL tronquerait sans le dire.
+
+    Le schéma laisse passer jusqu'à 2 000 caractères — il ne borne que la
+    taille du corps reçu, pas la règle métier — donc cette troncature est
+    atteignable par l'API.
+    """
     resultat = _motif_valide("Annulation " + "x" * 900)
-    assert len(resultat) == 500
+    assert len(resultat) == MOTIF_MAXIMUM

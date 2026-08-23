@@ -16,10 +16,12 @@ from sqlalchemy.orm import selectinload
 
 from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
+from app.models.user import User
 from app.repositories import cash_session_repository as cash_repo
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.payments._cashier import cashier_label
 from app.services.pdf import generate_daily_cash_book_pdf
 from app.services.pdf._helpers import enum_value
 
@@ -40,6 +42,10 @@ async def _load_payments_for_day(
         .where(Payment.created_at >= day_start, Payment.created_at < day_end)
         .options(
             selectinload(Payment.enrollment).selectinload(Enrollment.student),
+            # Le motif d'annulation figure sur le bordereau : sans cette relation,
+            # le lire leverait MissingGreenlet (`lazy="raise"` sur le modele).
+            selectinload(Payment.cancelled_by_user).selectinload(User.staff_profile),
+            selectinload(Payment.cancelled_by_user).selectinload(User.teacher_profile),
         )
         .order_by(Payment.created_at.asc())
     )
@@ -156,6 +162,9 @@ async def get_daily_cash_book_pdf(
                 "reference": p.reference,
                 "amount": p.amount,
                 "status": p_status,
+                "cancelled_at": p.cancelled_at,
+                "cancelled_by_name": cashier_label(p.cancelled_by_user) if p.cancelled_by else "",
+                "cancellation_reason": p.cancellation_reason,
             }
         )
         if p_status == PaymentStatus.COMPLETED.value:

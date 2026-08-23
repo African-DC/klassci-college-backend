@@ -105,9 +105,15 @@ class PaymentCancel(BaseModel):
     vient relire. Sans phrase qui la justifie, elle ne se défend pas — et un
     caissier qui pourrait annuler sans rien écrire pourrait encaisser puis
     effacer.
+
+    La longueur minimale n'est **pas** ici : elle se mesure après avoir réduit
+    les espaces, ce que Pydantic ne fait pas. Deux mesures sur deux chaînes
+    différentes refuseraient « abc    def » d'un côté et l'accepteraient de
+    l'autre. `MOTIF_MINIMUM` est la seule règle ; ce plafond ne borne que la
+    taille du corps reçu.
     """
 
-    reason: str = Field(min_length=10, max_length=500)
+    reason: str = Field(max_length=2000)
 
 
 class PaymentResponse(BaseModel):
