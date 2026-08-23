@@ -199,7 +199,7 @@ async def week_for_teacher(
     return TeacherWeekResponse(
         teacher_id=teacher_id,
         teacher_name=f"{prof.first_name} {prof.last_name}".strip(),
-        has_declarations=bool(plages),
+        has_declarations=bool(ouvertes),
         busy=occupes,
         open=ouvertes,
     )

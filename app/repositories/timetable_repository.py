@@ -295,6 +295,31 @@ async def get_teacher_profile(db: AsyncSession, teacher_id: int) -> TeacherProfi
     return (await db.execute(stmt)).scalar_one_or_none()
 
 
+async def a_declare_des_ouvertures(db: AsyncSession, teacher_id: int) -> bool:
+    """L'enseignant a-t-il declare au moins une plage OUVERTE ?
+
+    C'est cette question, et elle seule, qui fait basculer la table en liste
+    blanche. Compter toutes les lignes serait un contresens : noter « absent
+    mardi matin » fermerait alors les six jours, et le secretariat qui rend
+    service en notant une absence rendrait l'enseignant inplacable.
+
+    Une seule definition, lue par la creation manuelle et par le generateur
+    automatique : les deux repondaient a la question separement, donc pouvaient
+    y repondre differemment.
+    """
+    total = (
+        await db.execute(
+            select(func.count())
+            .select_from(TeacherAvailability)
+            .where(
+                TeacherAvailability.teacher_id == teacher_id,
+                TeacherAvailability.available.is_(True),
+            )
+        )
+    ).scalar() or 0
+    return total > 0
+
+
 async def find_teacher_unavailability(
     db: AsyncSession,
     teacher_id: int,
@@ -338,14 +363,7 @@ async def find_teacher_unavailability(
     if fermeture is not None:
         return "closed", fermeture
 
-    total = (
-        await db.execute(
-            select(func.count())
-            .select_from(TeacherAvailability)
-            .where(TeacherAvailability.teacher_id == teacher_id)
-        )
-    ).scalar() or 0
-    if total == 0:
+    if not await a_declare_des_ouvertures(db, teacher_id):
         return None
 
     couvert = (
@@ -401,16 +419,7 @@ async def get_unavailable_slot_indices(
     on suppose qu'il est disponible partout (pas de blocage).
     """
     # Check if teacher has ANY availability declarations
-    count_stmt = (
-        select(func.count())
-        .select_from(TeacherAvailability)
-        .where(
-            TeacherAvailability.teacher_id == teacher_id,
-        )
-    )
-    total_declarations = (await db.execute(count_stmt)).scalar() or 0
-
-    if total_declarations == 0:
+    if not await a_declare_des_ouvertures(db, teacher_id):
         # No declarations = teacher available everywhere
         return set()
 
