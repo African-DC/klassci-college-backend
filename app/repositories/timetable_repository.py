@@ -1,5 +1,6 @@
 """Repository emploi du temps — accès DB pour TimetableSlot et TeacherAvailability."""
 
+from collections.abc import Sequence
 from datetime import time
 from typing import Any
 
@@ -320,6 +321,28 @@ async def a_declare_des_ouvertures(db: AsyncSession, teacher_id: int) -> bool:
     return total > 0
 
 
+def couvre_entierement(plages: Sequence[TeacherAvailability], debut: time, fin: time) -> bool:
+    """Les plages ouvertes, mises bout a bout, couvrent-elles [debut, fin[ ?
+
+    L'ecran de saisie des disponibilites est une grille d'heures : cocher
+    « libre de 8 h a 12 h » ecrit quatre lignes d'une heure, jamais une ligne
+    de quatre. Chercher UNE ligne qui couvre tout le creneau revenait donc a
+    interdire les cours de plus d'une heure a tout enseignant qui s'etait
+    declare disponible — l'exact contraire de ce qu'il venait de dire.
+
+    On recolle donc ce qui se touche avant de mesurer. Un trou reste un trou :
+    8h-9h et 10h-11h ne couvrent pas 8h-11h.
+    """
+    curseur = debut
+    for plage in sorted(plages, key=lambda p: p.start_time):
+        if plage.start_time > curseur:
+            break
+        curseur = max(curseur, plage.end_time)
+        if curseur >= fin:
+            return True
+    return curseur >= fin
+
+
 async def find_teacher_unavailability(
     db: AsyncSession,
     teacher_id: int,
@@ -366,22 +389,20 @@ async def find_teacher_unavailability(
     if not await a_declare_des_ouvertures(db, teacher_id):
         return None
 
-    couvert = (
+    ouvertes = list(
         (
             await db.execute(
                 select(TeacherAvailability).where(
                     TeacherAvailability.teacher_id == teacher_id,
                     TeacherAvailability.day == day,
                     TeacherAvailability.available.is_(True),
-                    TeacherAvailability.start_time <= start_time,
-                    TeacherAvailability.end_time >= end_time,
                 )
             )
         )
         .scalars()
-        .first()
+        .all()
     )
-    return None if couvert is not None else ("not_open", None)
+    return None if couvre_entierement(ouvertes, start_time, end_time) else ("not_open", None)
 
 
 async def update_teacher_availability(
@@ -436,16 +457,8 @@ async def get_unavailable_slot_indices(
         slot_day = slot["day"]
         slot_start = slot["start_time"]
         slot_end = slot["end_time"]
-        is_available = False
-        for avail in availabilities:
-            if (
-                avail.day == slot_day
-                and avail.start_time <= slot_start
-                and avail.end_time >= slot_end
-            ):
-                is_available = True
-                break
-        if not is_available:
+        du_jour = [a for a in availabilities if a.day == slot_day]
+        if not couvre_entierement(du_jour, slot_start, slot_end):
             blocked.add(idx)
     return blocked
 
