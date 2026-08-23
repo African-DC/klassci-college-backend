@@ -149,7 +149,7 @@ def payment_column_html(data: dict[str, Any]) -> str:
 
     return f"""
     <div class="rc-amount">
-        <div class="rc-amount-label">Montant versé ce jour</div>
+        <div class="rc-amount-label">{_libelle_montant(data)}</div>
         <div class="rc-amount-value">{esc(money(data.get("amount")))}</div>
     </div>
     {_info_rows(items)}
@@ -225,10 +225,7 @@ def situation_column_html(data: dict[str, Any]) -> str:
         </tr></thead>
         <tbody>{_situation_rows(situation)}</tbody>
     </table>
-    <div class="rc-note">
-        Cumul de tous les versements encaissés, versement du jour compris
-        (<strong>{esc(versement_du_jour)}</strong>).
-    </div>
+    <div class="rc-note">{_note_cumul(data, versement_du_jour)}</div>
     {_schedule_note(data)}
     """
 
@@ -255,6 +252,42 @@ def key_figures_html(data: dict[str, Any]) -> str:
     return f'<table class="rc-keys"><tr>{tds}</tr></table>'
 
 
+def _note_cumul(data: dict[str, Any], versement: str) -> str:
+    """Ce que le cumul a le droit d'affirmer.
+
+    « Versement du jour compris » devient faux dès que le versement est annulé :
+    le total affiché juste au-dessus l'exclut, puisqu'il ne compte que les
+    encaissements valides. La phrase nommait alors le montant annulé comme
+    inclus, sur le document même qu'une famille brandira au guichet.
+    """
+    if data.get("status") == "cancelled":
+        return (
+            "Cumul de tous les versements encaissés. Le versement annulé "
+            f"(<strong>{esc(versement)}</strong>) n'y figure pas."
+        )
+    return (
+        "Cumul de tous les versements encaissés, versement du jour compris "
+        f"(<strong>{esc(versement)}</strong>)."
+    )
+
+
+def _libelle_montant(data: dict[str, Any]) -> str:
+    """Le bloc le plus visible de la page ne doit pas contredire le bandeau."""
+    return "Montant annulé" if data.get("status") == "cancelled" else "Montant versé ce jour"
+
+
+def _mention_de_pied(data: dict[str, Any]) -> str:
+    """Ce que le pied de page a le droit d'affirmer.
+
+    « Ce reçu fait foi de paiement » devient faux dès que le versement est
+    annulé, et c'est justement le papier qu'on présentera au guichet pour
+    soutenir le contraire.
+    """
+    if data.get("status") == "cancelled":
+        return "Ce reçu est annulé et ne vaut pas justificatif de paiement."
+    return "Ce reçu fait foi de paiement, à conserver."
+
+
 def footer_html(data: dict[str, Any], school: dict[str, Any]) -> str:
     """Signatures + mention légale, sous les chiffres clés.
 
@@ -276,7 +309,7 @@ def footer_html(data: dict[str, Any], school: dict[str, Any]) -> str:
         </td>
     </tr></table>
     <table class="rc-foot"><tr>
-        <td>{school_name} · Ce reçu fait foi de paiement, à conserver.</td>
+        <td>{school_name} · {_mention_de_pied(data)}</td>
         <td class="rc-foot-right">{esc(data.get("document_reference") or "")}</td>
     </tr></table>
     """

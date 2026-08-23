@@ -1,10 +1,11 @@
 """Transitions de statut Payment : validate (pending → completed) + cancel.
 
-Cancel d'un paiement alloué à N fees cascade DELETE allocations (FK) puis
+Cancel d'un paiement alloué à N fees garde ses allocations et recalcule
 recompute chaque fee.status. Audit log obligatoire avec breakdown
 (snapshot des allocations avant suppression) — décision Marcel #4.
 """
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.fee import Payment, PaymentAllocation, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import PaymentResponse
@@ -121,17 +122,61 @@ async def _ensure_cashier_may_cancel(db: AsyncSession, payment: Payment, cashier
         )
 
 
+#: La longueur minimale d'un motif d'annulation, une fois les espaces réduits.
+#: L'écran mesure la même chose, sur la même chaîne normalisée.
+MOTIF_MINIMUM = 10
+
+#: La colonne fait 500 caractères ; au-delà MySQL tronquerait sans le dire.
+MOTIF_MAXIMUM = 500
+
+
+def _motif_valide(motif: str) -> str:
+    """Un motif court n'est pas un motif.
+
+    « erreur », « test », « ok » ne disent rien a qui relira le bordereau dans
+    six mois — et c'est precisement a ce moment qu'on le relit. On exige une
+    phrase, pas un mot.
+    """
+    propre = " ".join(motif.split())
+    if len(propre) < MOTIF_MINIMUM:
+        raise BusinessValidationError(
+            "Indiquez le motif de l'annulation en une phrase : elle figurera sur "
+            "le bordereau de caisse et sur le reçu."
+        )
+    return propre[:MOTIF_MAXIMUM]
+
+
 async def cancel_payment(
     db: AsyncSession,
     payment_id: int,
     *,
+    reason: str,
     cancelled_by: int,
     may_cancel_any: bool,
 ) -> PaymentResponse:
-    """Annule un paiement et recalcule les statuts de TOUS les fees alloués.
+    """Contre-passe un versement : il reste, marqué annulé, avec sa raison.
 
-    À l'annulation d'un payment alloué à N fees, cascade DELETE allocations
-    + recalcule chaque fee.status. Audit log obligatoire avec breakdown.
+    On ne supprime pas une écriture de caisse, on l'annule en laissant une
+    trace au moins aussi visible que l'encaissement — c'est le principe
+    d'intangibilité, et c'est aussi la seule parade au caissier qui
+    encaisserait puis effacerait. Le motif est donc obligatoire : il figure sur
+    le bordereau et sur le reçu réimprimé.
+
+    **Les allocations survivent** — c'est l'historique de la famille, et le
+    guichet le lui montre. Elles cessent de compter parce que tous les totaux
+    joignent `Payment` et filtrent `status == 'completed'` : ne jamais écrire
+    un consommateur d'allocations sans ce filtre, sous peine de ressusciter de
+    l'argent annulé dans un solde.
+
+    Les statuts de TOUS les frais touchés sont recalculés dans la même
+    transaction : un solde à moitié rendu serait pire qu'un solde faux, parce
+    qu'il aurait l'air juste.
+
+    Ne sert que le cas où **aucun argent n'a bougé** : une saisie en trop, un
+    double. Un encaissement réel mais non dû se rembourse ou se reporte en
+    avoir — l'annuler ferait disparaître un billet qui est dans le tiroir, et
+    la caisse serait en excédent inexpliqué à la clôture. Une imputation sur
+    le mauvais frais se ré-affecte. Ni l'un ni l'autre n'existe encore.
 
     `may_cancel_any` est sans valeur par défaut à dessein : c'est un garde de
     sécurité, et un défaut permissif le désactiverait en silence chez le
@@ -140,6 +185,8 @@ async def cancel_payment(
     journée n'est pas clôturée. Après clôture, l'écart a été constaté et signé,
     revenir dessus rendrait faux un document déjà remis.
     """
+    motif = _motif_valide(reason)
+
     async with db.begin_nested():
         payment = await _load_payment_for_transition(db, payment_id)
         current = payment.status
@@ -156,6 +203,9 @@ async def cancel_payment(
         affected_fee_ids = [a.enrollment_fee_id for a in payment.allocations]
 
         payment.status = PaymentStatus.CANCELLED.value
+        payment.cancelled_at = datetime.now(UTC).replace(tzinfo=None)
+        payment.cancelled_by = cancelled_by
+        payment.cancellation_reason = motif
         await db.flush()
 
         touches = []
@@ -177,6 +227,7 @@ async def cancel_payment(
             old_values={"status": status_value(current)},
             new_values={
                 "status": payment.status,
+                "cancellation_reason": motif,
                 "cancelled_allocations": allocations_snapshot,
                 "recomputed_fee_ids": affected_fee_ids,
             },

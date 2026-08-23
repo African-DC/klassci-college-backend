@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Computed,
+    DateTime,
     ForeignKey,
     Numeric,
     SmallInteger,
@@ -354,6 +356,25 @@ class Payment(Base, TimestampMixin):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # La trace de l'annulation, sur la ligne elle-meme.
+    #
+    # L'audit la porte aussi, mais un audit se consulte ; un bordereau se
+    # relit. Le motif est obligatoire cote service : une annulation sans
+    # raison ecrite est precisement ce que la separation des taches existe
+    # pour empecher.
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Qui a annule. Meme discipline que `received_by_user` : lecture seule, et
+    # `lazy="raise"` pour forcer le selectinload du repository plutot qu'un
+    # chargement paresseux qui casserait apres commit.
+    cancelled_by_user: Mapped[User | None] = relationship(
+        "User", foreign_keys=[cancelled_by], lazy="raise", viewonly=True
+    )
 
     enrollment: Mapped[Enrollment | None] = relationship(back_populates="payments")
     enrollment_fee: Mapped[EnrollmentFee | None] = relationship(back_populates="payments")

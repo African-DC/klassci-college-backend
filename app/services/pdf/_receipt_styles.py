@@ -67,6 +67,18 @@ def receipt_styles(theme: PDFTheme) -> str:
             border-top: 0.75px dashed var(--border);
             position: relative;
         }}
+        /* Un recu annule reste imprimable, mais jamais muet. */
+        .rc-annule {{
+            margin: 4px 0 6px;
+            padding: 5px 8px;
+            border: 1.4pt solid #b91c1c;
+            border-radius: 4px;
+            background: #fef2f2;
+            color: #7f1d1d;
+            font-size: 8pt;
+            line-height: 1.35;
+        }}
+        .rc-annule strong {{ letter-spacing: 0.06em; }}
         .rc-cut-label {{
             position: absolute; top: -5px; left: 43%;
             background: #fff; padding: 0 10px;

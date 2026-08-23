@@ -10,18 +10,17 @@ s'appuie lui-même sur `fees_paid` ; l'échéance vient de `resolve_schedule`.
 
 from decimal import Decimal
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.fee import Payment
-from app.models.user import User
 from app.repositories import payment_repository as repo
 from app.services import fee_entitlements as entitlements
 from app.services import fee_situation
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
+from app.services.payments._cashier import cashier_label
 from app.services.payments._response import student_identity
 from app.services.pdf._helpers import enum_value
 from app.services.pdf_service import generate_receipt_pdf
@@ -70,16 +69,6 @@ def _build_entitlements(payment: Payment) -> tuple[list[tuple[str, str]], int]:
 
     debordement = max(len(lignes) - entitlements.RECEIPT_MAX_CATEGORIES, 0)
     return lignes[: entitlements.RECEIPT_MAX_CATEGORIES], debordement
-
-
-async def _resolve_received_by_name(db: AsyncSession, user_id: int | None) -> str:
-    """Affiche un nom user lisible (email avant @) ou vide."""
-    if not user_id:
-        return ""
-    user_stmt = select(User).where(User.id == user_id)
-    user_result = await db.execute(user_stmt)
-    user = user_result.scalar_one_or_none()
-    return user.email.split("@")[0] if user else ""
 
 
 async def _build_situation(db: AsyncSession, enrollment_id: int | None) -> dict:
@@ -161,7 +150,12 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
     year = getattr(enrollment, "academic_year", None) if enrollment is not None else None
 
     school = await _get_school_settings(db)
-    received_by_name = await _resolve_received_by_name(db, payment.received_by)
+    # `cashier_label` lit la relation deja chargee par `_payment_full_options`.
+    # Le resolveur precedent recomposait un nom depuis l'e-mail et signait le
+    # recu « accountant6 » — un identifiant technique sur une piece comptable.
+    # Le bordereau de caisse avait deja corrige cela de son cote.
+    received_by_name = cashier_label(payment.received_by_user)
+    cancelled_by_name = cashier_label(payment.cancelled_by_user) if payment.cancelled_by else ""
     entitlements_lines, entitlements_overflow = _build_entitlements(payment)
 
     # FIX bug enum : SQLAlchemy SAEnum retourne l'enum object (PaymentMethod.CASH),
@@ -175,6 +169,9 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
         "method": enum_value(payment.method),
         "reference": payment.reference,
         "status": enum_value(payment.status),
+        "cancelled_at": payment.cancelled_at,
+        "cancelled_by_name": cancelled_by_name,
+        "cancellation_reason": payment.cancellation_reason,
         "notes": payment.notes,
         "student_name": student_name or "",
         "class_name": getattr(klass, "name", "") or "",

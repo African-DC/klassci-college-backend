@@ -19,6 +19,7 @@ from app.repositories.payment_filters import PaymentFilters
 from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
     CashierOption,
+    PaymentCancel,
     PaymentCreate,
     PaymentListResponse,
     PaymentMethodListResponse,
@@ -309,12 +310,13 @@ async def validate_payment(
 @router.post("/{payment_id}/cancel", response_model=PaymentResponse)
 async def cancel_payment(
     payment_id: int,
+    data: PaymentCancel,
     current_user: TokenData = Depends(get_current_user),
     may_cancel_any: bool = has_permission("payments:cancel:any"),
     _: None = require_permission("payments:create"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentResponse:
-    """Annule un paiement.
+    """Annule un versement, motif obligatoire.
 
     Le comptable corrige n'importe quel versement. Le caissier ne corrige que
     sa propre saisie, et seulement tant que sa journée n'est pas clôturée.
@@ -322,6 +324,7 @@ async def cancel_payment(
     return await payment_service.cancel_payment(
         db,
         payment_id,
+        reason=data.reason,
         cancelled_by=current_user.user_id,
         may_cancel_any=may_cancel_any,
     )

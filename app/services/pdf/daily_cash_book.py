@@ -94,6 +94,43 @@ def _payment_rows(payments: list[dict[str, Any]], *, with_cashier: bool) -> list
     return rows
 
 
+def _annulations_section(payments: list[dict[str, Any]], *, theme: Any) -> str:
+    """Les annulations du jour, avec leur motif.
+
+    Elles ne rentrent pas dans le tableau principal : ajouter deux colonnes
+    pour un cas rare le rendrait illisible les jours ou il n'y en a aucune.
+    Mais elles ne peuvent pas non plus rester hors du document — un ecart
+    constate a la cloture se justifie par ces lignes-la, et c'est ce
+    bordereau qu'on relit pour les retrouver.
+    """
+    annulees = [p for p in payments if enum_value(p.get("status")) == "cancelled"]
+    if not annulees:
+        return ""
+
+    lignes = []
+    for p in annulees:
+        montant = p.get("amount")
+        lignes.append(
+            [
+                f"#{p.get('id', '')}",
+                p.get("student_name") or "—",
+                {
+                    "value": format_xof(montant) if isinstance(montant, Decimal) else "—",
+                    "type": "num",
+                },
+                {"value": p.get("cancelled_by_name") or "—", "type": "muted"},
+                p.get("cancellation_reason") or "—",
+            ]
+        )
+
+    return ui.section_title("Annulations du jour", theme=theme) + ui.premium_table(
+        headers=["N°", "Élève", "Montant", "Annulé par", "Motif"],
+        rows=lignes,
+        theme=theme,
+        empty_message="",
+    )
+
+
 def _cashier_methods(by_cashier: list[Any]) -> list[str]:
     """Les colonnes du tableau par caisse, dans l'ordre metier.
 
@@ -255,6 +292,8 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         "Statut",
     ]
 
+    annulations_section = _annulations_section(payments, theme=theme)
+
     detail_section = ui.section_title("Détail des versements", theme=theme) + ui.premium_table(
         headers=detail_headers,
         rows=_payment_rows(payments, with_cashier=consolidated),
@@ -298,6 +337,8 @@ def generate_daily_cash_book_pdf(data: dict[str, Any], school_settings: dict[str
         {cashier_section}
 
         {detail_section}
+
+        {annulations_section}
 
         {signatures}
 
