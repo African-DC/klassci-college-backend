@@ -49,6 +49,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un enseignant déclaré disponible toute la matinée ne pouvait recevoir qu'une heure de cours d'affilée : les heures déclarées se recollent désormais *(directeur des études, secrétariat, admin)*
 - Noter une seule absence rendait l'enseignant impossible à placer toute la semaine : une absence ne ferme plus que son propre créneau *(directeur des études, secrétariat, admin)*
 - Le cahier de textes est désormais numéroté : sur vingt-sept pages, on ne pouvait ni se repérer ni voir qu'il en manquait une *(enseignant, admin)*
 - Les traits de signature se soudaient en un seul filet : on ne voyait plus où signait le professeur et où signait le chef d'établissement *(tous)*
