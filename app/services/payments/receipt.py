@@ -162,6 +162,7 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
 
     school = await _get_school_settings(db)
     received_by_name = await _resolve_received_by_name(db, payment.received_by)
+    cancelled_by_name = await _resolve_received_by_name(db, payment.cancelled_by)
     entitlements_lines, entitlements_overflow = _build_entitlements(payment)
 
     # FIX bug enum : SQLAlchemy SAEnum retourne l'enum object (PaymentMethod.CASH),
@@ -175,6 +176,9 @@ async def get_payment_receipt_pdf(db: AsyncSession, payment_id: int) -> bytes:
         "method": enum_value(payment.method),
         "reference": payment.reference,
         "status": enum_value(payment.status),
+        "cancelled_at": payment.cancelled_at,
+        "cancelled_by_name": cancelled_by_name,
+        "cancellation_reason": payment.cancellation_reason,
         "notes": payment.notes,
         "student_name": student_name or "",
         "class_name": getattr(klass, "name", "") or "",

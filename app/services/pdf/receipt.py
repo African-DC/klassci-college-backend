@@ -41,6 +41,30 @@ def _document_reference(payment_data: dict[str, Any]) -> str:
     return f"REC-{year}-{payment_id}" if payment_id else ""
 
 
+def _bandeau_annulation(data: dict[str, Any]) -> str:
+    """Le bandeau qui barre un reçu annulé.
+
+    Un versement annulé garde son numéro et son papier peut être réimprimé —
+    c'est voulu, on ne renumérote pas. Mais réimprimé sans marque, il circule
+    comme un reçu valide, et c'est exactement ce que la contre-passation existe
+    pour empêcher. Le bandeau porte la date, le signataire et le motif : de quoi
+    répondre au guichet sans ouvrir l'application.
+    """
+    if data.get("status") != "cancelled":
+        return ""
+    quand = data.get("cancelled_at")
+    le = f" le {quand.strftime('%d/%m/%Y')}" if isinstance(quand, datetime) else ""
+    par = data.get("cancelled_by_name")
+    par_qui = f" par {par}" if par else ""
+    motif = (data.get("cancellation_reason") or "").strip()
+    return (
+        '<div class="rc-annule">'
+        f"<strong>VERSEMENT ANNULÉ</strong>{le}{par_qui}."
+        + (f" Motif : {motif}" if motif else "")
+        + "</div>"
+    )
+
+
 def _half_html(
     data: dict[str, Any],
     school: dict[str, Any],
@@ -62,6 +86,7 @@ def _half_html(
     return f"""
     <div class="rc-half">
         {parts.header_html(school, doc_number=doc_number, copy_label=copy_label)}
+        {_bandeau_annulation(data)}
         <table class="rc-cols"><tr>
             <td class="rc-col-left">{parts.payment_column_html(data)}</td>
             <td class="rc-col-right">{parts.situation_column_html(data)}</td>

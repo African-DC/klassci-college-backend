@@ -98,6 +98,18 @@ class PaymentAllocationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaymentCancel(BaseModel):
+    """Le motif d'une annulation, obligatoire.
+
+    Une annulation d'encaissement est exactement l'écriture qu'un contrôle
+    vient relire. Sans phrase qui la justifie, elle ne se défend pas — et un
+    caissier qui pourrait annuler sans rien écrire pourrait encaisser puis
+    effacer.
+    """
+
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class PaymentResponse(BaseModel):
     id: int
     #: `None` quand l'élève a été supprimé définitivement. Le versement, lui,
@@ -117,6 +129,13 @@ class PaymentResponse(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    #: Renseignés seulement sur un versement annulé. Le motif figure sur le
+    #: bordereau et sur le reçu réimprimé : c'est la trace que
+    #: l'intangibilité exige, et elle doit se lire sans ouvrir l'audit.
+    cancelled_at: datetime | None = None
+    cancelled_by: int | None = None
+    cancelled_by_name: str | None = None
+    cancellation_reason: str | None = None
     # Enriched from joins
     student_name: str | None = None
     student_photo_url: str | None = None

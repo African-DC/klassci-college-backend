@@ -59,6 +59,10 @@ def _payment_full_options():
         # colonne vide sur un document comptable.
         selectinload(Payment.received_by_user).selectinload(User.staff_profile),
         selectinload(Payment.received_by_user).selectinload(User.teacher_profile),
+        # L'annulateur se lit sur la ligne annulee, au meme titre que
+        # l'encaisseur : sans lui, « annule par » resterait vide.
+        selectinload(Payment.cancelled_by_user).selectinload(User.staff_profile),
+        selectinload(Payment.cancelled_by_user).selectinload(User.teacher_profile),
     )
 
 

@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Annuler un versement exige désormais un motif écrit, conservé sur la ligne avec la date et le nom du signataire, et repris sur le reçu réimprimé *(caissier, comptable, directeur)*
 - L'enseignant déclare lui-même ses plages d'indisponibilité depuis son portail, et l'administration peut les saisir à sa place quand il a prévenu de vive voix *(enseignant, directeur des études, secrétariat)*
 - Poser un créneau montre la semaine de l'enseignant choisi avant de choisir l'horaire : ses cours dans les autres classes et ses plages fermées *(directeur des études, secrétariat, admin)*
 - Chaque versement dit qui l'a encaissé : le nom du caissier apparaît dans la liste, dans le reçu et dans les deux exports, et la comptabilité peut isoler une caisse pour la contrôler *(comptable, directeur, caissier)*
