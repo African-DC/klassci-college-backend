@@ -159,7 +159,11 @@ async def create_slot(
 
     # Résoudre la salle par nom si fourni
     room_id: int | None = None
-    if data.room is not None:
+    # Une chaine vide n'est pas un nom de salle : c'est « aucune salle », ce que
+    # le formulaire envoie quand on choisit cette option. La modification le
+    # savait deja ; la creation refusait le creneau avec « La salle « » n'existe
+    # pas », donc poser un cours sans salle etait impossible.
+    if data.room:
         room = await repo.get_room_by_name(db, data.room)
         if room is None:
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")

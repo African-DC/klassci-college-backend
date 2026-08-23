@@ -239,3 +239,19 @@ async def test_creneau_adjacent_accepte(db: _AsyncBridge) -> None:
     cree = await svc.create_slot(db, _creation(SIXIEME_A, "10:00", "11:00"), created_by=1)  # type: ignore[arg-type]
 
     assert cree.start_time == "10:00"
+
+
+@pytest.mark.asyncio
+async def test_un_creneau_sans_salle_passe(db: _AsyncBridge) -> None:
+    """« Aucune salle » envoie une chaîne vide, pas l'absence de champ.
+
+    La création la traitait comme un nom de salle et refusait le créneau avec
+    « La salle « » n'existe pas » — donc poser un cours sans salle était
+    impossible, alors que la modification, elle, savait le faire.
+    """
+    creation = _creation(SIXIEME_A, "14:00", "15:00")
+    creation.room = ""
+
+    cree = await svc.create_slot(db, creation, created_by=1)  # type: ignore[arg-type]
+
+    assert cree.room is None
