@@ -118,9 +118,7 @@ async def list_students(
             pass
         else:
             base = base.where(
-                ~Student.enrollments.any(
-                    Enrollment.academic_year_id == current_ay_id
-                )
+                ~Student.enrollments.any(Enrollment.academic_year_id == current_ay_id)
             )
 
     count_stmt = select(func.count()).select_from(base.subquery())
@@ -202,9 +200,7 @@ async def get_students_filters(db: AsyncSession) -> dict:
     # prédicat que la liste filtrée : les deux doivent compter la même chose,
     # sinon la pastille annonce huit élèves et la liste en montre trois.
     no_current_stmt = select(func.count(Student.id)).where(
-        ~Student.enrollments.any(
-            Enrollment.academic_year_id == current_ay_id
-        )
+        ~Student.enrollments.any(Enrollment.academic_year_id == current_ay_id)
     )
     no_current = (await db.execute(no_current_stmt)).scalar() or 0
 
