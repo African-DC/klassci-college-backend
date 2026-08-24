@@ -29,7 +29,7 @@ async def get_current_academic_year_name(db: AsyncSession) -> str | None:
 
 
 def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
-    """Loader options bornant `Student.enrollments` à l'année courante + status valide.
+    """Loader options bornant `Student.enrollments` à l'année courante.
 
     Single source of truth partagée entre `list_students` et `get_student_by_id` :
     sans ce eager-load, `_student_to_response` plante avec `MissingGreenlet` quand
@@ -40,10 +40,7 @@ def _student_with_current_enrollment_options(current_ay_id: int | None) -> list:
         options.append(
             with_loader_criteria(
                 Enrollment,
-                and_(
-                    Enrollment.academic_year_id == current_ay_id,
-                    Enrollment.status == EnrollmentStatus.VALIDE,
-                ),
+                Enrollment.academic_year_id == current_ay_id,
                 include_aliases=True,
             )
         )
@@ -112,18 +109,16 @@ async def list_students(
             )
         )
     elif unenrolled_only:
-        # Élève SANS aucune enrollment valide pour l'année courante.
+        # Élève dont l'inscription n'est pas même entamée pour l'année
+        # courante. Une inscription en cours de validation compte : elle a
+        # été entamée, et la présenter comme « à inscrire » ferait recommencer
+        # un dossier déjà ouvert.
         if current_ay_id is None:
             # Pas d'année courante → tous les élèves sont "non inscrits".
             pass
         else:
             base = base.where(
-                ~Student.enrollments.any(
-                    and_(
-                        Enrollment.academic_year_id == current_ay_id,
-                        Enrollment.status == EnrollmentStatus.VALIDE,
-                    )
-                )
+                ~Student.enrollments.any(Enrollment.academic_year_id == current_ay_id)
             )
 
     count_stmt = select(func.count()).select_from(base.subquery())
@@ -201,14 +196,11 @@ async def get_students_filters(db: AsyncSession) -> dict:
         {"class_id": r.class_id, "class_name": r.class_name, "count": r.count} for r in rows
     ]
 
-    # Élèves sans enrollment valide cette année.
+    # Élèves dont l'inscription n'est pas même entamée cette année. Le même
+    # prédicat que la liste filtrée : les deux doivent compter la même chose,
+    # sinon la pastille annonce huit élèves et la liste en montre trois.
     no_current_stmt = select(func.count(Student.id)).where(
-        ~Student.enrollments.any(
-            and_(
-                Enrollment.academic_year_id == current_ay_id,
-                Enrollment.status == EnrollmentStatus.VALIDE,
-            )
-        )
+        ~Student.enrollments.any(Enrollment.academic_year_id == current_ay_id)
     )
     no_current = (await db.execute(no_current_stmt)).scalar() or 0
 
