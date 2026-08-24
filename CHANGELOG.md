@@ -51,6 +51,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un élève dont l'inscription est ouverte mais pas encore validée n'est plus présenté comme « à inscrire » *(admin)*
 - Poser un créneau sans salle était refusé par « La salle « » n'existe pas » *(admin, directeur des études)*
 - Un enseignant déclaré disponible toute la matinée ne pouvait recevoir qu'une heure de cours d'affilée : les heures déclarées se recollent désormais *(directeur des études, secrétariat, admin)*
 - Noter une seule absence rendait l'enseignant impossible à placer toute la semaine : une absence ne ferme plus que son propre créneau *(directeur des études, secrétariat, admin)*
