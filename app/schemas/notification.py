@@ -19,6 +19,10 @@ class NotificationResponse(BaseModel):
     read_at: datetime | None
     entity_type: str | None
     entity_id: int | None
+    # Ou la notification mene. Sans ce champ, la colonne existait, le service
+    # l'ecrivait, et rien ne sortait jamais du serveur : un lien pose mais
+    # jamais livre.
+    action_url: str | None = None
     created_at: datetime
 
 
