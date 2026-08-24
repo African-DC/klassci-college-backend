@@ -23,6 +23,11 @@ class NotificationType(str, enum.Enum):
     BULLETIN_PUBLISHED = "bulletin_published"
     ABSENCE_RECORDED = "absence_recorded"
     ENROLLMENT_STATUS = "enrollment_status"
+    # Les deux temps de la chaine d'inscription. Deux types distincts plutot
+    # qu'un seul : ils ne s'adressent pas aux memes personnes et n'appellent
+    # pas la meme action, donc ils meritent chacun leur libelle et leur lien.
+    ENROLLMENT_AWAITING_PAYMENT = "enrollment_awaiting_payment"
+    ENROLLMENT_AWAITING_VALIDATION = "enrollment_awaiting_validation"
     SYSTEM = "system"
 
 

@@ -16,10 +16,11 @@ from app.core.audit import AuditAction, audit_log
 from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
+from app.models.enrollment import EnrollmentStatus
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
-from app.services import cash_session_service, fees_paid
+from app.services import cash_session_service, enrollment_notifications, fees_paid
 from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
     paid_for_fees,
@@ -160,6 +161,23 @@ async def record_enrollment_payment(
         raise NotFoundError("Payment", payment.id)
 
     await dispatch_payment_notification(db, refreshed, kind="received")
+
+    # Le versement est passe : l'inscription attend sa validation. On ne
+    # previent que tant qu'elle ne l'est pas — une famille qui paie en
+    # plusieurs fois declencherait sinon une alerte par versement, et c'est
+    # ainsi qu'un compteur cesse d'etre lu.
+    inscription = getattr(refreshed, "enrollment", None)
+    if inscription is not None and inscription.status != EnrollmentStatus.VALIDE:
+        eleve = getattr(inscription, "student", None)
+        nom = " ".join(
+            p for p in (getattr(eleve, "last_name", ""), getattr(eleve, "first_name", "")) if p
+        ).strip()
+        await enrollment_notifications.prevenir_qu_il_faut_valider(
+            db,
+            enrollment_id=inscription.id,
+            student_name=nom or "Un eleve",
+            acteur_id=received_by,
+        )
     return payment_to_response(refreshed)
 
 
