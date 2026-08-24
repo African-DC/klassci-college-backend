@@ -11,6 +11,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Added
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*
 - Validation de plusieurs inscriptions en une fois, chaque refus étant rendu avec son motif *(admin)*
+- Les notifications affichées à l'ouverture de la cloche sont marquées lues automatiquement, sans effacer celles qu'on n'a pas vues *(tous)*
 - Une inscription créée prévient qui doit encaisser ; le versement enregistré prévient qui doit valider *(admin)*
 - Les notifications de tâche s'adressent à quiconque détient la permission concernée, quel que soit le nom de son rôle dans l'école *(tous)*
 - Annuler un versement exige un motif écrit, conservé avec la date et le nom du signataire, repris sur le reçu réimprimé et sur le bordereau de caisse *(caissier, comptable, directeur)*
