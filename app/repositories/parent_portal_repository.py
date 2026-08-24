@@ -74,10 +74,14 @@ async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> En
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
         )
         .options(
+            selectinload(Enrollment.class_),
+            selectinload(Enrollment.academic_year),
             selectinload(Enrollment.enrollment_fees)
             .selectinload(EnrollmentFee.fee_variant)
             .selectinload(FeeVariant.category),
-            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
+            # Pas de `EnrollmentFee.payments` ici : la relation est dépréciée
+            # depuis la migration 0028 et plus personne ne la lit. Le détail
+            # des versements passe par `fees_paid.payments_by_enrollment_fee`.
         )
         .order_by(Enrollment.id.desc())
         .limit(1)

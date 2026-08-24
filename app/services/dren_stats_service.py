@@ -11,11 +11,13 @@ from app.core.exceptions import NotFoundError
 from app.repositories import dren_stats_repository as repo
 from app.schemas.dren_stats import (
     ClassStats,
-    DrenExportResponse,
     DrenStatsResponse,
     LevelStats,
     SubjectStats,
 )
+from app.services._school_settings_helper import load_school_settings_for_pdf
+from app.services.exports.dren_stats_xlsx import generate_dren_stats_xlsx
+from app.services.pdf.dren_stats import generate_dren_stats_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +116,17 @@ async def get_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenStatsRe
     )
 
 
-async def export_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenExportResponse:
-    """Export des statistiques DREN (placeholder — retourne les données JSON)."""
+async def export_dren_stats_pdf(db: AsyncSession, academic_year_id: int) -> bytes:
+    """Génère le PDF premium des statistiques DREN."""
     data = await get_dren_stats(db, academic_year_id)
-    return DrenExportResponse(
-        export_url=None,
-        data=data,
-    )
+    school = await load_school_settings_for_pdf(db)
+    return generate_dren_stats_pdf(school, data)
+
+
+async def export_dren_stats_xlsx(db: AsyncSession, academic_year_id: int) -> bytes:
+    """Génère le classeur Excel des statistiques DREN."""
+    data = await get_dren_stats(db, academic_year_id)
+    return generate_dren_stats_xlsx(data)
 
 
 def _round_decimal(value: Decimal | None) -> Decimal | None:

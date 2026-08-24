@@ -12,18 +12,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BusinessValidationError
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
 from app.repositories import payment_repository as repo
+from app.schemas.fee import FeeEntitlement
 from app.schemas.payment import AllocationPreviewLine, AllocationPreviewResponse
+from app.services import fee_entitlements as entitlements
+from app.services import fees_paid
 from app.services.payments._allocation import plan_allocation
 
 
-def _resolve_category(fee: EnrollmentFee) -> tuple[str, int]:
-    """Extrait (name, priority) de la category liée. Defaults safe."""
+def _resolve_category(fee: EnrollmentFee) -> tuple[str, int, list[FeeEntitlement]]:
+    """Extrait (name, priority, contrepartie) de la category liée. Defaults safe."""
     fv = getattr(fee, "fee_variant", None)
     if fv is not None:
         cat = getattr(fv, "category", None)
         if cat is not None:
-            return cat.name, cat.priority
-    return "", 100
+            return cat.name, cat.priority, entitlements.read(cat)
+    return "", 100, []
 
 
 def _status_after(fee: EnrollmentFee, paid_after: Decimal) -> str:
@@ -61,10 +64,13 @@ async def preview_allocation(
             lines=[],
         )
 
-    fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = []
-    for fee in fees:
-        paid = await repo.get_total_paid_for_enrollment_fee(db, fee.id)
-        fees_with_paid.append((fee, paid))
+    # Une requete groupee pour toute l'inscription, pas une par frais : un
+    # apercu sur six frais coutait six allers-retours a la base pendant que
+    # le caissier attendait devant la famille.
+    deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_id)
+    fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
+        (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in fees
+    ]
 
     total_remaining_before = sum(
         (
@@ -89,11 +95,12 @@ async def preview_allocation(
     for fee, paid in fees_with_paid:
         allocated = split_map.get(fee.id, Decimal("0"))
         paid_after = paid + allocated
-        cat_name, cat_priority = _resolve_category(fee)
+        cat_name, cat_priority, cat_entitlements = _resolve_category(fee)
         lines.append(
             AllocationPreviewLine(
                 enrollment_fee_id=fee.id,
                 fee_category_name=cat_name,
+                fee_category_entitlements=cat_entitlements,
                 fee_category_priority=cat_priority,
                 fee_total=fee.amount,
                 fee_paid_before=paid,

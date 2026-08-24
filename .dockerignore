@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+venv_old
+__pycache__
+.pytest_cache
+.ruff_cache
+.env
+.env.local
+tests
+.claude
+.github
+docs

@@ -6,7 +6,14 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.audit_read import audit_read
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -19,6 +26,7 @@ from app.schemas.admin import (
     ClassUpdate,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
+    HolidaysUpdateRequest,
     LevelCreate,
     LevelListResponse,
     LevelResponse,
@@ -40,6 +48,7 @@ from app.schemas.admin import (
     RoomListResponse,
     RoomResponse,
     RoomUpdate,
+    SchoolHolidayDTO,
     SchoolInfoUpdate,
     SchoolSettingsResponse,
     SeriesCreate,
@@ -73,7 +82,8 @@ from app.schemas.admin import (
     UserAccountCreate,
     UserAccountUpdate,
 )
-from app.services import admin_service, enrollment_service, matricule_service
+from app.services import admin_service, enrollment_fees, matricule_service
+from app.services.finance_visibility import FinanceView
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -142,11 +152,23 @@ async def create_student(
 @router.get("/students/{student_id}/full", response_model=StudentFullResponse)
 async def get_student_full(
     student_id: int,
+    _read: None = audit_read("student", param="student_id"),
     _: None = require_permission("admin:students:read"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
-    """Retourne le profil complet d'un eleve avec KPIs."""
-    return await admin_service.get_student_full(db, student_id)
+    """Retourne le profil complet d'un eleve avec KPIs.
+
+    Ce que la famille doit est une information sensible : les montants ne
+    sortent que pour qui manipule l'argent. Les autres recoivent l'etat de
+    paiement, sans somme.
+    """
+    return await admin_service.get_student_full(
+        db,
+        student_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
 
 
 @router.get("/students/{student_id}", response_model=StudentResponse)
@@ -169,17 +191,6 @@ async def update_student(
 ) -> StudentResponse:
     """Met a jour un eleve (patch partiel)."""
     return await admin_service.update_student(db, student_id, data, updated_by=current_user.user_id)
-
-
-@router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_student(
-    student_id: int,
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:students:delete"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> None:
-    """Supprime un eleve."""
-    await admin_service.delete_student(db, student_id, deleted_by=current_user.user_id)
 
 
 @router.post("/students/{student_id}/photo")
@@ -245,10 +256,15 @@ async def create_student_account(
 )
 async def get_student_fees(
     student_id: int,
-    _: None = require_permission("admin:students:read"),
+    _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> StudentEnrollmentFeeListResponse:
-    """Retourne les frais d'inscription d'un élève avec détails de paiement."""
+    """Retourne les frais d'inscription d'un élève avec détails de paiement.
+
+    Garde `payments:read` et non `admin:students:read` : cette reponse n'est
+    faite que de montants, il n'y a rien a en montrer a qui n'a pas le droit
+    de les lire. Une liste de frais aux sommes vidées ne voudrait rien dire.
+    """
     return await admin_service.get_student_enrollment_fees(db, student_id)
 
 
@@ -266,11 +282,13 @@ async def regenerate_enrollment_fees(
 ) -> dict:
     """Régénère les frais obligatoires d'une inscription.
 
-    Supprime les frais sans paiements et recrée les frais obligatoires
-    correspondant à la classe actuelle.
+    Remplace les frais sur lesquels aucun versement n'est imputé, conserve
+    les autres, et recrée les frais obligatoires correspondant à la classe
+    actuelle. La réponse porte le décompte des deux et un message à
+    afficher tel quel.
     """
     async with db.begin_nested():
-        result = await enrollment_service.regenerate_enrollment_fees(
+        result = await enrollment_fees.regenerate_enrollment_fees(
             db, enrollment_id, regenerated_by=current_user.user_id
         )
     await db.commit()
@@ -356,17 +374,6 @@ async def update_teacher(
     return await admin_service.update_teacher(db, teacher_id, data, updated_by=current_user.user_id)
 
 
-@router.delete("/teachers/{teacher_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_teacher(
-    teacher_id: int,
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:teachers:delete"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> None:
-    """Supprime un enseignant."""
-    await admin_service.delete_teacher(db, teacher_id, deleted_by=current_user.user_id)
-
-
 @router.post("/teachers/{teacher_id}/photo")
 async def upload_teacher_photo(
     teacher_id: int,
@@ -440,6 +447,7 @@ async def create_staff(
 @router.get("/staff/{staff_id}/full", response_model=StaffFullResponse)
 async def get_staff_full(
     staff_id: int,
+    _read: None = audit_read("staff", param="staff_id"),
     _: None = require_permission("admin:staff:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
@@ -467,17 +475,6 @@ async def update_staff(
 ) -> StaffResponse:
     """Met a jour un membre du personnel (patch partiel)."""
     return await admin_service.update_staff(db, staff_id, data, updated_by=current_user.user_id)
-
-
-@router.delete("/staff/{staff_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_staff(
-    staff_id: int,
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:staff:delete"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> None:
-    """Supprime un membre du personnel."""
-    await admin_service.delete_staff(db, staff_id, deleted_by=current_user.user_id)
 
 
 @router.post("/staff/{staff_id}/photo")
@@ -716,6 +713,19 @@ async def create_academic_year(
     return await admin_service.create_academic_year(db, data, created_by=current_user.user_id)
 
 
+@router.get("/academic-years/current", response_model=AcademicYearResponse)
+async def get_current_academic_year(
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AcademicYearResponse:
+    """Retourne l'annee academique courante (is_current=True) ou 404.
+
+    Note: cette route doit etre declaree AVANT /academic-years/{year_id}
+    sinon FastAPI parse "current" comme un int year_id et renvoie 422.
+    """
+    return await admin_service.get_current_academic_year(db)
+
+
 @router.get("/academic-years/{year_id}", response_model=AcademicYearResponse)
 async def get_academic_year(
     year_id: int,
@@ -738,15 +748,6 @@ async def update_academic_year(
     return await admin_service.update_academic_year(
         db, year_id, data, updated_by=current_user.user_id
     )
-
-
-@router.get("/academic-years/current", response_model=AcademicYearResponse)
-async def get_current_academic_year(
-    current_user: TokenData = Depends(get_current_user),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> AcademicYearResponse:
-    """Retourne l'annee academique courante (is_current=True) ou 404."""
-    return await admin_service.get_current_academic_year(db)
 
 
 @router.patch(
@@ -844,10 +845,12 @@ async def delete_level(
 async def _build_settings_response(
     db: AsyncSession, school: SchoolSettings
 ) -> SchoolSettingsResponse:
-    """Assemble le payload settings + trimestres de l'AY courante."""
+    """Assemble le payload settings + trimestres + congés de l'AY courante."""
     trimesters = await admin_service.get_trimesters_for_current_year(db)
+    holidays = await admin_service.get_holidays_for_current_year(db)
     payload = SchoolSettingsResponse.model_validate(school)
     payload.trimesters = [TrimesterDTO.model_validate(t) for t in trimesters]
+    payload.holidays = [SchoolHolidayDTO.model_validate(h) for h in holidays]
     return payload
 
 
@@ -900,6 +903,20 @@ async def update_trimesters(
     await admin_service.upsert_trimesters_for_current_year(
         db, items, updated_by=current_user.user_id
     )
+    school = await admin_service.get_school_settings(db)
+    return await _build_settings_response(db, school)
+
+
+@router.put("/settings/holidays", response_model=SchoolSettingsResponse)
+async def update_holidays(
+    data: HolidaysUpdateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Remplace les congés / jours fériés de l'année académique courante."""
+    items = [h.model_dump() for h in data.holidays]
+    await admin_service.upsert_holidays_for_current_year(db, items, updated_by=current_user.user_id)
     school = await admin_service.get_school_settings(db)
     return await _build_settings_response(db, school)
 
@@ -1229,11 +1246,18 @@ async def create_parent(
 @router.get("/parents/{parent_id}/full", response_model=ParentFullResponse)
 async def get_parent_full(
     parent_id: int,
+    _read: None = audit_read("parent", param="parent_id"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
     _: None = require_permission("admin:parents:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Retourne le profil complet d'un parent avec ses enfants."""
-    return await admin_service.get_parent_full(db, parent_id)
+    return await admin_service.get_parent_full(
+        db,
+        parent_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
 
 
 @router.get("/parents/{parent_id}", response_model=ParentResponse)
@@ -1256,17 +1280,6 @@ async def update_parent(
 ) -> ParentResponse:
     """Met à jour un parent (patch partiel)."""
     return await admin_service.update_parent(db, parent_id, data, updated_by=current_user.user_id)
-
-
-@router.delete("/parents/{parent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_parent(
-    parent_id: int,
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:parents:delete"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> None:
-    """Supprime un parent."""
-    await admin_service.delete_parent(db, parent_id, deleted_by=current_user.user_id)
 
 
 @router.post("/parents/{parent_id}/link/{student_id}", status_code=status.HTTP_201_CREATED)

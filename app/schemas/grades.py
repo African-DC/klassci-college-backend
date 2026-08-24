@@ -45,6 +45,15 @@ class EvaluationResponse(BaseModel):
     created_at: datetime
 
 
+class EvaluationListResponse(BaseModel):
+    """Enveloppe paginée. `total` porte le compte de l'école, pas de la page."""
+
+    items: list[EvaluationResponse]
+    total: int
+    page: int
+    size: int
+
+
 # ---------------------------------------------------------------------------
 # Grade
 # ---------------------------------------------------------------------------
@@ -60,6 +69,10 @@ class GradeResponse(BaseModel):
 class GradeEntry(BaseModel):
     student_id: int
     value: float | None = Field(None, ge=0, le=20)
+    # Élève absent le jour de l'épreuve : zéro d'office. Distinct d'une case
+    # laissée vide, qui signifie seulement « pas encore corrigé ». C'est ce
+    # marquage qui permet ensuite un billet d'annulation de zéro.
+    absent: bool = False
 
 
 class GradeBatchUpdate(BaseModel):

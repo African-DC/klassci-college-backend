@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     # JWT
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # 60 min : réduit la fréquence des refresh (donc les courses de rotation du
+    # refresh token qui déconnectaient les utilisateurs actifs). La durée réelle
+    # de session reste bornée par la fenêtre d'inactivité (cookie FE, 30 min).
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
@@ -36,6 +39,25 @@ class Settings(BaseSettings):
     # Flip vers subdomain plus tard sans changer de code :
     #   PUBLIC_LOGIN_URL_TEMPLATE="https://{slug}.college.klassci.com/login"
     PUBLIC_LOGIN_URL_TEMPLATE: str = "https://college.klassci.com/login?c={slug}"
+
+    # Base URL publique du frontend — sert à construire l'URL de vérification
+    # encodée dans le QR code des documents officiels :
+    #   {PUBLIC_BASE_URL}/verifier/{tenant}/{token}
+    # À surcharger via env sur le serveur de démo (ex: http://94.72.96.119).
+    PUBLIC_BASE_URL: str = "https://college.klassci.com"
+
+    # Sceau numérique institutionnel KLASSCI. La clé privée est une graine
+    # Ed25519 brute de 32 octets encodée en base64url. Elle est indépendante
+    # de SECRET_KEY afin que la rotation JWT n'invalide jamais les documents.
+    DOCUMENT_SEAL_ACTIVE_KEY_ID: str = "klassci-college-2026-01"
+    DOCUMENT_SEAL_PRIVATE_KEY_B64: str = ""
+    # JSON {"key-id": "base64url-public-key"}. Conserver les anciennes clés
+    # publiques ici après chaque rotation pour valider les sceaux historiques.
+    DOCUMENT_SEAL_PUBLIC_KEYS_JSON: str = "{}"
+    # À renseigner avec l'ancienne SECRET_KEY avant toute rotation JWT afin de
+    # conserver la vérification des documents KCEV1 déjà distribués.
+    DOCUMENT_SEAL_LEGACY_SECRET_KEY: str = ""
+    DOCUMENT_SEAL_DEFAULT_VALIDITY_DAYS: int = 365
 
     # Host allowlist — protection CSRF / host header injection
     # Pattern regex matchant les hôtes acceptés en production multi-tenant.
@@ -60,6 +82,15 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
+
+    # MailPulse (notifications email + WhatsApp) — fallback quand les settings
+    # tenant sont vides. La clé API réelle vit dans school_settings par tenant.
+    MAILPULSE_BASE_URL: str = "https://mailpulse-two.vercel.app"
+    MAILPULSE_CONTACTS_ENDPOINT: str = "/api/v1/contacts"
+    MAILPULSE_MESSAGES_ENDPOINT: str = "/api/v1/messages"
+    MAILPULSE_TIMEOUT: int = 20
+    MAILPULSE_SENDER_NAME: str = "KLASSCI"
+    MAILPULSE_DEFAULT_LANGUAGE: str = "fr"
 
     # DigitalOcean Spaces (stockage bulletins PDF)
     DO_SPACES_KEY: str | None = None

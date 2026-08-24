@@ -20,7 +20,9 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
             selectinload(Enrollment.student),
             selectinload(Enrollment.class_),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
-            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.payments),
+            # Pas de `EnrollmentFee.payments` ici : la relation est dépréciée
+            # depuis la migration 0028 et plus personne ne la lit. La charger
+            # coûtait une requête par appel pour un résultat toujours vide.
         )
     )
     result = await db.execute(stmt)
@@ -78,6 +80,8 @@ async def create_enrollment(
     academic_year_id: int,
     created_by: int | None,
     notes: str | None,
+    assignment_status: str | None = None,
+    assignment_decision_number: str | None = None,
 ) -> Enrollment:
     """Crée une inscription et la flush pour obtenir l'ID."""
     enrollment = Enrollment(
@@ -86,6 +90,8 @@ async def create_enrollment(
         academic_year_id=academic_year_id,
         created_by=created_by,
         notes=notes,
+        assignment_status=assignment_status,
+        assignment_decision_number=assignment_decision_number,
     )
     db.add(enrollment)
     await db.flush()
@@ -109,6 +115,9 @@ async def create_enrollment_fee(
     fee = EnrollmentFee(
         enrollment_id=enrollment_id,
         fee_variant_id=fee_variant_id,
+        # Recopiee du tarif : c'est elle que porte la contrainte
+        # `uq_enrollment_fee_category`, une categorie par inscription.
+        fee_category_id=variant.fee_category_id,
         amount=variant.amount,
     )
     db.add(fee)

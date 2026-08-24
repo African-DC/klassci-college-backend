@@ -9,6 +9,7 @@ from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueCons
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
@@ -25,7 +26,29 @@ class EnrollmentStatus(str, enum.Enum):
     ANNULE = "annule"
 
 
-class Enrollment(Base, TimestampMixin):
+class AssignmentStatus(str, enum.Enum):
+    """Statut d'affectation d'un eleve par l'Etat.
+
+    En Cote d'Ivoire, un eleve affecte dans un etablissement prive est
+    subventionne : sa famille paie sensiblement moins qu'un non affecte. Le
+    reaffecte — reoriente vers un autre etablissement — reste pris en charge,
+    donc paie comme un affecte ; on garde neanmoins la distinction, que les
+    dossiers du ministere et le rapport de fin de trimestre reclament.
+
+    L'affectation vaut pour une annee et un etablissement donnes : elle vit
+    donc sur l'inscription, pas sur l'eleve. Un redoublant peut la perdre.
+    """
+
+    AFFECTE = "affecte"
+    REAFFECTE = "reaffecte"
+    NON_AFFECTE = "non_affecte"
+
+    @property
+    def is_subsidised(self) -> bool:
+        return self in (AssignmentStatus.AFFECTE, AssignmentStatus.REAFFECTE)
+
+
+class Enrollment(Base, TimestampMixin, ArchivableMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
     __tablename__ = "enrollments"
@@ -43,6 +66,16 @@ class Enrollment(Base, TimestampMixin):
     academic_year_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    # `None` = pas encore renseigne. On ne devine pas : un defaut a
+    # « non affecte » ferait basculer des familles existantes vers le tarif
+    # plein sans que personne ne l'ait decide.
+    assignment_status: Mapped[str | None] = mapped_column(
+        ValueEnum(AssignmentStatus, name="assignment_status"),
+        nullable=True,
+        index=True,
+    )
+    # Numero de la decision d'affectation, reclame par le rapport DEEP.
+    assignment_decision_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(
         ValueEnum(EnrollmentStatus, name="enrollment_status"),
         nullable=False,
@@ -60,7 +93,13 @@ class Enrollment(Base, TimestampMixin):
     documents: Mapped[list[Document]] = relationship(back_populates="enrollment")
     student_options: Mapped[list[StudentOption]] = relationship(back_populates="enrollment")
     enrollment_fees: Mapped[list[EnrollmentFee]] = relationship(back_populates="enrollment")
-    payments: Mapped[list[Payment]] = relationship(back_populates="enrollment")
+    # `passive_deletes` laisse la clé étrangère décider : elle est en RESTRICT,
+    # donc supprimer une inscription qui porte encore des versements échoue —
+    # et c'est voulu. Détacher les versements doit rester un geste explicite,
+    # journalisé, pas un effet de bord silencieux de l'ORM.
+    payments: Mapped[list[Payment]] = relationship(
+        back_populates="enrollment", passive_deletes=True
+    )
 
 
 class Document(Base, TimestampMixin):

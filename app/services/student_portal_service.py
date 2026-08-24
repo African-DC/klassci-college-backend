@@ -5,11 +5,11 @@ from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.attendance import AttendanceRecord, AttendanceStatus
-from app.models.fee import PaymentStatus
-from app.models.grade import Grade
+from app.models.grade import Evaluation, Grade
 from app.models.user import Student
 from app.repositories import admin_repository
 from app.repositories import student_portal_repository as repo
@@ -23,11 +23,20 @@ from app.schemas.student_portal import (
     StudentFeesResponse,
     StudentGradeResponse,
     StudentGradesListResponse,
+    StudentLatestGrade,
     StudentNextCourse,
     StudentProfileResponse,
     StudentTimetableResponse,
     TimetableSlotResponse,
 )
+from app.services import (
+    bulletin_access,
+    bulletin_document_service,
+    bulletin_visibility,
+    document_release_service,
+    fees_paid,
+)
+from app.services import fee_entitlements as entitlements
 
 
 async def _get_student_for_user(db: AsyncSession, user_id: int) -> Student:
@@ -106,6 +115,14 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
         raise NotFoundError("Active enrollment not found for student", student.id)
 
     enrollment_fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
+    # Source de verite : les allocations, pas `EnrollmentFee.payments`, qui
+    # s'appuie sur un lien deprecie depuis la migration 0028 et sous-estime
+    # donc ce que la famille a verse. C'est elle qui lit ce chiffre.
+    paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
+    # Le detail sous chaque frais vient des allocations lui aussi : la
+    # relation depreciee renvoyait une liste vide, donc un frais solde sans
+    # aucun versement visible en dessous.
+    payments_by_fee = await fees_paid.payments_by_enrollment_fee(db, enrollment.id)
 
     total_due = Decimal("0.00")
     total_paid = Decimal("0.00")
@@ -116,25 +133,25 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
         payments = [
             PaymentResponse(
                 id=p.id,
-                amount=p.amount,
+                # Part imputee a CE frais, pas le montant total du versement.
+                amount=montant,
                 method=p.method,
                 status=p.status,
                 reference=p.reference,
                 created_at=p.created_at,
             )
-            for p in ef.payments
+            for p, montant in payments_by_fee.get(ef.id, [])
         ]
-        for p in ef.payments:
-            if p.status == PaymentStatus.COMPLETED:
-                total_paid += p.amount
+        fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
+        total_paid += fee_paid
 
-        category_name = (
-            ef.fee_variant.category.name if ef.fee_variant and ef.fee_variant.category else "N/A"
-        )
+        categorie = ef.fee_variant.category if ef.fee_variant else None
+        category_name = categorie.name if categorie else "N/A"
         fee_responses.append(
             EnrollmentFeeResponse(
                 id=ef.id,
                 fee_category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 amount=ef.amount,
                 status=ef.status,
                 payments=payments,
@@ -150,25 +167,67 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
 
 
 async def get_bulletins(db: AsyncSession, user_id: int) -> StudentBulletinsListResponse:
-    """Retourne les bulletins publies de l'eleve."""
+    """Retourne les bulletins publies de l'eleve, vides de contenu si impaye.
+
+    La meme porte que le telechargement, appliquee a la consultation : rendre
+    ici la moyenne, le rang et la mention pendant que le PDF est retenu
+    reviendrait a publier le bulletin en refusant de l'imprimer.
+
+    Les bulletins retenus restent dans la liste. Les faire disparaitre ferait
+    croire a la famille qu'aucun bulletin n'a ete edite, et l'enverrait
+    telephoner au secretariat pour une panne imaginaire.
+    """
     student = await _get_student_for_user(db, user_id)
     bulletins = await repo.get_published_bulletins_for_student(db, student.id)
 
+    release = await document_release_service.evaluate_release(db, student.id)
+    withholding = bulletin_visibility.Withholding.from_release(release)
+
     items = [
         BulletinResponse(
-            id=b.id,
-            trimester=b.trimester,
-            average=b.average,
-            rank=b.rank,
-            mention=b.mention,
-            class_name=b.class_.name,
-            academic_year_name=b.academic_year.name,
-            file_url=b.file_url,
-            generated_at=b.generated_at,
+            **withholding.apply(
+                {
+                    "id": b.id,
+                    "trimester": b.trimester,
+                    "average": b.average,
+                    "rank": b.rank,
+                    "mention": b.mention,
+                    "class_name": b.class_.name,
+                    "academic_year_name": b.academic_year.name,
+                    "file_url": b.file_url,
+                    "generated_at": b.generated_at,
+                }
+            )
         )
         for b in bulletins
     ]
     return StudentBulletinsListResponse(items=items, total=len(items))
+
+
+async def get_bulletin_pdf(db: AsyncSession, user_id: int, bulletin_id: int) -> bytes:
+    """Rend le PDF d'un bulletin publie de l'eleve connecte.
+
+    L'ordre des trois controles compte. L'appartenance passe avant la porte de
+    paiement : celle-ci repond 402 en annoncant le montant reste impaye et
+    l'identifiant de l'eleve concerne. Interrogee sur le bulletin d'un
+    camarade, elle revelerait donc a la fois son existence et la situation
+    financiere de sa famille.
+
+    La famille ne peut jamais lever la retenue pour impaye : la derogation se
+    demande au secretariat, qui porte un motif au journal. Sans cette porte
+    ici, une famille retenue au guichet obtiendrait le document en ouvrant son
+    propre portail, et la retenue ne serait plus qu'un decor.
+    """
+    student = await _get_student_for_user(db, user_id)
+    await bulletin_access.ensure_owned_and_published(db, bulletin_id, student_id=student.id)
+    await document_release_service.ensure_bulletin_releasable(
+        db,
+        bulletin_id,
+        actor_id=user_id,
+        may_override=False,
+        override_reason=None,
+    )
+    return await bulletin_document_service.get_bulletin_pdf(db, bulletin_id)
 
 
 async def get_profile(db: AsyncSession, user_id: int) -> StudentProfileResponse:
@@ -197,6 +256,7 @@ async def get_profile(db: AsyncSession, user_id: int) -> StudentProfileResponse:
         first_name=student.first_name,
         last_name=student.last_name,
         birth_date=student.birth_date,
+        birth_place=student.birth_place,
         genre=student.genre,
         enrollment_number=student.enrollment_number,
         email=email,
@@ -274,12 +334,40 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
     avg_raw = (await db.execute(avg_stmt)).scalar()
     general_average = round(float(avg_raw), 2) if avg_raw is not None else None
 
-    # Frais restants (somme balance des fees non payés)
+    # Dernière note saisie : mise en avant sur l'accueil (l'élève voit tout de
+    # suite son résultat le plus récent). Tri par date d'évaluation décroissante.
+    latest_stmt = (
+        select(Grade)
+        .join(Evaluation, Evaluation.id == Grade.evaluation_id)
+        .where(Grade.student_id == student.id, Grade.value.is_not(None))
+        .options(selectinload(Grade.evaluation).selectinload(Evaluation.subject))
+        .order_by(Evaluation.date.desc(), Grade.id.desc())
+        .limit(1)
+    )
+    latest_row = (await db.execute(latest_stmt)).scalars().first()
+    latest_grade = None
+    if latest_row is not None and latest_row.evaluation is not None:
+        ev = latest_row.evaluation
+        latest_grade = StudentLatestGrade(
+            value=float(latest_row.value) if latest_row.value is not None else 0.0,
+            out_of=20,
+            subject_name=ev.subject.name if ev.subject else "",
+            evaluation_title=ev.title,
+            type=ev.type,
+            trimester=ev.trimester,
+            date=ev.date,
+        )
+
+    # Reste à payer. Source de vérité : les allocations, pas
+    # `EnrollmentFee.payments`, qui s'appuie sur un lien déprécié depuis la
+    # migration 0028 et surestimait donc la dette annoncée à l'élève dès sa
+    # page d'accueil.
     fees_remaining = Decimal("0")
     if enrollment:
         fees = await repo.get_enrollment_fees_for_enrollment(db, enrollment.id)
+        paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
         for fee in fees:
-            paid = sum(p.amount for p in fee.payments if p.status == PaymentStatus.COMPLETED)
+            paid = paid_by_fee.get(fee.id, Decimal("0"))
             balance = fee.amount - paid
             if balance > 0:
                 fees_remaining += balance
@@ -302,6 +390,7 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
         class_name=class_name,
         next_course=next_course,
         general_average=general_average,
+        latest_grade=latest_grade,
         fees_remaining=float(fees_remaining),
         total_absences=int(total_absences),
         current_academic_year=current_ay_name,

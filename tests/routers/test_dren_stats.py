@@ -11,7 +11,6 @@ from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.main import app
 from app.schemas.dren_stats import (
     ClassStats,
-    DrenExportResponse,
     DrenStatsResponse,
     LevelStats,
     SubjectStats,
@@ -82,11 +81,6 @@ SAMPLE_STATS = DrenStatsResponse(
             teacher_count=4,
         ),
     ],
-)
-
-SAMPLE_EXPORT = DrenExportResponse(
-    export_url=None,
-    data=SAMPLE_STATS,
 )
 
 
@@ -184,18 +178,16 @@ class TestExportDrenStats:
     def teardown_method(self) -> None:
         _clear_deps()
 
-    @patch("app.routers.dren_stats.service.export_dren_stats")
+    @patch("app.routers.dren_stats.service.export_dren_stats_pdf")
     def test_export_dren_stats_success(self, mock_export: AsyncMock) -> None:
-        mock_export.return_value = SAMPLE_EXPORT
+        mock_export.return_value = b"%PDF-1.7 dren"
         client = TestClient(app)
         response = client.get("/reports/dren-stats/1/export")
         assert response.status_code == 200
-        data = response.json()
-        assert data["export_url"] is None
-        assert data["data"]["academic_year_id"] == 1
-        assert data["data"]["total_students"] == 350
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content == b"%PDF-1.7 dren"
 
-    @patch("app.routers.dren_stats.service.export_dren_stats")
+    @patch("app.routers.dren_stats.service.export_dren_stats_pdf")
     def test_export_dren_stats_not_found(self, mock_export: AsyncMock) -> None:
         from app.core.exceptions import NotFoundError
 

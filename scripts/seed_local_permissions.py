@@ -64,13 +64,17 @@ async def main() -> None:
 
             await db.execute(
                 text(
-                    "INSERT IGNORE INTO user_roles (user_id, role_id) "
-                    "VALUES (:user_id, :role_id)"
+                    "INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (:user_id, :role_id)"
                 ),
                 {"user_id": user_id, "role_id": role_id},
             )
-            logger.info("Linked %s -> role '%s' (user_id=%s, role_id=%s)",
-                        email, role_name, user_id, role_id)
+            logger.info(
+                "Linked %s -> role '%s' (user_id=%s, role_id=%s)",
+                email,
+                role_name,
+                user_id,
+                role_id,
+            )
 
         await db.commit()
 

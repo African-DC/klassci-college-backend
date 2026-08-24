@@ -1,0 +1,342 @@
+"""Convocations de parents : émission, registre, suite donnée.
+
+La convocation est le seul des quatre actes à vivre après son impression :
+elle attend une réponse. Le registre existe pour répondre en conseil de classe
+à « qui a été convoqué ce trimestre, et qui est venu ».
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.audit import AuditAction, audit_log
+from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.models.school_life import ParentSummons, SummonsOutcome
+from app.models.user import Parent
+from app.schemas.school_life import (
+    ParentSummonsCreate,
+    ParentSummonsRegister,
+    ParentSummonsResponse,
+    SummonsOutcomeUpdate,
+    SummonsRegisterSummary,
+)
+from app.services.school_life._common import (
+    actor_name,
+    current_class_names,
+    issue_act_seal,
+    load_student_context,
+    resolve_trimester,
+)
+
+DOCUMENT_TYPE = "convocation_parent"
+
+OUTCOME_LABELS_FR: dict[str, str] = {
+    SummonsOutcome.PENDING.value: "Non renseigné",
+    SummonsOutcome.ATTENDED.value: "Présent",
+    SummonsOutcome.MISSED.value: "Absent",
+}
+
+
+async def _get_summons(db: AsyncSession, summons_id: int) -> ParentSummons:
+    """Charge une convocation avec tout ce que la réponse et le PDF liront.
+
+    Les relations sont préchargées ici parce que le service les parcourt après
+    `commit()`, moment où SQLAlchemy a expiré les attributs.
+    """
+    stmt = (
+        select(ParentSummons)
+        .where(ParentSummons.id == summons_id)
+        .options(
+            selectinload(ParentSummons.student),
+            selectinload(ParentSummons.parent),
+            selectinload(ParentSummons.academic_year),
+        )
+    )
+    summons = (await db.execute(stmt)).scalar_one_or_none()
+    if summons is None:
+        raise NotFoundError("ParentSummons", summons_id)
+    return summons
+
+
+def _to_response(
+    summons: ParentSummons,
+    *,
+    class_name: str | None,
+    issued_by_name: str | None,
+) -> ParentSummonsResponse:
+    student = summons.student
+    parent_label = summons.parent_name
+    if not parent_label and summons.parent is not None:
+        parent_label = f"{summons.parent.first_name} {summons.parent.last_name}".strip()
+    outcome = summons.outcome.value if hasattr(summons.outcome, "value") else summons.outcome
+    return ParentSummonsResponse(
+        id=summons.id,
+        student_id=summons.student_id,
+        student_name=f"{student.first_name} {student.last_name}".strip(),
+        enrollment_number=student.enrollment_number,
+        class_name=class_name,
+        parent_id=summons.parent_id,
+        parent_name=parent_label,
+        academic_year_id=summons.academic_year_id,
+        academic_year_name=summons.academic_year.name if summons.academic_year else None,
+        trimester=summons.trimester,
+        summons_date=summons.summons_date,
+        summons_time=summons.summons_time,
+        reason=summons.reason,
+        reference=summons.reference,
+        outcome=outcome,
+        outcome_label=OUTCOME_LABELS_FR.get(outcome, outcome),
+        outcome_notes=summons.outcome_notes,
+        outcome_recorded_at=summons.outcome_recorded_at,
+        issued_by_user_id=summons.issued_by_user_id,
+        issued_by_name=issued_by_name,
+        created_at=summons.created_at,
+    )
+
+
+async def create_summons(
+    db: AsyncSession, data: ParentSummonsCreate, *, actor_id: int
+) -> ParentSummonsResponse:
+    """Enregistre une convocation et la rend imprimable."""
+    context = await load_student_context(db, data.student_id)
+
+    parent_name = data.parent_name
+    if data.parent_id is not None:
+        parent = await db.get(Parent, data.parent_id)
+        if parent is None:
+            raise NotFoundError("Parent", data.parent_id)
+        parent_name = parent_name or f"{parent.first_name} {parent.last_name}".strip()
+
+    trimester = data.trimester or await resolve_trimester(
+        db, context.academic_year_id, data.summons_date
+    )
+
+    summons = ParentSummons(
+        student_id=data.student_id,
+        parent_id=data.parent_id,
+        parent_name=parent_name,
+        academic_year_id=context.academic_year_id,
+        trimester=trimester,
+        summons_date=data.summons_date,
+        summons_time=data.summons_time,
+        reason=data.reason,
+        issued_by_user_id=actor_id,
+        outcome=SummonsOutcome.PENDING,
+    )
+    db.add(summons)
+    await db.flush()
+
+    await audit_log(
+        db,
+        entity_type="parent_summons",
+        entity_id=summons.id,
+        action=AuditAction.CREATE,
+        user_id=actor_id,
+        new_values={
+            "student_id": data.student_id,
+            "summons_date": data.summons_date.isoformat(),
+            "trimester": trimester,
+        },
+    )
+    await db.commit()
+
+    refreshed = await _get_summons(db, summons.id)
+    return _to_response(
+        refreshed,
+        class_name=context.class_name,
+        issued_by_name=await actor_name(db, actor_id),
+    )
+
+
+async def _register_summary(db: AsyncSession, scope: list[Any]) -> SummonsRegisterSummary:
+    """Décompte des suites sur tout le registre consulté, filtre de suite exclu.
+
+    Un `COUNT ... GROUP BY outcome` plutôt qu'un comptage sur les lignes
+    rendues : c'est la seule façon d'avoir les quatre chiffres justes quand la
+    page n'en montre que vingt, et ça évite surtout la tautologie de l'ancien
+    calcul, qui répondait « Tuteur absent 8 sur 8 » à qui venait de cliquer
+    « Tuteur absent ».
+
+    Le périmètre (année, trimestre, élève) est bien appliqué, lui : il définit
+    quel registre on consulte. La suite donnée n'est qu'une loupe posée
+    dessus.
+    """
+    rows = (
+        await db.execute(
+            select(ParentSummons.outcome, func.count())
+            .where(*scope)
+            .group_by(ParentSummons.outcome)
+        )
+    ).all()
+    counts = {
+        (outcome.value if hasattr(outcome, "value") else outcome): int(count)
+        for outcome, count in rows
+    }
+    return SummonsRegisterSummary(
+        total=sum(counts.values()),
+        attended=counts.get(SummonsOutcome.ATTENDED.value, 0),
+        missed=counts.get(SummonsOutcome.MISSED.value, 0),
+        pending=counts.get(SummonsOutcome.PENDING.value, 0),
+    )
+
+
+async def list_register(
+    db: AsyncSession,
+    *,
+    academic_year_id: int | None = None,
+    trimester: int | None = None,
+    student_id: int | None = None,
+    outcome: str | None = None,
+    page: int = 1,
+    size: int = 20,
+) -> ParentSummonsRegister:
+    """Une page du registre, et le décompte de tout le registre consulté.
+
+    Paginé : un bureau qui convoque cinq tuteurs par jour écrit neuf cents
+    lignes par an, et le registre n'est jamais purgé. Sans borne, l'écran
+    chargeait toutes les années d'un coup pour n'en montrer que le haut.
+    """
+    scope: list[Any] = []
+    if academic_year_id is not None:
+        scope.append(ParentSummons.academic_year_id == academic_year_id)
+    if trimester is not None:
+        scope.append(ParentSummons.trimester == trimester)
+    if student_id is not None:
+        scope.append(ParentSummons.student_id == student_id)
+
+    summary = await _register_summary(db, scope)
+
+    filters = list(scope)
+    if outcome is not None:
+        filters.append(ParentSummons.outcome == outcome)
+
+    total = int(
+        (
+            await db.execute(select(func.count()).select_from(ParentSummons).where(*filters))
+        ).scalar_one()
+    )
+
+    stmt = (
+        select(ParentSummons)
+        .where(*filters)
+        .options(
+            selectinload(ParentSummons.student),
+            selectinload(ParentSummons.parent),
+            selectinload(ParentSummons.academic_year),
+        )
+        .order_by(ParentSummons.summons_date.desc(), ParentSummons.id.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+
+    rows = list((await db.execute(stmt)).scalars().all())
+    class_names = await current_class_names(db, {row.student_id for row in rows})
+    issuer_ids = {row.issued_by_user_id for row in rows}
+    issuers = {uid: await actor_name(db, uid) for uid in issuer_ids}
+
+    items = [
+        _to_response(
+            row,
+            class_name=class_names.get(row.student_id),
+            issued_by_name=issuers.get(row.issued_by_user_id),
+        )
+        for row in rows
+    ]
+    return ParentSummonsRegister(items=items, summary=summary, total=total, page=page, size=size)
+
+
+async def get_summons(db: AsyncSession, summons_id: int) -> ParentSummonsResponse:
+    summons = await _get_summons(db, summons_id)
+    class_names = await current_class_names(db, {summons.student_id})
+    return _to_response(
+        summons,
+        class_name=class_names.get(summons.student_id),
+        issued_by_name=await actor_name(db, summons.issued_by_user_id),
+    )
+
+
+async def record_outcome(
+    db: AsyncSession, summons_id: int, data: SummonsOutcomeUpdate, *, actor_id: int
+) -> ParentSummonsResponse:
+    """Note si le tuteur s'est présenté, une fois le rendez-vous passé."""
+    summons = await _get_summons(db, summons_id)
+    if summons.summons_date > date.today():
+        raise BusinessValidationError(
+            "La suite d'une convocation se renseigne à partir du jour du rendez-vous."
+        )
+
+    previous = summons.outcome.value if hasattr(summons.outcome, "value") else summons.outcome
+    summons.outcome = SummonsOutcome(data.outcome)
+    summons.outcome_notes = data.notes
+    summons.outcome_recorded_by_user_id = actor_id
+    summons.outcome_recorded_at = datetime.utcnow()
+
+    await audit_log(
+        db,
+        entity_type="parent_summons",
+        entity_id=summons.id,
+        action=AuditAction.UPDATE,
+        user_id=actor_id,
+        old_values={"outcome": previous},
+        new_values={"outcome": data.outcome},
+    )
+    await db.commit()
+
+    refreshed = await _get_summons(db, summons_id)
+    class_names = await current_class_names(db, {refreshed.student_id})
+    return _to_response(
+        refreshed,
+        class_name=class_names.get(refreshed.student_id),
+        issued_by_name=await actor_name(db, refreshed.issued_by_user_id),
+    )
+
+
+async def compose_document_data(db: AsyncSession, summons_id: int) -> dict[str, Any]:
+    """Scelle la convocation et renvoie de quoi l'imprimer."""
+    summons = await _get_summons(db, summons_id)
+    context = await load_student_context(db, summons.student_id)
+    issued_at = datetime.utcnow()
+
+    parent_label = summons.parent_name
+    if not parent_label and summons.parent is not None:
+        parent_label = f"{summons.parent.first_name} {summons.parent.last_name}".strip()
+
+    source_data: dict[str, Any] = {
+        "student": context.student_payload(),
+        "class_name": context.class_name,
+        "academic_year_name": context.academic_year_name,
+        "parent_name": parent_label,
+        "summons_date": summons.summons_date,
+        "summons_time": summons.summons_time,
+        "reason": summons.reason,
+        "school_settings": context.school_settings,
+    }
+    verification = await issue_act_seal(
+        db,
+        document_type=DOCUMENT_TYPE,
+        ref_prefix="CVP",
+        context=context,
+        issued_at=issued_at,
+        source_data=source_data,
+        # Un parent peut être convoqué plusieurs fois dans l'année : chaque
+        # convocation garde sa propre lignée de sceau.
+        act_id=summons.id,
+    )
+    # La référence rejoint le registre : le parent qui présente son papier au
+    # guichet doit pouvoir être retrouvé sans fouiller les dates.
+    summons.reference = verification["reference"]
+    await db.commit()
+
+    return {
+        **source_data,
+        "issued_at": issued_at,
+        "reference": verification["reference"],
+        "verification": verification,
+        "school_settings": context.school_settings,
+        "student_last_name": context.student.last_name,
+    }

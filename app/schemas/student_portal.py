@@ -3,7 +3,9 @@
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Grades
@@ -79,6 +81,9 @@ class EnrollmentFeeResponse(BaseModel):
 
     id: int
     fee_category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     amount: Decimal
     status: str
     payments: list[PaymentResponse]
@@ -109,6 +114,12 @@ class BulletinResponse(BaseModel):
     file_url: str | None
     generated_at: datetime | None
 
+    # Retenue pour impayé. Quand elle est active, les champs de contenu
+    # ci-dessus valent `None` : le bulletin est annoncé, pas divulgué.
+    is_withheld: bool = False
+    withheld_reason: str | None = None
+    withheld_amount: float | None = None
+
 
 class StudentBulletinsListResponse(BaseModel):
     items: list[BulletinResponse]
@@ -127,6 +138,7 @@ class StudentProfileResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     email: str | None
@@ -151,6 +163,18 @@ class StudentNextCourse(BaseModel):
     room: str | None = None
 
 
+class StudentLatestGrade(BaseModel):
+    """Dernière note saisie de l'élève (mise en avant sur le tableau de bord)."""
+
+    value: float
+    out_of: int = 20
+    subject_name: str
+    evaluation_title: str
+    type: str
+    trimester: int
+    date: date
+
+
 class StudentDashboardResponse(BaseModel):
     """Contrat consommé par /student/dashboard côté FE.
 
@@ -161,6 +185,7 @@ class StudentDashboardResponse(BaseModel):
     class_name: str
     next_course: StudentNextCourse | None = None
     general_average: float | None = None
+    latest_grade: StudentLatestGrade | None = None
     fees_remaining: float
     total_absences: int
     current_academic_year: str | None = None

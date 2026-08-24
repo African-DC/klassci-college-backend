@@ -59,6 +59,8 @@ SAMPLE_GENERATE_RESPONSE = {
 SAMPLE_LIST_RESPONSE = {
     "items": [SAMPLE_BULLETIN],
     "total": 1,
+    "page": 1,
+    "size": 20,
 }
 
 SAMPLE_PDF_RESPONSE = {
@@ -173,6 +175,8 @@ def test_list_bulletins_success() -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
+        assert data["page"] == 1
+        assert data["size"] == 20
         assert len(data["items"]) == 1
         assert data["items"][0]["rank"] == 1
     finally:
@@ -180,7 +184,7 @@ def test_list_bulletins_success() -> None:
 
 
 def test_list_bulletins_no_filters() -> None:
-    """GET /reports/bulletins sans filtres → 200 (liste complete tenant)."""
+    """GET /reports/bulletins sans filtres → 200 (premiere page du tenant)."""
     _override_deps()
     try:
         with patch(

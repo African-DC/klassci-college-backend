@@ -11,6 +11,7 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import Actor, current_actor
 from app.core.database import current_tenant_id, get_db
 from app.core.exceptions import PermissionDeniedError, UnauthorizedError
 from app.core.security import decode_token
@@ -52,6 +53,15 @@ async def get_tenant_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 
 
+def _role_value(role: object) -> str:
+    """Le slug du role, jamais son repr Python.
+
+    `User.role` est une colonne Enum : `str()` y renvoie « UserRoleEnum.ADMIN »,
+    qui ne correspond a rien cote interface et casse la traduction des libelles.
+    """
+    return str(getattr(role, "value", role))
+
+
 async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     try:
         payload = decode_token(token)
@@ -79,6 +89,11 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> TokenData:
     if not user or not user.is_active:
         raise UnauthorizedError("User not found or inactive")
 
+    # L'identite est deja chargee ici : on la pose pour que chaque ecriture
+    # d'audit de la requete la fige, sans requete supplementaire ni parametre
+    # a ajouter aux quelque cent appels existants.
+    current_actor.set(Actor(user_id=user_id, email=user.email, role=_role_value(user.role)))
+
     return TokenData(
         user_id=user_id,
         tenant_id=token_tenant,
@@ -105,6 +120,8 @@ async def _authenticate_pat(token: str, db: AsyncSession) -> TokenData:
 
     if pat.last_used_at is None or utcnow_naive() - pat.last_used_at >= _LAST_USED_THROTTLE:
         await touch_last_used(db, pat.id)
+
+    current_actor.set(Actor(user_id=pat.user_id, email=user.email, role=_role_value(user.role)))
 
     return TokenData(
         user_id=pat.user_id,
@@ -146,18 +163,50 @@ def require_permission(permission_slug: str) -> Any:
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> None:
+        # Une seule lecture de la matrice, partagée avec `has_permission` :
+        # dupliquer la résolution des droits est exactement là où l'on ne veut
+        # aucune divergence possible.
+        if not await _resolve_permission(current_user, db, permission_slug):
+            if current_user.auth_method == "pat":
+                raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
+            raise PermissionDeniedError(permission_slug)
+
+    return Depends(_check)
+
+
+async def _resolve_permission(
+    current_user: TokenData, db: AsyncSession, permission_slug: str
+) -> bool:
+    """Répond à « cet appelant a-t-il ce droit ? », sans décider quoi en faire.
+
+    Pour un PAT, la réponse vient du scope déclaré à la création du token ;
+    pour un JWT, de la matrice rôle/permission en base.
+    """
+    if current_user.auth_method == "pat":
         from app.services.pat_service import scope_matches
 
-        if current_user.auth_method == "pat":
-            if not scope_matches(current_user.pat_scopes, permission_slug):
-                raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
-            return
+        return bool(scope_matches(current_user.pat_scopes, permission_slug))
 
-        from app.repositories.permission_repository import check_user_permission
+    from app.repositories.permission_repository import check_user_permission
 
-        has_perm = await check_user_permission(db, current_user.user_id, permission_slug)
-        if not has_perm:
-            raise PermissionDeniedError(permission_slug)
+    return bool(await check_user_permission(db, current_user.user_id, permission_slug))
+
+
+def has_permission(permission_slug: str) -> Any:
+    """Dépendance qui répond `True`/`False` au lieu de lever un 403.
+
+    Pour les endpoints dont la permission ne décide pas de l'accès mais de
+    l'ÉTENDUE : un caissier et un comptable ouvrent tous deux le journal des
+    versements, mais le premier ne doit y lire que sa propre caisse. Écrire
+    `if role == "cashier"` serait une permission en dur (cf. `rules/security`) ;
+    on interroge donc la matrice, comme partout ailleurs.
+    """
+
+    async def _check(
+        current_user: TokenData = Depends(get_current_user),
+        db: AsyncSession = Depends(get_tenant_db),
+    ) -> bool:
+        return await _resolve_permission(current_user, db, permission_slug)
 
     return Depends(_check)
 

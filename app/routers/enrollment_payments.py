@@ -39,11 +39,15 @@ async def record_enrollment_payment(
     """Enregistre un versement sur une inscription, alloué automatiquement.
 
     Priorité catégorie ASC : Inscription → T1 → T2 → T3 → COGES → Tenue →
-    reste. Si le montant dépasse la dette restante : 400
-    BusinessValidationError.
+    reste. Si le montant dépasse la dette restante : 422.
+
+    Le moyen de paiement doit être accepté par l'établissement ET autorisé pour
+    le profil de l'appelant (`payments:method:*`) ; sinon 403 avec le détail de
+    ce qu'il peut faire et de qui contacter. Seules les espèces exigent une
+    journée de caisse ouverte.
     """
     return await payment_service.record_enrollment_payment(
-        db, enrollment_id, data, received_by=current_user.user_id
+        db, enrollment_id, data, actor=current_user
     )
 
 

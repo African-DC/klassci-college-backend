@@ -24,8 +24,10 @@ from __future__ import annotations
 
 from app.services.pdf._blocks import (
     amount_box,
+    entitlements_note,
     info_grid,
     info_row,
+    info_table,
     kpi_card,
     kpis_row,
     meta_banner,
@@ -36,8 +38,12 @@ from app.services.pdf._blocks import (
 from app.services.pdf._chrome import (
     CI_BANNER_HTML,
     base_styles,
+    document_frame,
+    page_decoration,
     premium_footer,
     premium_header,
+    seal_block,
+    signatory_clause,
     signature_block,
 )
 from app.services.pdf._helpers import (
@@ -47,27 +53,40 @@ from app.services.pdf._helpers import (
     image_to_datauri,
 )
 from app.services.pdf._tables import premium_table
-from app.services.pdf.theme import method_label, status_label
+from app.services.pdf.theme import (
+    appreciation_label,
+    mention_label,
+    method_label,
+    status_label,
+)
 
 __all__ = [
     "CI_BANNER_HTML",
     "amount_box",
+    "appreciation_label",
     "base_styles",
+    "document_frame",
+    "entitlements_note",
     "enum_value",
     "esc",
     "format_decimal",
     "image_to_datauri",
     "info_grid",
     "info_row",
+    "info_table",
     "kpi_card",
     "kpis_row",
+    "mention_label",
     "meta_banner",
     "method_label",
+    "page_decoration",
     "premium_footer",
     "premium_header",
     "premium_table",
     "progress_bar",
+    "seal_block",
     "section_title",
+    "signatory_clause",
     "signature_block",
     "status_label",
     "status_pill",

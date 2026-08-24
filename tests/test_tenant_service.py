@@ -107,11 +107,6 @@ async def test_list_tenant_databases() -> None:
 
     mock_result = MagicMock()
     mock_result.fetchall.return_value = [
-        ("information_schema",),
-        ("mysql",),
-        ("performance_schema",),
-        ("sys",),
-        ("alembic_migration",),
         ("lycee-moderne",),
         ("college-01",),
     ]
@@ -133,10 +128,23 @@ async def test_list_tenant_databases() -> None:
 
     assert "lycee-moderne" in tenants
     assert "college-01" in tenants
-    assert "mysql" not in tenants
-    assert "information_schema" not in tenants
-    assert "sys" not in tenants
     assert len(tenants) == 2
+    query = str(mock_conn.execute.await_args.args[0])
+    assert "alembic_version" in query
+    assert "academic_years" in query
+    assert "document_issuances" not in query
+    assert "HAVING COUNT(DISTINCT table_name) = 4" in query
+
+
+@pytest.mark.asyncio
+async def test_migrate_all_fails_closed_when_no_tenant_is_found() -> None:
+    from app.cli.migrate_all import migrate_all
+
+    with (
+        patch("app.cli.migrate_all.list_tenant_databases", new=AsyncMock(return_value=[])),
+        pytest.raises(RuntimeError, match="No KLASSCI tenant"),
+    ):
+        await migrate_all()
 
 
 # ---------------------------------------------------------------------------
@@ -228,3 +236,83 @@ async def test_create_admin_user_inserts_when_admin_does_not_exist() -> None:
     assert user_id == 99
     # 5 statements: SELECT existing, INSERT user, SELECT role, INSERT user_role, INSERT staff_profile
     assert db.execute.await_count == 5
+
+
+# ---------------------------------------------------------------------------
+# Roles metier (caissier / educateur / directeur des etudes) — invariants
+# ---------------------------------------------------------------------------
+
+
+def test_every_assignable_staff_role_is_defined() -> None:
+    """Le formulaire Personnel ne doit jamais proposer un role inexistant."""
+    from app.services.admin_service import _STAFF_ROLE_SENIORITY, STAFF_ASSIGNABLE_ROLES
+
+    for role in STAFF_ASSIGNABLE_ROLES:
+        assert role in ROLE_DEFINITIONS, f"Role assignable '{role}' absent de ROLE_DEFINITIONS"
+        assert role in _STAFF_ROLE_SENIORITY, (
+            f"Role assignable '{role}' absent de l'ordre de seniorite : un compte "
+            "portant plusieurs roles afficherait un role arbitraire"
+        )
+
+
+def test_studies_director_sees_payment_status_but_never_amounts() -> None:
+    """Separation des taches : il sait si un dossier est a jour, jamais combien.
+
+    Il preside les conseils de classe : savoir qu'une famille est en retard de
+    paiement pendant qu'on decide du passage d'un eleve pourrait peser sur la
+    decision. Il a donc l'etat, jamais la somme.
+    """
+    perms = set(ROLE_DEFINITIONS["studies_director"]["permissions"])
+    assert "payments:status:read" in perms
+    forbidden = {
+        p
+        for p in perms
+        if p.startswith(("payments:", "admin:fee-")) and p != "payments:status:read"
+    }
+    assert not forbidden, f"Le directeur des etudes ne lit aucun montant : {forbidden}"
+
+
+def test_cashier_cannot_configure_fees_nor_read_reports() -> None:
+    """Le caissier encaisse : il ne configure rien et n'a pas les rapports.
+
+    Il LIT en revanche la grille de tranches : au guichet, un parent demande
+    « je dois combien et pour quand ? », et lui refuser cette lecture le
+    rendrait incapable de répondre.
+    """
+    perms = set(ROLE_DEFINITIONS["cashier"]["permissions"])
+    assert "payments:create" in perms
+    assert "admin:fee-installments:read" in perms
+
+    writes = {p for p in perms if p.startswith("admin:fee-") and not p.endswith(":read")}
+    assert not writes, f"Le caissier ne doit configurer aucun frais : {writes}"
+    assert "enrollments:schedule:write" not in perms, "négocier un échéancier est financier"
+    assert "reports:read" not in perms
+
+
+def test_educator_validates_on_payment_status_without_seeing_amounts() -> None:
+    """L'educateur valide au vu de l'encaissement, sans lire les montants.
+
+    Un badge « a jour / en retard » et la date du dernier versement suffisent
+    a decider si un dossier peut etre valide. Combien la famille doit ne le
+    regarde pas : c'est la situation economique du foyer.
+    """
+    perms = set(ROLE_DEFINITIONS["educator"]["permissions"])
+    assert "payments:status:read" in perms
+    assert "payments:read" not in perms
+    assert "payments:create" not in perms
+    assert "enrollments:create" in perms
+    assert "enrollments:update" in perms
+
+
+def test_accountant_can_read_academic_years_and_configure_fees() -> None:
+    """Regression : sans `admin:academic-years:read` la page Frais tombait en 403."""
+    perms = set(ROLE_DEFINITIONS["accountant"]["permissions"])
+    assert "admin:academic-years:read" in perms
+    assert "admin:fee-categories:update" in perms
+    assert "admin:fee-variants:update" in perms
+
+
+def test_performance_permission_is_declared() -> None:
+    """`performance:read` est exigee par /admin/performance : elle doit etre seedee."""
+    assert "performance:read" in {p["slug"] for p in ALL_PERMISSIONS}
+    assert "performance:read" in ROLE_DEFINITIONS["admin"]["permissions"]

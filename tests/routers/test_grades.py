@@ -83,19 +83,35 @@ def _clear_deps() -> None:
 
 
 def test_list_evaluations_success() -> None:
-    """GET /evaluations → 200 + liste."""
+    """GET /evaluations → 200 + enveloppe paginée."""
     _override_deps()
     try:
         with patch(
             "app.services.grades_service.list_evaluations",
-            new=AsyncMock(return_value=[SAMPLE_EVAL]),
+            new=AsyncMock(
+                return_value={"items": [SAMPLE_EVAL], "total": 772, "page": 1, "size": 20}
+            ),
         ):
             with TestClient(app) as client:
                 resp = client.get("/evaluations?class_id=3")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
-        assert data[0]["title"] == "Contrôle de Maths T1"
+        assert data["items"][0]["title"] == "Contrôle de Maths T1"
+        # Le total est celui de l'école, pas celui de la page rendue.
+        assert data["total"] == 772
+        assert data["page"] == 1
+        assert data["size"] == 20
+    finally:
+        _clear_deps()
+
+
+def test_list_evaluations_rejects_an_oversized_page() -> None:
+    """GET /evaluations?size=500 → 422 : le plafond du projet est 100."""
+    _override_deps()
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/evaluations?size=500")
+        assert resp.status_code == 422
     finally:
         _clear_deps()
 

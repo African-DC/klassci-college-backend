@@ -21,6 +21,7 @@ from app.schemas.fee import (
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
+from app.services.deletion import DeletionPlan, Dependent, ensure_deletable
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,9 @@ async def create_fee_category(
     db: AsyncSession, data: FeeCategoryCreate, *, created_by: int
 ) -> FeeCategoryResponse:
     async with db.begin_nested():
-        category = await repo.create_fee_category(db, **data.model_dump())
+        # `mode="json"` et pas `model_dump()` nu : la contrepartie contient des
+        # enums `FeeEntitlementKind`, que la colonne JSON ne sait pas ecrire.
+        category = await repo.create_fee_category(db, **data.model_dump(mode="json"))
         await audit_log(
             db,
             entity_type="fee_category",
@@ -102,18 +105,62 @@ async def update_fee_category(
     return _fee_category_to_response(refreshed)
 
 
-async def delete_fee_category(db: AsyncSession, category_id: int, *, deleted_by: int) -> None:
+async def delete_fee_category(
+    db: AsyncSession, category_id: int, *, deleted_by: int, cascade: bool = False
+) -> None:
+    """Supprime une categorie de frais, et refuse clairement si elle sert.
+
+    Sans ce controle, SQLAlchemy tente de detacher les variantes en mettant
+    leur categorie a NULL — ce que la colonne interdit — et l'utilisateur
+    recoit une erreur de base de donnees illisible. Or la vraie reponse est
+    metier : cette categorie porte encore des montants, on ne peut pas la
+    faire disparaitre sans decider de leur sort.
+    """
     category = await repo.get_fee_category_by_id(db, category_id)
     if category is None:
         raise NotFoundError("FeeCategory", category_id)
+
+    plan = DeletionPlan(
+        entity_label=f"« {category.name} »",
+        dependents=(
+            Dependent(
+                "versement imputé",
+                "versements imputés",
+                await repo.count_paid_allocations_for_category(db, category_id),
+                blocking=True,
+            ),
+            Dependent(
+                "montant configuré",
+                "montants configurés",
+                await repo.count_fee_variants_for_category(db, category_id),
+            ),
+            Dependent(
+                "frais d'élève",
+                "frais d'élèves",
+                await repo.count_enrollment_fees_for_category(db, category_id),
+            ),
+            Dependent(
+                "option",
+                "options",
+                await repo.count_options_for_category(db, category_id),
+            ),
+        ),
+    )
+    ensure_deletable(plan, cascade=cascade)
+
     async with db.begin_nested():
-        await repo.delete_fee_category(db, category)
+        if plan.collateral:
+            await repo.cascade_delete_fee_category(db, category_id)
+        else:
+            await repo.delete_fee_category(db, category)
         await audit_log(
             db,
             entity_type="fee_category",
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=category_id,
+            old_values={"name": category.name},
+            new_values={"cascade": bool(plan.collateral), "emporte": plan.as_payload()},
         )
     await db.commit()
 
@@ -185,7 +232,16 @@ async def update_fee_variant(
     variant = await repo.get_fee_variant_by_id(db, variant_id)
     if variant is None:
         raise NotFoundError("FeeVariant", variant_id)
-    changes = data.model_dump(exclude_none=True, mode="json")
+    # `exclude_unset` et non `exclude_none` : envoyer explicitement
+    # `assignment_scope: null` doit remettre le tarif a « tous les eleves ».
+    # Avec `exclude_none`, ce vide etait silencieusement jete, et une portee
+    # posee par erreur ne se retirait plus jamais depuis l'ecran — le
+    # formulaire acceptait le choix et il ne se passait rien.
+    changes = data.model_dump(exclude_unset=True, mode="json")
+    # Le montant, lui, n'est pas effacable : la colonne ne l'accepte pas, et
+    # un tarif sans montant ne veut rien dire.
+    if changes.get("amount", ...) is None:
+        del changes["amount"]
     if not changes:
         return _fee_variant_to_response(variant)
     async with db.begin_nested():

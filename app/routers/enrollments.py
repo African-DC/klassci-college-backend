@@ -4,12 +4,12 @@ Les endpoints paiements `/enrollments/{id}/payments` sont dans
 `enrollment_payments.py` (séparation par sous-domaine, anti-god-code).
 """
 
-from fastapi import APIRouter, Depends, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
-    DocumentResponse,
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
@@ -19,7 +19,8 @@ from app.schemas.enrollment import (
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import enrollment_service
+from app.services import archive_service, enrollment_fees, enrollment_service
+from app.services.enrollment_archive import ENROLLMENT_KIND
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -106,7 +107,7 @@ async def get_applicable_fee_variants(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
     """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_service.get_applicable_fee_variants(db, class_id, academic_year_id)
+    return await enrollment_fees.get_applicable_fee_variants(db, class_id, academic_year_id)
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)
@@ -133,15 +134,58 @@ async def update_enrollment(
     )
 
 
-@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_enrollment(
+# Les trois gestes de corbeille passent par `archive_service`, comme ceux de
+# l'élève, du parent, de l'enseignant et du personnel : motif obligatoire,
+# passage par la corbeille avant toute destruction, journal et courriel. Seule
+# l'adresse reste propre à l'inscription, le front l'appelle ici.
+@router.post("/{enrollment_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive_enrollment(
+    enrollment_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:delete"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Place une inscription dans la corbeille. Réversible."""
+    await archive_service.archive_record(
+        db, ENROLLMENT_KIND, enrollment_id, reason=data.reason, actor_id=current_user.user_id
+    )
+
+
+@router.post("/{enrollment_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
+async def restore_enrollment(
     enrollment_id: int,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("enrollments:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
-    """Supprime une inscription."""
-    await enrollment_service.delete_enrollment(db, enrollment_id, deleted_by=current_user.user_id)
+    """Sort une inscription de la corbeille."""
+    await archive_service.restore_record(
+        db, ENROLLMENT_KIND, enrollment_id, actor_id=current_user.user_id
+    )
+
+
+@router.delete(
+    "/{enrollment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description=(
+        "Réservé à la direction : c'est le seul geste du logiciel qui ne se rattrape pas. "
+        "Le motif voyage dans le corps de la requête, jamais dans l'URL : une URL finit "
+        "dans les journaux d'accès du serveur et chez les intermédiaires, et « exclu pour "
+        "vol » n'a rien à y faire."
+    ),
+)
+async def delete_enrollment(
+    enrollment_id: int,
+    data: ArchiveRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("archive:purge"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Supprime définitivement une inscription déjà placée dans la corbeille."""
+    await archive_service.purge_record(
+        db, ENROLLMENT_KIND, enrollment_id, reason=data.reason, actor_id=current_user.user_id
+    )
 
 
 @router.post(
@@ -214,41 +258,3 @@ async def unsubscribe_option(
             deleted_by=current_user.user_id,
         )
     await db.commit()
-
-
-# ---------------------------------------------------------------------------
-# Documents
-# ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/{enrollment_id}/documents",
-    response_model=DocumentResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def upload_document(
-    enrollment_id: int,
-    file: UploadFile,
-    doc_type: str = Query("autre", description="Type de document: bulletin, acte_naissance, etc."),
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("enrollments:update"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> DocumentResponse:
-    """Upload un document justificatif pour une inscription."""
-    return await enrollment_service.upload_document(
-        db,
-        enrollment_id=enrollment_id,
-        file=file,
-        doc_type=doc_type,
-        uploaded_by=current_user.user_id,
-    )
-
-
-@router.get("/{enrollment_id}/documents", response_model=list[DocumentResponse])
-async def list_documents(
-    enrollment_id: int,
-    _: None = require_permission("enrollments:read"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> list[DocumentResponse]:
-    """Liste les documents d'une inscription."""
-    return await enrollment_service.list_documents(db, enrollment_id)

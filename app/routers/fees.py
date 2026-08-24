@@ -9,6 +9,8 @@ from app.schemas.fee import (
     FeeCategoryListResponse,
     FeeCategoryResponse,
     FeeCategoryUpdate,
+    FeePropagationPreview,
+    FeePropagationResult,
     FeeVariantCreate,
     FeeVariantListResponse,
     FeeVariantResponse,
@@ -18,7 +20,7 @@ from app.schemas.fee import (
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
-from app.services import fee_service
+from app.services import fee_propagation, fee_service
 
 router = APIRouter(prefix="/admin", tags=["fees"])
 
@@ -81,12 +83,21 @@ async def update_fee_category(
 @router.delete("/fee-categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_fee_category(
     category_id: int,
+    cascade: bool = Query(
+        False,
+        description=(
+            "Confirme la suppression des elements qui en dependent. Sans lui, un "
+            "409 renvoie l'inventaire de ce qui serait emporte."
+        ),
+    ),
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:fee-categories:delete"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Supprime une categorie de frais."""
-    await fee_service.delete_fee_category(db, category_id, deleted_by=current_user.user_id)
+    await fee_service.delete_fee_category(
+        db, category_id, deleted_by=current_user.user_id, cascade=cascade
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +163,50 @@ async def update_fee_variant(
     return await fee_service.update_fee_variant(
         db, variant_id, data, updated_by=current_user.user_id
     )
+
+
+@router.get(
+    "/fee-variants/{variant_id}/propagation-preview",
+    response_model=FeePropagationPreview,
+)
+async def preview_fee_variant_propagation(
+    variant_id: int,
+    _: None = require_permission("admin:fee-variants:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeePropagationPreview:
+    """Ce que la repercussion de ce tarif ferait, chiffre, sans rien ecrire.
+
+    L'ecole doit voir l'impact avant de confirmer : combien d'inscriptions
+    portent ce tarif, combien de lignes seraient reecrites, combien seraient
+    conservees parce qu'un versement y est impute, et de combien la dette
+    totale bougerait.
+    """
+    return await fee_propagation.preview_variant_propagation(db, variant_id)
+
+
+@router.post("/fee-variants/{variant_id}/propagate", response_model=FeePropagationResult)
+async def propagate_fee_variant(
+    variant_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:fee-variants:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeePropagationResult:
+    """Repercute le montant de ce tarif sur les inscriptions qui le portent.
+
+    Borne a la categorie et au tarif modifies, pour l'annee de ce tarif. Les
+    lignes qui portent deja un versement ne sont pas touchees : le recu remis
+    a la famille resterait vrai, et le reste du ne peut pas devenir negatif.
+
+    Meme droit que la modification du tarif : repercuter est la suite du meme
+    geste, et un slug supplementaire laisserait sans bouton les ecoles
+    provisionnees avant sa migration.
+    """
+    async with db.begin_nested():
+        result = await fee_propagation.apply_variant_propagation(
+            db, variant_id, applied_by=current_user.user_id
+        )
+    await db.commit()
+    return result
 
 
 @router.delete("/fee-variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)

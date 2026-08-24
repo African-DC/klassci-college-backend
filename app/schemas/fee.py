@@ -3,7 +3,63 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.fee import FeeAssignmentScope, FeeEntitlementKind
+
+# ---------------------------------------------------------------------------
+# Contrepartie — ce que la famille recoit contre un frais
+# ---------------------------------------------------------------------------
+
+
+class FeeEntitlement(BaseModel):
+    """Un element de ce qu'ouvre un frais : un objet remis ou un droit d'acces.
+
+    Volontairement pauvre. Un libelle, une quantite quand elle veut dire
+    quelque chose, une nature. Rien qui ressemble encore a un suivi de remise :
+    le jour ou l'ecole voudra cocher « la tenue a ete remise », il faudra une
+    ligne par eleve, pas un champ de plus ici.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str = Field(min_length=1, max_length=120)
+    #: `None` quand compter n'a pas de sens : on n'ecrit pas « 1 infirmerie ».
+    quantity: int | None = Field(default=None, ge=1, le=999)
+    kind: FeeEntitlementKind = FeeEntitlementKind.ITEM
+
+    @field_validator("label")
+    @classmethod
+    def _trim_label(cls, v: str) -> str:
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Le libellé ne peut pas être vide")
+        return trimmed
+
+
+def coerce_entitlements(v: object) -> object:
+    """Lit la colonne JSON sans jamais faire tomber une reponse.
+
+    La colonne est libre par nature : une ligne ecrite a la main en base, ou
+    laissee par une version anterieure du formulaire, ne doit pas transformer
+    la fiche d'un eleve en erreur 500. Ce qui est illisible est ignore, le
+    reste passe.
+    """
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        return []
+    propres: list[object] = []
+    for element in v:
+        if isinstance(element, dict) and str(element.get("label", "")).strip():
+            propres.append(element)
+    return propres
+
+
+#: Nombre maximum d'elements retenus sur une categorie. Au-dela, ce n'est plus
+#: une contrepartie lisible sur un recu, c'est un inventaire.
+MAX_ENTITLEMENTS = 15
+
 
 # ---------------------------------------------------------------------------
 # FeeCategory
@@ -13,13 +69,25 @@ from pydantic import BaseModel, ConfigDict, field_validator
 class FeeCategoryCreate(BaseModel):
     name: str
     description: str | None = None
+    #: Ce que la famille recoit contre ce frais. Vide par defaut : une ecole
+    #: qui n'a rien a promettre ne doit pas etre forcee d'inventer une ligne.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list, max_length=MAX_ENTITLEMENTS)
     is_mandatory: bool = True
+    # Ordre d'imputation des versements : plus petit = servi en premier.
+    # Sans ce champ, toute categorie creee tombait a 100, donc derniere, et
+    # rien ne permettait de la remonter depuis l'interface.
+    priority: int = Field(default=100, ge=0, le=999)
 
 
 class FeeCategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    #: Une liste vide efface la contrepartie ; le champ absent la laisse
+    #: intacte. Sans cette distinction, renommer une categorie effacerait au
+    #: passage tout ce qu'elle promet.
+    entitlements: list[FeeEntitlement] | None = Field(default=None, max_length=MAX_ENTITLEMENTS)
     is_mandatory: bool | None = None
+    priority: int | None = Field(default=None, ge=0, le=999)
 
 
 class FeeCategoryResponse(BaseModel):
@@ -28,9 +96,16 @@ class FeeCategoryResponse(BaseModel):
     id: int
     name: str
     description: str | None
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     is_mandatory: bool
+    priority: int
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("entitlements", mode="before")
+    @classmethod
+    def _lire_entitlements(cls, v: object) -> object:
+        return coerce_entitlements(v)
 
 
 class FeeCategoryListResponse(BaseModel):
@@ -60,6 +135,10 @@ class FeeVariantCreate(BaseModel):
             raise ValueError("amount must be positive")
         return v
 
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
+    # pour les affectes ou que pour les non affectes.
+    assignment_scope: FeeAssignmentScope | None = None
+
 
 class FeeVariantUpdate(BaseModel):
     amount: Decimal | None = None
@@ -71,6 +150,13 @@ class FeeVariantUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("amount must be positive")
         return v
+
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
+    # pour les affectes ou que pour les non affectes. Remettre ce champ a
+    # `None` doit rendre le tarif universel : le service distingue donc un
+    # champ absent d'un champ envoye vide, sans quoi une portee posee par
+    # erreur ne se retirerait plus jamais depuis l'ecran.
+    assignment_scope: FeeAssignmentScope | None = None
 
 
 class FeeVariantResponse(BaseModel):
@@ -85,6 +171,7 @@ class FeeVariantResponse(BaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
+    assignment_scope: str | None = None
 
 
 class FeeVariantListResponse(BaseModel):
@@ -92,6 +179,48 @@ class FeeVariantListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+# ---------------------------------------------------------------------------
+# Repercussion d'un tarif modifie sur les inscriptions existantes
+# ---------------------------------------------------------------------------
+
+
+class _FeePropagationImpact(BaseModel):
+    """Le socle chiffre commun a l'apercu et au resultat.
+
+    Les deux reponses portent les memes compteurs, sous les memes noms : c'est
+    ce qui permet a l'ecole de comparer ce qu'on lui avait annonce et ce qui a
+    ete fait.
+    """
+
+    variant_id: int
+    fee_category_id: int
+    category_name: str
+    academic_year_id: int
+    #: Le montant du tarif tel qu'il est aujourd'hui : celui qui sera recopie.
+    amount: Decimal
+    #: Somme des quatre paquets. Une categorie ne produisant qu'une ligne par
+    #: inscription, ce total est aussi le nombre d'inscriptions touchees.
+    enrollments_concerned: int
+    fees_already_up_to_date: int
+    fees_kept_with_payments: int
+    fees_waived: int
+    #: Ecart total de dette en francs, negatif quand le tarif baisse.
+    debt_delta: Decimal
+    message: str
+
+
+class FeePropagationPreview(_FeePropagationImpact):
+    """Ce qui se passerait. Rien n'est ecrit."""
+
+    fees_to_update: int
+
+
+class FeePropagationResult(_FeePropagationImpact):
+    """Ce qui a ete ecrit : le compte des lignes reellement reecrites."""
+
+    fees_updated: int
 
 
 # ---------------------------------------------------------------------------
