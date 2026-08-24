@@ -4,8 +4,8 @@ Ouvrir un dossier, encaisser, valider : trois gestes que trois personnes
 peuvent poser. Deux types distincts plutôt qu'un seul, parce qu'ils ne
 s'adressent pas aux mêmes personnes et n'appellent pas la même action.
 
-Revision ID: 0073_notification_enrollment_chain
-Revises: 0072_notification_action_url
+Revision ID: 0073_notif_enrol_chain
+Revises: 0072_notif_action_url
 """
 
 from collections.abc import Sequence
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0073_notification_enrollment_chain"
-down_revision: str | None = "0072_notification_action_url"
+revision: str = "0073_notif_enrol_chain"
+down_revision: str | None = "0072_notif_action_url"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
