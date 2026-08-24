@@ -610,3 +610,35 @@ async def unsubscribe_optional_fee(
         user_id=deleted_by,
         entity_id=option_id_for_audit,
     )
+
+
+async def validate_enrollments_in_bulk(
+    db: AsyncSession,
+    enrollment_ids: list[int],
+    validated_by: int,
+) -> dict[str, object]:
+    """Valide plusieurs inscriptions, et dit ce qui a échoué.
+
+    Une école valide une cohorte entière à la rentrée. Le faire dossier par
+    dossier prend l'après-midi, et rien dans le geste ne le justifie : la
+    décision a été prise en conseil, l'écran ne fait que l'enregistrer.
+
+    Une inscription qui refuse la transition n'arrête pas les autres. Un lot
+    qui s'interrompt à la troisième ligne laisse le secrétariat sans savoir
+    ce qui est passé, et l'oblige à tout reprendre pour le découvrir. Chaque
+    échec est donc rendu avec son motif, en face de son identifiant.
+
+    Chaque validation garde son audit propre : le lot est une commodité de
+    l'écran, pas une opération à part que l'historique ne saurait pas relire.
+    """
+    validees: list[int] = []
+    echecs: list[dict[str, object]] = []
+
+    for enrollment_id in enrollment_ids:
+        try:
+            await validate_enrollment(db, enrollment_id, validated_by)
+            validees.append(enrollment_id)
+        except (BusinessValidationError, NotFoundError) as exc:
+            echecs.append({"enrollment_id": enrollment_id, "reason": str(exc.detail)})
+
+    return {"validated": validees, "failed": echecs}

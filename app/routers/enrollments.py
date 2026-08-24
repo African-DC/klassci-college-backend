@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
+    BulkValidateRequest,
+    BulkValidateResponse,
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
@@ -201,13 +203,36 @@ async def delete_enrollment(
 async def validate_enrollment(
     enrollment_id: int,
     current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("enrollments:update"),
+    _: None = require_permission("enrollments:validate"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
     """Valide une inscription (transition prospect/en_validation → valide)."""
     return await enrollment_service.validate_enrollment(
         db, enrollment_id, validated_by=current_user.user_id
     )
+
+
+@router.post(
+    "/bulk-validate",
+    response_model=BulkValidateResponse,
+    summary="Valider plusieurs inscriptions",
+    description=(
+        "Valide une liste d'inscriptions. Une inscription qui refuse la "
+        "transition n'arrête pas les autres : chaque échec est rendu avec son "
+        "motif, en face de son identifiant."
+    ),
+)
+async def bulk_validate_enrollments(
+    payload: BulkValidateRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:validate"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> BulkValidateResponse:
+    """Valide une cohorte en une fois, plutôt que dossier par dossier."""
+    resultat = await enrollment_service.validate_enrollments_in_bulk(
+        db, payload.enrollment_ids, validated_by=current_user.user_id
+    )
+    return BulkValidateResponse(**resultat)
 
 
 # ---------------------------------------------------------------------------

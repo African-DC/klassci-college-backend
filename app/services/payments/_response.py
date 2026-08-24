@@ -5,6 +5,7 @@ relations (cf. `repo.get_payment_with_allocations`). Aucun fetch DB ici —
 juste de la projection.
 """
 
+from app.models.enrollment import EnrollmentStatus
 from app.models.fee import Payment, PaymentAllocation
 from app.schemas.fee import FeeEntitlement
 from app.schemas.payment import PaymentAllocationResponse, PaymentResponse
@@ -118,5 +119,21 @@ def payment_to_response(payment: Payment) -> PaymentResponse:
         fee_name=fee_name,
         student_matricule=student_matricule,
         student_deleted=student_deleted,
+        enrollment_awaiting_validation=_attend_validation(payment),
         allocations=[allocation_to_response(a) for a in allocations],
     )
+
+
+def _attend_validation(payment: Payment) -> bool:
+    """L'inscription reste-t-elle a valider apres ce versement ?
+
+    Lue sur la relation deja chargee : `get_payment_with_allocations` fait le
+    `selectinload` de l'inscription, donc aucune requete de plus. Si elle
+    manquait, on repond `False` plutot que de declencher un lazy-load hors
+    greenlet, qui rendrait un 500 sur l'encaissement pour un simple libelle
+    d'ecran.
+    """
+    inscription = getattr(payment, "enrollment", None)
+    if inscription is None:
+        return False
+    return inscription.status != EnrollmentStatus.VALIDE

@@ -152,6 +152,13 @@ class PaymentResponse(BaseModel):
     #: `True` quand la fiche élève n'existe plus. L'écran peut alors expliquer
     #: pourquoi la ligne ne mène nulle part, au lieu de proposer un lien mort.
     student_deleted: bool = False
+    #: `True` quand l'inscription reste à valider après ce versement.
+    #:
+    #: C'est le serveur qui le dit, comme pour `action_url` : il connaît le
+    #: statut, l'écran ne l'a pas. Sans ce champ, la caisse ne pourrait que
+    #: proposer « Valider » au hasard et laisser le serveur refuser, ce qui
+    #: revient à annoncer une action qui n'existe pas.
+    enrollment_awaiting_validation: bool = False
     # Nouveaux champs (refactor 2026-05-17)
     allocations: list[PaymentAllocationResponse] = []
 
