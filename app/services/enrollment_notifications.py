@@ -22,8 +22,14 @@ logger = logging.getLogger(__name__)
 #: Garde l'encaissement d'un versement.
 PERMISSION_ENCAISSER = "payments:create"
 
-#: Garde la validation d'une inscription (voir `POST /enrollments/{id}/validate`).
-PERMISSION_VALIDER = "enrollments:update"
+#: Garde la validation d'une inscription.
+#:
+#: C'etait `enrollments:update` tant que la validation n'avait pas de droit
+#: propre. Le probleme n'etait pas le routage de la notification mais le
+#: modele : confier la validation obligeait a ouvrir l'edition complete des
+#: dossiers, et la permission n'apparaissait nulle part dans l'ecran des roles
+#: puisqu'elle n'existait pas.
+PERMISSION_VALIDER = "enrollments:validate"
 
 
 async def prevenir_qu_il_faut_encaisser(

@@ -40,7 +40,7 @@ def envois(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     async def _faux_resolveur(db, slug):
         return {
             "payments:create": [SECRETAIRE, DIRECTEUR],
-            "enrollments:update": [DIRECTEUR],
+            "enrollments:validate": [DIRECTEUR],
         }.get(slug, [])
 
     monkeypatch.setattr(notification_dispatch_service, "dispatch_notification", _faux_dispatch)

@@ -202,3 +202,26 @@ class FeeVariantResponse(BaseModel):
     academic_year_id: int
     amount: Decimal
     description: str | None
+
+
+class BulkValidateRequest(BaseModel):
+    """Les inscriptions a valider en une fois."""
+
+    enrollment_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Identifiants des inscriptions a valider.",
+    )
+
+
+class BulkValidateFailure(BaseModel):
+    enrollment_id: int
+    #: Le motif, en clair : sans lui l'ecran ne peut que dire « certaines ont
+    #: echoue », ce qui oblige a rouvrir chaque dossier pour comprendre.
+    reason: str
+
+
+class BulkValidateResponse(BaseModel):
+    validated: list[int]
+    failed: list[BulkValidateFailure]
