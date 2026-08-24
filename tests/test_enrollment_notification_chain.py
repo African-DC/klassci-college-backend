@@ -106,9 +106,7 @@ async def test_une_cloche_en_panne_n_empeche_pas_d_inscrire(monkeypatch) -> None
     async def _explose(*a, **kw):
         raise RuntimeError("service de notification indisponible")
 
-    monkeypatch.setattr(
-        notification_dispatch_service, "dispatch_to_permission", _explose
-    )
+    monkeypatch.setattr(notification_dispatch_service, "dispatch_to_permission", _explose)
     # Ne doit pas lever : prévenir est un effet de l'inscription, jamais sa
     # condition. Un enfant s'inscrit même si la notification échoue.
     await enrollment_notifications.prevenir_qu_il_faut_encaisser(

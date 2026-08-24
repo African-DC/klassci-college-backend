@@ -247,6 +247,8 @@ async def dispatch_to_permission(
             # Un destinataire injoignable ne doit pas priver les autres : la
             # notification est un effet de bord de l'acte metier, jamais sa
             # condition. L'inscription reste creee meme si la cloche echoue.
-            logger.exception("Notification '%s' echouee pour l'utilisateur %d", notification_type, uid)
+            logger.exception(
+                "Notification '%s' echouee pour l'utilisateur %d", notification_type, uid
+            )
 
     return envoyees
