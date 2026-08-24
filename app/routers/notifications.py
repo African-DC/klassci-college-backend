@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.schemas.notification import (
     MarkAllReadResponse,
+    MarkSeenRequest,
     NotificationListResponse,
     NotificationResponse,
     UnreadCountResponse,
@@ -58,3 +59,20 @@ async def mark_all_read(
 ) -> MarkAllReadResponse:
     """Marque toutes les notifications non-lues comme lues."""
     return await notification_service.mark_all_read(db, user_id=current_user.user_id)
+
+
+@router.post("/mark-seen", response_model=MarkAllReadResponse)
+async def mark_seen(
+    payload: MarkSeenRequest,
+    current_user: TokenData = Depends(get_current_user),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> MarkAllReadResponse:
+    """Marque comme lues les notifications que le panneau vient d'afficher.
+
+    Distinct de `/read-all` : ouvrir la cloche ne veut pas dire avoir tout lu.
+    Effacer le stock entier ferait disparaitre des taches que personne n'a
+    vues, ce qu'un compteur est justement cense empecher.
+    """
+    return await notification_service.mark_seen(
+        db, user_id=current_user.user_id, notification_ids=payload.notification_ids
+    )

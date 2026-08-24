@@ -68,3 +68,29 @@ async def mark_all_read(db: AsyncSession, user_id: int) -> int:
     result = await db.execute(stmt)
     await db.flush()
     return result.rowcount
+
+
+async def mark_seen(db: AsyncSession, user_id: int, notification_ids: list[int]) -> int:
+    """Marque comme lues les notifications désignées, et elles seules.
+
+    Le filtre sur `user_id` n'est pas une précaution de style : sans lui,
+    n'importe qui pourrait faire disparaître les alertes d'un collègue en
+    envoyant ses identifiants.
+
+    Retourne le nombre de lignes réellement modifiées — celles déjà lues n'y
+    figurent pas, ce qui permet à l'appelant de savoir si le compteur bouge.
+    """
+    if not notification_ids:
+        return 0
+    stmt = (
+        update(Notification)
+        .where(
+            Notification.user_id == user_id,
+            Notification.id.in_(notification_ids),
+            Notification.read == False,  # noqa: E712
+        )
+        .values(read=True, read_at=func.now())
+    )
+    result = await db.execute(stmt)
+    await db.flush()
+    return result.rowcount

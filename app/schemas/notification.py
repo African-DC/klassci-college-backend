@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class NotificationResponse(BaseModel):
@@ -31,6 +31,16 @@ class NotificationListResponse(BaseModel):
 
 class UnreadCountResponse(BaseModel):
     count: int
+
+
+class MarkSeenRequest(BaseModel):
+    """Les notifications que le panneau vient d'afficher."""
+
+    notification_ids: list[int] = Field(
+        ...,
+        max_length=200,
+        description="Identifiants des notifications affichees, au plus une page.",
+    )
 
 
 class MarkAllReadResponse(BaseModel):
