@@ -26,7 +26,7 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     ReEnrollmentCreate,
 )
-from app.services import enrollment_fees
+from app.services import enrollment_fees, enrollment_notifications
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,26 @@ async def create_enrollment(
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment.id)
+
+    # Apres le commit : le dossier existe, quel que soit le sort de la cloche.
+    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
+        db,
+        enrollment_id=refreshed.id,
+        student_name=_nom_eleve(refreshed),
+        class_name=refreshed.class_.name if refreshed.class_ else "",
+        acteur_id=created_by,
+    )
     return _to_response(refreshed)
+
+
+def _nom_eleve(enrollment: object) -> str:
+    """Le nom affichable de l'eleve, ou son matricule s'il manque."""
+    student = getattr(enrollment, "student", None)
+    if student is None:
+        return "Un eleve"
+    parts = [getattr(student, "last_name", ""), getattr(student, "first_name", "")]
+    nom = " ".join(p for p in parts if p).strip()
+    return nom or getattr(student, "enrollment_number", "") or "Un eleve"
 
 
 async def list_enrollments(
