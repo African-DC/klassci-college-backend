@@ -218,7 +218,7 @@ async def validate_enrollment(
     summary="Valider plusieurs inscriptions",
     description=(
         "Valide une liste d'inscriptions. Une inscription qui refuse la "
-        "transition n'arrete pas les autres : chaque echec est rendu avec son "
+        "transition n'arrête pas les autres : chaque échec est rendu avec son "
         "motif, en face de son identifiant."
     ),
 )
@@ -228,7 +228,7 @@ async def bulk_validate_enrollments(
     _: None = require_permission("enrollments:validate"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> BulkValidateResponse:
-    """Valide une cohorte en une fois, plutot que dossier par dossier."""
+    """Valide une cohorte en une fois, plutôt que dossier par dossier."""
     resultat = await enrollment_service.validate_enrollments_in_bulk(
         db, payload.enrollment_ids, validated_by=current_user.user_id
     )

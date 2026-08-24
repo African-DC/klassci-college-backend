@@ -1,7 +1,7 @@
 """Valider une inscription devient un droit qu'on peut confier seul.
 
 La validation etait gardee par `enrollments:update`. Pour laisser quelqu'un
-valider, il fallait donc lui donner le droit de tout modifier — et la
+valider, il fallait donc lui donner le droit de tout modifier, et la
 permission n'apparaissait nulle part dans l'ecran des roles, puisqu'elle
 n'existait pas. Impossible de confier la validation au directeur des etudes
 sans lui ouvrir l'edition complete des dossiers.
@@ -32,7 +32,7 @@ def upgrade() -> None:
 
     # Tout role qui pouvait valider hier peut valider aujourd'hui. Sans cette
     # reprise, changer la garde de l'endpoint retirerait silencieusement la
-    # validation a ceux qui l'exercent — une ecole se retrouverait bloquee au
+    # validation a ceux qui l'exercent : une ecole se retrouverait bloquee au
     # milieu de ses inscriptions sans qu'aucun message ne l'explique.
     op.execute(
         f"""

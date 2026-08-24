@@ -156,7 +156,7 @@ class PaymentResponse(BaseModel):
     #:
     #: C'est le serveur qui le dit, comme pour `action_url` : il connaît le
     #: statut, l'écran ne l'a pas. Sans ce champ, la caisse ne pourrait que
-    #: proposer « Valider » au hasard et laisser le serveur refuser — ce qui
+    #: proposer « Valider » au hasard et laisser le serveur refuser, ce qui
     #: revient à annoncer une action qui n'existe pas.
     enrollment_awaiting_validation: bool = False
     # Nouveaux champs (refactor 2026-05-17)

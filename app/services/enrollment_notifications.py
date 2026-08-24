@@ -2,13 +2,13 @@
 
 Une inscription se déroule en trois gestes que trois personnes différentes
 peuvent poser : on ouvre le dossier, on encaisse, on valide. Sans lien entre
-eux, chaque geste attend que quelqu'un pense à regarder — et dans une école,
+eux, chaque geste attend que quelqu'un pense à regarder, et dans une école
 personne ne regarde : on est au guichet, en classe, ou au téléphone.
 
 Les destinataires sont désignés par la permission qui garde l'action, jamais
-par un nom de rôle. `enrollments:update` garde réellement l'endpoint de
-validation ; c'est donc lui qu'on vise, et non un `enrollments:validate` qui
-n'existe pas et n'autoriserait personne.
+par un nom de rôle. Une école confie l'encaissement à sa secrétaire, une autre
+à un caissier, une troisième au directeur : nommer un rôle ici obligerait à
+modifier le produit école par école.
 """
 
 import logging

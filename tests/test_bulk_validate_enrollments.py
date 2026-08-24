@@ -1,7 +1,7 @@
 """Valider une cohorte sans que le lot s'arrête à la troisième ligne.
 
 Une école valide une promotion entière à la rentrée. Dossier par dossier,
-c'est l'après-midi — et rien dans le geste ne le justifie : la décision a été
+c'est l'après-midi, et rien dans le geste ne le justifie : la décision a été
 prise en conseil, l'écran ne fait que l'enregistrer.
 
 Ce qui compte ici n'est pas la boucle, c'est ce qui arrive quand une ligne
