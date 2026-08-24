@@ -4,6 +4,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.permission import Permission, Role, RolePermission, UserRole
+from app.models.user import User
 
 
 async def check_user_permission(db: AsyncSession, user_id: int, slug: str) -> bool:
@@ -97,3 +98,28 @@ async def role_permission_slugs(db: AsyncSession, role_id: int) -> set[str]:
         .where(RolePermission.role_id == role_id)
     )
     return {row[0] for row in (await db.execute(stmt)).all()}
+
+
+async def list_user_ids_with_permission(db: AsyncSession, slug: str) -> list[int]:
+    """Les utilisateurs actifs qui détiennent cette permission.
+
+    Le chemin inverse de `check_user_permission` : au lieu de demander si une
+    personne peut agir, on demande qui peut. C'est ce que réclame une
+    notification de tâche — elle ne s'adresse pas à un rôle nommé, mais à
+    quiconque a le droit de faire ce qu'elle annonce. Une école qui confie
+    l'encaissement à sa secrétaire plutôt qu'à un caissier reçoit alors la
+    notification au bon endroit, sans qu'on ait codé « secrétaire » nulle part.
+
+    Les comptes désactivés sont exclus : leur écrire ne servirait qu'à laisser
+    la tâche sans destinataire visible.
+    """
+    stmt = (
+        select(User.id)
+        .distinct()
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(Permission.slug == slug, User.is_active.is_(True))
+    )
+    result = await db.execute(stmt)
+    return [row[0] for row in result.all()]

@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Les notifications de tâche s'adressent à quiconque détient la permission concernée, quel que soit le nom de son rôle dans l'école *(tous)*
 - Annuler un versement exige un motif écrit, conservé avec la date et le nom du signataire, repris sur le reçu réimprimé et sur le bordereau de caisse *(caissier, comptable, directeur)*
 - L'annulation ne couvre que la saisie en trop, quand aucun argent n'a bougé. Un encaissement réel non dû, ou une imputation sur le mauvais frais, restent à traiter *(comptable)*
 - L'enseignant déclare lui-même ses plages d'indisponibilité depuis son portail, et l'administration peut les saisir à sa place quand il a prévenu de vive voix *(enseignant, directeur des études, secrétariat)*

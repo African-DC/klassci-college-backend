@@ -56,6 +56,14 @@ class Notification(Base, TimestampMixin):
     # Lien optionnel vers l'entité concernée
     entity_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Où la notification mène, décidé côté serveur.
+    #
+    # `entity_type`/`entity_id` disent de quoi il s'agit ; ils ne disent pas
+    # sur quel écran on répare la chose. Traduire l'un en l'autre côté client
+    # demanderait une table de correspondance qui se désynchronise au premier
+    # renommage de route — et c'est le serveur qui sait quelle action il
+    # attend, puisque c'est lui qui a décidé de prévenir.
+    action_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="notifications")
 
