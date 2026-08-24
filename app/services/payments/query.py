@@ -11,7 +11,7 @@ from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
 from app.repositories import installment_repository
 from app.repositories import payment_repository as repo
-from app.repositories.payment_filters import PaymentFilters
+from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
 from app.schemas.payment import (
     PaymentListResponse,
     PaymentResponse,
@@ -97,6 +97,7 @@ async def get_payments_summary(
     *,
     academic_year_id: int | None = None,
     received_by: int | None = None,
+    filters: PaymentFilters | None = None,
 ) -> PaymentSummaryResponse:
     """Agrège les statistiques de paiement (KPIs dashboard admin).
 
@@ -179,6 +180,12 @@ async def get_payments_summary(
         pay_stmt = pay_stmt.where(await _belongs_to_year(db, academic_year_id))
     if cloisonne:
         pay_stmt = pay_stmt.where(Payment.received_by == received_by)
+    if filters is not None:
+        # Le meme predicat que la liste, pas une recopie. Sans lui, filtrer sur
+        # « Annule » laissait le bandeau annoncer tout l'argent recu au-dessus
+        # d'un tableau qui en montrait trois : deux chiffres, deux perimetres,
+        # et rien a l'ecran pour dire lequel on lit.
+        pay_stmt = apply_payment_filters(pay_stmt, filters)
 
     pay_row = (await db.execute(pay_stmt)).one()
 

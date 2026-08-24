@@ -125,12 +125,27 @@ async def list_my_payment_methods(
 @router.get("/summary", response_model=PaymentSummaryResponse)
 async def get_payments_summary(
     academic_year_id: int | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    method: str | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    search: str | None = Query(None),
+    fee_category_id: int | None = Query(None),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PaymentSummaryResponse:
     """Les chiffres du bandeau, sur le meme perimetre que le tableau dessous.
+
+    Les filtres de l'ecran s'appliquent a la moitie caisse : nombre de
+    versements, en attente, annules. Filtrer sur « Annule » et lire malgre
+    tout le total de l'annee ferait dire au bandeau autre chose que la liste.
+
+    Le recouvrement, lui, ne les suit pas, et c'est voulu : il parle de la
+    dette de l'ecole, pas des lignes affichees. Filtrer une dette sur un
+    moyen de paiement ne veut rien dire. L'ecran doit le signaler plutot que
+    de laisser croire que les deux chiffres repondent a la meme question.
 
     Sans cloisonnement, une caissiere lisait « 128 versements » au-dessus d'un
     tableau qui n'en contenait que trois : le bandeau parlait de l'ecole, la
@@ -143,6 +158,14 @@ async def get_payments_summary(
     return await payment_service.get_payments_summary(
         db,
         academic_year_id=academic_year_id,
+        filters=PaymentFilters(
+            status=status_filter,
+            method=method,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            fee_category_id=fee_category_id,
+        ),
         received_by=cashier_scope(
             requested_received_by=None,
             can_read_all=can_read_all,
