@@ -42,3 +42,67 @@ def test_aucune_extension_ne_contient_de_separateur() -> None:
         assert "/" not in extension
         assert "\\" not in extension
         assert ".." not in extension
+
+
+@pytest.mark.parametrize(
+    "nom_forge",
+    [
+        "photo.png/../../../../app/main",
+        "innocent.jpg.tar.gz/../../etc/cron.d/backdoor",
+        "x." + "../" * 20 + "root",
+        "p.C:/Windows/evil",
+        "sans-point",
+    ],
+)
+def test_un_nom_forge_ne_touche_plus_le_chemin(nom_forge: str) -> None:
+    """Le nom envoyé n'entre plus dans le calcul du chemin.
+
+    Ces noms sont ceux qui traversaient l'ancien `rsplit`. On les rejoue pour
+    que le correctif reste vérifiable par ce qu'il empêche, et pas seulement
+    par la façon dont il est écrit.
+    """
+    import os
+
+    from app.utils.photo_upload import PHOTO_UPLOAD_DIR
+
+    extension = extension_pour("image/jpeg")
+    chemin = os.path.join(PHOTO_UPLOAD_DIR, f"42_abcd1234.{extension}")
+    assert os.path.normpath(chemin).startswith(os.path.normpath(PHOTO_UPLOAD_DIR))
+    assert nom_forge not in chemin
+
+
+def test_l_ancien_calcul_ouvrait_un_sous_chemin_pas_une_evasion() -> None:
+    """Ce que l'ancien calcul permettait vraiment, et ce qu'il ne permettait pas.
+
+    Correction d'une affirmation trop forte faite en livrant le correctif : je
+    l'avais décrit comme une écriture arbitraire sur le serveur. Ce n'en était
+    pas une. `rsplit(".", 1)[-1]` rend ce qui suit le **dernier** point, donc
+    une chaîne sans aucun point : elle ne peut jamais contenir `..`, et la
+    remontée d'un dossier est hors d'atteinte.
+
+    Ce qu'elle pouvait contenir, ce sont des séparateurs. La cible devenait
+    alors un sous-chemin inexistant du dossier d'upload, et `open()` levait
+    une `FileNotFoundError` non rattrapée : une erreur 500 sur l'envoi d'une
+    photo, pas une évasion.
+
+    Le correctif reste juste — il retire la donnée envoyée du calcul du chemin,
+    et ferme les deux. Mais il fallait dire la bonne gravité.
+    """
+    import os
+
+    from app.utils.photo_upload import PHOTO_UPLOAD_DIR
+
+    hostiles = [
+        "photo.png/../../../../app/main",
+        "x." + "../" * 20 + "root",
+        "p.C:/Windows/evil",
+    ]
+    for nom in hostiles:
+        ancienne = nom.rsplit(".", 1)[-1]
+        # La propriété qui rendait l'évasion impossible : pas de point, donc
+        # pas de `..`.
+        assert "." not in ancienne
+        cible = os.path.join(PHOTO_UPLOAD_DIR, f"42_abcd1234.{ancienne}")
+        assert os.path.normpath(cible).startswith(os.path.normpath(PHOTO_UPLOAD_DIR))
+        # En revanche le chemin s'enfonçait dans des dossiers absents.
+        assert os.sep in os.path.normpath(cible)[len(os.path.normpath(PHOTO_UPLOAD_DIR)) :]
