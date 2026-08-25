@@ -1,0 +1,56 @@
+{
+	admin off
+	email adcdevteam2025@gmail.com
+	# On-demand TLS : un certificat Let's Encrypt est émis à la 1re visite de
+	# chaque sous-domaine tenant (xxx.college.klassci.com), via HTTP-01.
+	on_demand_tls {
+		# Caddy demande à cette URL si le host est autorisé (anti-abus).
+		# Le backend renvoie 200 si le slug est un tenant connu, sinon 404.
+		ask http://127.0.0.1:8000/tenants/exists
+	}
+}
+
+# Domaine racine (login central) + IP, en HTTPS/HTTP
+college.klassci.com, http://94.72.96.119 {
+	encode gzip zstd
+	@svc path /svc/*
+	handle @svc {
+		uri strip_prefix /svc
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
+
+# Sous-domaines tenants : *.college.klassci.com, cert on-demand
+*.college.klassci.com {
+	tls {
+		on_demand
+	}
+	encode gzip zstd
+	@svc path /svc/*
+	handle @svc {
+		uri strip_prefix /svc
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

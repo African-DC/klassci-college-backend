@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*
 - Validation de plusieurs inscriptions en une fois, chaque refus étant rendu avec son motif *(admin)*
 - Les notifications affichées à l'ouverture de la cloche sont marquées lues automatiquement, sans effacer celles qu'on n'a pas vues *(tous)*
