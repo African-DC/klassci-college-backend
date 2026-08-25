@@ -97,3 +97,39 @@ async def test_deux_filtres_se_cumulent(db: Session) -> None:
     recap = await _recap(db, PaymentFilters(status="cancelled", method="cash"))
     assert recap.payment_count == 1
     assert recap.total_cancelled == 3000.0
+
+
+@pytest.mark.asyncio
+async def test_la_recette_du_caissier_suit_aussi_les_filtres(db: Session) -> None:
+    """« Encaissé par vous » est un agrégat de caisse, pas une dette.
+
+    La revue a trouvé la carte affichant le montant de l'année sous un nombre
+    de versements filtré, en affirmant que le filtre valait pour les deux.
+    """
+    # « Encaissé » ne somme que les versements validés : filtrer sur « annulé »
+    # donnerait zéro, ce qui est juste mais ne prouve rien. On filtre donc sur
+    # le moyen de paiement, qui laisse la mesure intacte.
+    tout = await _recap(db, None)
+    assert tout.total_paid == 10000.0
+
+    espèces = await _recap(db, PaymentFilters(method="mobile_money"))
+    # Le seul mobile money du jeu est annulé : rien de validé sur ce moyen.
+    assert espèces.total_paid == 0.0
+    assert espèces.payment_count == 1
+
+
+def test_un_caissier_ne_peut_pas_lire_la_caisse_d_un_collegue() -> None:
+    """Le filtre est une commodité de lecture, jamais un passe-droit.
+
+    Le récapitulatif accepte désormais `received_by`, parce que l'écran
+    l'envoie. Il devait donc être résolu par le même garde que la liste.
+    """
+    from app.services.payments.scope import cashier_scope
+
+    # Sans le droit de tout lire, la demande est ignorée : on reste sur sa caisse.
+    assert (
+        cashier_scope(requested_received_by=99, can_read_all=False, current_user_id=CAISSIERE)
+        == CAISSIERE
+    )
+    # Avec le droit, la comptabilité isole bien la caisse demandée.
+    assert cashier_scope(requested_received_by=99, can_read_all=True, current_user_id=1) == 99

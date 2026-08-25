@@ -251,4 +251,12 @@ async def dispatch_to_permission(
                 "Notification '%s' echouee pour l'utilisateur %d", notification_type, uid
             )
 
+    # Sans ce commit, rien n'est ecrit. `dispatch_notification` fait `add` puis
+    # `flush`, ce qui ouvre une transaction ; nos deux appelants s'executent
+    # APRES le commit metier, et la session est refermee par `get_db` sans
+    # jamais recommiter. La fermeture annule alors la transaction, et la
+    # notification disparait sans qu'aucune erreur ne soit levee.
+    if envoyees:
+        await db.commit()
+
     return envoyees

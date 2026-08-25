@@ -167,7 +167,10 @@ async def record_enrollment_payment(
     # plusieurs fois declencherait sinon une alerte par versement, et c'est
     # ainsi qu'un compteur cesse d'etre lu.
     inscription = getattr(refreshed, "enrollment", None)
-    if inscription is not None and inscription.status != EnrollmentStatus.VALIDE:
+    if inscription is not None and inscription.status in (
+        EnrollmentStatus.PROSPECT,
+        EnrollmentStatus.EN_VALIDATION,
+    ):
         eleve = getattr(inscription, "student", None)
         nom = " ".join(
             p for p in (getattr(eleve, "last_name", ""), getattr(eleve, "first_name", "")) if p
@@ -175,7 +178,7 @@ async def record_enrollment_payment(
         await enrollment_notifications.prevenir_qu_il_faut_valider(
             db,
             enrollment_id=inscription.id,
-            student_name=nom or "Un eleve",
+            student_name=nom or "Un élève",
             acteur_id=received_by,
         )
     return payment_to_response(refreshed)

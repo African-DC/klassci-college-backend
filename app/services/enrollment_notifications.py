@@ -56,8 +56,8 @@ async def prevenir_qu_il_faut_encaisser(
                 # Le repli du dispatch lit `title` et `body` quand aucun gabarit
                 # n'est defini : la notification reste lisible sans seed.
                 "title": "Versement attendu",
-                "body": f"{student_name} ({class_name}) vient d'etre inscrit. "
-                "Le premier versement reste a encaisser.",
+                "body": f"{student_name} ({class_name}) vient d'être inscrit. "
+                "Le premier versement reste à encaisser.",
             },
             action_url=f"/admin/enrollments/{enrollment_id}?action=encaisser",
             entity_type="enrollment",
@@ -88,8 +88,8 @@ async def prevenir_qu_il_faut_valider(
             "enrollment_awaiting_validation",
             {
                 "student_name": student_name,
-                "title": "Inscription a valider",
-                "body": f"Le versement de {student_name} est enregistre. "
+                "title": "Inscription à valider",
+                "body": f"Le versement de {student_name} est enregistré. "
                 "L'inscription attend votre validation.",
             },
             action_url=f"/admin/enrollments/{enrollment_id}?action=valider",

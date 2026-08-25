@@ -43,7 +43,7 @@ class MarkSeenRequest(BaseModel):
     notification_ids: list[int] = Field(
         ...,
         max_length=200,
-        description="Identifiants des notifications affichees, au plus une page.",
+        description="Identifiants des notifications affichées, au plus une page.",
     )
 
 

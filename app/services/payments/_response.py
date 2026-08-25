@@ -136,4 +136,8 @@ def _attend_validation(payment: Payment) -> bool:
     inscription = getattr(payment, "enrollment", None)
     if inscription is None:
         return False
-    return inscription.status != EnrollmentStatus.VALIDE
+    # Seuls ces deux statuts passent le garde de `validate_enrollment`. Repondre
+    # « oui » pour un dossier rejete ou annule ferait annoncer une action que le
+    # serveur refuserait ensuite, et enverrait une tache a tous ceux qui peuvent
+    # valider.
+    return inscription.status in (EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION)
