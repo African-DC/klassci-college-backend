@@ -29,7 +29,7 @@ ppf-datamatrix==0.2
 # statistiques DREN. Aucune dépendance native, install rapide.
 openpyxl==3.1.5
 rapidfuzz==3.12.2
-sentry-sdk[fastapi]==2.18.0
+sentry-sdk[fastapi]==2.68.0
 click==8.1.7
 keyring==25.5.0
 keyrings.alt==5.0.2
