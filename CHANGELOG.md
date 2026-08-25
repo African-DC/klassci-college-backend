@@ -41,6 +41,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
 
 ### Changed
+- WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*
 - Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3 *(technique)*
 - L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement *(tous)*
 - Le bulletin porte l'en-tête administratif ivoirien : autorité à gauche, titre encadré au centre, année à droite, puis le bloc établissement *(parent, admin)*
