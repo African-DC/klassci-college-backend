@@ -42,22 +42,51 @@ def db() -> Iterator[Session]:
 
     Base.metadata.create_all(moteur)
     with Session(moteur) as s:
-        s.add_all([
-            AcademicYear(id=1, name="2025-2026", start_date=date(2025, 9, 8),
-                         end_date=date(2026, 6, 30), is_current=False),
-            AcademicYear(id=2, name="2026-2027", start_date=date(2026, 9, 14),
-                         end_date=date(2027, 7, 30), is_current=True),
-            Level(id=1, name="3eme", order=4),
-            Class(id=1, name="3eme 2", level_id=1),
-            # Trois élèves du fichier réel des arriérés.
-            Student(id=1, last_name="KOUASSI", first_name="Aya marie adelaide",
-                    enrollment_number="ECER0882"),
-            Student(id=2, last_name="KOUASSI", first_name="David", enrollment_number="ECER0864"),
-            Student(id=3, last_name="COULIBALY", first_name="Souleymane ben junior",
-                    enrollment_number="ECER0734"),
-        ])
-        s.add(Enrollment(id=1, student_id=1, class_id=1, academic_year_id=2,
-                         status=EnrollmentStatus.PROSPECT.value))
+        s.add_all(
+            [
+                AcademicYear(
+                    id=1,
+                    name="2025-2026",
+                    start_date=date(2025, 9, 8),
+                    end_date=date(2026, 6, 30),
+                    is_current=False,
+                ),
+                AcademicYear(
+                    id=2,
+                    name="2026-2027",
+                    start_date=date(2026, 9, 14),
+                    end_date=date(2027, 7, 30),
+                    is_current=True,
+                ),
+                Level(id=1, name="3eme", order=4),
+                Class(id=1, name="3eme 2", level_id=1),
+                # Trois élèves du fichier réel des arriérés.
+                Student(
+                    id=1,
+                    last_name="KOUASSI",
+                    first_name="Aya marie adelaide",
+                    enrollment_number="ECER0882",
+                ),
+                Student(
+                    id=2, last_name="KOUASSI", first_name="David", enrollment_number="ECER0864"
+                ),
+                Student(
+                    id=3,
+                    last_name="COULIBALY",
+                    first_name="Souleymane ben junior",
+                    enrollment_number="ECER0734",
+                ),
+            ]
+        )
+        s.add(
+            Enrollment(
+                id=1,
+                student_id=1,
+                class_id=1,
+                academic_year_id=2,
+                status=EnrollmentStatus.PROSPECT.value,
+            )
+        )
         s.commit()
         yield s
 
@@ -94,8 +123,11 @@ async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
     # Le cœur de la demande : un dossier en attente ne se voit pas dans les
     # listes, et c'est celui-là qu'on recrée.
     trouves = await chercher_doublons(
-        _Pont(db), last_name="KOUASSI", first_name="Aya marie adelaide",
-        enrollment_number="ECER0882", academic_year_id=2,
+        _Pont(db),
+        last_name="KOUASSI",
+        first_name="Aya marie adelaide",
+        enrollment_number="ECER0882",
+        academic_year_id=2,
     )
     inscription = trouves[0].inscription_annee_courante
     assert inscription is not None
@@ -106,7 +138,9 @@ async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
 @pytest.mark.asyncio
 async def test_sans_annee_on_ne_pretend_pas_connaitre_l_inscription(db: Session) -> None:
     trouves = await chercher_doublons(
-        _Pont(db), last_name="KOUASSI", first_name="Aya marie adelaide",
+        _Pont(db),
+        last_name="KOUASSI",
+        first_name="Aya marie adelaide",
         enrollment_number="ECER0882",
     )
     assert trouves[0].inscription_annee_courante is None
@@ -121,7 +155,10 @@ async def test_un_nouvel_eleve_ne_declenche_rien(db: Session) -> None:
 @pytest.mark.asyncio
 async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> None:
     trouves = await chercher_doublons(
-        _Pont(db), last_name="KOUASSI", first_name="David",
-        enrollment_number="ECER0864", ignorer_student_id=2,
+        _Pont(db),
+        last_name="KOUASSI",
+        first_name="David",
+        enrollment_number="ECER0864",
+        ignorer_student_id=2,
     )
     assert trouves == []

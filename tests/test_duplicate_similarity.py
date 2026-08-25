@@ -26,9 +26,7 @@ from app.services.duplicates.similarity import (
 
 
 def fiche(nom, prenom, naissance=None, lieu=None):
-    return SimpleNamespace(
-        last_name=nom, first_name=prenom, birth_date=naissance, birth_place=lieu
-    )
+    return SimpleNamespace(last_name=nom, first_name=prenom, birth_date=naissance, birth_place=lieu)
 
 
 class TestNormalisation:
@@ -101,8 +99,12 @@ class TestVraisDoublons:
         assert r.quasi_certain
 
     def test_une_faute_de_frappe_reste_detectee(self):
-        r = comparer(fiche("COULIBALY", "Souleymane ben junior"), fiche("COULIBALI", "Souleymane ben junior"))
-        assert r.a_signaler, f"score {r.score} : une lettre d'écart ne devrait pas masquer un doublon"
+        r = comparer(
+            fiche("COULIBALY", "Souleymane ben junior"), fiche("COULIBALI", "Souleymane ben junior")
+        )
+        assert r.a_signaler, (
+            f"score {r.score} : une lettre d'écart ne devrait pas masquer un doublon"
+        )
 
     def test_jour_et_mois_intervertis_restent_suspects(self):
         # La famille dicte « 04/05 » et la saisie hésite : le cas est courant
