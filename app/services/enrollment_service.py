@@ -489,6 +489,18 @@ async def create_enrollment_with_student(
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment.id)
+
+    # Même avertissement que dans `create_enrollment`, et pour la même raison :
+    # c'est ce chemin-ci que le formulaire « Nouvelle inscription » emprunte,
+    # celui où la secrétaire saisit l'élève et son inscription d'un seul geste.
+    # Sans cet appel, la chaîne restait muette précisément là où elle sert.
+    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
+        db,
+        enrollment_id=refreshed.id,
+        student_name=_nom_eleve(refreshed),
+        class_name=refreshed.class_.name if refreshed.class_ else "",
+        acteur_id=created_by,
+    )
     return _to_response(refreshed)
 
 
