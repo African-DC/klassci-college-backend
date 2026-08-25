@@ -151,15 +151,30 @@ services:
       - traefik.http.routers.klassci-college-ip.service=klassci-college
 
 volumes:
+  # Le prefixe est surchargeable, et c'est un garde, pas une commodite.
+  #
+  # Ces volumes etaient epingles a `linux_klassci_*` en dur. Toute seconde pile
+  # montee depuis ce fichier - un test de restauration, une copie de recette -
+  # s'attachait donc aux donnees de la production. Constate le 2026-08-25 en
+  # essayant justement de restaurer a cote : MySQL refusait de verrouiller
+  # `ibdata1`, deja tenu par la production.
+  #
+  # Le refus etait la chance. Si la production avait ete arretee - pendant une
+  # migration, une fenetre de maintenance, c'est-a-dire exactement quand on
+  # restaure - la pile de test aurait demarre sur ses donnees et reinitialise
+  # le mot de passe applicatif avec le sien.
+  #
+  # Pour une pile jetable : creer les volumes prefixes d'abord, puis
+  #   KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest up -d
   klassci_uploads:
     external: true
-    name: linux_klassci_uploads
+    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_uploads
   klassci_mysql:
     external: true
-    name: linux_klassci_mysql
+    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_mysql
   klassci_redis:
     external: true
-    name: linux_klassci_redis
+    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_redis
 
 networks:
   klassci:

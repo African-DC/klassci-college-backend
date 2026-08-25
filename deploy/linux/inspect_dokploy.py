@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Register the live KLASSCI College stack as a Dokploy Compose project.
 
 Keeps existing MySQL/Redis volumes. Does not touch Wourri.
@@ -6,11 +6,8 @@ Keeps existing MySQL/Redis volumes. Does not touch Wourri.
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 
@@ -30,19 +27,24 @@ def sh(cmd: str, check: bool = True) -> str:
     return (res.stdout or "").strip()
 
 
-def find_dokploy_container() -> str:
-    out = sh("docker ps --filter name=dokploy.1 --format '{{.Names}}'")
+def find_container(prefixe: str) -> str:
+    """Le conteneur dont le nom commence par `prefixe`.
+
+    Les noms portent un identifiant de tâche Swarm — `dokploy-postgres.1.esnff…`
+    — qui change à chaque redéploiement. Le coder en dur marche jusqu'au jour
+    où le service redémarre.
+    """
+    out = sh("docker ps --filter name=%s --format '{{.Names}}'" % prefixe)
     if not out:
-        raise SystemExit("dokploy container not found")
+        raise SystemExit("conteneur introuvable : %s" % prefixe)
     return out.splitlines()[0]
 
 
 def pg(sql: str) -> str:
-    ctn = find_dokploy_container()
-    # Dokploy app talks to dokploy-postgres. Query via the postgres container.
+    """Interroger la base de Dokploy, à travers son conteneur postgres."""
+    conteneur = find_container("dokploy-postgres")
     return sh(
-        "docker exec dokploy-postgres.1.esnff5rkgy8t8jjeoz92qfllr "
-        "psql -U dokploy -d dokploy -At -c " + json.dumps(sql)
+        "docker exec " + conteneur + " psql -U dokploy -d dokploy -At -c " + json.dumps(sql)
     )
 
 

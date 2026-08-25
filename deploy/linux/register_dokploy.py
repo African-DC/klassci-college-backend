@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Register KLASSCI College in Dokploy and adopt the live stack."""
 from __future__ import annotations
 

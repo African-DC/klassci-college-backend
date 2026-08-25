@@ -208,6 +208,50 @@ ssh -F deploy/ssh_config klassci 'nssm restart klassci-frontend'
     regarder**, plutôt que de lire le vert de la CI. La production Contabo est
     Linux et n'est pas concernée — vérifié en rendant un PDF dans son image.
 
+## Éprouver une restauration, sans toucher à la production
+
+Vérifier que ce dossier reconstruit un système qui marche demande de le monter
+pour de vrai. Deux pièges rendent l'exercice dangereux, et tous deux ont été
+rencontrés le 2026-08-25 :
+
+**Les volumes.** Ils étaient épinglés à `linux_klassci_*` en dur : une seconde
+pile s'attachait donc aux données de la production. Le premier essai a échoué
+sur `Unable to lock ./ibdata1`, tenu par la production — et ce refus était la
+chance. Production arrêtée, la pile de test aurait démarré sur ses données et
+réinitialisé le mot de passe applicatif avec le sien. Le préfixe est désormais
+surchargeable, avec la production pour défaut.
+
+**Le port.** Une surcharge Compose **concatène** les listes ; sans `!override`,
+le test réclame encore le 8088 de la production et échoue.
+
+La séquence qui fonctionne :
+
+```bash
+D=~/restore-test-$(date +%s) && mkdir -p $D && cd $D
+cp /chemin/deploy/linux/docker-compose.dokploy.yml docker-compose.yml
+cp /chemin/deploy/linux/Caddyfile .
+# Un .env aux valeurs JETABLES — jamais celles de la production.
+printf 'services:
+  proxy:
+    ports: !override
+      - "8099:80"
+' > docker-compose.override.yml
+for v in mysql redis uploads; do docker volume create restoretest_klassci_$v; done
+KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest up -d
+curl -s -o /dev/null -w '%{http_code}
+' http://127.0.0.1:8099/svc/health   # attendu : 200
+```
+
+Démontage — `down` **sans** `-v`, puis les volumes de test nommément :
+
+```bash
+KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest down
+for v in mysql redis uploads; do docker volume rm restoretest_klassci_$v; done
+```
+
+Résultat du 2026-08-25 : sept services montés, backend et frontend en 200, les
+volumes de production intacts et la production ininterrompue pendant l'exercice.
+
 ## Fidélité au serveur
 
 Les fichiers de ce dossier doivent correspondre, à l'octet près, à ce que les
