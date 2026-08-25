@@ -59,6 +59,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 - Les montées de dépendances passent la validation de nom de branche, au lieu de forcer une fusion qui contourne tous les contrôles *(technique)*
+- Un identifiant d'établissement ne peut plus se terminer par un saut de ligne, ce qui créait une base au nom indiscernable de son voisin *(sécurité)*
 - Un nom de fichier contenant des séparateurs ne provoque plus une erreur 500 à l'envoi d'une photo *(sécurité)*
 - Créer une inscription depuis le formulaire « Nouvelle inscription » prévient enfin la personne qui doit encaisser : ce chemin ne déclenchait pas la chaîne *(admin)*
 - L'extension d'une photo envoyée vient désormais de son type d'image, plus de son nom de fichier : un nom forgé pouvait faire écrire le fichier hors du dossier prévu *(sécurité)*
