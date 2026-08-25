@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*
 - Validation de plusieurs inscriptions en une fois, chaque refus étant rendu avec son motif *(admin)*
 - Les notifications affichées à l'ouverture de la cloche sont marquées lues automatiquement, sans effacer celles qu'on n'a pas vues *(tous)*
@@ -58,6 +59,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses *(technique)*
+- Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles *(technique)*
+- Le script d'intégration d'un établissement refuse désormais de démarrer sans confirmation : relancé tel quel, il réinitialisait le mot de passe admin d'une école en service *(technique)*
+- Le fichier de déploiement versionné ne décrivait pas le service qui ferme les caisses chaque nuit : une reconstruction depuis le dépôt l'aurait omis *(technique)*
 - Les montées de dépendances passent la validation de nom de branche, au lieu de forcer une fusion qui contourne tous les contrôles *(technique)*
 - Un identifiant d'établissement ne peut plus se terminer par un saut de ligne, ce qui créait une base au nom indiscernable de son voisin *(sécurité)*
 - Un nom de fichier contenant des séparateurs ne provoque plus une erreur 500 à l'envoi d'une photo *(sécurité)*

@@ -1,0 +1,22 @@
+# Les secrets restent hors du dépôt. Ce qui est versionné ici décrit la forme
+# de l'infrastructure ; les valeurs vivent dans `deploy/.secrets.env` sur le
+# poste, et dans les variables d'environnement des services côté serveur.
+.secrets.env
+.ssh/
+*.pem
+*.key
+
+# Le fichier produit à partir du gabarit, qui porte les vrais mots de passe.
+server/mysql-setup.sql
+
+# Environnements et artefacts de transfert.
+linux/.env
+ssh_config
+dist/
+*.tgz
+
+# Sondes et captures d'une session de diagnostic : utiles sur le moment,
+# trompeuses six mois plus tard.
+linux/_*
+*.out.txt
+*.png

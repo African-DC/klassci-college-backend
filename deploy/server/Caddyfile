@@ -1,0 +1,24 @@
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	encode gzip zstd
+
+	# Backend API (FastAPI) sous /svc/* — strip puis proxy vers uvicorn
+	@svc path /svc/*
+	handle @svc {
+		uri strip_prefix /svc
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# Tout le reste (pages Next.js + /api/auth NextAuth) → frontend
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
