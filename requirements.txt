@@ -18,9 +18,12 @@ boto3==1.42.97
 twilio==9.10.5
 ortools>=9.10
 weasyprint==69.0
-# pydyf 0.12+ a un breaking change incompatible avec weasyprint 62.3
-# (Stream.transform retiré → AttributeError au PDF render). Pinning explicite.
-pydyf>=0.10.0,<0.12
+# Borne haute héritée de weasyprint 62.3, dont pydyf 0.12+ cassait le rendu
+# (Stream.transform retiré → AttributeError). weasyprint 69 exige pydyf>=0.11
+# et ne pose plus cette borne : la résolution donne 0.11.0, qui satisfait les
+# deux. On garde le plafond le temps de vérifier 0.12 sur un vrai document ;
+# la raison écrite ici n'est plus celle d'origine.
+pydyf>=0.11.0,<0.12
 # ppf-datamatrix : génération de Datamatrix (norme 2D-Doc / Cachet Électronique
 # Visible) en pur Python, rendu SVG → aucune dépendance native. Imprimé sur les
 # documents officiels comme cachet signé pour la vérification publique.
