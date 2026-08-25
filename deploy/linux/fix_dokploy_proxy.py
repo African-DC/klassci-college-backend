@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Recreate only the Dokploy proxy with a host-absolute Caddyfile bind."""
 from __future__ import annotations
 

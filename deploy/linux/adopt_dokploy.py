@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Adopt the live College stack under the Dokploy compose project.
 
 Stops the manual 'linux' project without deleting volumes, then starts

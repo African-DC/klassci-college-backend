@@ -1,5 +1,29 @@
 #!/usr/bin/env python3
-"""Reset Rostan admin password then continue idempotent onboarding."""
+"""Intégration d'un établissement : la séquence exécutée pour ROSTAN.
+
+ATTENTION : CE SCRIPT ÉCRASE UNE ÉCOLE EN SERVICE. Relancé tel quel sur `rostan-bouake`,
+il **réinitialise le mot de passe de l'administrateur** et **réécrit le nom de
+l'établissement** en « College Rostan Bouake » — le nom réel est « COLLÈGE
+PRIVÉ D'EXCELLENCE ROSTAN ». Il refuse donc de démarrer sans confirmation
+explicite (voir `--ecraser-la-production`).
+
+Ce qu'il vaut : il est le seul enregistrement de la séquence d'intégration —
+année scolaire, trimestres, niveaux, classes, matières, frais, rôles. Le lire
+avant d'intégrer une nouvelle école évite de redécouvrir l'ordre.
+
+**État vérifié le 2026-08-25** : les constantes ci-dessous ont été corrigées
+après la migration vers Dokploy, qui les avait toutes périmées —
+
+  - les conteneurs s'appelaient `linux-backend-1` / `linux-mysql-1`, qui
+    n'existent plus ;
+  - `ENV_PATH` lisait une copie figée du 16 août, différente du `.env` vivant,
+    donc des identifiants faux ;
+  - `BASE` répondait encore, par coïncidence : le port 8088 est aujourd'hui
+    celui du proxy actuel.
+
+La séquence complète n'a **pas** été rejouée depuis cette migration : les
+constantes sont justes, l'enchaînement reste à éprouver sur une école neuve.
+"""
 import json
 import os
 import secrets
@@ -9,10 +33,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-
-BASE = "http://127.0.0.1:8088/svc"
-OUT = Path("/opt/apps/klassci-college/deploy/linux/.rostan-credentials.json")
-ENV_PATH = Path("/opt/apps/klassci-college/deploy/linux/.env")
+# Surchargeables par l'environnement : ces valeurs ont déjà dérivé une fois.
+BASE = os.environ.get("KLASSCI_BASE", "http://127.0.0.1:8088/svc")
+COMPOSE_DIR = Path(
+    os.environ.get("KLASSCI_COMPOSE_DIR", "/etc/dokploy/compose/klassci-college-prod/code")
+)
+ENV_PATH = Path(os.environ.get("KLASSCI_ENV", str(COMPOSE_DIR / ".env")))
+OUT = Path(os.environ.get("KLASSCI_CREDENTIALS_OUT", "/tmp/klassci-credentials.json"))
+CONTENEUR_BACKEND = os.environ.get("KLASSCI_BACKEND_CONTAINER", "klassci-college-prod-backend-1")
+CONTENEUR_MYSQL = os.environ.get("KLASSCI_MYSQL_CONTAINER", "klassci-college-prod-mysql-1")
 
 
 def load_env() -> dict[str, str]:
@@ -83,20 +112,15 @@ def ensure_list(path, token, tenant, size=100):
 
 def reset_admin_password(password: str) -> None:
     env = load_env()
-    sql = (
-        "UPDATE users SET hashed_password = %s, is_active = 1, must_change_password = 0 "
-        "WHERE email = 'admin@rostan-bouake.ci';"
-    )
     # Hash inside backend container to stay compatible with app hasher.
     cmd = (
         "from app.core.security import hash_password; print(hash_password(%r))" % password
     )
     hashed = os.popen(
-        "docker exec linux-backend-1 python -c %s" % repr(cmd)
+        "docker exec " + CONTENEUR_BACKEND + " python -c %s" % repr(cmd)
     ).read().strip()
     if not hashed.startswith("$"):
         raise RuntimeError(f"hash failed: {hashed!r}")
-    os.environ["MYSQL_PWD"] = env["MYSQL_PASSWORD"]
     import subprocess
 
     subprocess.run(
@@ -105,7 +129,7 @@ def reset_admin_password(password: str) -> None:
             "exec",
             "-e",
             f"MYSQL_PWD={env['MYSQL_PASSWORD']}",
-            "linux-mysql-1",
+            CONTENEUR_MYSQL,
             "mysql",
             "-uklassci",
             "rostan-bouake",
@@ -117,6 +141,20 @@ def reset_admin_password(password: str) -> None:
 
 
 def main() -> int:
+    # Ce script réécrit une école en service. Sans ce garde, un « je relance le
+    # script d'intégration » réinitialise le mot de passe de l'administrateur de
+    # ROSTAN et remplace le nom de l'établissement par une valeur périmée.
+    if "--ecraser-la-production" not in sys.argv:
+        # Une console Windows n'encode pas tout : un refus ne doit pas
+        # ressortir en trace d'erreur.
+        sys.stdout.reconfigure(errors="replace")
+        print(__doc__)
+        print(
+            "Refus de démarrer. Relancer avec --ecraser-la-production si c'est "
+            "bien ce que vous voulez, ou copier la séquence pour une école neuve."
+        )
+        return 2
+
     env = load_env()
     admin_password = generate_password()
     teacher_password = generate_password()
@@ -383,7 +421,7 @@ def main() -> int:
 def reset_user_password(email: str, password: str) -> None:
     env = load_env()
     cmd = "from app.core.security import hash_password; print(hash_password(%r))" % password
-    hashed = os.popen("docker exec linux-backend-1 python -c %s" % repr(cmd)).read().strip()
+    hashed = os.popen("docker exec " + CONTENEUR_BACKEND + " python -c %s" % repr(cmd)).read().strip()
     if not hashed.startswith("$"):
         raise RuntimeError(f"hash failed for {email}: {hashed!r}")
     import subprocess
@@ -394,7 +432,7 @@ def reset_user_password(email: str, password: str) -> None:
             "exec",
             "-e",
             f"MYSQL_PWD={env['MYSQL_PASSWORD']}",
-            "linux-mysql-1",
+            CONTENEUR_MYSQL,
             "mysql",
             "-uklassci",
             "rostan-bouake",

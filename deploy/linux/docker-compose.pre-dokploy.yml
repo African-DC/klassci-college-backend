@@ -1,3 +1,19 @@
+# ARCHIVE — la pile d'AVANT la migration vers Dokploy. Ne pas monter.
+#
+# Renomme le 2026-08-25 : il s'appelait `docker-compose.yml`, le nom que Docker
+# choisit tout seul. Un `docker compose up` lance depuis ce dossier prenait donc
+# ce fichier-ci, et non celui de la production. Il lui manque deux choses :
+#
+#   - le volume des televersements : les photos d'eleves et le logo repartent
+#     dans la couche jetable du conteneur, et disparaissent au deploiement
+#     suivant sans que rien ne le signale ;
+#   - le service `beat` : les sessions de caisse ne se ferment plus la nuit.
+#
+# La production tourne sur `docker-compose.dokploy.yml`, qui est la copie
+# fidele de ce que le serveur execute. Garde ici parce que les scripts
+# `adopt_dokploy.py` et `fix_dokploy_proxy.py` decrivent la migration depuis
+# cette forme-la.
+
 services:
   mysql:
     image: mysql:8.4
