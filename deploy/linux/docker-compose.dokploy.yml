@@ -53,10 +53,9 @@ services:
       timeout: 5s
       retries: 10
     volumes:
-      # Sans ce volume, les televersements vivent dans la couche jetable du
-      # conteneur : la premiere photo d eleve disparait au deploiement
-      # suivant, et le logo de l ecole avec elle, sans que rien ne le
-      # signale sur les bulletins deja imprimes.
+      # Les televersements vivaient dans la couche jetable du conteneur : la
+      # premiere photo d eleve aurait disparu au deploiement suivant, et le
+      # logo avec elle, sans que rien ne le signale sur les bulletins.
       - klassci_uploads:/tmp/klassci-uploads
     networks:
       - klassci
@@ -77,11 +76,27 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      # Sans ce volume, les televersements vivent dans la couche jetable du
-      # conteneur : la premiere photo d eleve disparait au deploiement
-      # suivant, et le logo de l ecole avec elle, sans que rien ne le
-      # signale sur les bulletins deja imprimes.
+      # Les televersements vivaient dans la couche jetable du conteneur : la
+      # premiere photo d eleve aurait disparu au deploiement suivant, et le
+      # logo avec elle, sans que rien ne le signale sur les bulletins.
       - klassci_uploads:/tmp/klassci-uploads
+    networks:
+      - klassci
+
+  beat:
+    image: ${KLASSCI_BACKEND_IMAGE}
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "beat", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/{tenant}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - klassci
 
@@ -150,3 +165,4 @@ networks:
   klassci:
   dokploy-network:
     external: true
+
