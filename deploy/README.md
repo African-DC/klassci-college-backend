@@ -208,6 +208,32 @@ ssh -F deploy/ssh_config klassci 'nssm restart klassci-frontend'
     regarder**, plutôt que de lire le vert de la CI. La production Contabo est
     Linux et n'est pas concernée — vérifié en rendant un PDF dans son image.
 
+## Fidélité au serveur
+
+Les fichiers de ce dossier doivent correspondre, à l'octet près, à ce que les
+serveurs exécutent. Un exemplaire versionné qui a dérivé est pire que pas
+d'exemplaire du tout : il inspire confiance et reconstruit autre chose.
+
+La première synchronisation, le 2026-08-25, a trouvé que le compose versionné
+**n'avait pas le service `beat`** que la production fait tourner. Rebâtir depuis
+le dépôt aurait donné un système où la fermeture nocturne des sessions de caisse
+ne s'exécute jamais, sans que rien ne le signale.
+
+Vérifier après toute modification côté serveur :
+
+```bash
+# Production : le compose et le Caddyfile
+ssh -4 -F deploy/ssh_config klassci-prod "docker run --rm -v /etc/dokploy/compose/klassci-college-prod/code:/c:ro alpine sha256sum /c/docker-compose.yml /c/Caddyfile"
+sha256sum deploy/linux/docker-compose.dokploy.yml deploy/linux/Caddyfile
+
+# Demo : les scripts PowerShell
+ssh -F deploy/ssh_config klassci "Get-ChildItem C:\klassci-deploy -Filter *.ps1 | ForEach-Object { $_.Name + ' ' + (Get-FileHash $_.FullName -Algorithm SHA256).Hash }"
+sha256sum deploy/server/*.ps1
+```
+
+Les empreintes doivent coïncider. Un script présent sur le serveur et absent
+d'ici est une pièce d'infrastructure qui n'existe qu'à un exemplaire.
+
 ## À finaliser (suivi)
 
 - [x] **GTK runtime** pour WeasyPrint — extrait via 7-Zip (l'installeur GUI et
