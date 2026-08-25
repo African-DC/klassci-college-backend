@@ -21,7 +21,6 @@ EXTENSION_PAR_TYPE = {
     "image/png": "png",
     "image/webp": "webp",
 }
-_ALLOWED_TYPES = tuple(EXTENSION_PAR_TYPE)
 
 
 def extension_pour(content_type: str | None) -> str:

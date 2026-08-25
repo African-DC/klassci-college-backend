@@ -5,13 +5,14 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
+from app.utils.photo_upload import EXTENSION_PAR_TYPE
+
 DOCUMENT_UPLOAD_DIR = "/tmp/klassci-uploads/documents"
-_ALLOWED_TYPES = {
-    "application/pdf": "pdf",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
+# Les types d'image viennent de `photo_upload`, seule table de reference :
+# les deux modules en portaient chacun une copie, et c'est la divergence qui a
+# laisse vivre l'extraction dangereuse d'un cote pendant que l'autre etait
+# correcte. Un document accepte en plus le PDF.
+_ALLOWED_TYPES = {**EXTENSION_PAR_TYPE, "application/pdf": "pdf"}
 _MAX_BYTES = 10 * 1024 * 1024
 
 
