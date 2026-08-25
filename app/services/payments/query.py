@@ -150,6 +150,12 @@ async def get_payments_summary(
                 Enrollment, Payment.enrollment_id == Enrollment.id
             )
             encaisse_stmt = encaisse_stmt.where(await _belongs_to_year(db, academic_year_id))
+        if filters is not None:
+            # « Encaisse par vous » est un agregat de caisse, comme le compte
+            # juste a cote : les deux doivent repondre a la meme question,
+            # sinon la carte affiche un montant de l'annee sous un nombre
+            # filtre, et affirme que le filtre vaut pour les deux.
+            encaisse_stmt = apply_payment_filters(encaisse_stmt, filters)
         total_paid = float((await db.execute(encaisse_stmt)).scalar() or 0)
 
     pay_stmt = select(

@@ -82,7 +82,7 @@ async def test_le_versement_previent_qui_peut_valider(envois) -> None:
         None, enrollment_id=42, student_name="Traoré Aminata", acteur_id=None
     )
     assert [e["user_id"] for e in envois] == [DIRECTEUR]
-    assert envois[0]["title"] == "Inscription a valider"
+    assert envois[0]["title"] == "Inscription à valider"
 
 
 @pytest.mark.asyncio

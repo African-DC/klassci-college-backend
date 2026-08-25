@@ -205,13 +205,13 @@ class FeeVariantResponse(BaseModel):
 
 
 class BulkValidateRequest(BaseModel):
-    """Les inscriptions a valider en une fois."""
+    """Les inscriptions à valider en une fois."""
 
     enrollment_ids: list[int] = Field(
         ...,
         min_length=1,
         max_length=500,
-        description="Identifiants des inscriptions a valider.",
+        description="Identifiants des inscriptions à valider.",
     )
 
 

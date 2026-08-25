@@ -152,13 +152,13 @@ async def create_enrollment(
 
 
 def _nom_eleve(enrollment: object) -> str:
-    """Le nom affichable de l'eleve, ou son matricule s'il manque."""
+    """Le nom affichable de l'élève, ou son matricule s'il manque."""
     student = getattr(enrollment, "student", None)
     if student is None:
-        return "Un eleve"
+        return "Un élève"
     parts = [getattr(student, "last_name", ""), getattr(student, "first_name", "")]
     nom = " ".join(p for p in parts if p).strip()
-    return nom or getattr(student, "enrollment_number", "") or "Un eleve"
+    return nom or getattr(student, "enrollment_number", "") or "Un élève"
 
 
 async def list_enrollments(
