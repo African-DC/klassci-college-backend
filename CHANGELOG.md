@@ -59,6 +59,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le fichier de déploiement versionné ne décrivait pas le service qui ferme les caisses chaque nuit : une reconstruction depuis le dépôt l'aurait omis *(technique)*
 - Les montées de dépendances passent la validation de nom de branche, au lieu de forcer une fusion qui contourne tous les contrôles *(technique)*
 - Un identifiant d'établissement ne peut plus se terminer par un saut de ligne, ce qui créait une base au nom indiscernable de son voisin *(sécurité)*
 - Un nom de fichier contenant des séparateurs ne provoque plus une erreur 500 à l'envoi d'une photo *(sécurité)*
