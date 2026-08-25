@@ -1,0 +1,152 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: local
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - klassci_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - klassci
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - klassci_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - klassci
+
+  backend:
+    image: ${KLASSCI_BACKEND_IMAGE}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/{tenant}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    volumes:
+      # Sans ce volume, les televersements vivent dans la couche jetable du
+      # conteneur : la premiere photo d eleve disparait au deploiement
+      # suivant, et le logo de l ecole avec elle, sans que rien ne le
+      # signale sur les bulletins deja imprimes.
+      - klassci_uploads:/tmp/klassci-uploads
+    networks:
+      - klassci
+      - dokploy-network
+
+  worker:
+    image: ${KLASSCI_BACKEND_IMAGE}
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info", "--pool=solo"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/{tenant}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Sans ce volume, les televersements vivent dans la couche jetable du
+      # conteneur : la premiere photo d eleve disparait au deploiement
+      # suivant, et le logo de l ecole avec elle, sans que rien ne le
+      # signale sur les bulletins deja imprimes.
+      - klassci_uploads:/tmp/klassci-uploads
+    networks:
+      - klassci
+
+  frontend:
+    image: ${KLASSCI_FRONTEND_IMAGE}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_URL: /svc
+      INTERNAL_API_URL: http://backend:8000
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      NEXT_PUBLIC_EXTRA_ALLOWED_HOSTS: ${NEXT_PUBLIC_EXTRA_ALLOWED_HOSTS}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - klassci
+      - dokploy-network
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "8088:80"
+    volumes:
+      - /etc/dokploy/compose/klassci-college-prod/code/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - klassci
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.klassci-college.rule=Host(`${PUBLIC_HOST}`)
+      - traefik.http.routers.klassci-college.entrypoints=websecure
+      - traefik.http.routers.klassci-college.tls=true
+      - traefik.http.routers.klassci-college.tls.certresolver=letsencrypt
+      - traefik.http.routers.klassci-college.service=klassci-college
+      - traefik.http.services.klassci-college.loadbalancer.server.port=80
+      - traefik.http.routers.klassci-college-http.rule=Host(`${PUBLIC_HOST}`) && !PathPrefix(`/.well-known/acme-challenge/`)
+      - traefik.http.routers.klassci-college-http.entrypoints=web
+      - traefik.http.routers.klassci-college-http.middlewares=redirect-to-https@file
+      - traefik.http.routers.klassci-college-ip.rule=Host(`169.58.156.206`)
+      - traefik.http.routers.klassci-college-ip.entrypoints=web
+      - traefik.http.routers.klassci-college-ip.service=klassci-college
+
+volumes:
+  klassci_uploads:
+    external: true
+    name: linux_klassci_uploads
+  klassci_mysql:
+    external: true
+    name: linux_klassci_mysql
+  klassci_redis:
+    external: true
+    name: linux_klassci_redis
+
+networks:
+  klassci:
+  dokploy-network:
+    external: true

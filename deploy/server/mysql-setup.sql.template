@@ -1,0 +1,28 @@
+-- Amorçage MySQL de la démo Windows. Gabarit : les mots de passe viennent de
+-- `deploy/.secrets.env`, qui n'est pas versionné.
+--
+-- Le fichier d'origine portait les deux mots de passe en clair. Il reste sur
+-- le poste, ignoré par git ; c'est celui-ci qui fait foi pour reconstruire.
+--
+-- Usage (PowerShell, sur le poste) :
+--   $s = Get-Content deploy\.secrets.env | ConvertFrom-StringData
+--   (Get-Content deploy\server\mysql-setup.sql.template) `
+--     -replace '\$\{MYSQL_APP_PW\}', $s.MYSQL_APP_PW `
+--     -replace '\$\{MYSQL_ROOT_PW\}', $s.MYSQL_ROOT_PW |
+--     Set-Content deploy\server\mysql-setup.sql
+--
+-- Puis exécuter le fichier produit, et le supprimer.
+
+CREATE DATABASE IF NOT EXISTS `local` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE USER IF NOT EXISTS 'klassci'@'%' IDENTIFIED BY '${MYSQL_APP_PW}';
+ALTER USER 'klassci'@'%' IDENTIFIED BY '${MYSQL_APP_PW}';
+
+-- `WITH GRANT OPTION` : le provisionnement d'un tenant crée sa propre base,
+-- ce que le compte applicatif doit pouvoir faire seul.
+GRANT ALL PRIVILEGES ON *.* TO 'klassci'@'%' WITH GRANT OPTION;
+
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PW}';
+FLUSH PRIVILEGES;
+
+SELECT user, host FROM mysql.user WHERE user IN ('root', 'klassci');
