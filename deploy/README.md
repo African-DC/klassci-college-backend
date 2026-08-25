@@ -223,12 +223,12 @@ Vérifier après toute modification côté serveur :
 
 ```bash
 # Production : le compose et le Caddyfile
-ssh -4 -F deploy/ssh_config klassci-prod   'docker run --rm -v /etc/dokploy/compose/klassci-college-prod/code:/c:ro    alpine sha256sum /c/docker-compose.yml /c/Caddyfile'
+ssh -4 -F deploy/ssh_config klassci-prod "docker run --rm -v /etc/dokploy/compose/klassci-college-prod/code:/c:ro alpine sha256sum /c/docker-compose.yml /c/Caddyfile"
 sha256sum deploy/linux/docker-compose.dokploy.yml deploy/linux/Caddyfile
 
-# Démo : les scripts
-ssh -F deploy/ssh_config klassci   'Get-ChildItem C:\klassci-deploy -Filter *.ps1 | ForEach-Object {
-     $_.Name + " " + (Get-FileHash $_.FullName -Algorithm SHA256).Hash }'
+# Demo : les scripts PowerShell
+ssh -F deploy/ssh_config klassci "Get-ChildItem C:\klassci-deploy -Filter *.ps1 | ForEach-Object { $_.Name + ' ' + (Get-FileHash $_.FullName -Algorithm SHA256).Hash }"
+sha256sum deploy/server/*.ps1
 ```
 
 Les empreintes doivent coïncider. Un script présent sur le serveur et absent
