@@ -59,6 +59,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante *(technique)*
 - Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses *(technique)*
 - Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles *(technique)*
 - Le script d'intégration d'un établissement refuse désormais de démarrer sans confirmation : relancé tel quel, il réinitialisait le mot de passe admin d'une école en service *(technique)*

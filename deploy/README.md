@@ -268,12 +268,22 @@ Vérifier après toute modification côté serveur :
 ```bash
 # Production : le compose et le Caddyfile
 ssh -4 -F deploy/ssh_config klassci-prod "docker run --rm -v /etc/dokploy/compose/klassci-college-prod/code:/c:ro alpine sha256sum /c/docker-compose.yml /c/Caddyfile"
-sha256sum deploy/linux/docker-compose.dokploy.yml deploy/linux/Caddyfile
+
+# Cote depot : comparer le BLOB git, pas le fichier du disque.
+git show HEAD:deploy/linux/docker-compose.dokploy.yml | sha256sum
+git show HEAD:deploy/linux/Caddyfile | sha256sum
 
 # Demo : les scripts PowerShell
 ssh -F deploy/ssh_config klassci "Get-ChildItem C:\klassci-deploy -Filter *.ps1 | ForEach-Object { $_.Name + ' ' + (Get-FileHash $_.FullName -Algorithm SHA256).Hash }"
-sha256sum deploy/server/*.ps1
+for f in deploy/server/*.ps1; do echo -n "$f "; git show HEAD:"$f" | sha256sum; done
 ```
+
+**Comparer le blob, jamais le fichier du disque.** Sur un poste Windows, git
+convertit les fins de ligne a l'extraction : `sha256sum deploy/linux/Caddyfile`
+ne correspondra jamais au serveur, alors que le contenu versionne est
+rigoureusement identique. La premiere version de cette procedure faisait
+cette erreur et annoncait une derive inexistante — un controle qui crie au
+loup finit par n'etre plus lu.
 
 Les empreintes doivent coïncider. Un script présent sur le serveur et absent
 d'ici est une pièce d'infrastructure qui n'existe qu'à un exemplaire.
