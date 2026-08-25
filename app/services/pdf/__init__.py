@@ -11,6 +11,8 @@
 | `certificate_scolarite` | Certificat de scolarité officiel CI |
 | `attendance_certificate` | Attestation de fréquentation officielle CI |
 | `fee_statement` | État individuel des frais (NEW P0) |
+| `deep_report` | Rapport de fin de trimestre DEEP, 27 tableaux (landscape A4) |
+| `school_life_acts` | Demande de dossier, billet d'entrée, convocation, annulation de zéro |
 
 Call sites historiques `from app.services.pdf_service import generate_X_pdf`
 passent par la facade `pdf_service.py` qui re-exporte tout.
@@ -28,14 +30,25 @@ from app.services.pdf._helpers import (
     enum_value,
 )
 from app.services.pdf.attendance_certificate import generate_attendance_certificate_pdf
+from app.services.pdf.attendance_sheet import generate_attendance_sheet_pdf
 from app.services.pdf.bulletin import generate_bulletin_pdf
+from app.services.pdf.cahier_texte import generate_cahier_texte_pdf
 from app.services.pdf.certificate_scolarite import generate_certificate_scolarite_pdf
 from app.services.pdf.class_roster import generate_class_roster_pdf
+from app.services.pdf.class_synthesis import generate_class_synthesis_pdf
 from app.services.pdf.council_minutes import generate_council_minutes_pdf
 from app.services.pdf.daily_cash_book import generate_daily_cash_book_pdf
 from app.services.pdf.enrollment_form import generate_enrollment_form_pdf
 from app.services.pdf.fee_statement import generate_fee_statement_pdf
+from app.services.pdf.grade_report import generate_grade_report_pdf
+from app.services.pdf.grade_sheet import generate_grade_sheet_pdf
 from app.services.pdf.receipt import generate_receipt_pdf
+from app.services.pdf.school_life_acts import (
+    generate_entry_slip_pdf,
+    generate_parent_summons_pdf,
+    generate_school_file_request_pdf,
+    generate_zero_cancellation_pdf,
+)
 from app.services.pdf.theme import _ACCENT, _PRIMARY, PDFTheme, method_label, status_label
 from app.services.pdf.timetable import generate_timetable_pdf
 
@@ -53,15 +66,24 @@ __all__ = [
     "components",
     "enum_value",
     "generate_attendance_certificate_pdf",
+    "generate_attendance_sheet_pdf",
     "generate_bulletin_pdf",
+    "generate_cahier_texte_pdf",
     "generate_certificate_scolarite_pdf",
     "generate_class_roster_pdf",
+    "generate_class_synthesis_pdf",
     "generate_council_minutes_pdf",
     "generate_daily_cash_book_pdf",
     "generate_enrollment_form_pdf",
+    "generate_entry_slip_pdf",
     "generate_fee_statement_pdf",
+    "generate_grade_report_pdf",
+    "generate_grade_sheet_pdf",
+    "generate_parent_summons_pdf",
     "generate_receipt_pdf",
+    "generate_school_file_request_pdf",
     "generate_timetable_pdf",
+    "generate_zero_cancellation_pdf",
     "method_label",
     "status_label",
 ]

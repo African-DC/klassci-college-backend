@@ -100,9 +100,10 @@ def test_list_payments_with_filters() -> None:
     assert resp.status_code == 200
     mock_list.assert_called_once()
     call_kwargs = mock_list.call_args.kwargs
-    assert call_kwargs["status"] == "completed"
-    assert call_kwargs["method"] == "cash"
-    assert call_kwargs["enrollment_fee_id"] == 10
+    criteres = call_kwargs["filters"]
+    assert criteres.status == "completed"
+    assert criteres.method == "cash"
+    assert criteres.enrollment_fee_id == 10
     assert call_kwargs["page"] == 2
     assert call_kwargs["size"] == 10
 

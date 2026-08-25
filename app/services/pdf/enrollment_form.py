@@ -35,7 +35,7 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
 
     data keys (composé par enrollment_form_service) :
         enrollment_id, enrollment_number, status,
-        student: {first_name, last_name, genre, birth_date, birthplace,
+        student: {first_name, last_name, genre, birth_date, birth_place,
                   photo_url, city, commune, address},
         class_name, level_name, academic_year_name,
         parents: list[{first_name, last_name, phone, email, relationship_label}],
@@ -45,6 +45,7 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
     from weasyprint import HTML  # lazy import
 
     theme = PDFTheme.from_school(school_settings)
+    school_name = school_settings.get("school_name") or ""
 
     enrollment_id = data.get("enrollment_id", "")
     enrollment_number = data.get("enrollment_number") or f"#{enrollment_id}"
@@ -98,6 +99,8 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
     <html lang="fr">
     <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A4", margin="14mm")}</head>
     <body>
+        {ui.page_decoration(theme=theme, watermark_text=school_name)}
+        <div class="pdf-page-body">
         {
         ui.premium_header(
             school_settings,
@@ -127,6 +130,7 @@ def generate_enrollment_form_pdf(data: dict[str, Any], school_settings: dict[str
             note="Conserver précieusement — à présenter au secrétariat sur demande.",
         )
     }
+        </div>
     </body>
     </html>
     """

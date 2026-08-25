@@ -1,46 +1,39 @@
 """Read-only queries paiements : list, get, get_by_enrollment, summary."""
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
+from app.models.academic import AcademicYear
 from app.models.enrollment import Enrollment
-from app.models.fee import EnrollmentFee, Payment, PaymentStatus
+from app.models.fee import Payment, PaymentStatus
+from app.repositories import installment_repository
 from app.repositories import payment_repository as repo
+from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
 from app.schemas.payment import (
     PaymentListResponse,
     PaymentResponse,
     PaymentSummaryResponse,
 )
+from app.services import fees_paid
 from app.services.payments._response import payment_to_response
 
 
 async def list_payments(
     db: AsyncSession,
     *,
-    status: str | None = None,
-    method: str | None = None,
-    enrollment_fee_id: int | None = None,
-    enrollment_id: int | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
+    filters: PaymentFilters,
     page: int = 1,
     size: int = 20,
 ) -> PaymentListResponse:
-    """Retourne une page de paiements."""
-    payments, total = await repo.list_payments(
-        db,
-        status=status,
-        method=method,
-        enrollment_fee_id=enrollment_fee_id,
-        enrollment_id=enrollment_id,
-        date_from=date_from,
-        date_to=date_to,
-        page=page,
-        size=size,
-    )
+    """Retourne une page de paiements.
+
+    Les critères sont composés par le routeur, qui y résout au passage la
+    caisse que l'appelant a le droit de lire.
+    """
+    payments, total = await repo.list_payments(db, filters=filters, page=page, size=size)
     return PaymentListResponse(
         items=[payment_to_response(p) for p in payments],
         total=total,
@@ -63,34 +56,110 @@ async def get_student_payments(db: AsyncSession, enrollment_id: int) -> list[Pay
     return [payment_to_response(p) for p in payments]
 
 
+async def _belongs_to_year(db: AsyncSession, academic_year_id: int):
+    """Condition « ce versement relève de cette année scolaire ».
+
+    Une jointure interne sur l'inscription ferait disparaître des totaux tout
+    versement dont l'élève a été supprimé : le tableau de bord annoncerait
+    moins d'argent encaissé que le bordereau de caisse du même jour, et
+    personne ne saurait lequel croire.
+
+    On rattache donc le versement orphelin par sa date. C'est exact : une
+    somme encaissée le 12 novembre relève de l'année scolaire qui couvre le
+    12 novembre, que la fiche élève existe encore ou non.
+    """
+    dates = (
+        await db.execute(
+            select(AcademicYear.start_date, AcademicYear.end_date).where(
+                AcademicYear.id == academic_year_id
+            )
+        )
+    ).one_or_none()
+
+    par_inscription = Enrollment.academic_year_id == academic_year_id
+    if dates is None:
+        return par_inscription
+
+    start = datetime.combine(dates.start_date, time.min)
+    # Borne haute exclusive au lendemain de la fin : un versement encaissé à
+    # 16 h le dernier jour ne doit pas tomber hors de l'année.
+    end = datetime.combine(dates.end_date, time.min) + timedelta(days=1)
+    return or_(
+        par_inscription,
+        and_(
+            Payment.enrollment_id.is_(None), Payment.created_at >= start, Payment.created_at < end
+        ),
+    )
+
+
 async def get_payments_summary(
     db: AsyncSession,
     *,
     academic_year_id: int | None = None,
+    received_by: int | None = None,
+    filters: PaymentFilters | None = None,
 ) -> PaymentSummaryResponse:
-    """Agrège les statistiques de paiement (KPIs dashboard admin)."""
-    expected_stmt = select(
-        func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
-    )
-    if academic_year_id is not None:
-        expected_stmt = expected_stmt.join(
-            Enrollment, EnrollmentFee.enrollment_id == Enrollment.id
-        ).where(Enrollment.academic_year_id == academic_year_id)
+    """Agrège les statistiques de paiement (KPIs dashboard admin).
 
-    expected_row = (await db.execute(expected_stmt)).one()
-    total_expected = float(expected_row.expected)
+    Deux périmètres cohabitent ici, et c'est délibéré :
+
+    - **le recouvrement** — `total_expected`, `total_paid` et le taux qui en
+      découle. Les deux moitiés parlent de la même dette : les frais
+      obligatoires encore dus, et l'argent imputé sur eux. C'est le calcul de
+      la fiche de l'élève et de l'échéancier, appliqué à toute l'école.
+      Auparavant, l'attendu totalisait tous les frais — facultatifs et
+      exonérés compris — face à une somme brute de versements : une famille
+      exonérée après avoir versé restait comptée comme ayant payé, et le taux
+      du tableau de bord contredisait la fiche de l'élève.
+
+    - **la caisse** — `total_pending`, `total_cancelled` et le nombre de
+      versements. Ce sont des versements, pas des dettes : on les compte tels
+      qu'ils ont été enregistrés, versements orphelins compris, pour que le
+      tableau de bord ne dise pas moins que le bordereau du jour. Aucun taux
+      n'en est tiré : ils ne se comparent à aucun attendu.
+
+    `received_by` ne restreint que la seconde moitié. Le recouvrement n'a pas
+    de version « pour une personne » : il se lit sur les frais dus, pas sur
+    qui a tenu le guichet. Pour un appelant cloisonné il n'est donc pas
+    calculé du tout, et `total_paid` change de sens — ce qu'il a encaissé,
+    et non ce que l'école a recouvré.
+    """
+    cloisonne = received_by is not None
+
+    total_expected: float | None = None
+    completion_rate: float | None = None
+    if not cloisonne:
+        total_expected = float(
+            await installment_repository.mandatory_total_for_year(db, academic_year_id)
+        )
+        total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, academic_year_id))
+    else:
+        encaisse_stmt = select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Payment.status == PaymentStatus.COMPLETED.value, Payment.amount),
+                        else_=0,
+                    )
+                ),
+                0,
+            )
+        ).where(Payment.received_by == received_by)
+        if academic_year_id is not None:
+            encaisse_stmt = encaisse_stmt.select_from(Payment).outerjoin(
+                Enrollment, Payment.enrollment_id == Enrollment.id
+            )
+            encaisse_stmt = encaisse_stmt.where(await _belongs_to_year(db, academic_year_id))
+        if filters is not None:
+            # « Encaisse par vous » est un agregat de caisse, comme le compte
+            # juste a cote : les deux doivent repondre a la meme question,
+            # sinon la carte affiche un montant de l'annee sous un nombre
+            # filtre, et affirme que le filtre vaut pour les deux.
+            encaisse_stmt = apply_payment_filters(encaisse_stmt, filters)
+        total_paid = float((await db.execute(encaisse_stmt)).scalar() or 0)
 
     pay_stmt = select(
         func.count().label("payment_count"),
-        func.coalesce(
-            func.sum(
-                case(
-                    (Payment.status == PaymentStatus.COMPLETED.value, Payment.amount),
-                    else_=0,
-                )
-            ),
-            0,
-        ).label("total_paid"),
         func.coalesce(
             func.sum(
                 case(
@@ -111,17 +180,26 @@ async def get_payments_summary(
         ).label("total_cancelled"),
     )
     if academic_year_id is not None:
-        pay_stmt = pay_stmt.join(Enrollment, Payment.enrollment_id == Enrollment.id).where(
-            Enrollment.academic_year_id == academic_year_id
+        pay_stmt = pay_stmt.select_from(Payment).outerjoin(
+            Enrollment, Payment.enrollment_id == Enrollment.id
         )
+        pay_stmt = pay_stmt.where(await _belongs_to_year(db, academic_year_id))
+    if cloisonne:
+        pay_stmt = pay_stmt.where(Payment.received_by == received_by)
+    if filters is not None:
+        # Le meme predicat que la liste, pas une recopie. Sans lui, filtrer sur
+        # « Annule » laissait le bandeau annoncer tout l'argent recu au-dessus
+        # d'un tableau qui en montrait trois : deux chiffres, deux perimetres,
+        # et rien a l'ecran pour dire lequel on lit.
+        pay_stmt = apply_payment_filters(pay_stmt, filters)
 
     pay_row = (await db.execute(pay_stmt)).one()
 
-    total_paid = float(pay_row.total_paid)
     total_pending = float(pay_row.total_pending)
     total_cancelled = float(pay_row.total_cancelled)
     payment_count = pay_row.payment_count
-    completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
+    if total_expected is not None:
+        completion_rate = round(total_paid / total_expected * 100, 1) if total_expected > 0 else 0.0
 
     return PaymentSummaryResponse(
         total_expected=total_expected,

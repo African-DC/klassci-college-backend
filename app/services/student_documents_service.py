@@ -23,6 +23,8 @@ from app.core.exceptions import (
 from app.models.enrollment import Enrollment
 from app.models.user import Student, User, UserRoleEnum
 from app.services import parent_portal_service
+from app.services._document_verification_helper import DOCUMENT_RENDER_VERSION
+from app.services._school_settings_helper import load_school_settings_for_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +112,51 @@ async def verify_document_access(
 
 
 # ---------------------------------------------------------------------------
+# Sceau numérique institutionnel KLASSCI
+# ---------------------------------------------------------------------------
+
+
+async def _issue_verification(
+    db: AsyncSession,
+    *,
+    document_type: str,
+    ref_prefix: str,
+    student: Student,
+    class_name: str,
+    academic_year_name: str,
+    student_id: int,
+    issued_at: datetime,
+    source_data: object,
+) -> dict[str, Any]:
+    """Enregistre l'émission et renvoie le sceau en attente pour le PDF.
+
+    La référence (CS-AAAA-MATRICULE / AF-AAAA-MATRICULE) est calculée ici pour
+    qu'elle corresponde exactement à ce qui est signé et imprimé.
+    """
+    from app.services._document_verification_helper import build_verification
+
+    matricule = (student.enrollment_number or "").strip()
+    reference = (
+        f"{ref_prefix}-{issued_at.year}-{matricule}"
+        if matricule
+        else f"{ref_prefix}-{issued_at.year}"
+    )
+    student_name = f"{student.first_name} {student.last_name}".strip()
+
+    return await build_verification(
+        db,
+        document_type=document_type,
+        reference=reference,
+        student_name=student_name,
+        class_name=class_name,
+        academic_year=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+        source_data=source_data,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Document data composers
 # ---------------------------------------------------------------------------
 
@@ -129,20 +176,45 @@ async def compose_certificate_data(
         raise NotFoundError("Student", student_id)
 
     enrollment = await _get_active_enrollment(db, student_id)
+    issued_at = datetime.utcnow()
+    class_name = enrollment.class_.name if enrollment.class_ else ""
+    academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+    school_settings = await load_school_settings_for_pdf(db)
 
-    return {
+    source_data = {
         "student": {
             "first_name": student.first_name,
             "last_name": student.last_name,
             "birth_date": student.birth_date,
+            "birth_place": student.birth_place,
             "genre": student.genre.value if student.genre else None,
             "enrollment_number": student.enrollment_number,
             "city": student.city,
             "commune": student.commune,
         },
-        "class_name": enrollment.class_.name if enrollment.class_ else "",
-        "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
-        "issued_at": datetime.utcnow(),
+        "class_name": class_name,
+        "academic_year_name": academic_year_name,
+        "school_settings": school_settings,
+        "template_version": DOCUMENT_RENDER_VERSION,
+    }
+    verification = await _issue_verification(
+        db,
+        document_type="certificat_scolarite",
+        ref_prefix="CS",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+        source_data=source_data,
+    )
+
+    return {
+        **source_data,
+        "issued_at": issued_at,
+        "reference": verification["reference"],
+        "verification": verification,
+        "school_settings": school_settings,
     }
 
 
@@ -166,19 +238,44 @@ async def compose_attendance_certificate_data(
     summary = await get_student_attendance_summary(
         db, student_id, academic_year_id=enrollment.academic_year_id
     )
+    issued_at = datetime.utcnow()
+    class_name = enrollment.class_.name if enrollment.class_ else ""
+    academic_year_name = enrollment.academic_year.name if enrollment.academic_year else ""
+    school_settings = await load_school_settings_for_pdf(db)
 
-    return {
+    source_data = {
         "student": {
             "first_name": student.first_name,
             "last_name": student.last_name,
             "birth_date": student.birth_date,
+            "birth_place": student.birth_place,
             "genre": student.genre.value if student.genre else None,
             "enrollment_number": student.enrollment_number,
             "city": student.city,
             "commune": student.commune,
         },
-        "class_name": enrollment.class_.name if enrollment.class_ else "",
-        "academic_year_name": enrollment.academic_year.name if enrollment.academic_year else "",
+        "class_name": class_name,
+        "academic_year_name": academic_year_name,
         "attendance": summary,
-        "issued_at": datetime.utcnow(),
+        "school_settings": school_settings,
+        "template_version": DOCUMENT_RENDER_VERSION,
+    }
+    verification = await _issue_verification(
+        db,
+        document_type="attestation_frequentation",
+        ref_prefix="AF",
+        student=student,
+        class_name=class_name,
+        academic_year_name=academic_year_name,
+        student_id=student_id,
+        issued_at=issued_at,
+        source_data=source_data,
+    )
+
+    return {
+        **source_data,
+        "issued_at": issued_at,
+        "reference": verification["reference"],
+        "verification": verification,
+        "school_settings": school_settings,
     }

@@ -30,6 +30,22 @@ from app.models.attendance import (  # noqa: F401
 # Audit log (défini dans app.core.audit, re-exporté ici)
 from app.models.audit import AuditAction, AuditLog  # noqa: F401
 
+# Session de caisse (journée de guichet d'un caissier)
+from app.models.cash_session import CashSession, CashSessionStatus  # noqa: F401
+
+# Données propres au rapport de fin de trimestre de la DEEP
+from app.models.deep_report import (  # noqa: F401
+    ClassVisit,
+    Scholarship,
+    ScholarshipKind,
+    StudentTransfer,
+    TeacherTraining,
+    TransferKind,
+)
+
+# Émissions de documents officiels (vérification publique)
+from app.models.document_issuance import DocumentIssuance  # noqa: F401
+
 # Inscriptions
 from app.models.enrollment import (  # noqa: F401
     Document,
@@ -52,6 +68,8 @@ from app.models.fee import (  # noqa: F401
 
 # Notes et bulletins
 from app.models.grade import (  # noqa: F401
+    COUNTED_GRADE_STATUSES,
+    STICKY_GRADE_STATUSES,
     Bulletin,
     CouncilDecision,
     CouncilMinutes,
@@ -63,6 +81,9 @@ from app.models.grade import (  # noqa: F401
     Mention,
     SubjectAverage,
 )
+
+# Tranches de paiement (grille standard + échéancier négocié)
+from app.models.installment import EnrollmentInstallment, FeeInstallment  # noqa: F401
 
 # Messagerie interne
 from app.models.message import Message  # noqa: F401
@@ -85,6 +106,14 @@ from app.models.permission import (  # noqa: F401
 
 # Personal Access Tokens (CLI / agents)
 from app.models.personal_access_token import PersonalAccessToken  # noqa: F401
+
+# Vie scolaire (convocations, autorisations de rattrapage)
+from app.models.school_life import (  # noqa: F401
+    ParentSummons,
+    RetakeAuthorization,
+    RetakeAuthorizationEvaluation,
+    SummonsOutcome,
+)
 
 # Emploi du temps
 from app.models.timetable import (  # noqa: F401

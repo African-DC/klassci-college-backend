@@ -68,3 +68,19 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> MarkAllReadRespons
     count = await repo.mark_all_read(db, user_id)
     await db.commit()
     return MarkAllReadResponse(updated=count)
+
+
+async def mark_seen(
+    db: AsyncSession, *, user_id: int, notification_ids: list[int]
+) -> MarkAllReadResponse:
+    """Marque comme lu ce que la personne a réellement vu.
+
+    Distinct de `mark_all_read`, et pour une raison qui compte : ouvrir la
+    cloche ne veut pas dire avoir tout lu. Le stock contient des alertes plus
+    bas dans la liste, et d'autres arriveront pendant que le panneau est
+    ouvert. Les effacer toutes reviendrait à faire disparaître des tâches que
+    personne n'a vues — exactement ce qu'un compteur est censé empêcher.
+    """
+    count = await repo.mark_seen(db, user_id, notification_ids)
+    await db.commit()
+    return MarkAllReadResponse(updated=count)

@@ -9,7 +9,6 @@ Architecture (refactor 2026-05-17) :
   Payment + N PaymentAllocation en transaction.
 """
 
-from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -23,8 +22,8 @@ from app.models.fee import (
     FeeVariant,
     Payment,
     PaymentAllocation,
-    PaymentStatus,
 )
+from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
 
 # ---------------------------------------------------------------------------
 # Loaders communs (selectinload exhaustif — voir preload-relations-after-commit)
@@ -33,13 +32,18 @@ from app.models.fee import (
 
 def _payment_full_options():
     """Tout ce que le service / le PDF / la notif consomment post-commit."""
-    from app.models.user import Student
+    from app.models.user import Student, User
 
     return (
         # Pour le notif dispatch
         selectinload(Payment.enrollment)
         .selectinload(Enrollment.student)
         .selectinload(Student.user),
+        # Pour l'en-tete du recu, qui nomme la classe et l'annee. Sans elles,
+        # le `getattr` du service declenche un chargement paresseux hors
+        # contexte : MissingGreenlet, et la famille repart sans son recu.
+        selectinload(Payment.enrollment).selectinload(Enrollment.class_),
+        selectinload(Payment.enrollment).selectinload(Enrollment.academic_year),
         # Pour les allocations enrichies dans la response
         selectinload(Payment.allocations)
         .selectinload(PaymentAllocation.enrollment_fee)
@@ -49,6 +53,16 @@ def _payment_full_options():
         selectinload(Payment.enrollment_fee)
         .selectinload(EnrollmentFee.fee_variant)
         .selectinload(FeeVariant.category),
+        # Pour nommer l'encaisseur. Les deux profils sont chargés parce qu'un
+        # versement peut avoir ete encaisse par un poste administratif comme
+        # par un enseignant regisseur : lire le mauvais profil rendrait une
+        # colonne vide sur un document comptable.
+        selectinload(Payment.received_by_user).selectinload(User.staff_profile),
+        selectinload(Payment.received_by_user).selectinload(User.teacher_profile),
+        # L'annulateur se lit sur la ligne annulee, au meme titre que
+        # l'encaisseur : sans lui, « annule par » resterait vide.
+        selectinload(Payment.cancelled_by_user).selectinload(User.staff_profile),
+        selectinload(Payment.cancelled_by_user).selectinload(User.teacher_profile),
     )
 
 
@@ -75,37 +89,26 @@ async def get_payment_with_allocations(db: AsyncSession, payment_id: int) -> Pay
 async def list_payments(
     db: AsyncSession,
     *,
-    status: str | None = None,
-    method: str | None = None,
-    enrollment_fee_id: int | None = None,
-    enrollment_id: int | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
+    filters: PaymentFilters,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[Payment], int]:
-    """Retourne une page de paiements avec le total."""
-    base = select(Payment).options(*_payment_full_options())
+    """Retourne une page de paiements avec le total.
 
-    if status is not None:
-        base = base.where(Payment.status == status)
-    if method is not None:
-        base = base.where(Payment.method == method)
-    if enrollment_id is not None:
-        base = base.where(Payment.enrollment_id == enrollment_id)
-    if enrollment_fee_id is not None:
-        # Le filtre passe par les allocations (nouveau modèle)
-        base = base.where(
-            Payment.id.in_(
-                select(PaymentAllocation.payment_id).where(
-                    PaymentAllocation.enrollment_fee_id == enrollment_fee_id
-                )
-            )
-        )
-    if date_from is not None:
-        base = base.where(Payment.created_at >= date_from)
-    if date_to is not None:
-        base = base.where(Payment.created_at <= date_to)
+    Les critères arrivent composés : l'écran et les deux exports passent le
+    même objet, donc un filtre ajouté vaut pour les trois. Les recopier ici
+    en paramètres separés avait déjà laissé la recherche et la catégorie hors
+    de la requête, acceptées par l'API et silencieusement ignorées.
+
+    `filters.received_by` cloisonne un caissier sur sa propre caisse. Il est
+    appliqué dans la requête, pas après coup sur la page : filtrer en Python
+    laisserait le total et la pagination compter les versements des collègues,
+    et le caissier verrait « 128 versements » en n'en lisant que les siens.
+    """
+    base = apply_payment_filters(
+        select(Payment).options(*_payment_full_options()),
+        filters,
+    )
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
@@ -200,38 +203,14 @@ async def get_enrollment_fees_ordered_by_priority(
 
 
 # ---------------------------------------------------------------------------
-# Totals calculation — source of truth = payment_allocations
+# Combien a été versé sur un frais : voir `app.services.fees_paid`.
+#
+# La formule vivait ici une seconde fois, frais par frais. Quatre boucles
+# l'appelaient, dont celle de la caisse : encaisser sur une inscription à six
+# frais coûtait six requêtes séquentielles là où `fees_paid.paid_by_enrollment`
+# en fait une seule, groupée. Deux copies d'un même calcul finissent par
+# diverger, et c'est de l'argent qu'elles comptent.
 # ---------------------------------------------------------------------------
-
-
-async def get_total_paid_for_enrollment_fee(db: AsyncSession, enrollment_fee_id: int) -> Decimal:
-    """Total alloué à un fee depuis les paiements COMPLETED.
-
-    Source de vérité = `payment_allocations`. Exclut les payments
-    cancelled/failed/refunded.
-    """
-    stmt = (
-        select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
-        .join(Payment, PaymentAllocation.payment_id == Payment.id)
-        .where(
-            PaymentAllocation.enrollment_fee_id == enrollment_fee_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-    )
-    result = await db.execute(stmt)
-    return Decimal(str(result.scalar()))
-
-
-async def get_total_paid_for_enrollment(db: AsyncSession, enrollment_id: int) -> Decimal:
-    """Total versé sur une inscription (somme des Payment.amount COMPLETED)."""
-    stmt = select(
-        func.coalesce(func.sum(Payment.amount), 0),
-    ).where(
-        Payment.enrollment_id == enrollment_id,
-        Payment.status == PaymentStatus.COMPLETED.value,
-    )
-    result = await db.execute(stmt)
-    return Decimal(str(result.scalar()))
 
 
 # ---------------------------------------------------------------------------

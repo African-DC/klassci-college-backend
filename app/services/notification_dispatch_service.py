@@ -19,6 +19,7 @@ from app.models.notification import (
     NotificationType,
 )
 from app.models.user import User
+from app.repositories import permission_repository
 from app.services.email_service import send_email
 from app.services.sms_service import send_sms
 
@@ -83,6 +84,10 @@ async def dispatch_notification(
     notification_type: str | NotificationType,
     context: dict[str, str],
     channels: list[str | NotificationChannel] | None = None,
+    *,
+    action_url: str | None = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
 ) -> Notification:
     """Dispatche une notification sur les canaux demandés.
 
@@ -110,6 +115,14 @@ async def dispatch_notification(
         for ch in channels:
             requested_channels.add(ch.value if isinstance(ch, NotificationChannel) else ch)
 
+    # Respecte les préférences de canaux de l'utilisateur (l'in-app reste toujours actif).
+    from app.services import notification_pref_service
+
+    enabled = await notification_pref_service.get_enabled_channels(db, user_id)
+    requested_channels = {
+        c for c in requested_channels if c == NotificationChannel.IN_APP.value or c in enabled
+    }
+
     # ── Charger l'utilisateur avec profils ──
     user = await _get_user_with_profiles(db, user_id)
     if user is None:
@@ -135,6 +148,9 @@ async def dispatch_notification(
         body=body,
         read=False,
         sent_at=datetime.now(UTC),
+        action_url=action_url,
+        entity_type=entity_type,
+        entity_id=entity_id,
     )
     db.add(notification)
     await db.flush()
@@ -171,3 +187,76 @@ async def dispatch_notification(
             logger.warning("No phone number for user %d — SMS skipped", user_id)
 
     return notification
+
+
+async def dispatch_to_permission(
+    db: AsyncSession,
+    permission_slug: str,
+    notification_type: str | NotificationType,
+    context: dict[str, str],
+    channels: list[str | NotificationChannel] | None = None,
+    *,
+    action_url: str | None = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    exclude_user_id: int | None = None,
+) -> list[Notification]:
+    """Prévient quiconque a le droit de faire ce que la notification annonce.
+
+    On ne s'adresse pas à un rôle nommé. Une école confie l'encaissement à sa
+    secrétaire, une autre à un caissier, une troisième au directeur lui-même :
+    coder « caissier » ici obligerait à modifier le produit à chaque école.
+    La permission, elle, dit exactement ce qu'on cherche — la personne qui
+    peut encaisser — quel que soit le nom qu'on lui donne.
+
+    `exclude_user_id` évite d'écrire à celui qui vient d'agir. Recevoir la
+    notification de sa propre action n'apprend rien et use le compteur : c'est
+    justement ce qui fait qu'on cesse de regarder la cloche.
+
+    Retourne les notifications créées, éventuellement aucune — et ce cas
+    mérite un log : une tâche sans destinataire est une tâche que personne ne
+    verra, ce qui est un défaut de configuration, pas un silence normal.
+    """
+    user_ids = await permission_repository.list_user_ids_with_permission(db, permission_slug)
+    destinataires = [uid for uid in user_ids if uid != exclude_user_id]
+
+    if not destinataires:
+        logger.warning(
+            "Notification '%s' sans destinataire : personne ne detient '%s'",
+            notification_type,
+            permission_slug,
+        )
+        return []
+
+    envoyees: list[Notification] = []
+    for uid in destinataires:
+        try:
+            envoyees.append(
+                await dispatch_notification(
+                    db,
+                    uid,
+                    notification_type,
+                    context,
+                    channels,
+                    action_url=action_url,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                )
+            )
+        except Exception:
+            # Un destinataire injoignable ne doit pas priver les autres : la
+            # notification est un effet de bord de l'acte metier, jamais sa
+            # condition. L'inscription reste creee meme si la cloche echoue.
+            logger.exception(
+                "Notification '%s' echouee pour l'utilisateur %d", notification_type, uid
+            )
+
+    # Sans ce commit, rien n'est ecrit. `dispatch_notification` fait `add` puis
+    # `flush`, ce qui ouvre une transaction ; nos deux appelants s'executent
+    # APRES le commit metier, et la session est refermee par `get_db` sans
+    # jamais recommiter. La fermeture annule alors la transaction, et la
+    # notification disparait sans qu'aucune erreur ne soit levee.
+    if envoyees:
+        await db.commit()
+
+    return envoyees

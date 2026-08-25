@@ -21,27 +21,49 @@ logger = logging.getLogger(__name__)
 
 
 async def list_tenant_databases() -> list[str]:
-    """List all tenant databases (convention: exclude system DBs)."""
+    """List databases carrying the KLASSCI tenant schema markers."""
     from app.core.config import settings
 
     base_url = settings.DATABASE_URL.replace("/{tenant}", "/")
     engine = create_async_engine(base_url, isolation_level="AUTOCOMMIT")
     try:
         async with engine.begin() as conn:
-            result = await conn.execute(text("SHOW DATABASES"))
+            result = await conn.execute(
+                text(
+                    """
+                    SELECT table_schema
+                    FROM information_schema.tables
+                    WHERE table_name IN (
+                        'alembic_version', 'users', 'roles', 'academic_years'
+                    )
+                    AND table_schema REGEXP '^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$'
+                    GROUP BY table_schema
+                    HAVING COUNT(DISTINCT table_name) = 4
+                    ORDER BY table_schema
+                    """
+                )
+            )
             all_dbs = [row[0] for row in result.fetchall()]
     finally:
         await engine.dispose()
 
-    # Exclude MySQL system databases
-    system_dbs = {"information_schema", "mysql", "performance_schema", "sys", "alembic_migration"}
-    return [db for db in all_dbs if db not in system_dbs]
+    return all_dbs
 
 
 async def migrate_all(revision: str = "head") -> None:
     """Run Alembic migrations on all tenant databases."""
     tenants = await list_tenant_databases()
     logger.info("Found %d tenant databases", len(tenants))
+    if not tenants:
+        raise RuntimeError("No KLASSCI tenant database found; refusing to deploy")
+
+    from app.core.config import settings
+
+    if (
+        settings.APP_ENV.lower() in {"production", "prod"}
+        and settings.LOCAL_TENANT_ID not in tenants
+    ):
+        raise RuntimeError("Production tenant 'local' is missing; refusing to deploy")
 
     project_root = str(Path(__file__).resolve().parents[2])
     failed: list[tuple[str, str]] = []

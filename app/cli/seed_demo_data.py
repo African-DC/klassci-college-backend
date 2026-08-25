@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 LEVELS = [
-    {"name": "6eme", "order": 1},
-    {"name": "5eme", "order": 2},
-    {"name": "4eme", "order": 3},
-    {"name": "3eme", "order": 4},
+    {"name": "6ème", "order": 1},
+    {"name": "5ème", "order": 2},
+    {"name": "4ème", "order": 3},
+    {"name": "3ème", "order": 4},
     {"name": "2nde", "order": 5},
-    {"name": "1ere", "order": 6},
+    {"name": "1ère", "order": 6},
     {"name": "Terminale", "order": 7},
 ]
 
@@ -40,14 +40,14 @@ SERIES = [
 ]
 
 SUBJECTS = [
-    {"name": "Mathematiques", "coefficient": 4, "hours_per_week": 5},
-    {"name": "Francais", "coefficient": 4, "hours_per_week": 5},
+    {"name": "Mathématiques", "coefficient": 4, "hours_per_week": 5},
+    {"name": "Français", "coefficient": 4, "hours_per_week": 5},
     {"name": "Anglais", "coefficient": 2, "hours_per_week": 3},
     {"name": "Sciences Physiques", "coefficient": 3, "hours_per_week": 4},
     {"name": "Sciences de la Vie et de la Terre", "coefficient": 2, "hours_per_week": 3},
-    {"name": "Histoire-Geographie", "coefficient": 2, "hours_per_week": 3},
-    {"name": "Education Civique et Morale", "coefficient": 1, "hours_per_week": 1},
-    {"name": "Education Physique et Sportive", "coefficient": 1, "hours_per_week": 2},
+    {"name": "Histoire-Géographie", "coefficient": 2, "hours_per_week": 3},
+    {"name": "Éducation Civique et Morale", "coefficient": 1, "hours_per_week": 1},
+    {"name": "Éducation Physique et Sportive", "coefficient": 1, "hours_per_week": 2},
     {"name": "Dessin / Arts Plastiques", "coefficient": 1, "hours_per_week": 1},
     {"name": "Musique", "coefficient": 1, "hours_per_week": 1},
     {"name": "Philosophie", "coefficient": 3, "hours_per_week": 4},
@@ -63,6 +63,24 @@ FEE_CATEGORIES = [
     {"name": "Scolarite Trimestre 3", "description": "Frais de scolarite 3eme trimestre"},
     {"name": "COGES", "description": "Contribution au comite de gestion"},
     {"name": "Tenue scolaire", "description": "Frais de tenue obligatoire"},
+]
+
+# Calendrier scolaire 2025-2026 (aligné sur l'AY : 2025-09-08 → 2026-06-30)
+TRIMESTERS = [
+    {"label": "1er trimestre", "start": "2025-09-08", "end": "2025-12-19"},
+    {"label": "2e trimestre", "start": "2026-01-05", "end": "2026-04-03"},
+    {"label": "3e trimestre", "start": "2026-04-13", "end": "2026-06-30"},
+]
+
+# Congés scolaires (vacances multi-jours) + jours fériés civils fixes de l'année.
+HOLIDAYS = [
+    {"label": "Congés de Toussaint", "start": "2025-10-27", "end": "2025-11-02"},
+    {"label": "Congés de Noël", "start": "2025-12-20", "end": "2026-01-04"},
+    {"label": "Congés de détente", "start": "2026-02-16", "end": "2026-02-22"},
+    {"label": "Lundi de Pâques", "start": "2026-04-06", "end": "2026-04-06"},
+    {"label": "Fête du Travail", "start": "2026-05-01", "end": "2026-05-01"},
+    {"label": "Ascension", "start": "2026-05-14", "end": "2026-05-14"},
+    {"label": "Lundi de Pentecôte", "start": "2026-05-25", "end": "2026-05-25"},
 ]
 
 # 2 classes per level: A and B
@@ -107,6 +125,58 @@ async def seed_demo_data(tenant_slug: str) -> None:
                 # AY 2025-2026 créée. Refactor #97 : Class est universel,
                 # plus besoin de propager academic_year_id aux INSERT classes.
                 counts["academic_years"] = 1
+
+                # 1b. Calendrier scolaire (trimestres + congés) de l'AY.
+                # Seed-if-empty : on ne réécrit jamais un calendrier déjà
+                # configuré par l'admin (le seed peut tourner sur un tenant vivant).
+                ay_id = (
+                    await db.execute(
+                        text("SELECT id FROM academic_years WHERE name = :n"),
+                        {"n": "2025-2026"},
+                    )
+                ).scalar_one()
+
+                tri_existing = (
+                    await db.execute(
+                        text("SELECT COUNT(*) FROM trimesters WHERE academic_year_id = :ay"),
+                        {"ay": ay_id},
+                    )
+                ).scalar_one()
+                if tri_existing == 0:
+                    for i, t in enumerate(TRIMESTERS, start=1):
+                        await db.execute(
+                            text(
+                                "INSERT INTO trimesters "
+                                "(academic_year_id, label, order_no, start_date, end_date) "
+                                "VALUES (:ay, :label, :ord, :s, :e)"
+                            ),
+                            {
+                                "ay": ay_id,
+                                "label": t["label"],
+                                "ord": i,
+                                "s": t["start"],
+                                "e": t["end"],
+                            },
+                        )
+                counts["trimesters"] = len(TRIMESTERS) if tri_existing == 0 else 0
+
+                hol_existing = (
+                    await db.execute(
+                        text("SELECT COUNT(*) FROM school_holidays WHERE academic_year_id = :ay"),
+                        {"ay": ay_id},
+                    )
+                ).scalar_one()
+                if hol_existing == 0:
+                    for h in HOLIDAYS:
+                        await db.execute(
+                            text(
+                                "INSERT INTO school_holidays "
+                                "(academic_year_id, label, start_date, end_date) "
+                                "VALUES (:ay, :label, :s, :e)"
+                            ),
+                            {"ay": ay_id, "label": h["label"], "s": h["start"], "e": h["end"]},
+                        )
+                counts["holidays"] = len(HOLIDAYS) if hol_existing == 0 else 0
 
                 # 2. Levels
                 for lvl in LEVELS:

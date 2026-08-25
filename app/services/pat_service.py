@@ -103,6 +103,25 @@ async def revoke_pat(db: AsyncSession, pat_id: int) -> bool:
     return result.rowcount > 0
 
 
+async def revoke_user_pats(db: AsyncSession, user_id: int) -> int:
+    """Revoke every live token of one user. Returns how many were revoked.
+
+    Used when an account loses its right to enter: ``users.is_active`` alone
+    would not be enough, since a later reactivation would silently bring the
+    tokens — and their scopes — back to life.
+    """
+    stmt = (
+        update(PersonalAccessToken)
+        .where(
+            PersonalAccessToken.user_id == user_id,
+            PersonalAccessToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=utcnow_naive())
+    )
+    result = await db.execute(stmt)
+    return int(result.rowcount or 0)
+
+
 async def list_user_pats(db: AsyncSession, user_id: int) -> list[PersonalAccessToken]:
     stmt = (
         select(PersonalAccessToken)

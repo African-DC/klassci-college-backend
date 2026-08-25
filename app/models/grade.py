@@ -14,6 +14,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -37,8 +38,34 @@ class EvaluationType(str, enum.Enum):
 
 
 class GradeStatus(str, enum.Enum):
+    """Cycle de vie d'une note.
+
+    Trois situations que `pending` confondait, alors que le conseil de classe
+    les traite differemment : la note pas encore saisie, l'eleve absent le jour
+    de l'epreuve (zero d'office, la note compte) et l'epreuve rouverte par un
+    billet d'annulation de zero, en attente de la note de rattrapage que seul
+    l'enseignant saisira.
+    """
+
     PENDING = "pending"
     ENTERED = "entered"
+    ABSENT = "absent"
+    RETAKE_ALLOWED = "retake_allowed"
+
+
+# Statuts dont la valeur entre dans les moyennes. Le zero d'office compte comme
+# une note : l'exclure reviendrait a recompenser l'absence. Constante partagee
+# pour que bulletins, rapports et score enseignant ne divergent pas.
+COUNTED_GRADE_STATUSES: tuple[GradeStatus, ...] = (GradeStatus.ENTERED, GradeStatus.ABSENT)
+
+# Statuts qu'un enregistrement de feuille de notes laissee vide ne doit pas
+# ecraser : un rattrapage autorise et pas encore note doit survivre a la
+# sauvegarde suivante, sinon l'autorisation disparait dans le dos de tout le
+# monde et l'eleve retombe a zero.
+STICKY_GRADE_STATUSES: tuple[GradeStatus, ...] = (
+    GradeStatus.ABSENT,
+    GradeStatus.RETAKE_ALLOWED,
+)
 
 
 class Mention(str, enum.Enum):
@@ -60,6 +87,10 @@ class Evaluation(Base, TimestampMixin):
     """Évaluation (contrôle, devoir, examen) pour une classe."""
 
     __tablename__ = "evaluations"
+    # L'écran liste par classe et trimestre, trié par date décroissante.
+    __table_args__ = (
+        Index("idx_evaluations_class_trimester_date", "class_id", "trimester", "date"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -206,7 +237,17 @@ class CouncilMinutes(Base, TimestampMixin):
 
     class_: Mapped[Class] = relationship()
     academic_year: Mapped[AcademicYear] = relationship()
-    decisions: Mapped[list[CouncilStudentDecision]] = relationship(back_populates="council_minutes")
+    # `passive_deletes` laisse la clé étrangère faire son travail : elle est en
+    # CASCADE. Sans lui, SQLAlchemy tente de détacher les décisions en mettant
+    # leur `council_minutes_id` à NULL avant de supprimer le procès-verbal, sur
+    # une colonne qui ne l'accepte pas. Régénérer un PV déjà établi, ce que
+    # l'écran propose et ce que fait `generate_council_minutes`, échouait donc
+    # à la deuxième tentative.
+    decisions: Mapped[list[CouncilStudentDecision]] = relationship(
+        back_populates="council_minutes",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class CouncilStudentDecision(Base, TimestampMixin):

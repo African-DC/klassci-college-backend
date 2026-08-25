@@ -25,6 +25,16 @@ class DecisionOverrideRequest(BaseModel):
     override_reason: str = Field(..., min_length=3, max_length=1000)
 
 
+class CouncilDecisionBatchItem(BaseModel):
+    student_id: int
+    final_decision: str = Field(..., pattern=r"^(passage|repechage|redoublement|exclusion)$")
+    override_reason: str | None = Field(None, max_length=1000)
+
+
+class CouncilDecisionsBatchRequest(BaseModel):
+    decisions: list[CouncilDecisionBatchItem]
+
+
 # ---------------------------------------------------------------------------
 # Response — Student Decision
 # ---------------------------------------------------------------------------

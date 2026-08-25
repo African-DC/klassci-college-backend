@@ -36,7 +36,7 @@ def test_logs_returns_redacted_lines() -> None:
     )
     try:
         with patch(
-            "app.routers.super_admin.logs.read_journalctl",
+            "app.routers.super_admin.logs.read_service_logs",
             return_value=result,
         ):
             with TestClient(app) as client:
@@ -61,18 +61,35 @@ def test_logs_invalid_service_name_400() -> None:
     assert resp.status_code == 400
 
 
-def test_logs_journalctl_unavailable_returns_501() -> None:
+def test_logs_reader_unavailable_returns_501() -> None:
     _override()
     try:
         with patch(
-            "app.routers.super_admin.logs.read_journalctl",
-            side_effect=NotImplementedError("journalctl not available"),
+            "app.routers.super_admin.logs.read_service_logs",
+            side_effect=NotImplementedError("logs not available"),
         ):
             with TestClient(app) as client:
                 resp = client.get("/super-admin/logs?service=klassci-backend&lines=5")
     finally:
         _clear()
     assert resp.status_code == 501
+
+
+def test_windows_log_reader_reads_nssm_files(tmp_path, monkeypatch) -> None:
+    from app.services.logs_service import read_windows_service_logs
+
+    monkeypatch.setenv("KLASSCI_LOG_DIR", str(tmp_path))
+    (tmp_path / "backend.err.log").write_text(
+        "user admin@klassci.com tried to login\nAuthorization: Bearer secret-token\n",
+        encoding="utf-8",
+    )
+
+    result = read_windows_service_logs("klassci-backend", 10)
+
+    assert len(result.lines) == 2
+    assert "[REDACTED-EMAIL]" in result.lines[0]
+    assert "[REDACTED]" in result.lines[1]
+    assert result.redacted_count >= 2
 
 
 def test_logs_unauthenticated() -> None:

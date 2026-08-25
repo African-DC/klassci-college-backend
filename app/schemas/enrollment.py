@@ -3,7 +3,9 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.schemas.fee import FeeEntitlement
 
 
 class EnrollmentCreate(BaseModel):
@@ -19,6 +21,9 @@ class EnrollmentCreate(BaseModel):
         if v <= 0:
             raise ValueError("must be a positive integer")
         return v
+
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
 
 
 class EnrollmentUpdate(BaseModel):
@@ -42,6 +47,9 @@ class EnrollmentUpdate(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("class_id must be a positive integer")
         return v
+
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
 
 
 class SubscribeOptionRequest(BaseModel):
@@ -72,6 +80,8 @@ class EnrollmentResponse(BaseModel):
     student_first_name: str | None = None
     student_last_name: str | None = None
     class_name: str | None = None
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
 
 
 class EnrollmentListResponse(BaseModel):
@@ -123,6 +133,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None
@@ -132,6 +143,10 @@ class EnrollmentWithStudentCreate(BaseModel):
     # Enrollment info
     class_id: int
     academic_year_id: int | None = None  # if None, use current year
+    # Statut d'affectation : il decide du tarif applique, il doit donc
+    # etre saisi au moment ou l'inscription est creee.
+    assignment_status: str | None = None
+    assignment_decision_number: str | None = None
     fee_variant_id: int | None = None
     notes: str | None = None
 
@@ -178,9 +193,35 @@ class FeeVariantResponse(BaseModel):
     id: int
     fee_category_id: int
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     is_mandatory: bool = True
     level_id: int | None
     series_id: int | None
     academic_year_id: int
     amount: Decimal
     description: str | None
+
+
+class BulkValidateRequest(BaseModel):
+    """Les inscriptions à valider en une fois."""
+
+    enrollment_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Identifiants des inscriptions à valider.",
+    )
+
+
+class BulkValidateFailure(BaseModel):
+    enrollment_id: int
+    #: Le motif, en clair : sans lui l'ecran ne peut que dire « certaines ont
+    #: echoue », ce qui oblige a rouvrir chaque dossier pour comprendre.
+    reason: str
+
+
+class BulkValidateResponse(BaseModel):
+    validated: list[int]
+    failed: list[BulkValidateFailure]

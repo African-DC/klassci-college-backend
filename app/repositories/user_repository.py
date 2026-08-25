@@ -68,3 +68,26 @@ def get_user_full_name(user: User) -> tuple[str, str]:
     if profile is None:
         return ("", "")
     return (profile.first_name, profile.last_name)
+
+
+#: Ce qu'on écrit quand un compte n'est plus identifiable du tout.
+UNNAMED_PERSON = "—"
+
+
+def format_person_name(first_name: str | None, last_name: str | None, email: str | None) -> str:
+    """Nom lisible d'une personne, avec les mêmes replis partout.
+
+    Deux documents produits par la même école doivent nommer la même personne
+    de la même façon. Le bordereau de caisse et le journal des versements
+    passaient par des replis différents — l'un montrait l'adresse e-mail
+    entière, l'autre sa partie gauche — et deux pièces comptables du même jour
+    désignaient le même caissier sous deux noms.
+
+    Ordre : le nom du profil, puis la partie gauche de l'adresse e-mail, qui
+    identifie encore, puis un tiret cadratin explicite.
+    """
+    complet = " ".join(part for part in (first_name, last_name) if part).strip()
+    if complet:
+        return complet
+    local = (email or "").split("@")[0].strip()
+    return local or UNNAMED_PERSON

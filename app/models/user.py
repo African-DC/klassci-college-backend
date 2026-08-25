@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
@@ -62,6 +63,9 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Vrai quand le compte a un mot de passe temporaire (création par un admin
+    # ou réinitialisation) : l'utilisateur doit le changer à la 1re connexion.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Relations
     staff_profile: Mapped[StaffProfile | None] = relationship(back_populates="user", uselist=False)
@@ -79,7 +83,7 @@ class User(Base, TimestampMixin):
 # ---------------------------------------------------------------------------
 
 
-class StaffProfile(Base, TimestampMixin):
+class StaffProfile(Base, TimestampMixin, ArchivableMixin):
     """Profil personnel administratif."""
 
     __tablename__ = "staff_profiles"
@@ -97,11 +101,28 @@ class StaffProfile(Base, TimestampMixin):
     position: Mapped[str | None] = mapped_column(String(100), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Réclamés nommément par le rapport de fin de trimestre de la DEEP.
+    # Un censeur ou un directeur des études enseigne souvent quelques heures :
+    # il porte donc lui aussi une autorisation d'enseigner.
+    cnps_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    teaching_authorization_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="staff_profile")
 
 
-class TeacherProfile(Base, TimestampMixin):
+class TeacherContract(str, enum.Enum):
+    """Type de contrat d'un enseignant, tel que la DRENA le distingue.
+
+    Le rapport de fin de trimestre en fait une synthese obligatoire : sans
+    cette information, deux de ses tableaux restent vierges.
+    """
+
+    PERMANENT = "permanent"
+    VACATAIRE = "vacataire"
+    FONCTIONNAIRE = "fonctionnaire"
+
+
+class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
     """Profil enseignant."""
 
     __tablename__ = "teacher_profiles"
@@ -117,8 +138,19 @@ class TeacherProfile(Base, TimestampMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     speciality: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    # Reclames par la synthese DRENA. `None` tant que l'ecole ne les a pas
+    # saisis : on ne devine ni le sexe ni le contrat de quelqu'un.
+    genre: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    contract_type: Mapped[str | None] = mapped_column(
+        ValueEnum(TeacherContract, name="teacher_contract"), nullable=True
+    )
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Réclamés nommément par le rapport de fin de trimestre de la DEEP :
+    # l'inspection vérifie que chaque enseignant est déclaré à la CNPS et
+    # autorisé à enseigner dans le privé.
+    cnps_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    teaching_authorization_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="teacher_profile")
 
@@ -128,7 +160,7 @@ class TeacherProfile(Base, TimestampMixin):
 # ---------------------------------------------------------------------------
 
 
-class Student(Base, TimestampMixin):
+class Student(Base, TimestampMixin, ArchivableMixin):
     """Profil élève — peut ou non avoir un compte User."""
 
     __tablename__ = "students"
@@ -140,6 +172,11 @@ class Student(Base, TimestampMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Lieu de naissance : sur toute piece officielle ivoirienne un eleve est
+    # identifie par « ne(e) le ... a ... ». Distinct de `city`/`commune`, qui
+    # sont le domicile actuel : un eleve ne a Bouake et habitant Cocody n'est
+    # pas « ne a Cocody ». Facultatif, les anciens dossiers ne le portent pas.
+    birth_place: Mapped[str | None] = mapped_column(String(150), nullable=True)
     genre: Mapped[str | None] = mapped_column(ValueEnum(Genre, name="genre"), nullable=True)
     enrollment_number: Mapped[str | None] = mapped_column(
         String(50), nullable=True, unique=True, index=True
@@ -147,6 +184,12 @@ class Student(Base, TimestampMixin):
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     commune: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Etablissement d'origine et numero de la decision de transfert : les deux
+    # seules informations que la demande de dossier scolaire ne peut pas
+    # deviner. Sans elles, le secretariat retape l'adresse du college
+    # precedent a chaque demande, avec les fautes que cela suppose.
+    previous_school: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    transfer_decision_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")
@@ -166,7 +209,7 @@ class ParentRelationship(str, enum.Enum):
     OTHER = "other"
 
 
-class Parent(Base, TimestampMixin):
+class Parent(Base, TimestampMixin, ArchivableMixin):
     """Profil parent / tuteur légal."""
 
     __tablename__ = "parents"

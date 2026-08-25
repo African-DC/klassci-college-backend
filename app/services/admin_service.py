@@ -13,7 +13,8 @@ from sqlalchemy.orm import selectinload
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, SchoolSettings, Trimester
+from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
+from app.models.permission import UserRole
 from app.models.user import (
     Parent,
     ParentStudent,
@@ -24,11 +25,13 @@ from app.models.user import (
     UserRoleEnum,
 )
 from app.repositories import admin_repository as repo
+from app.repositories import student_purge_repository as purge_repo
 from app.schemas.admin import (
     AcademicYearCreate,
     AcademicYearListResponse,
     AcademicYearResponse,
     AcademicYearUpdate,
+    AdminSummaryResponse,
     ClassCreate,
     ClassListResponse,
     ClassResponse,
@@ -80,6 +83,9 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
+from app.services import archive_service, fees_paid
+from app.services import fee_entitlements as entitlements
+from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +141,15 @@ async def list_students(
         page=page,
         size=size,
     )
+
+
+async def get_admin_summary(db: AsyncSession) -> AdminSummaryResponse:
+    """Agrégats KPI (classes, acteurs, salles, matières, inscriptions).
+
+    Délègue le calcul SQL au repo ; le dict retourné mappe 1:1 le schéma.
+    """
+    data = await repo.get_admin_summary(db)
+    return AdminSummaryResponse(**data)
 
 
 async def get_students_filters(db: AsyncSession) -> StudentFiltersResponse:
@@ -226,27 +241,78 @@ async def update_student(
     return _student_to_response(refreshed)
 
 
-async def delete_student(db: AsyncSession, student_id: int, *, deleted_by: int) -> None:
-    student = await repo.get_student_by_id(db, student_id)
-    if student is None:
-        raise NotFoundError("Student", student_id)
-    async with db.begin_nested():
-        await repo.delete_student(db, student)
-        await audit_log(
-            db,
-            entity_type="student",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=student_id,
-        )
-    await db.commit()
+# ---------------------------------------------------------------------------
+# Corbeille — les fiches personnes, toutes sur la même mécanique
+# ---------------------------------------------------------------------------
+
+TEACHER_KIND = archive_service.ArchivableKind(
+    "teacher",
+    "L'enseignant",
+    TeacherProfile,
+    lambda db, r: repo.delete_teacher(db, r),
+    archive_service.owns_user_account,
+)
+STAFF_KIND = archive_service.ArchivableKind(
+    "staff",
+    "Le membre du personnel",
+    StaffProfile,
+    lambda db, r: repo.delete_staff(db, r),
+    archive_service.owns_user_account,
+)
+PARENT_KIND = archive_service.ArchivableKind(
+    "parent",
+    "Le parent",
+    Parent,
+    lambda db, r: repo.delete_parent(db, r),
+    archive_service.owns_user_account,
+)
+STUDENT_KIND = archive_service.ArchivableKind(
+    "student",
+    "L'eleve",
+    Student,
+    # Surtout pas `repo.delete_student`, qui est un `db.delete` nu : il ferait
+    # sauter le RESTRICT sur `payments.enrollment_id`. L'argent encaissé
+    # survit à la fiche de l'élève, sous identité figée.
+    purge_repo.purge_student_keeping_payments,
+    archive_service.owns_user_account,
+    load=repo.get_archived_student_by_id,
+    # Figer l'identité sur les versements AVANT que la fiche ne quitte les
+    # écrans : le filtre qui masque l'élève archivé le masque aussi derrière
+    # ses versements, et la colonne « Élève » du bordereau journalier se
+    # viderait du jour au lendemain.
+    before_archive=purge_repo.freeze_student_identity_on_payments,
+)
 
 
-async def get_student_full(db: AsyncSession, student_id: int) -> dict:
-    """Enriched student profile with user, enrollment, attendance, fees data."""
+async def _mandatory_expected_and_paid(
+    db: AsyncSession, enrollment_id: int | None
+) -> tuple[float, float]:
+    """Ce qui est dû et ce qui a été versé sur une inscription, même périmètre.
+
+    Les deux moitiés viennent du même endroit et couvrent les mêmes frais :
+    obligatoires, exonérations exclues. Les calculer séparément est ce qui
+    avait produit une fiche parent où le solde dû et le badge « à jour » se
+    contredisaient — le badge suivait l'échéancier, qui exclut les frais
+    exonérés, le solde non.
+    """
+    if enrollment_id is None:
+        return 0.0, 0.0
+    from app.repositories import installment_repository as installment_repo
+
+    expected = await installment_repo.mandatory_total(db, enrollment_id)
+    paid = await fees_paid.paid_on_mandatory(db, enrollment_id)
+    return float(expected), float(paid)
+
+
+async def get_student_full(db: AsyncSession, student_id: int, *, finance: FinanceView) -> dict:
+    """Enriched student profile with user, enrollment, attendance, fees data.
+
+    `finance` dit ce que l'appelant a le droit de lire des montants, et se
+    passe toujours : un appel interne assume `FinanceView.INTERNAL` en toutes
+    lettres plutôt que de l'obtenir en oubliant l'argument.
+    """
     from app.models.attendance import AttendanceRecord
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentStatus
 
     # Get student with user
     stmt = select(Student).where(Student.id == student_id).options(selectinload(Student.user))
@@ -259,6 +325,7 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
         "first_name": student.first_name,
         "last_name": student.last_name,
         "birth_date": student.birth_date,
+        "birth_place": student.birth_place,
         "genre": student.genre,
         "enrollment_number": student.enrollment_number,
         "photo_url": student.photo_url,
@@ -311,32 +378,23 @@ async def get_student_full(db: AsyncSession, student_id: int) -> dict:
             round((att_row.present or 0) / att_row.total * 100, 1) if att_row.total > 0 else 0.0
         )
 
-    # Financial summary
-    fees_stmt = (
-        select(
-            func.coalesce(func.sum(EnrollmentFee.amount), 0).label("expected"),
-        )
-        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id)
-    )
-    fees_row = (await db.execute(fees_stmt)).one_or_none()
-    expected = float(fees_row.expected) if fees_row else 0.0
-
-    paid_stmt = (
-        select(
-            func.coalesce(func.sum(Payment.amount), 0).label("paid"),
-        )
-        .join(EnrollmentFee, Payment.enrollment_fee_id == EnrollmentFee.id)
-        .join(Enrollment, EnrollmentFee.enrollment_id == Enrollment.id)
-        .where(Enrollment.student_id == student_id, Payment.status == PaymentStatus.COMPLETED)
-    )
-    paid_row = (await db.execute(paid_stmt)).one_or_none()
-    paid = float(paid_row.paid) if paid_row else 0.0
+    # Situation financière — même périmètre que le badge affiché juste en
+    # dessous : frais obligatoires, exonérations déduites, année en cours.
+    # Un solde calculé sur un autre périmètre que l'état de paiement produit
+    # une fiche qui se contredit elle-même, « 80 000 restants » sous un badge
+    # « à jour ».
+    expected, paid = await _mandatory_expected_and_paid(db, enrollment.id if enrollment else None)
 
     result["fees_expected"] = expected
     result["fees_paid"] = paid
     result["fees_remaining"] = expected - paid
     result["fees_rate"] = round(paid / expected * 100, 1) if expected > 0 else 0.0
+
+    if finance.status:
+        result["fee_status"], result["last_payment_date"] = await payment_pulse(
+            db, enrollment.id if enrollment else None
+        )
+    result = redact(result, finance)
 
     # Trimester breakdowns — alimentent les charts du tab Parcours.
     current_ay_id = enrollment.academic_year_id if enrollment else None
@@ -412,12 +470,12 @@ async def _student_trimester_absences(
     abs_stmt = (
         select(
             TrimesterModel.order_no.label("trimester"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)
-            ).label("justifiees"),
-            func.sum(
-                case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)
-            ).label("non_justifiees"),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.EXCUSED, 1), else_=0)).label(
+                "justifiees"
+            ),
+            func.sum(case((AttendanceRecord.status == AttendanceStatus.ABSENT, 1), else_=0)).label(
+                "non_justifiees"
+            ),
         )
         .select_from(AttendanceRecord)
         .join(AttendanceContext, AttendanceRecord.context_id == AttendanceContext.id)
@@ -654,22 +712,6 @@ async def update_teacher(
     return _teacher_to_response(refreshed)
 
 
-async def delete_teacher(db: AsyncSession, teacher_id: int, *, deleted_by: int) -> None:
-    teacher = await repo.get_teacher_by_id(db, teacher_id)
-    if teacher is None:
-        raise NotFoundError("Teacher", teacher_id)
-    async with db.begin_nested():
-        await repo.delete_teacher(db, teacher)
-        await audit_log(
-            db,
-            entity_type="teacher",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=teacher_id,
-        )
-    await db.commit()
-
-
 async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     """Enriched teacher profile with user account and aggregated KPIs."""
     from app.models.enrollment import Enrollment
@@ -694,6 +736,8 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
         "last_name": teacher.last_name,
         "speciality": teacher.speciality,
         "phone": teacher.phone,
+        "genre": teacher.genre,
+        "contract_type": teacher.contract_type,
         "created_at": teacher.created_at,
         "updated_at": teacher.updated_at,
     }
@@ -863,9 +907,112 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
 # StaffProfile
 # ---------------------------------------------------------------------------
 
+# Rôles d'accès assignables à un membre du personnel. Volontairement restreint :
+# jamais `admin` ni `super_admin` (pas d'escalade de privilèges via ce formulaire).
+STAFF_ASSIGNABLE_ROLES: Final[tuple[str, ...]] = (
+    "staff",
+    "accountant",
+    "cashier",
+    "educator",
+    "studies_director",
+    "director",
+)
+
+# Ordre de seniorite utilise quand un compte porte plusieurs roles : on affiche
+# le plus eleve. Doit couvrir tout STAFF_ASSIGNABLE_ROLES, sinon le rôle
+# retombe sur un choix arbitraire (`next(iter(names))`).
+_STAFF_ROLE_SENIORITY: Final[tuple[str, ...]] = (
+    "director",
+    "studies_director",
+    "accountant",
+    "cashier",
+    "educator",
+    "staff",
+)
+
+
+def _extract_staff_role(user: object | None) -> str | None:
+    """Résout le rôle d'accès RBAC du staff depuis user.roles (selectinloaded)."""
+    if user is None:
+        return None
+    roles = getattr(user, "roles", None) or []
+    names = {ur.role.name for ur in roles if getattr(ur, "role", None) is not None}
+    for preferred in _STAFF_ROLE_SENIORITY:
+        if preferred in names:
+            return preferred
+    return next(iter(names), None)
+
+
+async def _assert_staff_role_seeded(db: AsyncSession, role_name: str) -> None:
+    """Refuse un rôle d'accès absent de la table `roles` de ce tenant.
+
+    `_ensure_default_user_role` se contente d'un warning quand le rôle n'existe
+    pas : acceptable pour le rôle implicite d'un élève, inacceptable ici. Le rôle
+    a été choisi explicitement dans le formulaire ; l'ignorer créerait un compte
+    sans aucune permission, qui se connecte puis se prend un 403 sur chaque page
+    — avec un message « Créé avec succès » à l'écran.
+
+    Cas réel : un tenant qui n'a pas encore joué la migration 0042 ne connaît pas
+    `cashier` / `educator` / `studies_director`.
+    """
+    row = await db.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name})
+    if row.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Le rôle « {role_name} » n'est pas encore installé sur cet établissement. "
+                "Mettez la base à jour avant de l'attribuer."
+            ),
+        )
+
+
+def _validate_staff_role(role: str | None) -> str:
+    """Valide le rôle demandé contre la whitelist, défaut `staff`."""
+    if role is None or role == "":
+        return "staff"
+    if role not in STAFF_ASSIGNABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rôle invalide. Valeurs autorisées : {', '.join(STAFF_ASSIGNABLE_ROLES)}",
+        )
+    return role
+
+
+async def _set_staff_role(db: AsyncSession, user_id: int, role_name: str) -> None:
+    """Remplace le rôle d'accès du staff (retire les anciens rôles staff, pose le nouveau)."""
+    role_id = (
+        await db.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name})
+    ).scalar_one_or_none()
+    if role_id is None:
+        logger.warning("Role '%s' not seeded; user_id=%d role unchanged", role_name, user_id)
+        return
+    placeholders = ", ".join(f"'{r}'" for r in STAFF_ASSIGNABLE_ROLES)
+    await db.execute(
+        text(
+            "DELETE FROM user_roles WHERE user_id = :u "
+            f"AND role_id IN (SELECT id FROM roles WHERE name IN ({placeholders}))"
+        ),
+        {"u": user_id},
+    )
+    await db.execute(
+        text("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (:u, :r)"),
+        {"u": user_id, "r": role_id},
+    )
+    # Le DELETE/INSERT ci-dessus passe par du SQL brut : l'ORM ignore la
+    # mutation et garde en cache la collection `user.roles` deja chargee dans
+    # cette session. Un `selectinload` ne reecrit pas une collection deja
+    # peuplee, donc le refetch de `update_staff` renverrait l'ANCIEN role juste
+    # apres l'avoir change — l'admin voit son changement rejete a l'ecran alors
+    # que la base est correcte. On expire la collection pour forcer sa relecture.
+    cached_user = await db.get(User, user_id)
+    if cached_user is not None:
+        db.expire(cached_user, ["roles"])
+
 
 def _staff_to_response(s: object) -> StaffResponse:
-    return StaffResponse.model_validate(s)
+    resp = StaffResponse.model_validate(s)
+    resp.role = _extract_staff_role(getattr(s, "user", None))
+    return resp
 
 
 async def list_staff(
@@ -899,6 +1046,9 @@ async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) 
     if existing:
         raise HTTPException(status_code=400, detail=f"L'email {data.email} est déjà utilisé")
 
+    role_name = _validate_staff_role(data.role)
+    await _assert_staff_role_seeded(db, role_name)
+
     async with db.begin_nested():
         user = User(
             email=data.email,
@@ -907,9 +1057,9 @@ async def create_staff(db: AsyncSession, data: StaffCreate, *, created_by: int) 
         )
         db.add(user)
         await db.flush()
-        await _ensure_default_user_role(db, user.id, "staff")
+        await _ensure_default_user_role(db, user.id, role_name)
 
-        profile_data = data.model_dump(exclude={"email", "password"})
+        profile_data = data.model_dump(exclude={"email", "password", "role"})
         profile_data["user_id"] = user.id
         staff = await repo.create_staff(db, **profile_data)
         await audit_log(
@@ -934,39 +1084,31 @@ async def update_staff(
     if staff is None:
         raise NotFoundError("Staff", staff_id)
     changes = data.model_dump(exclude_none=True, mode="json")
-    if not changes:
+    # Le rôle d'accès n'est pas une colonne StaffProfile : on le traite à part.
+    new_role = changes.pop("role", None)
+    if new_role is not None:
+        new_role = _validate_staff_role(new_role)
+        await _assert_staff_role_seeded(db, new_role)
+    if not changes and new_role is None:
         return _staff_to_response(staff)
     async with db.begin_nested():
-        await repo.update_staff(db, staff, **changes)
+        if changes:
+            await repo.update_staff(db, staff, **changes)
+        if new_role is not None and staff.user_id is not None:
+            await _set_staff_role(db, staff.user_id, new_role)
         await audit_log(
             db,
             entity_type="staff",
             action=AuditAction.UPDATE,
             user_id=updated_by,
             entity_id=staff_id,
-            new_values=changes,
+            new_values={**changes, **({"role": new_role} if new_role else {})},
         )
     await db.commit()
     refreshed = await repo.get_staff_by_id(db, staff_id)
     if refreshed is None:
         raise NotFoundError("Staff", staff_id)
     return _staff_to_response(refreshed)
-
-
-async def delete_staff(db: AsyncSession, staff_id: int, *, deleted_by: int) -> None:
-    staff = await repo.get_staff_by_id(db, staff_id)
-    if staff is None:
-        raise NotFoundError("Staff", staff_id)
-    async with db.begin_nested():
-        await repo.delete_staff(db, staff)
-        await audit_log(
-            db,
-            entity_type="staff",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=staff_id,
-        )
-    await db.commit()
 
 
 async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
@@ -976,7 +1118,9 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
     stmt = (
         select(StaffProfile)
         .where(StaffProfile.id == staff_id)
-        .options(selectinload(StaffProfile.user))
+        .options(
+            selectinload(StaffProfile.user).selectinload(User.roles).selectinload(UserRole.role)
+        )
     )
     staff = (await db.execute(stmt)).scalar_one_or_none()
     if staff is None:
@@ -989,6 +1133,7 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
         "last_name": staff.last_name,
         "position": staff.position,
         "phone": staff.phone,
+        "role": _extract_staff_role(staff.user),
         "created_at": staff.created_at,
         "updated_at": staff.updated_at,
     }
@@ -998,6 +1143,25 @@ async def get_staff_full(db: AsyncSession, staff_id: int) -> dict:
         result["user_is_active"] = staff.user.is_active
         result["user_last_login"] = staff.user.last_login
         result["user_created_at"] = staff.user.created_at
+
+    # Activité de l'année courante (versements encaissés, inscriptions traitées)
+    from app.repositories import performance_repository as perf_repo
+
+    ay = await perf_repo.get_current_year_with_calendar(db)
+    activity: dict = {
+        "payments_count": 0,
+        "payments_amount": 0.0,
+        "enrollments_count": 0,
+        "academic_year_name": ay.name if ay else None,
+    }
+    if ay is not None and staff.user_id is not None:
+        payments = await perf_repo.payment_activity_by_user(db, ay.start_date)
+        enrollments = await perf_repo.enrollment_activity_by_user(db, ay.start_date)
+        count, amount = payments.get(staff.user_id, (0, 0))
+        activity["payments_count"] = count
+        activity["payments_amount"] = float(amount)
+        activity["enrollments_count"] = enrollments.get(staff.user_id, 0)
+    result["activity"] = activity
 
     return result
 
@@ -1034,8 +1198,67 @@ async def get_parent(db: AsyncSession, parent_id: int) -> ParentResponse:
     return _parent_to_response(parent)
 
 
-async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
-    """Enriched parent profile with user account and children list."""
+async def _child_financial_context(
+    db: AsyncSession,
+    student_id: int,
+    academic_year_id: int | None,
+    *,
+    finance: FinanceView,
+) -> dict:
+    """Classe + statut d'inscription + solde (frais) de l'élève pour l'AY courante.
+
+    Un parent règle la scolarité de ses enfants : le solde par enfant est
+    l'information la plus utile au secrétariat sur une fiche parent.
+    """
+    from app.models.enrollment import Enrollment
+
+    ctx = {
+        "class_name": None,
+        "enrollment_status": None,
+        "is_enrolled": False,
+        "fees_expected": 0.0,
+        "fees_paid": 0.0,
+        "fees_balance": 0.0,
+        "fee_status": None,
+        "last_payment_date": None,
+    }
+    if academic_year_id is None:
+        return ctx
+
+    enr = (
+        await db.execute(
+            select(Enrollment)
+            .where(
+                Enrollment.student_id == student_id,
+                Enrollment.academic_year_id == academic_year_id,
+            )
+            .options(selectinload(Enrollment.class_))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if enr is None:
+        return ctx
+
+    ctx["class_name"] = enr.class_.name if enr.class_ else None
+    ctx["enrollment_status"] = enr.status
+    ctx["is_enrolled"] = enr.status == "valide"
+
+    expected, paid = await _mandatory_expected_and_paid(db, enr.id)
+    ctx["fees_expected"] = expected
+    ctx["fees_paid"] = paid
+    ctx["fees_balance"] = expected - paid
+
+    if finance.status:
+        ctx["fee_status"], ctx["last_payment_date"] = await payment_pulse(db, enr.id)
+    return ctx
+
+
+async def get_parent_full(db: AsyncSession, parent_id: int, *, finance: FinanceView) -> dict:
+    """Enriched parent profile with user account and children list.
+
+    Chaque enfant est enrichi (classe, statut d'inscription, solde des frais)
+    et un récapitulatif financier agrégé est calculé pour l'AY courante.
+    """
     stmt = (
         select(Parent)
         .where(Parent.id == parent_id)
@@ -1055,6 +1278,8 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
         "last_name": parent.last_name,
         "phone": parent.phone,
         "email": parent.email,
+        "city": parent.city,
+        "commune": parent.commune,
         "created_at": parent.created_at,
         "updated_at": parent.updated_at,
     }
@@ -1062,18 +1287,44 @@ async def get_parent_full(db: AsyncSession, parent_id: int) -> dict:
     if parent.user:
         result["user_email"] = parent.user.email
         result["user_is_active"] = parent.user.is_active
+        result["user_last_login"] = parent.user.last_login
+
+    ay_id = await repo.get_current_academic_year_id(db)
+    ay_name = await repo.get_current_academic_year_name(db)
 
     children = []
+    total_expected = total_paid = 0.0
+    enrolled_count = 0
     for link in parent.children:
         s = link.student
+        ctx = await _child_financial_context(db, s.id, ay_id, finance=finance)
         children.append(
             {
                 "student_id": s.id,
+                "first_name": s.first_name,
+                "last_name": s.last_name,
                 "student_name": f"{s.first_name} {s.last_name}",
+                "matricule": s.enrollment_number,
+                "photo_url": s.photo_url,
                 "relationship_type": link.relationship_type,
+                **ctx,
             }
         )
-    result["children"] = children
+        total_expected += ctx["fees_expected"]
+        total_paid += ctx["fees_paid"]
+        if ctx["is_enrolled"]:
+            enrolled_count += 1
+    # Redaction une seule fois, apres les totaux : le recapitulatif du foyer
+    # se calcule sur les vraies valeurs, puis disparait avec elles.
+    result["children"] = [redact(child, finance) for child in children]
+    result["summary"] = {
+        "children_count": len(children),
+        "enrolled_count": enrolled_count,
+        "total_expected": total_expected if finance.amounts else None,
+        "total_paid": total_paid if finance.amounts else None,
+        "total_balance": (total_expected - total_paid) if finance.amounts else None,
+        "academic_year_name": ay_name,
+    }
 
     return result
 
@@ -1162,22 +1413,6 @@ async def update_parent(
     if refreshed is None:
         raise NotFoundError("Parent", parent_id)
     return _parent_to_response(refreshed)
-
-
-async def delete_parent(db: AsyncSession, parent_id: int, *, deleted_by: int) -> None:
-    parent = await repo.get_parent_by_id(db, parent_id)
-    if parent is None:
-        raise NotFoundError("Parent", parent_id)
-    async with db.begin_nested():
-        await repo.delete_parent(db, parent)
-        await audit_log(
-            db,
-            entity_type="parent",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=parent_id,
-        )
-    await db.commit()
 
 
 async def link_parent_to_student(
@@ -1952,6 +2187,69 @@ async def upsert_trimesters_for_current_year(
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def get_holidays_for_current_year(db: AsyncSession) -> list[SchoolHoliday]:
+    """Retourne les congés de l'année académique courante (vide si aucune)."""
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        return []
+    stmt = (
+        select(SchoolHoliday)
+        .where(SchoolHoliday.academic_year_id == year_id)
+        .order_by(SchoolHoliday.start_date)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def upsert_holidays_for_current_year(
+    db: AsyncSession, items: list[dict], *, updated_by: int
+) -> list[SchoolHoliday]:
+    """Remplace les congés de l'AY courante (delete + insert).
+
+    Les items reçus suivent le format `{label, start_date, end_date}`.
+    """
+    year_id = await repo.get_current_academic_year_id(db)
+    if year_id is None:
+        raise NotFoundError("AcademicYear", 0)
+
+    async with db.begin_nested():
+        await db.execute(sa_delete(SchoolHoliday).where(SchoolHoliday.academic_year_id == year_id))
+        await db.flush()
+        for item in items:
+            db.add(
+                SchoolHoliday(
+                    academic_year_id=year_id,
+                    label=item["label"],
+                    start_date=item["start_date"],
+                    end_date=item["end_date"],
+                )
+            )
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_holidays",
+            entity_id=year_id,
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            new_values={
+                "items": [
+                    {
+                        "label": it["label"],
+                        "start_date": str(it["start_date"]),
+                        "end_date": str(it["end_date"]),
+                    }
+                    for it in items
+                ]
+            },
+        )
+    await db.commit()
+    stmt = (
+        select(SchoolHoliday)
+        .where(SchoolHoliday.academic_year_id == year_id)
+        .order_by(SchoolHoliday.start_date)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
 async def update_school_info(
     db: AsyncSession, data: SchoolInfoUpdate, *, updated_by: int
 ) -> SchoolSettings:
@@ -2059,7 +2357,6 @@ async def get_student_enrollment_fees(
         EnrollmentFee,
         FeeVariant,
         OptionalFeeOption,
-        PaymentStatus,
     )
 
     student = await repo.get_student_by_id(db, student_id)
@@ -2073,20 +2370,20 @@ async def get_student_enrollment_fees(
         .where(Enrollment.student_id == student_id)
         .options(
             selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
-            selectinload(EnrollmentFee.payments),
         )
         .order_by(EnrollmentFee.enrollment_id, EnrollmentFee.id)
     )
     rows = (await db.execute(stmt)).scalars().all()
 
+    # Le calcul canonique, partagé avec les portails : un frais ne peut pas
+    # valoir un montant côté administration et un autre côté famille.
+    paid_by_fee = await fees_paid.paid_by_enrollment_fee(db, student_id)
+
     items: list[StudentEnrollmentFeeResponse] = []
     for ef in rows:
-        category_name = (
-            ef.fee_variant.category.name
-            if ef.fee_variant and ef.fee_variant.category
-            else "Inconnu"
-        )
-        paid = sum(float(p.amount) for p in ef.payments if p.status == PaymentStatus.COMPLETED)
+        categorie = ef.fee_variant.category if ef.fee_variant else None
+        category_name = categorie.name if categorie else "Inconnu"
+        paid = float(paid_by_fee.get(ef.id, 0))
         amount = float(ef.amount)
         remaining = max(0.0, amount - paid)
 
@@ -2095,6 +2392,7 @@ async def get_student_enrollment_fees(
                 id=ef.id,
                 enrollment_id=ef.enrollment_id,
                 category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 amount=amount,
                 paid=paid,
                 remaining=remaining,
@@ -2119,7 +2417,8 @@ async def get_student_enrollment_fees(
 
     for so in opt_rows:
         option = so.optional_fee_option
-        category_name = option.category.name if option and option.category else "Inconnu"
+        categorie = option.category if option else None
+        category_name = categorie.name if categorie else "Inconnu"
         option_name = option.name if option else "Inconnu"
         amount = float(option.amount * so.quantity) if option else 0.0
 
@@ -2128,6 +2427,7 @@ async def get_student_enrollment_fees(
                 id=so.id,
                 enrollment_id=so.enrollment_id,
                 category_name=category_name,
+                entitlements=entitlements.read(categorie),
                 amount=amount,
                 paid=0.0,  # Optional fees don't use EnrollmentFee/Payment
                 remaining=amount,

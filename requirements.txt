@@ -2,6 +2,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.32.1
 sqlalchemy[asyncio]==2.0.49
 aiomysql==0.3.2
+# PyMySQL 1.2.0 casse la connexion ici : rester sur 1.1.1.
+PyMySQL==1.1.1
 alembic==1.18.4
 pydantic[email]==2.10.3
 pydantic-settings==2.14.0
@@ -19,6 +21,13 @@ weasyprint==62.3
 # pydyf 0.12+ a un breaking change incompatible avec weasyprint 62.3
 # (Stream.transform retiré → AttributeError au PDF render). Pinning explicite.
 pydyf>=0.10.0,<0.12
+# ppf-datamatrix : génération de Datamatrix (norme 2D-Doc / Cachet Électronique
+# Visible) en pur Python, rendu SVG → aucune dépendance native. Imprimé sur les
+# documents officiels comme cachet signé pour la vérification publique.
+ppf-datamatrix==0.2
+# openpyxl : génération de classeurs Excel (.xlsx) en pur Python — export des
+# statistiques DREN. Aucune dépendance native, install rapide.
+openpyxl==3.1.5
 rapidfuzz==3.12.2
 sentry-sdk[fastapi]==2.18.0
 click==8.1.7

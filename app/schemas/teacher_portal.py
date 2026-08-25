@@ -96,3 +96,22 @@ class TeacherDashboardStats(BaseModel):
     next_course: TeacherNextCourse | None = None
     upcoming_evaluations: list[TeacherUpcomingEval]
     current_academic_year: str | None = None
+
+
+class TeacherRosterStudent(BaseModel):
+    """Un élève de la classe, pour l'appel enseignant."""
+
+    student_id: int
+    first_name: str
+    last_name: str
+    matricule: str | None = None
+    photo_url: str | None = None
+
+
+class TeacherClassRosterResponse(BaseModel):
+    """Liste des élèves inscrits d'une classe assignée à l'enseignant."""
+
+    class_id: int
+    class_name: str
+    academic_year_id: int
+    students: list[TeacherRosterStudent]

@@ -10,9 +10,15 @@ Architecture (refactor 2026-05-17) :
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-_ALLOWED_METHODS = {"cash", "mobile_money", "bank_transfer", "cheque"}
+from app.core.payment_methods import SELECTABLE_METHODS
+from app.schemas.fee import FeeEntitlement
+
+#: Ce qu'un formulaire peut soumettre. `mobile_money` en est volontairement
+#: absent : la valeur reste lisible en base mais n'est plus saisissable depuis
+#: que les quatre operateurs ivoiriens sont distingues.
+_ALLOWED_METHODS = set(SELECTABLE_METHODS)
 
 
 # ---------------------------------------------------------------------------
@@ -83,15 +89,39 @@ class PaymentAllocationResponse(BaseModel):
     enrollment_fee_id: int
     amount: Decimal
     fee_category_name: str | None = None
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int | None = None
     enrollment_fee_status_after: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
+class PaymentCancel(BaseModel):
+    """Le motif d'une annulation, obligatoire.
+
+    Une annulation d'encaissement est exactement l'écriture qu'un contrôle
+    vient relire. Sans phrase qui la justifie, elle ne se défend pas — et un
+    caissier qui pourrait annuler sans rien écrire pourrait encaisser puis
+    effacer.
+
+    La longueur minimale n'est **pas** ici : elle se mesure après avoir réduit
+    les espaces, ce que Pydantic ne fait pas. Deux mesures sur deux chaînes
+    différentes refuseraient « abc    def » d'un côté et l'accepteraient de
+    l'autre. `MOTIF_MINIMUM` est la seule règle ; ce plafond ne borne que la
+    taille du corps reçu.
+    """
+
+    reason: str = Field(max_length=2000)
+
+
 class PaymentResponse(BaseModel):
     id: int
-    enrollment_id: int
+    #: `None` quand l'élève a été supprimé définitivement. Le versement, lui,
+    #: reste : la caisse avait compté cet argent et les points journaliers
+    #: déjà imprimés le disent. Le nom figé prend alors le relais.
+    enrollment_id: int | None = None
     # DEPRECATED — conservé pour rétrocompat 1 release.
     enrollment_fee_id: int | None = None
     amount: Decimal
@@ -99,15 +129,45 @@ class PaymentResponse(BaseModel):
     status: str
     reference: str | None
     received_by: int | None
+    #: Qui a encaissé, en clair. Sans lui, la ligne ne répond pas à la
+    #: première question qu'on lui pose au moment d'un contrôle de caisse.
+    received_by_name: str | None = None
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    #: Renseignés seulement sur un versement annulé. Le motif figure sur le
+    #: bordereau et sur le reçu réimprimé : c'est la trace que
+    #: l'intangibilité exige, et elle doit se lire sans ouvrir l'audit.
+    cancelled_at: datetime | None = None
+    cancelled_by: int | None = None
+    cancelled_by_name: str | None = None
+    cancellation_reason: str | None = None
     # Enriched from joins
     student_name: str | None = None
     student_photo_url: str | None = None
     fee_name: str | None = None
+    #: Identité figée, recopiée sur le versement avant la suppression de la
+    #: fiche élève. Renseignée aussi dès la mise à la corbeille.
+    student_matricule: str | None = None
+    #: `True` quand la fiche élève n'existe plus. L'écran peut alors expliquer
+    #: pourquoi la ligne ne mène nulle part, au lieu de proposer un lien mort.
+    student_deleted: bool = False
+    #: `True` quand l'inscription reste à valider après ce versement.
+    #:
+    #: C'est le serveur qui le dit, comme pour `action_url` : il connaît le
+    #: statut, l'écran ne l'a pas. Sans ce champ, la caisse ne pourrait que
+    #: proposer « Valider » au hasard et laisser le serveur refuser, ce qui
+    #: revient à annoncer une action qui n'existe pas.
+    enrollment_awaiting_validation: bool = False
     # Nouveaux champs (refactor 2026-05-17)
     allocations: list[PaymentAllocationResponse] = []
+
+
+class CashierOption(BaseModel):
+    """Un compte ayant déjà encaissé — de quoi remplir le filtre « Encaissé par »."""
+
+    id: int
+    name: str
 
 
 class PaymentListResponse(BaseModel):
@@ -118,12 +178,31 @@ class PaymentListResponse(BaseModel):
 
 
 class PaymentSummaryResponse(BaseModel):
-    total_expected: float
+    """Les chiffres du tableau de bord, et ce qu'ils recouvrent exactement.
+
+    `total_expected`, `total_paid` et `completion_rate` parlent de la même
+    dette : les frais obligatoires encore dus, et l'argent imputé sur eux. Ils
+    se comparent entre eux, et ils disent la même chose que la fiche de chaque
+    élève.
+
+    `total_pending`, `total_cancelled` et `payment_count` comptent des
+    versements, pas des dettes — versements orphelins compris, pour ne pas
+    dire moins que le bordereau de caisse du jour. Ils ne se comparent pas à
+    `total_expected`.
+
+    Pour un caissier, tout ce qui compte des versements est ramené à sa
+    propre caisse, et le recouvrement n'est pas servi du tout.
+    """
+
+    #: Vide pour un appelant cloisonne sur sa caisse : le recouvrement est un
+    #: chiffre d'ecole, il ne se restreint pas a une personne. Vide et non zero,
+    #: parce qu'un zero se lirait « rien n'est du ».
+    total_expected: float | None
     total_paid: float
     total_pending: float
     total_cancelled: float
     payment_count: int
-    completion_rate: float
+    completion_rate: float | None
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +215,9 @@ class AllocationPreviewLine(BaseModel):
 
     enrollment_fee_id: int
     fee_category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    fee_category_entitlements: list[FeeEntitlement] = Field(default_factory=list)
     fee_category_priority: int
     fee_total: Decimal
     fee_paid_before: Decimal
@@ -155,3 +237,25 @@ class AllocationPreviewResponse(BaseModel):
     can_record: bool
     reject_reason: str | None
     lines: list[AllocationPreviewLine]
+
+
+# ---------------------------------------------------------------------------
+# Moyens de paiement disponibles pour l'appelant
+# ---------------------------------------------------------------------------
+
+
+class PaymentMethodOption(BaseModel):
+    """Une entrée du sélecteur d'encaissement."""
+
+    key: str
+    label: str
+
+
+class PaymentMethodListResponse(BaseModel):
+    """Ce que l'appelant peut saisir, déjà dans l'ordre d'affichage.
+
+    L'ordre vient du serveur et suit la fréquence réelle au guichet ; l'écran
+    n'a pas à le recalculer, et surtout pas à le retrier alphabétiquement.
+    """
+
+    items: list[PaymentMethodOption]

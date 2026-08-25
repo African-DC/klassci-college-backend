@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import BusinessValidationError
 from app.models.grade import Bulletin, CouncilDecision, Mention
 from app.repositories import reports_repository as repo
 from app.schemas.reports import (
@@ -19,10 +19,7 @@ from app.schemas.reports import (
     BulletinResponse,
     SubjectAverageResponse,
 )
-from app.services._school_settings_helper import (
-    load_school_settings_for_pdf as _get_school_settings,
-)
-from app.services.pdf_service import generate_bulletin_pdf
+from app.services.bulletin_document_service import get_bulletin_pdf as get_bulletin_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -322,26 +319,37 @@ async def list_bulletins(
     trimester: int | None = None,
     academic_year_id: int | None = None,
     is_published: bool | None = None,
+    page: int = 1,
+    size: int = 20,
 ) -> BulletinListResponse:
-    """Liste les bulletins, filtrables. Tous les filtres sont optionnels."""
-    bulletins = await repo.list_bulletins(
+    """Une page de bulletins. Tous les filtres sont optionnels.
+
+    `total` est le nombre de bulletins correspondant aux filtres pour toute
+    l'école, indépendant de la page affichée : un écran qui annonce un
+    effectif doit lire l'enveloppe et jamais compter `items`.
+    """
+    bulletins, total = await repo.list_bulletins_page(
         db,
         class_id=class_id,
         trimester=trimester,
         academic_year_id=academic_year_id,
         is_published=is_published,
+        page=page,
+        size=size,
     )
-    # Cache total_students per unique (class_id, academic_year_id) pair to avoid N+1
-    counts: dict[tuple[int, int], int] = {}
-    for b in bulletins:
-        key = (b.class_id, b.academic_year_id)
-        if key not in counts:
-            counts[key] = await repo.count_enrolled_students(db, b.class_id, b.academic_year_id)
+    counts = await repo.count_enrolled_students_by_class_year(
+        db,
+        sorted({b.class_id for b in bulletins}),
+        sorted({b.academic_year_id for b in bulletins}),
+    )
     return BulletinListResponse(
         items=[
-            _bulletin_to_response(b, counts[(b.class_id, b.academic_year_id)]) for b in bulletins
+            _bulletin_to_response(b, counts.get((b.class_id, b.academic_year_id), 0))
+            for b in bulletins
         ],
-        total=len(bulletins),
+        total=total,
+        page=page,
+        size=size,
     )
 
 
@@ -354,49 +362,6 @@ async def get_bulletin_response(db: AsyncSession, bulletin_id: int) -> BulletinR
         db, bulletin.class_id, bulletin.academic_year_id
     )
     return _bulletin_to_response(bulletin, total_students)
-
-
-# ---------------------------------------------------------------------------
-# Get bulletin PDF
-# ---------------------------------------------------------------------------
-
-
-async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
-    """Generate and return the PDF bytes of a bulletin."""
-    bulletin = await repo.get_bulletin_by_id(db, bulletin_id)
-    if bulletin is None:
-        raise NotFoundError("Bulletin", bulletin_id)
-
-    total_students = await repo.count_enrolled_students(
-        db, bulletin.class_id, bulletin.academic_year_id
-    )
-    school = await _get_school_settings(db)
-
-    subject_averages = [
-        {
-            "subject_name": sa.subject.name if sa.subject else "",
-            "average": sa.average,
-            "coefficient": sa.coefficient,
-        }
-        for sa in (bulletin.subject_averages or [])
-    ]
-
-    bulletin_data = {
-        "student_name": _student_full_name(bulletin.student) if bulletin.student else "",
-        "class_name": bulletin.class_.name if bulletin.class_ else "",
-        "trimester": bulletin.trimester,
-        "academic_year_name": bulletin.academic_year.name if bulletin.academic_year else "",
-        "average": bulletin.average,
-        "rank": bulletin.rank,
-        "total_students": total_students,
-        "mention": bulletin.mention,
-        "council_decision": bulletin.council_decision,
-        "teacher_comment": bulletin.teacher_comment,
-        "subject_averages": subject_averages,
-        "generated_at": bulletin.generated_at,
-    }
-
-    return generate_bulletin_pdf(bulletin_data, school)
 
 
 # ---------------------------------------------------------------------------

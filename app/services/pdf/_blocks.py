@@ -47,6 +47,11 @@ def amount_box(
     """
 
 
+def _valeur_non_nulle(valeur: str) -> bool:
+    """Vrai si la valeur affichee porte autre chose que des zeros."""
+    return any(c in "123456789" for c in str(valeur))
+
+
 def kpi_card(
     label: str,
     value: str,
@@ -54,7 +59,15 @@ def kpi_card(
     theme: PDFTheme,
     tone: str = "primary",
 ) -> str:
-    """KPI card unique. `tone` parmi primary/accent/success/warn."""
+    """KPI card unique. `tone` parmi primary/accent/success/warn.
+
+    Un ton semantique sur une valeur nulle est retrograde en neutre : « 0 %
+    de reussite » ou « 0 XOF verse » ecrit en vert dit « tout va bien », et
+    l'oeil lit la couleur avant le chiffre. Mieux vaut pas de signal qu'un
+    signal faux.
+    """
+    if tone in ("success", "warn") and not _valeur_non_nulle(value):
+        tone = "primary"
     value_class = (
         f"pdf-kpi-value pdf-kpi-value-{esc(tone)}" if tone != "primary" else "pdf-kpi-value"
     )
@@ -109,6 +122,77 @@ def info_grid(items: list[tuple[str, Any]], *, columns: int = 2) -> str:
     return (
         f'<div class="pdf-info-grid" '
         f'style="grid-template-columns:repeat({columns}, 1fr);">{rows}</div>'
+    )
+
+
+def info_table(items: list[tuple[str, Any]]) -> str:
+    """Bloc label/valeur en table borderless — alignement colonne robuste.
+
+    Rend un vrai ``<table>`` deux colonnes plutôt qu'un flex : le support
+    flexbox de WeasyPrint est partiel et laisse l'étiquette rétrécir à son
+    contenu, si bien que les valeurs ne s'alignent plus verticalement. Une
+    table garantit une colonne d'étiquettes de largeur fixe et des valeurs
+    parfaitement alignées, sans bordure.
+
+    La valeur peut être du HTML déjà composé (ex. un status pill) via un
+    dict ``{"html": "<span ...>"}`` ; sinon elle est échappée.
+    """
+    rows: list[str] = []
+    for label, value in items:
+        if isinstance(value, dict) and "html" in value:
+            val_html = str(value["html"])
+        else:
+            val_html = esc(str(value)) if value not in (None, "") else "—"
+        rows.append(
+            f'<tr><td class="pdf-info-label">{esc(label)}</td>'
+            f'<td class="pdf-info-value">{val_html}</td></tr>'
+        )
+    return f'<table class="pdf-info-table">{"".join(rows)}</table>'
+
+
+def entitlements_note(
+    lignes: list[tuple[str, str]],
+    *,
+    theme: PDFTheme,
+    title: str = "CE QUE CES FRAIS OUVRENT",
+    overflow: int = 0,
+) -> str:
+    """Bloc court « ce que la famille obtient », une ligne par frais.
+
+    Dimensionne pour un recu imprime en deux exemplaires sur une A4 coupee au
+    milieu : une demi-page fait 148 mm, dont la situation financiere de
+    l'eleve occupe deja la moitie. Le bloc se tient donc a 7 pt, une ligne par
+    categorie, et ne s'affiche pas du tout quand il n'y a rien a promettre —
+    plutot qu'un titre suivi du vide, qui inquieterait plus qu'il ne rassure.
+
+    `overflow` compte les frais regles ce jour qui n'ont pas trouve leur place :
+    on les annonce en une ligne au lieu de les taire.
+    """
+    lignes_utiles = [(nom, texte) for nom, texte in lignes if texte]
+    if not lignes_utiles:
+        return ""
+
+    corps = "".join(
+        f'<div style="margin:0 0 1mm 0; line-height:1.3;">'
+        f'<span style="font-weight:700; color:{theme.primary};">{esc(nom)}</span>'
+        f'<span style="color:var(--muted);"> · </span>{esc(texte)}</div>'
+        for nom, texte in lignes_utiles
+    )
+    reste = (
+        f'<div style="color:var(--muted); font-style:italic;">'
+        f"et {overflow} autre{'s' if overflow > 1 else ''} frais "
+        f"régl{'és' if overflow > 1 else 'é'} ce jour</div>"
+        if overflow > 0
+        else ""
+    )
+    return (
+        f'<div style="margin:3mm 0 0 0; padding:2mm 2.5mm; font-size:7pt;'
+        f" background:{theme.primary_light}; border-left:0.8mm solid {theme.accent};"
+        f' border-radius:0 1.5mm 1.5mm 0;">'
+        f'<div style="font-size:6.5pt; font-weight:700; letter-spacing:0.4pt;'
+        f' text-transform:uppercase; color:{theme.primary}; margin-bottom:1.2mm;">'
+        f"{esc(title)}</div>"
+        f"{corps}{reste}</div>"
     )
 
 

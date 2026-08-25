@@ -3,7 +3,8 @@
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.permission import Permission, RolePermission, UserRole
+from app.models.permission import Permission, Role, RolePermission, UserRole
+from app.models.user import User
 
 
 async def check_user_permission(db: AsyncSession, user_id: int, slug: str) -> bool:
@@ -35,6 +36,90 @@ async def list_user_permissions(db: AsyncSession, user_id: int) -> list[str]:
         .join(UserRole, UserRole.role_id == RolePermission.role_id)
         .where(UserRole.user_id == user_id)
         .order_by(Permission.slug)
+    )
+    result = await db.execute(stmt)
+    return [row[0] for row in result.all()]
+
+
+async def list_roles_with_permission(db: AsyncSession, slug: str) -> list[str]:
+    """Noms lisibles des rôles qui détiennent cette permission.
+
+    Sert à rendre un refus actionnable : dire « vous ne pouvez pas encaisser en
+    espèces » sans dire qui le peut oblige la personne au guichet à aller
+    demander, la famille devant elle.
+    """
+    stmt = (
+        select(Role.description, Role.name)
+        .distinct()
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(Permission.slug == slug)
+        .order_by(Role.name)
+    )
+    result = await db.execute(stmt)
+    return [description or name for description, name in result.all()]
+
+
+async def list_roles_holding(db: AsyncSession, slug: str) -> list[Role]:
+    """Les rôles qui détiennent ce slug, objets complets.
+
+    Sert à ne présenter dans l'écran de configuration que les profils qui
+    encaissent réellement : proposer de régler les moyens de paiement d'un
+    enseignant n'apprendrait rien à personne.
+    """
+    stmt = (
+        select(Role)
+        .distinct()
+        .join(RolePermission, RolePermission.role_id == Role.id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(Permission.slug == slug)
+        .order_by(Role.name)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def permission_ids_by_slug(db: AsyncSession, slugs: list[str]) -> dict[str, int]:
+    """Identifiants des permissions demandées, par slug.
+
+    Un slug absent n'apparaît pas dans le retour : l'appelant décide quoi en
+    faire, plutôt que de recevoir un `None` qui finirait écrit en base.
+    """
+    if not slugs:
+        return {}
+    stmt = select(Permission.slug, Permission.id).where(Permission.slug.in_(slugs))
+    return dict((await db.execute(stmt)).all())  # type: ignore[arg-type]
+
+
+async def role_permission_slugs(db: AsyncSession, role_id: int) -> set[str]:
+    """Slugs détenus par un rôle."""
+    stmt = (
+        select(Permission.slug)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .where(RolePermission.role_id == role_id)
+    )
+    return {row[0] for row in (await db.execute(stmt)).all()}
+
+
+async def list_user_ids_with_permission(db: AsyncSession, slug: str) -> list[int]:
+    """Les utilisateurs actifs qui détiennent cette permission.
+
+    Le chemin inverse de `check_user_permission` : au lieu de demander si une
+    personne peut agir, on demande qui peut. C'est ce que réclame une
+    notification de tâche — elle ne s'adresse pas à un rôle nommé, mais à
+    quiconque a le droit de faire ce qu'elle annonce. Une école qui confie
+    l'encaissement à sa secrétaire plutôt qu'à un caissier reçoit alors la
+    notification au bon endroit, sans qu'on ait codé « secrétaire » nulle part.
+
+    Les comptes désactivés sont exclus : leur écrire ne servirait qu'à laisser
+    la tâche sans destinataire visible.
+    """
+    stmt = (
+        select(User.id)
+        .distinct()
+        .join(UserRole, UserRole.user_id == User.id)
+        .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(Permission.slug == slug, User.is_active.is_(True))
     )
     result = await db.execute(stmt)
     return [row[0] for row in result.all()]

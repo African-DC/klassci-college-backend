@@ -42,5 +42,19 @@ async def dispatch_payment_notification(
                 "amount": str(payment.amount),
             },
         )
+
+        # Notification parents via MailPulse (email + WhatsApp) — best-effort,
+        # gardée par la config tenant (désactivée par défaut).
+        from app.services.mailpulse import workflow_service as mp_workflow
+
+        parent_body = f"Un versement de {payment.amount} FCFA a été {verb} pour votre enfant."
+        await mp_workflow.notify_student_parents(
+            db,
+            student_id=student.id,
+            event=mp_workflow.EVENT_PAYMENT,
+            subject=title,
+            body=parent_body,
+            external_event_id=f"payment-{payment.id}",
+        )
     except Exception:
         logger.exception("Failed to dispatch payment notification (kind=%s)", kind)

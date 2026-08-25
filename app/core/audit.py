@@ -2,6 +2,8 @@
 
 import enum
 import logging
+from contextvars import ContextVar
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -20,6 +22,21 @@ def _sanitize(value: object) -> str:
     return str(value).replace("\n", "\\n").replace("\r", "\\r")
 
 
+@dataclass(frozen=True, slots=True)
+class Actor:
+    """Qui agit, tel qu'on veut le relire dans dix ans."""
+
+    user_id: int
+    email: str
+    role: str
+
+
+# Pose par l'authentification, lu par `audit_log`. Evite d'ajouter un
+# parametre a 99 appels et une requete par ecriture : l'identite est deja
+# chargee au moment d'authentifier la requete.
+current_actor: ContextVar[Actor | None] = ContextVar("current_actor", default=None)
+
+
 class AuditAction(str, enum.Enum):
     """Actions auditables — utilisé à la fois comme type Python et comme ENUM MySQL."""
 
@@ -28,6 +45,9 @@ class AuditAction(str, enum.Enum):
     DELETE = "delete"
     LOGIN = "login"
     LOGOUT = "logout"
+    # Consultation d'un dossier sensible. Volumineux par nature : purge a
+    # 6 mois par le worker, la ou les ecritures sont conservees.
+    READ = "read"
 
 
 class AuditLog(Base):
@@ -49,6 +69,12 @@ class AuditLog(Base):
     )
     old_values: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     new_values: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Identite figee a l'ecriture : un compte supprime ou reattribue ne doit
+    # pas effacer la trace de ce qu'il a fait. Le nom affichable, lui, est
+    # resolu a la lecture depuis les fiches — on veut retrouver la personne
+    # telle qu'elle s'appelle aujourd'hui, pas telle qu'elle signait en 2024.
+    actor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    actor_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -78,9 +104,18 @@ async def audit_log(
     À appeler sur toutes les mutations sensibles :
     paiements, notes, inscriptions, rôles/permissions.
     """
+    # On ne recopie l'identite que si elle correspond bien a l'auteur declare :
+    # un service qui audite au nom d'un autre (import, tache planifiee) ne doit
+    # pas heriter de l'identite de la requete courante.
+    actor = current_actor.get()
+    if actor is not None and user_id is not None and actor.user_id != user_id:
+        actor = None
+
     try:
         stmt = insert(AuditLog).values(
-            user_id=user_id,
+            user_id=user_id if user_id is not None else (actor.user_id if actor else None),
+            actor_email=actor.email if actor else None,
+            actor_role=actor.role if actor else None,
             entity_type=entity_type,
             entity_id=entity_id,
             action=action,

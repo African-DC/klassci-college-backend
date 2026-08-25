@@ -12,8 +12,8 @@ from app.models.user import Student
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
-    """Retourne le profil eleve lie a un user_id."""
-    stmt = select(Student).where(Student.user_id == user_id)
+    """Retourne le profil eleve lie a un user_id, avec User selectinload pour /student/profile."""
+    stmt = select(Student).where(Student.user_id == user_id).options(selectinload(Student.user))
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -82,12 +82,14 @@ async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list
 async def get_enrollment_fees_for_enrollment(
     db: AsyncSession, enrollment_id: int
 ) -> list[EnrollmentFee]:
-    """Retourne les frais d'une inscription avec paiements et categorie."""
+    """Retourne les frais d'une inscription avec leur categorie."""
     stmt = (
         select(EnrollmentFee)
         .where(EnrollmentFee.enrollment_id == enrollment_id)
         .options(
-            selectinload(EnrollmentFee.payments),
+            # Pas de `EnrollmentFee.payments` ici : la relation est depreciee
+            # depuis la migration 0028 et plus personne ne la lit. Le detail
+            # des versements passe par `fees_paid.payments_by_enrollment_fee`.
             selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
         )
     )

@@ -9,6 +9,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.repositories import council_repository as repo
 from app.schemas.council import (
+    CouncilDecisionsBatchRequest,
     CouncilMinutesGenerateRequest,
     CouncilMinutesResponse,
     CouncilStudentDecisionResponse,
@@ -231,6 +232,95 @@ async def get_council_minutes_pdf(
     }
 
     return generate_council_minutes_pdf(council_data, school)
+
+
+# ---------------------------------------------------------------------------
+# Batch update decisions
+# ---------------------------------------------------------------------------
+
+
+async def update_decisions_batch(
+    db: AsyncSession,
+    council_id: int,
+    data: CouncilDecisionsBatchRequest,
+    updated_by: int,
+) -> CouncilMinutesResponse:
+    """Met a jour en lot les decisions finales d'un PV (delibere par eleve)."""
+    council = await repo.get_council_minutes_by_id(db, council_id)
+    if council is None:
+        raise NotFoundError("CouncilMinutes", council_id)
+    if council.is_published:
+        raise BusinessValidationError("Ce proces-verbal est valide et ne peut plus etre modifie.")
+
+    decisions_by_student = {d.student_id: d for d in council.decisions}
+
+    async with db.begin_nested():
+        for item in data.decisions:
+            decision = decisions_by_student.get(item.student_id)
+            if decision is None:
+                continue
+            await repo.update_decision_override(
+                db, decision, item.final_decision, item.override_reason
+            )
+        await audit_log(
+            db,
+            entity_type="council_minutes",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=council_id,
+            new_values={
+                "decisions": [
+                    {
+                        "student_id": item.student_id,
+                        "final_decision": item.final_decision,
+                        "override_reason": item.override_reason,
+                    }
+                    for item in data.decisions
+                ]
+            },
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_council_minutes_by_id(db, council_id)
+    if refreshed is None:
+        raise NotFoundError("CouncilMinutes", council_id)
+    return _build_response(refreshed)
+
+
+# ---------------------------------------------------------------------------
+# Validate (publish)
+# ---------------------------------------------------------------------------
+
+
+async def validate_council_minutes(
+    db: AsyncSession,
+    council_id: int,
+    validated_by: int,
+) -> CouncilMinutesResponse:
+    """Valide definitivement le PV (is_published=True, plus modifiable)."""
+    council = await repo.get_council_minutes_by_id(db, council_id)
+    if council is None:
+        raise NotFoundError("CouncilMinutes", council_id)
+
+    async with db.begin_nested():
+        await repo.set_published(db, council, True)
+        await audit_log(
+            db,
+            entity_type="council_minutes",
+            action=AuditAction.UPDATE,
+            user_id=validated_by,
+            entity_id=council_id,
+            old_values={"is_published": False},
+            new_values={"is_published": True},
+        )
+
+    await db.commit()
+
+    refreshed = await repo.get_council_minutes_by_id(db, council_id)
+    if refreshed is None:
+        raise NotFoundError("CouncilMinutes", council_id)
+    return _build_response(refreshed)
 
 
 # ---------------------------------------------------------------------------

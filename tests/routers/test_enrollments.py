@@ -214,21 +214,45 @@ def test_update_enrollment_invalid_status() -> None:
 # ---------------------------------------------------------------------------
 
 
+MOTIF = "Inscription saisie deux fois le 12 aout"
+
+
 def test_delete_enrollment_success() -> None:
-    """DELETE /enrollments/1 → 204."""
+    """DELETE /enrollments/1 avec le motif dans le corps → 204."""
     _override_deps()
     try:
         with patch(
-            "app.routers.enrollments.enrollment_service.delete_enrollment",
+            "app.routers.enrollments.archive_service.purge_record",
             new_callable=AsyncMock,
             return_value=None,
-        ):
+        ) as purge:
+            with TestClient(app) as client:
+                resp = client.request("DELETE", "/enrollments/1", json={"reason": MOTIF})
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 204
+    # Le geste passe par le chemin commun de la corbeille, avec le motif.
+    assert purge.await_args.kwargs["reason"] == MOTIF
+
+
+def test_delete_enrollment_sans_motif_est_refuse() -> None:
+    """Sans motif, rien ne part : le journal dirait qu'une inscription a
+    disparu sans dire pourquoi."""
+    _override_deps()
+    try:
+        with patch(
+            "app.routers.enrollments.archive_service.purge_record",
+            new_callable=AsyncMock,
+            return_value=None,
+        ) as purge:
             with TestClient(app) as client:
                 resp = client.delete("/enrollments/1")
     finally:
         _clear_deps()
 
-    assert resp.status_code == 204
+    assert resp.status_code == 422
+    purge.assert_not_awaited()
 
 
 def test_delete_enrollment_not_found() -> None:
@@ -238,12 +262,12 @@ def test_delete_enrollment_not_found() -> None:
     _override_deps()
     try:
         with patch(
-            "app.routers.enrollments.enrollment_service.delete_enrollment",
+            "app.routers.enrollments.archive_service.purge_record",
             new_callable=AsyncMock,
             side_effect=NotFoundError("Enrollment", 999),
         ):
             with TestClient(app) as client:
-                resp = client.delete("/enrollments/999")
+                resp = client.request("DELETE", "/enrollments/999", json={"reason": MOTIF})
     finally:
         _clear_deps()
 

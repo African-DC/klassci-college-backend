@@ -22,10 +22,10 @@ from app.services.curriculum_service import validate_subject_class_pair
 logger = logging.getLogger(__name__)
 
 
-def _build_eval_response(ev: Evaluation, actor_user_id: int | None = None) -> dict[str, Any]:
+def _build_eval_response(ev: Evaluation, counts: repo.EvaluationGradeCounts) -> dict[str, Any]:
     teacher_name = f"{ev.teacher.first_name} {ev.teacher.last_name}" if ev.teacher else ""
-    total = len(ev.grades) if ev.grades is not None else 0
-    graded = sum(1 for g in (ev.grades or []) if g.status == "entered")
+    total = counts.total
+    graded = counts.graded
     return {
         "id": ev.id,
         "title": ev.title,
@@ -53,15 +53,31 @@ async def list_evaluations(
     teacher_id: int | None = None,
     academic_year_id: int | None = None,
     trimester: int | None = None,
-) -> list[dict[str, Any]]:
-    evals = await repo.list_evaluations(
+    page: int = 1,
+    size: int = 20,
+) -> dict[str, Any]:
+    """Une page d'évaluations, avec le total de l'école dans l'enveloppe.
+
+    `total` est celui des filtres demandés, pas celui de la page : un écran
+    qui affiche « 772 évaluations » doit lire l'enveloppe, jamais compter
+    `items`.
+    """
+    evals, total = await repo.list_evaluations_page(
         db,
         class_id=class_id,
         teacher_id=teacher_id,
         academic_year_id=academic_year_id,
         trimester=trimester,
+        page=page,
+        size=size,
     )
-    return [_build_eval_response(ev) for ev in evals]
+    counts = await repo.count_grades_by_evaluation(db, [ev.id for ev in evals])
+    return {
+        "items": [_build_eval_response(ev, counts.get(ev.id, repo.NO_GRADES)) for ev in evals],
+        "total": total,
+        "page": page,
+        "size": size,
+    }
 
 
 async def teacher_exists(db: AsyncSession, teacher_id: int) -> bool:
@@ -111,7 +127,10 @@ async def create_evaluation(
     if not full_eval:
         raise NotFoundError("Evaluation", evaluation.id)
 
-    return _build_eval_response(full_eval)
+    # L'évaluation vient d'être créée avec une note « à saisir » par élève :
+    # les compteurs se lisent sur les lignes déjà chargées.
+    created_counts = repo.EvaluationGradeCounts(total=len(full_eval.grades or []), graded=0)
+    return _build_eval_response(full_eval, created_counts)
 
 
 async def get_grades(db: AsyncSession, eval_id: int) -> list[dict[str, Any]]:
@@ -141,7 +160,9 @@ async def batch_update_grades(
     if not evaluation:
         raise NotFoundError("Evaluation", eval_id)
 
-    entries = [{"student_id": e.student_id, "value": e.value} for e in payload.grades]
+    entries = [
+        {"student_id": e.student_id, "value": e.value, "absent": e.absent} for e in payload.grades
+    ]
 
     # Valider que tous les student_ids appartiennent bien à l'évaluation
     valid_student_ids = {g.student_id for g in evaluation.grades} if evaluation.grades else set()
@@ -150,6 +171,29 @@ async def batch_update_grades(
         from app.core.exceptions import BusinessValidationError
 
         raise BusinessValidationError(f"Student IDs not enrolled in this evaluation: {invalid_ids}")
+
+    # Permission fine-grained : grades:write couvre la saisie initiale (slot
+    # vide ou jamais noté), grades:edit couvre la modification d'une note
+    # déjà enregistrée. L'endpoint exige déjà grades:write comme garde
+    # grossière ; ici on vérifie en plus grades:edit pour toute entrée qui
+    # change une valeur existante. Workflow strict possible : une école peut
+    # révoquer grades:edit aux teachers pour empêcher la révision sans aval.
+    existing_by_student: dict[int, Any] = {g.student_id: g.value for g in (evaluation.grades or [])}
+    has_real_edits = any(
+        existing_by_student.get(e["student_id"]) is not None
+        and e["value"] is not None
+        and float(e["value"]) != float(existing_by_student[e["student_id"]])
+        for e in entries
+    )
+    if has_real_edits:
+        from app.core.exceptions import PermissionDeniedError
+        from app.repositories.permission_repository import check_user_permission
+
+        can_edit = await check_user_permission(db, current_user_id, "grades:edit")
+        if not can_edit:
+            raise PermissionDeniedError(
+                "grades:edit requise pour modifier une note déjà enregistrée"
+            )
 
     grades = await repo.batch_update_grades(
         db, eval_id, entries, entered_by_user_id=current_user_id
@@ -166,6 +210,26 @@ async def batch_update_grades(
     )
 
     await db.commit()
+
+    # Notification parents via MailPulse — best-effort, gardée par la config tenant
+    # (désactivée par défaut). Une notification par élève noté.
+    try:
+        from app.services.mailpulse import workflow_service as mp_workflow
+
+        notified: set[int] = set()
+        for g in grades:
+            if g.status == "entered" and g.student_id not in notified:
+                notified.add(g.student_id)
+                await mp_workflow.notify_student_parents(
+                    db,
+                    student_id=g.student_id,
+                    event=mp_workflow.EVENT_GRADE,
+                    subject="Nouvelle note disponible",
+                    body="Une nouvelle note est disponible pour votre enfant.",
+                    external_event_id=f"eval-{eval_id}-student-{g.student_id}",
+                )
+    except Exception:
+        logger.exception("Failed to dispatch grade MailPulse notifications")
 
     return [
         {

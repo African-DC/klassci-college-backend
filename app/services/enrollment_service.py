@@ -1,17 +1,21 @@
-"""Service inscriptions — logique métier CRUD + frais automatiques."""
+"""Service inscriptions — CRUD, inscription couplee eleve+inscription, options.
+
+La corbeille vit dans `enrollment_archive`, les frais dans `enrollment_fees` :
+ce fichier portait cinq sujets sans rapport, et plus personne ne le relisait
+en entier.
+"""
 
 import logging
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, Class, SchoolSettings
+from app.models.academic import AcademicYear, SchoolSettings
 from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
-from app.models.fee import EnrollmentFee, FeeCategory, FeeVariant, OptionalFeeOption
+from app.models.fee import OptionalFeeOption
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
@@ -20,9 +24,9 @@ from app.schemas.enrollment import (
     EnrollmentResponse,
     EnrollmentUpdate,
     EnrollmentWithStudentCreate,
-    FeeVariantResponse,
     ReEnrollmentCreate,
 )
+from app.services import enrollment_fees, enrollment_notifications
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -56,6 +60,8 @@ def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
         student_first_name=enrollment.student.first_name if enrollment.student else None,
         student_last_name=enrollment.student.last_name if enrollment.student else None,
         class_name=enrollment.class_.name if enrollment.class_ else None,
+        assignment_status=enrollment.assignment_status,
+        assignment_decision_number=enrollment.assignment_decision_number,
     )
 
 
@@ -98,6 +104,8 @@ async def create_enrollment(
             academic_year_id=data.academic_year_id,
             created_by=created_by,
             notes=data.notes,
+            assignment_status=data.assignment_status,
+            assignment_decision_number=data.assignment_decision_number,
         )
 
         # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat)
@@ -109,8 +117,12 @@ async def create_enrollment(
             )
 
         # Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(
-            db, enrollment.id, data.class_id, data.academic_year_id
+        await enrollment_fees.create_mandatory_enrollment_fees(
+            db,
+            enrollment.id,
+            data.class_id,
+            data.academic_year_id,
+            enrollment.assignment_status,
         )
 
         await audit_log(
@@ -127,7 +139,26 @@ async def create_enrollment(
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment.id)
+
+    # Apres le commit : le dossier existe, quel que soit le sort de la cloche.
+    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
+        db,
+        enrollment_id=refreshed.id,
+        student_name=_nom_eleve(refreshed),
+        class_name=refreshed.class_.name if refreshed.class_ else "",
+        acteur_id=created_by,
+    )
     return _to_response(refreshed)
+
+
+def _nom_eleve(enrollment: object) -> str:
+    """Le nom affichable de l'élève, ou son matricule s'il manque."""
+    student = getattr(enrollment, "student", None)
+    if student is None:
+        return "Un élève"
+    parts = [getattr(student, "last_name", ""), getattr(student, "first_name", "")]
+    nom = " ".join(p for p in parts if p).strip()
+    return nom or getattr(student, "enrollment_number", "") or "Un élève"
 
 
 async def list_enrollments(
@@ -214,7 +245,9 @@ async def update_enrollment(
 
         # Régénérer les frais obligatoires si la classe a changé
         if class_changed:
-            await regenerate_enrollment_fees(db, enrollment_id, regenerated_by=updated_by)
+            await enrollment_fees.regenerate_enrollment_fees(
+                db, enrollment_id, regenerated_by=updated_by
+            )
 
         await audit_log(
             db,
@@ -277,36 +310,6 @@ async def validate_enrollment(
     return _to_response(refreshed)
 
 
-async def delete_enrollment(
-    db: AsyncSession,
-    enrollment_id: int,
-    deleted_by: int,
-) -> None:
-    """Supprime une inscription ou lève 404. Bloque si statut valide avec paiements."""
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    if enrollment.status == EnrollmentStatus.VALIDE and enrollment.enrollment_fees:
-        has_payments = any(ef.payments for ef in enrollment.enrollment_fees)
-        if has_payments:
-            raise BusinessValidationError(
-                "Cannot delete a validated enrollment with existing payments"
-            )
-
-    async with db.begin_nested():
-        await repo.delete_enrollment(db, enrollment)
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.DELETE,
-            user_id=deleted_by,
-            entity_id=enrollment_id,
-        )
-
-    await db.commit()
-
-
 # ---------------------------------------------------------------------------
 # Current academic year helper
 # ---------------------------------------------------------------------------
@@ -352,7 +355,7 @@ async def create_enrollment_with_student(
         if class_ is None:
             raise BusinessValidationError(f"Class {data.class_id} not found")
         enrolled_count = await repo.count_active_enrollments_for_class(
-            db, data.class_id, data.academic_year_id
+            db, data.class_id, academic_year_id
         )
         if enrolled_count >= class_.max_students:
             raise BusinessValidationError(
@@ -364,6 +367,7 @@ async def create_enrollment_with_student(
             first_name=data.first_name,
             last_name=data.last_name,
             birth_date=data.birth_date,
+            birth_place=data.birth_place,
             genre=data.genre,
             enrollment_number=data.enrollment_number,
         )
@@ -445,6 +449,8 @@ async def create_enrollment_with_student(
             academic_year_id=academic_year_id,
             created_by=created_by,
             notes=data.notes,
+            assignment_status=data.assignment_status,
+            assignment_decision_number=data.assignment_decision_number,
         )
 
         # 4. Create enrollment fee if variant provided (rétrocompat)
@@ -456,8 +462,12 @@ async def create_enrollment_with_student(
             )
 
         # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await _create_mandatory_enrollment_fees(
-            db, enrollment.id, data.class_id, data.academic_year_id
+        await enrollment_fees.create_mandatory_enrollment_fees(
+            db,
+            enrollment.id,
+            data.class_id,
+            academic_year_id,
+            enrollment.assignment_status,
         )
 
         await audit_log(
@@ -507,136 +517,6 @@ async def re_enroll_student(
         notes=data.notes,
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by)
-
-
-# ---------------------------------------------------------------------------
-# Mandatory fee variants helper
-# ---------------------------------------------------------------------------
-
-
-async def _get_mandatory_fee_variants(
-    db: AsyncSession,
-    class_id: int,
-    academic_year_id: int,
-) -> list[FeeVariant]:
-    """Retourne les FeeVariants obligatoires applicables à une classe pour l'AY donnée.
-
-    Refactor #97 : Class est désormais universal (pas de academic_year_id),
-    donc l'AY est passée explicitement par le caller (qui l'a depuis le payload
-    EnrollmentCreate.academic_year_id).
-    """
-    stmt = select(Class).where(Class.id == class_id)
-    result = await db.execute(stmt)
-    class_ = result.scalar_one_or_none()
-    if class_ is None:
-        raise BusinessValidationError(f"Class {class_id} not found")
-
-    if class_.series_id:
-        series_condition = or_(
-            FeeVariant.series_id == class_.series_id,
-            FeeVariant.series_id.is_(None),
-        )
-    else:
-        series_condition = FeeVariant.series_id.is_(None)
-
-    stmt = (
-        select(FeeVariant)
-        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
-        .where(
-            FeeVariant.academic_year_id == academic_year_id,
-            FeeVariant.level_id == class_.level_id,
-            series_condition,
-            FeeCategory.is_mandatory == True,  # noqa: E712
-        )
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return list(rows)
-
-
-async def _create_mandatory_enrollment_fees(
-    db: AsyncSession,
-    enrollment_id: int,
-    class_id: int,
-    academic_year_id: int,
-) -> None:
-    """Crée les EnrollmentFee pour tous les frais obligatoires d'une classe.
-
-    Idempotent : ne crée pas de doublons si un enrollment_fee existe déjà
-    pour un fee_variant donné.
-    """
-    variants = await _get_mandatory_fee_variants(db, class_id, academic_year_id)
-    if not variants:
-        return
-
-    # Récupérer les fee_variant_ids déjà liés à cette inscription
-    existing_stmt = select(EnrollmentFee.fee_variant_id).where(
-        EnrollmentFee.enrollment_id == enrollment_id
-    )
-    existing_ids = set((await db.execute(existing_stmt)).scalars().all())
-
-    for variant in variants:
-        if variant.id not in existing_ids:
-            fee = EnrollmentFee(
-                enrollment_id=enrollment_id,
-                fee_variant_id=variant.id,
-                amount=variant.amount,
-            )
-            db.add(fee)
-
-    await db.flush()
-
-
-# ---------------------------------------------------------------------------
-# Regenerate enrollment fees
-# ---------------------------------------------------------------------------
-
-
-async def regenerate_enrollment_fees(
-    db: AsyncSession,
-    enrollment_id: int,
-    regenerated_by: int,
-) -> dict:
-    """Régénère les frais obligatoires d'une inscription.
-
-    1. Supprime les EnrollmentFee sans paiements (safe to replace)
-    2. Conserve ceux avec paiements (données financières intouchables)
-    3. Re-crée les frais obligatoires manquants (idempotent)
-    """
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    deleted_count = 0
-    kept_count = 0
-
-    for ef in list(enrollment.enrollment_fees):
-        if ef.payments:
-            kept_count += 1
-        else:
-            await db.delete(ef)
-            deleted_count += 1
-
-    await db.flush()
-
-    # Re-créer les frais obligatoires manquants
-    await _create_mandatory_enrollment_fees(
-        db, enrollment_id, enrollment.class_id, enrollment.academic_year_id
-    )
-
-    await audit_log(
-        db,
-        entity_type="enrollment",
-        action=AuditAction.UPDATE,
-        user_id=regenerated_by,
-        entity_id=enrollment_id,
-        new_values={
-            "action": "regenerate_fees",
-            "deleted": deleted_count,
-            "kept_with_payments": kept_count,
-        },
-    )
-
-    return {"deleted": deleted_count, "kept": kept_count}
 
 
 # ---------------------------------------------------------------------------
@@ -732,90 +612,33 @@ async def unsubscribe_optional_fee(
     )
 
 
-# ---------------------------------------------------------------------------
-# Fee variant resolution by class
-# ---------------------------------------------------------------------------
-
-
-async def get_applicable_fee_variants(
+async def validate_enrollments_in_bulk(
     db: AsyncSession,
-    class_id: int,
-    academic_year_id: int | None = None,
-) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnée.
+    enrollment_ids: list[int],
+    validated_by: int,
+) -> dict[str, object]:
+    """Valide plusieurs inscriptions, et dit ce qui a échoué.
 
-    Frais obligatoires : filtrés par level_id + series_id + academic_year_id.
-    Frais optionnels : level_id NULL (globaux) OU matching level — les frais
-    optionnels comme la cantine sont un prix fixe, pas lié au niveau.
+    Une école valide une cohorte entière à la rentrée. Le faire dossier par
+    dossier prend l'après-midi, et rien dans le geste ne le justifie : la
+    décision a été prise en conseil, l'écran ne fait que l'enregistrer.
 
-    Refactor #97 : Class est universel, l'AY est passée explicitement par le
-    caller (ou résolue depuis l'AY courante si omise).
+    Une inscription qui refuse la transition n'arrête pas les autres. Un lot
+    qui s'interrompt à la troisième ligne laisse le secrétariat sans savoir
+    ce qui est passé, et l'oblige à tout reprendre pour le découvrir. Chaque
+    échec est donc rendu avec son motif, en face de son identifiant.
+
+    Chaque validation garde son audit propre : le lot est une commodité de
+    l'écran, pas une opération à part que l'historique ne saurait pas relire.
     """
-    stmt = select(Class).where(Class.id == class_id)
-    result = await db.execute(stmt)
-    class_ = result.scalar_one_or_none()
-    if class_ is None:
-        raise BusinessValidationError(f"Class {class_id} not found")
+    validees: list[int] = []
+    echecs: list[dict[str, object]] = []
 
-    if academic_year_id is None:
-        current_ay_stmt = select(AcademicYear).where(AcademicYear.is_current.is_(True))
-        current_ay = (await db.execute(current_ay_stmt)).scalar_one_or_none()
-        if current_ay is None:
-            raise BusinessValidationError("Aucune année académique courante configurée.")
-        academic_year_id = current_ay.id
+    for enrollment_id in enrollment_ids:
+        try:
+            await validate_enrollment(db, enrollment_id, validated_by)
+            validees.append(enrollment_id)
+        except (BusinessValidationError, NotFoundError) as exc:
+            echecs.append({"enrollment_id": enrollment_id, "reason": str(exc.detail)})
 
-    # Series condition: exact match OR NULL (applicable à tout le niveau)
-    if class_.series_id:
-        series_condition = or_(
-            FeeVariant.series_id == class_.series_id,
-            FeeVariant.series_id.is_(None),
-        )
-    else:
-        series_condition = FeeVariant.series_id.is_(None)
-
-    # Level condition: exact match for mandatory, OR NULL for optional (global fees)
-    level_condition = or_(
-        FeeVariant.level_id == class_.level_id,
-        FeeVariant.level_id.is_(None),
-    )
-
-    stmt = (
-        select(FeeVariant)
-        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
-        .options(selectinload(FeeVariant.category))
-        .where(
-            or_(
-                # Mandatory: must match academic_year + level + series
-                and_(
-                    FeeCategory.is_mandatory,
-                    FeeVariant.academic_year_id == academic_year_id,
-                    FeeVariant.level_id == class_.level_id,
-                    series_condition,
-                ),
-                # Optional: match academic_year, level NULL (global) or matching
-                and_(
-                    FeeCategory.is_mandatory.is_(False),
-                    FeeVariant.academic_year_id == academic_year_id,
-                    level_condition,
-                    series_condition,
-                ),
-            )
-        )
-        .order_by(FeeCategory.is_mandatory.desc(), FeeVariant.fee_category_id, FeeVariant.id)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-
-    return [
-        FeeVariantResponse(
-            id=fv.id,
-            fee_category_id=fv.fee_category_id,
-            category_name=fv.category.name if fv.category else str(fv.fee_category_id),
-            is_mandatory=fv.category.is_mandatory if fv.category else True,
-            level_id=fv.level_id,
-            series_id=fv.series_id,
-            academic_year_id=fv.academic_year_id,
-            amount=fv.amount,
-            description=fv.description,
-        )
-        for fv in rows
-    ]
+    return {"validated": validees, "failed": echecs}

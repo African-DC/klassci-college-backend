@@ -27,6 +27,20 @@ _PDF_EXCLUDE = {
     "day_end_hour",
     "created_at",
     "updated_at",
+    # MailPulse — config technique et secrets, jamais dans un PDF.
+    "mailpulse_enabled",
+    "mailpulse_base_url",
+    "mailpulse_api_key",
+    "mailpulse_sender_email",
+    "mailpulse_sender_name",
+    "mailpulse_default_language",
+    "mailpulse_timeout",
+    "mailpulse_real_workflows_enabled",
+    "mailpulse_test_email_enabled",
+    "mailpulse_test_whatsapp_enabled",
+    "mailpulse_test_email_recipients",
+    "mailpulse_test_phone_recipients",
+    "mailpulse_inbound_secret",
 }
 
 

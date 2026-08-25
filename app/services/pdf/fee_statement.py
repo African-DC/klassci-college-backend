@@ -86,7 +86,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
 
     data keys :
         student_name, class_name, academic_year_name, enrollment_id,
-        fees: list[{category_name, amount, paid, remaining, status}],
+        fees: list[{category_name, amount, paid, remaining, status, entitlements}],
         payments: list[{id, created_at, method, reference, amount, status}],
         totals: {total_expected, total_paid, total_remaining, completion_rate},
         issued_at: datetime
@@ -94,6 +94,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
     from weasyprint import HTML  # lazy import
 
     theme = PDFTheme.from_school(school_settings)
+    school_name = school_settings.get("school_name") or ""
 
     student_name = data.get("student_name", "")
     class_name = data.get("class_name", "")
@@ -123,11 +124,22 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         cards=[
             {"label": "Total attendu", "value": f"{_fmt(total_expected)} XOF"},
             {"label": "Total versé", "value": f"{_fmt(total_paid)} XOF", "tone": "success"},
-            {"label": "Reste à payer", "value": f"{_fmt(total_remaining)} XOF", "tone": "accent"},
             {"label": "Avancement", "value": f"{completion_rate:.1f}%"},
         ],
         theme=theme,
     )
+
+    balance_box = ui.amount_box(
+        total_remaining, theme=theme, label="Solde restant dû", currency="XOF"
+    )
+
+    fees_total_row = [
+        {"value": "Total", "type": "emphasis"},
+        {"value": _fmt(total_expected), "type": "num"},
+        {"value": _fmt(total_paid), "type": "num"},
+        {"value": _fmt(total_remaining), "type": "num-emphasis"},
+        "",
+    ]
 
     fees_section = ui.section_title("Détail des frais", theme=theme) + ui.premium_table(
         headers=[
@@ -140,6 +152,14 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         rows=_fee_rows(fees),
         theme=theme,
         empty_message="Aucun frais configuré pour cette inscription.",
+        total_row=fees_total_row if fees else None,
+        col_widths=["34%", "17%", "17%", "17%", "15%"],
+    )
+
+    entitlements_section = ui.entitlements_note(
+        [(f.get("category_name", ""), f.get("entitlements", "")) for f in fees],
+        theme=theme,
+        title="Ce que ces frais ouvrent",
     )
 
     payments_section = ui.section_title(
@@ -156,6 +176,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         rows=_payment_rows(payments),
         theme=theme,
         empty_message="Aucun versement enregistré à ce jour.",
+        col_widths=["8%", "14%", "18%", "24%", "18%", "18%"],
     )
 
     html = f"""
@@ -163,6 +184,8 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
     <html lang="fr">
     <head><meta charset="UTF-8">{ui.base_styles(theme, page_size="A4", margin="15mm")}</head>
     <body>
+        {ui.page_decoration(theme=theme, watermark_text=school_name)}
+        <div class="pdf-page-body">
         {
         ui.premium_header(
             school_settings,
@@ -177,7 +200,11 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
         {kpis}
         {ui.progress_bar(completion_rate, theme=theme)}
 
+        {balance_box}
+
         {fees_section}
+
+        {entitlements_section}
 
         {payments_section}
 
@@ -188,6 +215,7 @@ def generate_fee_statement_pdf(data: dict[str, Any], school_settings: dict[str, 
             note="Document généré automatiquement — non contractuel sans signature.",
         )
     }
+        </div>
     </body>
     </html>
     """

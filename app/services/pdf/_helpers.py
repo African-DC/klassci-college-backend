@@ -10,10 +10,44 @@ import base64
 import enum
 import logging
 import os
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Mention d'etat civil absente sur une piece officielle
+# ---------------------------------------------------------------------------
+
+# Points de suite. Une piece officielle ivoirienne doit porter la mention
+# « ne(e) le ... a ... » : la supprimer rend le document non conforme, et y
+# imprimer « None », un vide ou une valeur approchante le rend faux. On imprime
+# donc la ligne a completer et parapher a la main au secretariat, comme sur les
+# imprimes prefectoraux.
+OFFICIAL_BLANK = "……………………"
+
+
+def birth_mention(student: Mapping[str, Any]) -> tuple[str, str]:
+    """Date et lieu de naissance prêts à imprimer sur une pièce officielle.
+
+    Retourne `(date, lieu)` déjà formatés. Deux garanties, qui sont la
+    raison d'être de cette fonction :
+
+    - **aucun repli sur `city` / `commune`.** Ce sont le domicile actuel.
+      Un élève né à Bouaké et domicilié à Cocody n'est pas « né à Cocody »,
+      et un certificat qui l'affirme est un faux, opposable à
+      l'administration qui le réclame.
+    - **jamais `None` ni de vide.** L'information manquante sort en points
+      de suite, la ligne que le secrétariat complète et paraphe à la main,
+      comme sur les imprimés préfectoraux. Retirer la mention rendrait le
+      document non conforme ; la laisser vide le rendrait illisible.
+    """
+    birth_date = student.get("birth_date")
+    date_str = birth_date.strftime("%d/%m/%Y") if birth_date else OFFICIAL_BLANK
+    place = (student.get("birth_place") or "").strip() or OFFICIAL_BLANK
+    return date_str, place
 
 
 # ---------------------------------------------------------------------------
@@ -49,16 +83,18 @@ _MIME_BY_EXT = {
 }
 
 
-def image_to_datauri(url_or_path: str | None) -> str | None:
-    """Resolve an image URL/path and return a `data:image/...;base64,...` URI.
+def image_bytes(url_or_path: str | None) -> tuple[bytes, str] | None:
+    """Resolve an image URL/path and return its `(content, mime)`.
 
     Accepts:
     - relative URLs like `/uploads/photos/abc.png` (resolved against `_UPLOAD_ROOT`)
     - absolute filesystem paths
     Returns None if the file cannot be found or read.
 
-    WeasyPrint embeds inline data URIs reliably across multi-tenant containers,
-    avoiding the brittleness of file:// or HTTP-fetched assets.
+    Partagé par le PDF (qui en fait une data URI) et par l'export Excel (qui
+    a besoin des octets bruts pour poser le logo dans la feuille) : une seule
+    résolution de chemin, donc un logo qui apparaît aux deux endroits ou à
+    aucun, jamais à un seul.
     """
     if not url_or_path:
         return None
@@ -74,14 +110,27 @@ def image_to_datauri(url_or_path: str | None) -> str | None:
             if not os.path.exists(path):
                 continue
             with open(path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("ascii")
+                content = f.read()
             ext = path.rsplit(".", 1)[-1].lower() if "." in path else "png"
-            mime = _MIME_BY_EXT.get(ext, "image/png")
-            return f"data:{mime};base64,{encoded}"
+            return content, _MIME_BY_EXT.get(ext, "image/png")
         except OSError as exc:
             logger.warning("Could not embed image %s: %s", path, exc)
             continue
     return None
+
+
+def image_to_datauri(url_or_path: str | None) -> str | None:
+    """Resolve an image URL/path and return a `data:image/...;base64,...` URI.
+
+    WeasyPrint embeds inline data URIs reliably across multi-tenant containers,
+    avoiding the brittleness of file:// or HTTP-fetched assets.
+    """
+    resolved = image_bytes(url_or_path)
+    if resolved is None:
+        return None
+    content, mime = resolved
+    encoded = base64.b64encode(content).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 # ---------------------------------------------------------------------------

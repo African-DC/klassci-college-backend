@@ -73,6 +73,48 @@ class TeacherAvailabilityResponse(BaseModel):
     preferred: bool
 
 
+class TeacherWeekBusySlot(BaseModel):
+    """Un empechement sur la semaine type d'un enseignant.
+
+    `kind` vaut « course » quand il enseigne ailleurs, « unavailable » quand la
+    plage a ete fermee. L'ecran a besoin de la distinction : un cours se
+    deplace, une indisponibilite se discute avec l'interesse.
+    """
+
+    day: str
+    start_time: str
+    end_time: str
+    kind: str
+    label: str
+    class_name: str | None = None
+
+
+class TeacherWeekOpenSlot(BaseModel):
+    """Une plage que l'enseignant a declaree ouverte."""
+
+    day: str
+    start_time: str
+    end_time: str
+    preferred: bool = False
+
+
+class TeacherWeekResponse(BaseModel):
+    """La semaine type d'un enseignant, telle qu'elle contraint la saisie.
+
+    `has_declarations` porte la regle et evite de la deviner cote ecran : tant
+    qu'un enseignant n'a rien declare, il est disponible partout et `open` est
+    vide sans que cela ferme quoi que ce soit. Des qu'il a declare une plage,
+    seules celles de `open` restent ouvertes, comme pour la generation
+    automatique.
+    """
+
+    teacher_id: int
+    teacher_name: str
+    has_declarations: bool
+    busy: list[TeacherWeekBusySlot]
+    open: list[TeacherWeekOpenSlot]
+
+
 # ---------------------------------------------------------------------------
 # OR-Tools generation
 # ---------------------------------------------------------------------------

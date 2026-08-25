@@ -13,7 +13,11 @@ Architecture (refactor 2026-05-18) :
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+from app.core.payment_methods import PAYMENT_METHOD_LABELS_FR as _PAYMENT_METHOD_LABELS_FR
+from app.core.payment_methods import method_label as _method_label
 
 # ---------------------------------------------------------------------------
 # Palette KLASSCI par défaut (fallback si school.primary_color is NULL)
@@ -21,6 +25,44 @@ from typing import Any
 
 DEFAULT_PRIMARY = "#0F3F8C"  # Bleu KLASSCI
 DEFAULT_ACCENT = "#F58220"  # Orange KLASSCI
+
+# ---------------------------------------------------------------------------
+# Polices embarquées (rendu identique sur tout serveur — les .ttf sont dans
+# le repo). Spectral = display (titres, nom d'école) ; Inter = corps + données.
+# ---------------------------------------------------------------------------
+
+FONTS_DIR = Path(__file__).resolve().parent / "fonts"
+
+
+def _font_uri(filename: str) -> str:
+    return (FONTS_DIR / filename).as_uri()
+
+
+def font_face_css() -> str:
+    """Bloc `@font-face` pour Spectral (statique) + Inter (variable, axe wght).
+
+    Injecté en tête de `base_styles`. Si un fichier manque, renvoie "" et les
+    fallbacks système (`Georgia`/`Arial`) prennent le relais sans casser le PDF.
+    """
+    try:
+        inter = _font_uri("Inter-Var.ttf")
+        reg = _font_uri("Spectral-Regular.ttf")
+        semibold = _font_uri("Spectral-SemiBold.ttf")
+        bold = _font_uri("Spectral-Bold.ttf")
+    except (OSError, ValueError):
+        return ""
+    if not FONTS_DIR.exists():
+        return ""
+    return f"""
+        @font-face {{ font-family: 'Inter'; src: url('{inter}') format('truetype');
+            font-weight: 100 900; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{reg}') format('truetype');
+            font-weight: 400; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{semibold}') format('truetype');
+            font-weight: 600; font-style: normal; }}
+        @font-face {{ font-family: 'Spectral'; src: url('{bold}') format('truetype');
+            font-weight: 700; font-style: normal; }}
+    """
 
 
 @dataclass(frozen=True)
@@ -42,8 +84,8 @@ class PDFTheme:
     warn: str = "#F59E0B"  # partial / warning
     danger: str = "#EF4444"  # erreur
     info: str = "#3B82F6"  # info neutre
-    font_family: str = "'Helvetica', 'Arial', sans-serif"
-    font_serif: str = "'Georgia', 'Times New Roman', serif"
+    font_family: str = "'Inter', 'Helvetica Neue', 'Arial', sans-serif"
+    font_serif: str = "'Spectral', 'Georgia', 'Times New Roman', serif"
 
     @classmethod
     def from_school(cls, school: dict[str, Any] | None) -> PDFTheme:
@@ -110,11 +152,25 @@ STATUS_LABELS_FR: dict[str, str] = {
 }
 
 
-PAYMENT_METHOD_LABELS_FR: dict[str, str] = {
-    "cash": "Espèces",
-    "mobile_money": "Mobile Money",
-    "bank_transfer": "Virement bancaire",
-    "cheque": "Chèque",
+#: Re-export : la table vit dans `app.core.payment_methods`, seul endroit ou
+#: la liste des moyens est tenue a jour. En garder une copie ici avait pour
+#: seul effet garanti de la laisser vieillir.
+PAYMENT_METHOD_LABELS_FR: dict[str, str] = _PAYMENT_METHOD_LABELS_FR
+
+
+MENTION_LABELS_FR: dict[str, str] = {
+    # Noms de membres d'enum
+    "TRES_BIEN": "Très Bien",
+    "BIEN": "Bien",
+    "ASSEZ_BIEN": "Assez Bien",
+    "PASSABLE": "Passable",
+    "MEDIOCRE": "Médiocre",
+    # Valeurs d'enum
+    "TB": "Très Bien",
+    "B": "Bien",
+    "AB": "Assez Bien",
+    "P": "Passable",
+    "M": "Médiocre",
 }
 
 
@@ -125,4 +181,79 @@ def status_label(key: str) -> str:
 
 def method_label(key: str) -> str:
     """Renvoie le label FR d'une méthode (cash → Espèces). Fallback sur la clé."""
-    return PAYMENT_METHOD_LABELS_FR.get(key, key)
+    return _method_label(key)
+
+
+def mention_label(value: Any) -> str:
+    """Renvoie le label FR d'une mention.
+
+    Accepte un enum `Mention`, sa `.value` (ex: "TB"), ou une chaîne brute
+    comme "Mention.TRES_BIEN". Nettoie le préfixe enum puis cherche le label
+    en l'état et en majuscules. Fallback sur la chaîne nettoyée.
+    """
+    cleaned = str(value).split(".")[-1].strip()
+    if not cleaned:
+        return ""
+    return MENTION_LABELS_FR.get(cleaned) or MENTION_LABELS_FR.get(cleaned.upper()) or cleaned
+
+
+def appreciation_label(average: Any) -> str:
+    """Appréciation par matière déduite de la moyenne /20 (échelle scolaire CI).
+
+    Distincte de la mention générale : qualifie le niveau dans UNE matière.
+    Accepte un nombre, un Decimal ou une chaîne numérique ; renvoie "—" si
+    la moyenne est absente ou non interprétable.
+    """
+    if average is None or average == "":
+        return "—"
+    try:
+        value = float(average)
+    except (TypeError, ValueError):
+        return "—"
+    if value >= 16:
+        return "Excellent"
+    if value >= 14:
+        return "Très bien"
+    if value >= 12:
+        return "Bien"
+    if value >= 10:
+        return "Assez bien"
+    if value >= 8:
+        return "Passable"
+    return "Insuffisant"
+
+
+_DECISION_LABELS = {
+    "passage": "Admis en classe supérieure",
+    "repechage": "Repêché par le conseil",
+    "redoublement": "Redouble la classe",
+    "exclusion": "Exclu de l'établissement",
+}
+
+
+_DECISION_LABELS_COURTS = {
+    "passage": "Admis",
+    "repechage": "Repêché",
+    "redoublement": "Redouble",
+    "exclusion": "Exclu",
+}
+
+
+def decision_label(value: Any, *, court: bool = False) -> str:
+    """Le libellé français d'une décision de conseil de classe.
+
+    Le procès-verbal imprimait « passage » en minuscules, tel que la base le
+    stocke. C'est une pièce d'archive que le conseil signe : elle doit dire ce
+    qu'elle décide, pas le nom interne de la décision.
+
+    `court` pour une colonne de tableau. « Admis en classe supérieure » y casse
+    sur deux lignes à chaque élève et pousse le procès-verbal sur une seconde
+    feuille ; le bulletin, lui, a la place de la phrase entière.
+    """
+    from app.services.pdf._helpers import enum_value
+
+    brut = str(enum_value(value) or "").strip()
+    if not brut:
+        return "—"
+    table = _DECISION_LABELS_COURTS if court else _DECISION_LABELS
+    return table.get(brut, brut)

@@ -23,6 +23,11 @@ class NotificationType(str, enum.Enum):
     BULLETIN_PUBLISHED = "bulletin_published"
     ABSENCE_RECORDED = "absence_recorded"
     ENROLLMENT_STATUS = "enrollment_status"
+    # Les deux temps de la chaine d'inscription. Deux types distincts plutot
+    # qu'un seul : ils ne s'adressent pas aux memes personnes et n'appellent
+    # pas la meme action, donc ils meritent chacun leur libelle et leur lien.
+    ENROLLMENT_AWAITING_PAYMENT = "enrollment_awaiting_payment"
+    ENROLLMENT_AWAITING_VALIDATION = "enrollment_awaiting_validation"
     SYSTEM = "system"
 
 
@@ -56,8 +61,33 @@ class Notification(Base, TimestampMixin):
     # Lien optionnel vers l'entité concernée
     entity_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Où la notification mène, décidé côté serveur.
+    #
+    # `entity_type`/`entity_id` disent de quoi il s'agit ; ils ne disent pas
+    # sur quel écran on répare la chose. Traduire l'un en l'autre côté client
+    # demanderait une table de correspondance qui se désynchronise au premier
+    # renommage de route — et c'est le serveur qui sait quelle action il
+    # attend, puisque c'est lui qui a décidé de prévenir.
+    action_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="notifications")
+
+
+class NotificationPreference(Base, TimestampMixin):
+    """Préférences de canaux d'un utilisateur. L'in-app (cloche) est toujours actif."""
+
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class NotificationTemplate(Base, TimestampMixin):

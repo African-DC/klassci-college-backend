@@ -2,7 +2,10 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+from app.models.user import TeacherContract
+from app.schemas.fee import FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Student
@@ -15,6 +18,7 @@ class StudentCreate(BaseModel):
     email: str
     password: str
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     city: str | None = None
@@ -32,6 +36,7 @@ class StudentUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     birth_date: date | None = None
+    birth_place: str | None = None
     genre: str | None = None
     enrollment_number: str | None = None
     user_id: int | None = None
@@ -69,6 +74,7 @@ class StudentResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
@@ -104,6 +110,72 @@ class StudentFiltersResponse(BaseModel):
     current_academic_year_id: int | None = None
 
 
+# ---------------------------------------------------------------------------
+# Admin summary (KPI aggregates) — computed server-side, scale-independent
+# ---------------------------------------------------------------------------
+
+
+class ClassesSummary(BaseModel):
+    total: int
+    enrolled: int
+    capacity: int
+    full: int
+
+
+class TeachersSummary(BaseModel):
+    total: int
+    with_speciality: int
+    with_phone: int
+    without_speciality: int
+
+
+class StaffSummary(BaseModel):
+    total: int
+    distinct_positions: int
+    with_phone: int
+    without_position: int
+
+
+class ParentsSummary(BaseModel):
+    total: int
+    with_account: int
+    with_email: int
+    without_account: int
+
+
+class RoomsSummary(BaseModel):
+    total: int
+    capacity: int
+    classrooms: int
+    classes_without_room: int
+
+
+class SubjectsSummary(BaseModel):
+    unique_names: int
+    instances: int
+    without_teacher: int
+    total_hours: int
+
+
+class EnrollmentsSummary(BaseModel):
+    total: int
+    valid: int
+    pending: int
+    closed: int
+
+
+class AdminSummaryResponse(BaseModel):
+    """Agrégats KPI pour le dashboard et les pages de gestion admin."""
+
+    classes: ClassesSummary
+    teachers: TeachersSummary
+    staff: StaffSummary
+    parents: ParentsSummary
+    rooms: RoomsSummary
+    subjects: SubjectsSummary
+    enrollments: EnrollmentsSummary
+
+
 class StudentTrimesterGrades(BaseModel):
     trimester: int
     general: float | None = None
@@ -125,6 +197,7 @@ class StudentFullResponse(BaseModel):
     first_name: str
     last_name: str
     birth_date: date | None
+    birth_place: str | None = None
     genre: str | None
     enrollment_number: str | None
     photo_url: str | None = None
@@ -153,11 +226,16 @@ class StudentFullResponse(BaseModel):
     attendance_late: int = 0
     attendance_rate: float = 0.0
 
-    # Financial summary
-    fees_expected: float = 0.0
-    fees_paid: float = 0.0
-    fees_remaining: float = 0.0
-    fees_rate: float = 0.0
+    # Financial summary — `None` quand l'appelant n'a pas `payments:read`.
+    # On renvoie `None` et pas `0` : un zero se lit « la famille ne doit
+    # rien », ce qui serait un mensonge.
+    fees_expected: float | None = 0.0
+    fees_paid: float | None = 0.0
+    fees_remaining: float | None = 0.0
+    fees_rate: float | None = 0.0
+    # Etat de paiement sans montant, pour `payments:status:read`.
+    fee_status: str | None = None
+    last_payment_date: date | None = None
 
     # Trimester breakdowns (current academic year)
     # Toujours 3 entrées (T1/T2/T3) padded avec null/0 si pas de données.
@@ -184,6 +262,18 @@ class TeacherCreate(BaseModel):
     password: str
     speciality: str | None = None
     phone: str | None = None
+    # Reclames par le rapport de fin de trimestre de la DEEP (repartition du
+    # personnel enseignant par contrat et par sexe). Facultatifs : on ne devine
+    # ni le sexe ni le contrat de quelqu'un.
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
+
+    @field_validator("genre")
+    @classmethod
+    def valid_genre(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"M", "F"}:
+            raise ValueError("genre must be 'M' or 'F'")
+        return v
 
 
 class TeacherUpdate(BaseModel):
@@ -191,6 +281,15 @@ class TeacherUpdate(BaseModel):
     last_name: str | None = None
     speciality: str | None = None
     phone: str | None = None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
+
+    @field_validator("genre")
+    @classmethod
+    def valid_genre(cls, v: str | None) -> str | None:
+        if v is not None and v not in {"M", "F"}:
+            raise ValueError("genre must be 'M' or 'F'")
+        return v
 
 
 class TeacherResponse(BaseModel):
@@ -202,6 +301,8 @@ class TeacherResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
     photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -228,6 +329,8 @@ class TeacherFullResponse(BaseModel):
     last_name: str
     speciality: str | None
     phone: str | None
+    genre: str | None = None
+    contract_type: TeacherContract | None = None
     photo_url: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -272,6 +375,10 @@ class StaffCreate(BaseModel):
     password: str
     position: str | None = None
     phone: str | None = None
+    # Rôle d'accès RBAC (secrétariat, comptable, caissier, éducateur, directeur
+    # des études, directeur). Pilote les permissions. Whitelist validée côté
+    # service via STAFF_ASSIGNABLE_ROLES, jamais admin/super_admin.
+    role: str | None = None
 
 
 class StaffUpdate(BaseModel):
@@ -279,6 +386,7 @@ class StaffUpdate(BaseModel):
     last_name: str | None = None
     position: str | None = None
     phone: str | None = None
+    role: str | None = None
 
 
 class StaffResponse(BaseModel):
@@ -291,6 +399,8 @@ class StaffResponse(BaseModel):
     position: str | None
     phone: str | None
     photo_url: str | None = None
+    # Rôle d'accès RBAC résolu depuis user_roles (cf. STAFF_ASSIGNABLE_ROLES)
+    role: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -306,6 +416,7 @@ class StaffFullResponse(BaseModel):
     position: str | None
     phone: str | None
     photo_url: str | None = None
+    role: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -314,6 +425,9 @@ class StaffFullResponse(BaseModel):
     user_is_active: bool | None = None
     user_last_login: datetime | None = None
     user_created_at: datetime | None = None
+
+    # Activité (versements encaissés, inscriptions traitées) — AY courante
+    activity: dict = {}
 
 
 class StaffListResponse(BaseModel):
@@ -384,7 +498,9 @@ class ParentLinkBody(BaseModel):
 class ParentFullResponse(ParentResponse):
     user_email: str | None = None
     user_is_active: bool | None = None
+    user_last_login: datetime | None = None
     children: list[dict] = []
+    summary: dict = {}
 
 
 class ParentListResponse(BaseModel):
@@ -647,6 +763,28 @@ class TrimesterUpdateRequest(BaseModel):
     trimesters: list[TrimesterDTO]
 
 
+class SchoolHolidayDTO(BaseModel):
+    """Un congé ou jour férié. Jour unique = start_date == end_date."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    label: str
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def _check_range(self) -> "SchoolHolidayDTO":
+        if self.end_date < self.start_date:
+            raise ValueError("La date de fin doit être postérieure ou égale à la date de début")
+        return self
+
+
+class HolidaysUpdateRequest(BaseModel):
+    """PUT /admin/settings/holidays — remplace les congés de l'AY courante."""
+
+    holidays: list[SchoolHolidayDTO]
+
+
 class NotificationSettingsUpdate(BaseModel):
     """PUT /admin/settings/notifications — préférences globales école."""
 
@@ -678,7 +816,9 @@ class SchoolSettingsResponse(BaseModel):
     accent_color: str | None = None
     website: str | None = None
     motto: str | None = None
+    deletion_notice_emails: str | None = None
     trimesters: list[TrimesterDTO] = []
+    holidays: list[SchoolHolidayDTO] = []
     notify_by_email: bool = False
     notify_by_sms: bool = False
     notify_grades: bool = False
@@ -696,20 +836,23 @@ class SchoolSettingsResponse(BaseModel):
 
 
 class UserAccountCreate(BaseModel):
-    email: str
+    """Create a user account for an existing profile (student/parent/teacher/staff).
+
+    Uses Pydantic ``EmailStr`` so validation is consistent with ``/auth/login``
+    (both rely on ``email-validator`` and reject special-use TLDs like
+    ``.local`` or ``.test``). Previously this used plain ``str`` and accepted
+    e-mails that could never log in — caught during the e2e regression on
+    2026-05-20 when ``foo@bar.local`` was accepted at creation but rejected at
+    login with HTTP 422.
+    """
+
+    email: EmailStr
     password: str
 
 
 class UserAccountUpdate(BaseModel):
-    email: str | None = None
+    email: EmailStr | None = None
     password: str | None = None
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, v: str | None) -> str | None:
-        if v is not None and "@" not in v:
-            raise ValueError("Email invalide")
-        return v
 
     @field_validator("password")
     @classmethod
@@ -725,6 +868,9 @@ class StudentEnrollmentFeeResponse(BaseModel):
     id: int  # enrollment_fee.id ou student_option.id
     enrollment_id: int
     category_name: str
+    #: Ce que ce frais ouvre a la famille. Repris de la categorie : sans lui,
+    #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
+    entitlements: list[FeeEntitlement] = Field(default_factory=list)
     amount: float  # total dû
     paid: float  # somme des paiements complétés
     remaining: float
@@ -752,6 +898,10 @@ class SchoolInfoUpdate(BaseModel):
     accent_color: str | None = None
     website: str | None = None
     motto: str | None = None
+    #: Destinataires du courriel envoyé à chaque archivage et à chaque
+    #: suppression définitive, séparés par des virgules. Laisser vide fait
+    #: retomber sur l'adresse de l'établissement.
+    deletion_notice_emails: str | None = None
 
     @field_validator("primary_color", "accent_color")
     @classmethod
@@ -928,6 +1078,12 @@ class PromotionPreviewRequest(BaseModel):
     source_ay_id: int
     target_ay_id: int
     class_mapping: dict[int, int]
+    # Inscriptions a NE PAS promouvoir : redoublants, departs, exclusions.
+    # Sans cette liste, une promotion emmene tout le monde et il faudrait
+    # annuler a la main les inscriptions creees a tort — ce que personne ne
+    # fera correctement sur trois cents eleves. Le redoublement est courant
+    # dans le systeme ivoirien, ce n'est pas un cas marginal.
+    excluded_enrollment_ids: list[int] = Field(default_factory=list)
 
 
 class SourceClassSummary(BaseModel):
@@ -991,3 +1147,18 @@ class PromotionExecuteResponse(BaseModel):
     skipped_count: int
     error_count: int
     errors: list[PromotionExecuteError]
+
+
+class ArchiveRequest(BaseModel):
+    """Motif d'un geste de corbeille — mise à la corbeille ou suppression définitive.
+
+    Obligatoire : sans lui, le journal dirait qu'une fiche a disparu sans dire
+    pourquoi, ce qui ne vaut guère mieux que pas de trace du tout.
+
+    Il voyage dans le corps de la requête, y compris pour la suppression
+    définitive. Un motif passé en paramètre d'URL finirait recopié dans les
+    journaux d'accès du serveur et chez tous les intermédiaires ; « élève
+    exclu pour vol » n'a rien à faire dans une adresse.
+    """
+
+    reason: str = Field(min_length=10, max_length=500)

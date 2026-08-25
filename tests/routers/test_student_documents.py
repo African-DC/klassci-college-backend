@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
+from app.routers.student_documents import RevokeDocumentSealRequest
 
 MOCK_USER = TokenData(user_id=1, tenant_id="local", email="admin@college.ci")
 
@@ -21,6 +24,11 @@ def _override_deps() -> None:
 
 def _clear_deps() -> None:
     app.dependency_overrides.clear()
+
+
+def test_revoke_reason_rejects_whitespace_only() -> None:
+    with pytest.raises(ValidationError):
+        RevokeDocumentSealRequest(reason="     ")
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +53,12 @@ def test_get_certificat_success() -> None:
                 "app.services.student_documents_service.verify_document_access",
                 new=AsyncMock(return_value=None),
             ),
+            # La retenue pour impaye a ses propres tests : ici on suppose
+            # l'eleve a jour pour ne tester que la generation du certificat.
+            patch(
+                "app.services.document_release_service.ensure_releasable",
+                new=AsyncMock(return_value=None),
+            ),
             patch(
                 "app.services.student_documents_service.compose_certificate_data",
                 new=AsyncMock(
@@ -61,16 +75,18 @@ def test_get_certificat_success() -> None:
                         "class_name": "6e A",
                         "academic_year_name": "2025-2026",
                         "issued_at": None,
+                        "verification": {"issuance_id": 1},
+                        "school_settings": {"school_name": "Ecole Test"},
                     }
                 ),
             ),
             patch(
-                "app.routers.student_documents.load_school_settings_for_pdf",
-                new=AsyncMock(return_value={"school_name": "Ecole Test"}),
-            ),
-            patch(
                 "app.routers.student_documents.generate_certificate_scolarite_pdf",
                 return_value=b"%PDF-1.4 fake bytes",
+            ),
+            patch(
+                "app.routers.student_documents.render_verification",
+                new=AsyncMock(return_value=b"%PDF-1.4 fake bytes"),
             ),
         ):
             with TestClient(app) as client:
@@ -91,6 +107,12 @@ def test_get_certificat_no_active_enrollment() -> None:
         with (
             patch(
                 "app.services.student_documents_service.verify_document_access",
+                new=AsyncMock(return_value=None),
+            ),
+            # La retenue pour impaye a ses propres tests : ici on suppose
+            # l'eleve a jour pour ne tester que la generation du certificat.
+            patch(
+                "app.services.document_release_service.ensure_releasable",
                 new=AsyncMock(return_value=None),
             ),
             patch(
