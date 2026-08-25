@@ -17,7 +17,7 @@ python-multipart==0.0.22
 boto3==1.42.97
 twilio==9.10.5
 ortools>=9.10
-weasyprint==62.3
+weasyprint==69.0
 # pydyf 0.12+ a un breaking change incompatible avec weasyprint 62.3
 # (Stream.transform retiré → AttributeError au PDF render). Pinning explicite.
 pydyf>=0.10.0,<0.12
