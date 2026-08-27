@@ -23,7 +23,7 @@ def test_la_route_repond_200(client: TestClient) -> None:
     """Le câblage complet : URL, permission, sérialisation."""
     with patch.object(
         routeur_doublons,
-        "reponse_doublons",
+        "chercher_doublons",
         new_callable=AsyncMock,
         return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
     ) as service:
@@ -38,7 +38,7 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
     """Un paramètre perdu en route rendrait 200 sur une recherche vide."""
     with patch.object(
         routeur_doublons,
-        "reponse_doublons",
+        "chercher_doublons",
         new_callable=AsyncMock,
         return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
     ) as service:
@@ -74,7 +74,7 @@ def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
     """
     with patch.object(
         routeur_doublons,
-        "reponse_doublons",
+        "chercher_doublons",
         new_callable=AsyncMock,
         return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
     ):

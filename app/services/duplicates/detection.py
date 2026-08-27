@@ -19,7 +19,6 @@ Le matricule identique, lui, est une collision : l'écriture la refuse.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import date
 from typing import Literal, cast
 
@@ -37,7 +36,6 @@ from app.schemas.duplicates import (
     InscriptionExistante,
 )
 from app.services.duplicates.similarity import (
-    Ressemblance,
     StudentIdentity,
     compact,
     comparer,
@@ -53,33 +51,6 @@ STATUTS_OCCUPANTS = (
 )
 
 Motif = Literal["matricule", "ressemblance"]
-
-
-@dataclass(frozen=True)
-class Correspondance:
-    """Un élève existant qui pourrait être celui qu'on s'apprête à créer."""
-
-    student_id: int
-    last_name: str
-    first_name: str
-    enrollment_number: str | None
-    birth_date: date | None
-    motif: Motif
-    ressemblance: Ressemblance | None
-    inscription_annee_courante: InscriptionExistante | None
-
-    def vers_reponse(self) -> CorrespondanceResponse:
-        return CorrespondanceResponse(
-            student_id=self.student_id,
-            last_name=self.last_name,
-            first_name=self.first_name,
-            enrollment_number=self.enrollment_number,
-            birth_date=self.birth_date,
-            motif=self.motif,
-            score=self.ressemblance.score if self.ressemblance else None,
-            juge_sur_peu=self.ressemblance.juge_sur_peu if self.ressemblance else False,
-            inscription_annee_courante=self.inscription_annee_courante,
-        )
 
 
 def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
@@ -254,7 +225,7 @@ def _correspondance_ou_rien(
     matricule_saisi: str | None,
     inscription: Enrollment | None,
     classe: Class | None,
-) -> Correspondance | None:
+) -> CorrespondanceResponse | None:
     """La fiche est-elle a signaler, et a quel titre ?
 
     Rend `None` quand ni le matricule ni le score ne justifient de deranger
@@ -266,24 +237,27 @@ def _correspondance_ou_rien(
     r = comparer(saisi, existant)
     if not meme_matricule and not r.a_signaler:
         return None
-    return Correspondance(
+    return CorrespondanceResponse(
         student_id=existant.id,
         last_name=existant.last_name,
         first_name=existant.first_name,
         enrollment_number=existant.enrollment_number,
         birth_date=existant.birth_date,
         motif="matricule" if meme_matricule else "ressemblance",
-        ressemblance=None if meme_matricule else r,
+        # Un matricule identique n'est pas une ressemblance : il ne passe pas
+        # par le score, et n'a donc ni pourcentage ni reserve.
+        score=None if meme_matricule else r.score,
+        juge_sur_peu=False if meme_matricule else r.juge_sur_peu,
         inscription_annee_courante=_inscription_jointe(inscription, classe),
     )
 
 
-def _par_certitude_puis_score(c: Correspondance) -> tuple[bool, float]:
+def _par_certitude_puis_score(c: CorrespondanceResponse) -> tuple[bool, float]:
     """Une certitude avant une ressemblance, puis du plus sur au moins sur.
 
     Sinon l'ecran met en avant la correspondance la moins fiable des deux.
     """
-    return (c.motif != "matricule", -(c.ressemblance.score if c.ressemblance else 1.0))
+    return (c.motif != "matricule", -(c.score if c.score is not None else 1.0))
 
 
 async def chercher_doublons(
@@ -295,7 +269,7 @@ async def chercher_doublons(
     enrollment_number: str | None = None,
     academic_year_id: int | None = None,
     ignorer_student_id: int | None = None,
-) -> tuple[list[Correspondance], bool]:
+) -> DoublonsResponse:
     """Les fiches qui pourraient etre la meme personne, les plus sures d'abord.
 
     Rend aussi si la recherche a ete tronquee : le plafond de candidats peut
@@ -313,7 +287,7 @@ async def chercher_doublons(
     # Le `.strip()` retient le cas d'un matricule fait d'espaces, qui sinon
     # coutait un aller-retour pour une requete vide.
     if not ((enrollment_number or "").strip() or saisi.suffisante):
-        return [], False
+        return DoublonsResponse(correspondances=[], total=0, tronque=False)
 
     resultat = await db.execute(
         _requete_avec_inscription(
@@ -334,7 +308,7 @@ async def chercher_doublons(
             first_name,
         )
 
-    trouves: dict[int, Correspondance] = {}
+    trouves: dict[int, CorrespondanceResponse] = {}
     for existant, inscription, classe in lignes:
         if ignorer_student_id is not None and existant.id == ignorer_student_id:
             continue
@@ -348,29 +322,4 @@ async def chercher_doublons(
             trouves[existant.id] = correspondance
 
     trouves_list = sorted(trouves.values(), key=_par_certitude_puis_score)
-    return trouves_list, tronque
-
-
-async def reponse_doublons(
-    db: AsyncSession,
-    *,
-    last_name: str | None,
-    first_name: str | None,
-    birth_date: date | None = None,
-    enrollment_number: str | None = None,
-    academic_year_id: int | None = None,
-    ignorer_student_id: int | None = None,
-) -> DoublonsResponse:
-    trouves, tronque = await chercher_doublons(
-        db,
-        last_name=last_name,
-        first_name=first_name,
-        birth_date=birth_date,
-        enrollment_number=enrollment_number,
-        academic_year_id=academic_year_id,
-        ignorer_student_id=ignorer_student_id,
-    )
-    correspondances = [c.vers_reponse() for c in trouves]
-    return DoublonsResponse(
-        correspondances=correspondances, total=len(correspondances), tronque=tronque
-    )
+    return DoublonsResponse(correspondances=trouves_list, total=len(trouves_list), tronque=tronque)

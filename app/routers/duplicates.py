@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_tenant_db, require_permission
 from app.schemas.duplicates import DoublonsResponse
-from app.services.duplicates.detection import reponse_doublons
+from app.services.duplicates.detection import chercher_doublons
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -44,7 +44,7 @@ async def chercher_doublons_eleve(
     # La mise en forme vit dans le service, qui la possede deja : la garder
     # ici en faisait une seconde copie, dans un routeur qui frole les 1400
     # lignes, pendant que celle du service n'etait appelee par personne.
-    return await reponse_doublons(
+    return await chercher_doublons(
         db,
         last_name=last_name,
         first_name=first_name,
