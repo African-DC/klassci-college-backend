@@ -205,9 +205,10 @@ def _query_with_enrollment(
     if exact is not None:
         conditions.append(exact)
     # Construites une fois, pour que la lecture ne repete pas quatre fois la
-    # meme chose. Cela ne raccourcit PAS la requete : SQLAlchemy reinsere
-    # l'expression a chaque usage, et le SQL compile fait 5 564 caracteres dans
-    # les deux cas. Le vrai remede est la colonne normalisee indexee de #343.
+    # même chose. Cela ne raccourcit PAS la requête : SQLAlchemy réinsère
+    # l'expression à chaque usage, et le SQL compilé est identique au caractère
+    # près, avec 216 `replace()` dans les deux cas. Le vrai remède est la
+    # colonne normalisée et indexée de #343.
     nom_compacte = _compact_sql(Student.last_name)
     prenom_compacte = _compact_sql(Student.first_name)
     for valeur in (nom, prenom):
@@ -367,8 +368,10 @@ async def find_duplicates(
             last_name, first_name, enrollment_number, academic_year_id, birth_date
         )
     )
-    # Pas de `.unique()` : il dédoublonnerait les lignes et fausserait le
-    # compte de troncature juste en dessous, qui porte sur les lignes lues.
+    # Pas de `.unique()` : il serait sans effet. `uq_enrollment_student_year`
+    # garantit au plus une inscription par élève et par année, et la classe est
+    # jointe sur sa clé primaire, donc la jointure rend au plus une ligne par
+    # élève.
     lignes = list(resultat.all())
     truncated = len(lignes) >= CANDIDATE_CAP
     if truncated:
@@ -381,16 +384,14 @@ async def find_duplicates(
             first_name,
         )
 
-    trouves: dict[int, MatchResponse] = {}
+    found: list[MatchResponse] = []
     for existing, inscription, classe in lignes:
         if exclude_student_id is not None and existing.id == exclude_student_id:
-            continue
-        if existing.id in trouves:
             continue
 
         correspondance = _match_or_none(typed, existing, enrollment_number, inscription, classe)
         if correspondance is not None:
-            trouves[existing.id] = correspondance
+            found.append(correspondance)
 
-    found = sorted(trouves.values(), key=_by_certainty_then_score)
+    found.sort(key=_by_certainty_then_score)
     return DuplicatesResponse(matches=found, truncated=truncated)

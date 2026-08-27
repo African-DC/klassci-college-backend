@@ -41,7 +41,11 @@ class MatchResponse(BaseModel):
 
 class DuplicatesResponse(BaseModel):
     matches: list[MatchResponse] = Field(default_factory=list)
-    #: Vrai quand le plafond de candidats a ete atteint : le vrai doublon peut
-    #: se trouver au-dela. Sans ce signal, « rien trouve » passerait pour une
-    #: certitude alors qu'on n'a pas tout regarde.
-    truncated: bool = False
+    truncated: bool = Field(
+        default=False,
+        description=(
+            "Vrai quand le plafond de candidats a été atteint : le vrai doublon "
+            "peut se trouver au-delà. Sans ce signal, « rien trouvé » passerait "
+            "pour une certitude alors qu'on n'a pas tout regardé."
+        ),
+    )
