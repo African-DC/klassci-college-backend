@@ -79,7 +79,6 @@ class TestChampAbsent:
         assert r.partial_identity, "l'écran doit dire que l'état civil est incomplet"
         assert r.worth_reporting
 
-
     def test_un_champ_manquant_ne_vaut_pas_desaccord(self):
         # C'est le point qui décide si le score est honnête : une fiche sans
         # date de naissance ne « diffère » pas, elle se tait.
