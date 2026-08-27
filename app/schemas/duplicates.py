@@ -32,7 +32,7 @@ class CorrespondanceResponse(BaseModel):
         default=False,
         description=(
             "Vrai quand un des champs d'état civil n'a pas pu être comparé : "
-            "le score ne porte alors que sur le nom et le prénom, et l'écran doit "
+            "le score ne porte alors que sur une partie de l'identité"
             "le dire plutôt que d'afficher un pourcentage rassurant."
         ),
     )

@@ -16,7 +16,6 @@ from types import SimpleNamespace
 import pytest
 
 from app.services.duplicates.similarity import (
-    SEUIL_QUASI_CERTAIN,
     SEUIL_SIGNALEMENT,
     comparer,
     normaliser,
@@ -67,8 +66,8 @@ class TestChampAbsent:
         r = comparer(fiche("TRAORE", "Siaka"), fiche("TRAORE", "Siaka"))
         assert r.juge_sur_peu is True
         complet = comparer(
-            fiche("TRAORE", "Siaka", date(2008, 3, 2), "Bouaké"),
-            fiche("TRAORE", "Siaka", date(2008, 3, 2), "Bouaké"),
+            fiche("TRAORE", "Siaka", date(2008, 3, 2)),
+            fiche("TRAORE", "Siaka", date(2008, 3, 2)),
         )
         assert complet.juge_sur_peu is False
 
@@ -85,20 +84,24 @@ class TestHomonymes:
         assert r.score < SEUIL_SIGNALEMENT
 
     def test_la_naissance_departage_deux_homonymes_exacts(self):
-        memes = fiche("TRAORE", "Cheick moussa", date(2011, 1, 4), "Bouaké")
-        autre = fiche("TRAORE", "Cheick moussa", date(2009, 8, 22), "Korhogo")
+        memes = fiche("TRAORE", "Cheick moussa", date(2011, 1, 4))
+        autre = fiche("TRAORE", "Cheick moussa", date(2009, 8, 22))
         r = comparer(memes, autre)
-        assert r.score < SEUIL_QUASI_CERTAIN
+        # Le point du test : la date FAIT baisser le score. Comparer a un seuil
+        # ne le disait pas — il fallait le comparer au meme couple sans dates.
+        sans_dates = comparer(fiche("TRAORE", "Cheick moussa"), fiche("TRAORE", "Cheick moussa"))
+        assert r.score < sans_dates.score
         assert "birth_date" in r.champs_compares
 
 
 class TestVraisDoublons:
     def test_la_casse_et_les_accents_ne_creent_pas_deux_personnes(self):
         r = comparer(
-            fiche("GNOUGNOU", "Gnoleba ange david", date(2007, 6, 1), "Daloa"),
-            fiche("gnougnou", "GNOLEBA ANGE DAVID", date(2007, 6, 1), "DALOA"),
+            fiche("GNOUGNOU", "Gnoleba ange david", date(2007, 6, 1)),
+            fiche("gnougnou", "GNOLEBA ANGE DAVID", date(2007, 6, 1)),
         )
-        assert r.quasi_certain
+        assert r.score == pytest.approx(1.0)
+        assert r.a_signaler
 
     def test_une_faute_de_frappe_reste_detectee(self):
         r = comparer(

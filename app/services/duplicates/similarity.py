@@ -30,9 +30,10 @@ from typing import Protocol
 POIDS = {"last_name": 0.40, "first_name": 0.35, "birth_date": 0.25}
 
 # En dessous, deux fiches ne se ressemblent pas assez pour qu'on dérange
-# quelqu'un ; au-dessus du seuil haut, on considère que c'est la même personne.
+# quelqu'un. Il n'y a pas de second palier : une « quasi-certitude » a existé
+# ici, que ni le contrat ni l'écran ne portaient — un seuil que personne ne lit
+# est une promesse que personne ne tient.
 SEUIL_SIGNALEMENT = 0.72
-SEUIL_QUASI_CERTAIN = 0.90
 
 
 def normaliser(valeur: str | None) -> str:
@@ -158,10 +159,6 @@ class Ressemblance:
     score: float
     champs_compares: tuple[str, ...]
     champs_manquants: tuple[str, ...]
-
-    @property
-    def quasi_certain(self) -> bool:
-        return self.score >= SEUIL_QUASI_CERTAIN
 
     @property
     def a_signaler(self) -> bool:

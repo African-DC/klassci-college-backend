@@ -248,26 +248,6 @@ def _inscription_jointe(
     )
 
 
-def _fragment_cherchable(
-    nom: str | None, prenom: str | None, matricule: str | None, naissance: date | None
-) -> bool:
-    """Y a-t-il de quoi construire une requete ?
-
-    Distinct de « y a-t-il de quoi se prononcer », qui vit sur
-    `StudentIdentity.suffisante`. Une version anterieure melait les deux, et le
-    nom seul — l'etat le plus frequent du formulaire — lancait quatre LIKE a
-    joker de tete sur deux colonnes non indexees a chaque touche, pour un
-    resultat que la seconde regle interdisait de rapporter.
-    """
-    if matricule and matricule.strip():
-        return True
-    if naissance is not None:
-        return True
-    # Un fragment flou, ou a defaut une valeur exacte : les noms de trois
-    # lettres se cherchent a l'identique plutot que pas du tout.
-    return bool(compact(nom)) or bool(compact(prenom))
-
-
 def _correspondance_ou_rien(
     saisi: StudentIdentity,
     existant: Student,
@@ -326,11 +306,13 @@ async def chercher_doublons(
     # l'aller-retour plutot que de demander a MySQL une requete batie pour ne
     # rien rendre.
     saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
-    # Deux gardes, dans cet ordre : se prononcer ne coute rien, chercher coute
-    # un balayage complet.
-    if not (enrollment_number or saisi.suffisante):
-        return [], False
-    if not _fragment_cherchable(last_name, first_name, enrollment_number, birth_date):
+    # Se prononcer ne coute rien, chercher coute un balayage complet. Un second
+    # garde a existe ici : il ne pouvait plus se declencher, celui-ci ayant deja
+    # etabli ses conditions, et se lisait pourtant comme porteur.
+    #
+    # Le `.strip()` retient le cas d'un matricule fait d'espaces, qui sinon
+    # coutait un aller-retour pour une requete vide.
+    if not ((enrollment_number or "").strip() or saisi.suffisante):
         return [], False
 
     resultat = await db.execute(
