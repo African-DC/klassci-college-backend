@@ -26,7 +26,7 @@ from app.services.duplicates.similarity import (
 
 
 def fiche(nom, prenom, naissance=None, lieu=None):
-    return SimpleNamespace(last_name=nom, first_name=prenom, birth_date=naissance, birth_place=lieu)
+    return SimpleNamespace(last_name=nom, first_name=prenom, birth_date=naissance)
 
 
 class TestNormalisation:
@@ -48,7 +48,7 @@ class TestNormalisation:
 class TestChampAbsent:
     def test_un_champ_manquant_ne_vaut_pas_desaccord(self):
         # C'est le point qui décide si le score est honnête : une fiche sans
-        # lieu de naissance ne « diffère » pas, elle se tait.
+        # date de naissance ne « diffère » pas, elle se tait.
         assert ressemblance_texte("Bouaké", None) is None
         assert ressemblance_date(date(2010, 5, 4), None) is None
 
@@ -113,3 +113,20 @@ class TestVraisDoublons:
         # et doit ressortir, sans valoir une égalité franche.
         r = ressemblance_date(date(2010, 5, 4), date(2010, 4, 5))
         assert 0.5 < r < 1.0
+
+
+def test_la_reserve_se_leve_aussi_quand_le_prenom_manque():
+    """Une fiche stockée sans prénom doit porter la réserve.
+
+    Une version antérieure ne la levait que sur la date manquante : avec une
+    date qui correspond, le score atteignait 1.0 sur le seul nom et s'affichait
+    sans réserve. Les deux élèves repris sans prénom sont exactement ce cas, et
+    ils doivent 101 000 FCFA à eux deux.
+    """
+    r = comparer(
+        fiche("KOUASSI", "Aya", date(2010, 3, 14)),
+        fiche("KOUASSI", "", date(2010, 3, 14)),
+    )
+    assert r.score == pytest.approx(1.0)
+    assert r.champs_compares == ("last_name", "birth_date")
+    assert r.juge_sur_peu is True

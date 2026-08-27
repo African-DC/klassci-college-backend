@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import Literal, cast
 
 from sqlalchemy import ColumnElement, Select, and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,6 +88,10 @@ def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
 
 def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     """Même compactage que `compact()` Python, sans accents ni ponctuation.
+
+    Suivi : #343 — une colonne normalisee et indexee supprimerait cette
+    fonction entiere, et avec elle le risque de derive entre les deux
+    normalisations.
 
     MySQL et SQLite n'ont pas `unaccent`. On retire les diacritiques
     fréquents au copier-coller, on remplace la ponctuation par rien, et
@@ -200,7 +204,12 @@ def _requete_avec_inscription(
         annee_visee,
         inscription.status.in_([s.value for s in STATUTS_OCCUPANTS]),
     )
-    return (
+    # SQLAlchemy type un `outerjoin` comme s'il rendait toujours l'entite, alors
+    # qu'une jointure externe rend `None` quand rien ne correspond — ce qui est
+    # le cas le plus frequent ici : la plupart des eleves n'ont pas
+    # d'inscription ouverte sur l'annee visee. Le type declare par la fonction
+    # est le vrai ; ce `cast` ne fait que le dire au verificateur.
+    requete = (
         select(Student, inscription, classe)
         # Le cote gauche est explicite : avec trois entites dans le SELECT,
         # SQLAlchemy ne le devine pas et refuse la requete.
@@ -213,6 +222,7 @@ def _requete_avec_inscription(
         .order_by(Student.id)
         .limit(PLAFOND_CANDIDATS)
     )
+    return cast("Select[tuple[Student, Enrollment | None, Class | None]]", requete)
 
 
 def _inscription_jointe(
@@ -227,27 +237,56 @@ def _inscription_jointe(
     )
 
 
-def _criteres_exploitables(
-    nom: str | None, prenom: str | None, matricule: str | None, naissance: date | None
-) -> bool:
-    """Y a-t-il de quoi chercher ?"""
+def _fragment_cherchable(nom: str | None, prenom: str | None, matricule: str | None) -> bool:
+    """Y a-t-il de quoi construire une requete ?
+
+    Distinct de « y a-t-il de quoi se prononcer », qui vit sur
+    `StudentIdentity.suffisante`. Une version anterieure melait les deux, et le
+    nom seul — l'etat le plus frequent du formulaire — lancait quatre LIKE a
+    joker de tete sur deux colonnes non indexees a chaque touche, pour un
+    resultat que la seconde regle interdisait de rapporter.
+    """
     if matricule and matricule.strip():
         return True
-    # Deux conditions distinctes, qu'une version anterieure confondait.
-    #
-    # De quoi CHERCHER : au moins un fragment assez long pour un motif SQL.
-    if _noyau(nom) is None and _noyau(prenom) is None:
-        return False
-    # De quoi RAPPORTER : `Ressemblance.saisie_suffisante` exige le nom plus un
-    # second element. Sans cet accord, le nom seul — l'etat le plus frequent du
-    # formulaire, avant que le prenom soit tape — lancait quatre LIKE a joker de
-    # tete sur deux colonnes non indexees, a chaque touche, pour un resultat qui
-    # ne pouvait etre rapporte.
-    #
-    # Le second element n'a pas besoin d'etre assez long pour un motif : « Aya »
-    # est un prenom courant, trois lettres, et suffit a departager deux
-    # homonymes une fois les candidats remontes par le nom.
-    return bool(compact(nom)) and (bool(compact(prenom)) or naissance is not None)
+    return _noyau(nom) is not None or _noyau(prenom) is not None
+
+
+def _correspondance_ou_rien(
+    saisi: StudentIdentity,
+    existant: Student,
+    matricule_saisi: str | None,
+    inscription: Enrollment | None,
+    classe: Class | None,
+) -> Correspondance | None:
+    """La fiche est-elle a signaler, et a quel titre ?
+
+    Rend `None` quand ni le matricule ni le score ne justifient de deranger
+    quelqu'un.
+    """
+    meme_matricule = _meme_matricule(matricule_saisi, existant.enrollment_number)
+    # `Student` satisfait `Identite` structurellement : c'est la raison d'etre
+    # du protocole, et le recopier l'annulait.
+    r = comparer(saisi, existant)
+    if not meme_matricule and not r.a_signaler:
+        return None
+    return Correspondance(
+        student_id=existant.id,
+        last_name=existant.last_name,
+        first_name=existant.first_name,
+        enrollment_number=existant.enrollment_number,
+        birth_date=existant.birth_date,
+        motif="matricule" if meme_matricule else "ressemblance",
+        ressemblance=None if meme_matricule else r,
+        inscription_annee_courante=_inscription_jointe(inscription, classe),
+    )
+
+
+def _par_certitude_puis_score(c: Correspondance) -> tuple[bool, float]:
+    """Une certitude avant une ressemblance, puis du plus sur au moins sur.
+
+    Sinon l'ecran met en avant la correspondance la moins fiable des deux.
+    """
+    return (c.motif != "matricule", -(c.ressemblance.score if c.ressemblance else 1.0))
 
 
 async def chercher_doublons(
@@ -269,7 +308,12 @@ async def chercher_doublons(
     # Sans critere exploitable, il n'y a rien a chercher : on evite
     # l'aller-retour plutot que de demander a MySQL une requete batie pour ne
     # rien rendre.
-    if not _criteres_exploitables(last_name, first_name, enrollment_number, birth_date):
+    saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
+    # Deux gardes, dans cet ordre : se prononcer ne coute rien, chercher coute
+    # un balayage complet.
+    if not (enrollment_number or saisi.suffisante):
+        return [], False
+    if not _fragment_cherchable(last_name, first_name, enrollment_number):
         return [], False
 
     resultat = await db.execute(
@@ -291,7 +335,6 @@ async def chercher_doublons(
             first_name,
         )
 
-    saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
     trouves: dict[int, Correspondance] = {}
     for existant, inscription, classe in lignes:
         if ignorer_student_id is not None and existant.id == ignorer_student_id:
@@ -299,28 +342,13 @@ async def chercher_doublons(
         if existant.id in trouves:
             continue
 
-        meme_matricule = _meme_matricule(enrollment_number, existant.enrollment_number)
-        # `Student` satisfait `Identite` structurellement : c'est la raison
-        # d'etre du protocole, et le recopier l'annulait.
-        r = comparer(saisi, existant)
-        if not meme_matricule and not r.a_signaler:
-            continue
-
-        trouves[existant.id] = Correspondance(
-            student_id=existant.id,
-            last_name=existant.last_name,
-            first_name=existant.first_name,
-            enrollment_number=existant.enrollment_number,
-            birth_date=existant.birth_date,
-            motif="matricule" if meme_matricule else "ressemblance",
-            ressemblance=None if meme_matricule else r,
-            inscription_annee_courante=_inscription_jointe(inscription, classe),
+        correspondance = _correspondance_ou_rien(
+            saisi, existant, enrollment_number, inscription, classe
         )
+        if correspondance is not None:
+            trouves[existant.id] = correspondance
 
-    trouves_list = list(trouves.values())
-    trouves_list.sort(
-        key=lambda c: (c.motif != "matricule", -(c.ressemblance.score if c.ressemblance else 1.0))
-    )
+    trouves_list = sorted(trouves.values(), key=_par_certitude_puis_score)
     return trouves_list, tronque
 
 

@@ -315,3 +315,33 @@ async def test_la_troncature_est_annoncee(db: Session, monkeypatch) -> None:
 async def test_sans_troncature_on_ne_le_pretend_pas(db: Session) -> None:
     _, tronque = await chercher_doublons(_Pont(db), last_name="TIOTE", first_name="Personne")
     assert tronque is False
+
+
+@pytest.mark.asyncio
+async def test_le_nom_seul_ne_touche_pas_la_base(db: Session) -> None:
+    """Le garde de performance, épinglé par ce qu'il empêche vraiment.
+
+    Le nom seul est l'état le plus fréquent du formulaire : la secrétaire le
+    tape avant le prénom. Sans ce garde, chaque touche lançait quatre `LIKE` à
+    joker de tête sur deux colonnes non indexées, pour un résultat que la règle
+    de signalement interdisait de rapporter — sur la connexion d'une école.
+
+    Les assertions sur le résultat ne suffisaient pas : elles restaient vertes
+    parce que le filtrage aval faisait le travail. Celle-ci compte les requêtes.
+    """
+    pont = _Pont(db)
+    appels = 0
+    vrai_execute = pont.execute
+
+    async def compte(*args, **kwargs):
+        nonlocal appels
+        appels += 1
+        return await vrai_execute(*args, **kwargs)
+
+    pont.execute = compte  # type: ignore[method-assign]
+
+    await chercher_doublons(pont, last_name="KOUASSI", first_name=None)
+    assert appels == 0, "le nom seul a interrogé la base pour rien"
+
+    await chercher_doublons(pont, last_name="KOUASSI", first_name="Aya")
+    assert appels == 1, "nom + prénom doit interroger la base"

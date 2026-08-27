@@ -31,7 +31,7 @@ class CorrespondanceResponse(BaseModel):
     juge_sur_peu: bool = Field(
         default=False,
         description=(
-            "Vrai quand ni la date ni le lieu de naissance n'étaient disponibles : "
+            "Vrai quand un des champs d'état civil n'a pas pu être comparé : "
             "le score ne porte alors que sur le nom et le prénom, et l'écran doit "
             "le dire plutôt que d'afficher un pourcentage rassurant."
         ),

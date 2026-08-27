@@ -6,9 +6,9 @@ existe deux fois — avec deux ardoises séparées, dont une que personne ne
 réclamera jamais.
 
 Ce module compare ce qui identifie une personne quand le numéro manque : le
-nom, le prénom, la date et le lieu de naissance. Il rend un score et, surtout,
+nom, le prénom et la date de naissance. Il rend un score et, surtout,
 **sur combien de champs il a pu juger**. Un score de 100 % obtenu sur le seul
-nom de famille n'a pas la valeur d'un score de 100 % obtenu sur quatre champs,
+nom de famille n'a pas la valeur d'un score obtenu sur l'identité entière,
 et l'écran doit pouvoir le dire.
 """
 
@@ -70,7 +70,24 @@ class Identite(Protocol):
 
 @dataclass(frozen=True)
 class StudentIdentity:
-    """Les quatre champs qui identifient un élève quand le matricule manque."""
+    """Les trois champs qui identifient un élève quand le matricule manque."""
+
+    @property
+    def suffisante(self) -> bool:
+        """Y a-t-il de quoi se prononcer sur cette saisie ?
+
+        Le nom, plus au moins un second element. Le nom seul est l'etat le plus
+        frequent du formulaire — la secretaire le tape avant le prenom — et il
+        rendrait 1.0 pour tous les homonymes : dans un etablissement qui compte
+        trois KOUASSI, l'ecran signalerait a chaque inscription, et un
+        avertissement permanent n'est plus lu.
+
+        Seul proprietaire de cette regle. Elle etait ecrite trois fois, dont une
+        seule verifiee, et les trois ne disaient pas la meme chose.
+        """
+        return bool(compact(self.last_name)) and (
+            bool(compact(self.first_name)) or self.birth_date is not None
+        )
 
     last_name: str | None
     first_name: str | None
@@ -126,17 +143,7 @@ class Ressemblance:
 
     score: float
     champs_compares: tuple[str, ...]
-    #: Les champs que la SAISIE portait, comparables ou non. C'est sur eux que
-    #: se decide le declenchement : une fiche stockee incomplete doit remonter
-    #: avec une confiance reduite, pas etre condamnee au silence.
-    champs_saisis: tuple[str, ...]
     champs_manquants: tuple[str, ...]
-
-    @property
-    def saisie_suffisante(self) -> bool:
-        """Le nom, plus au moins un second element d'identite."""
-        saisis = set(self.champs_saisis)
-        return "last_name" in saisis and bool(saisis & {"first_name", "birth_date"})
 
     @property
     def quasi_certain(self) -> bool:
@@ -144,19 +151,19 @@ class Ressemblance:
 
     @property
     def a_signaler(self) -> bool:
-        return self.saisie_suffisante and self.score >= SEUIL_SIGNALEMENT
+        return self.score >= SEUIL_SIGNALEMENT
 
     @property
     def juge_sur_peu(self) -> bool:
-        """Vrai quand la naissance manque des deux côtés.
+        """Vrai quand un champ n'a pas pu etre compare.
 
-        Seule la date departage vraiment : a Bouake, le lieu de naissance
-        est le meme pour presque tout le monde. Le compter comme un etat civil
-        corrobore gonflait le score ET faisait taire cet avertissement, ce qui
-        est le pire des deux mondes.
+        Le score ne porte alors que sur une partie de l'identite. Une version
+        anterieure ne levait cette reserve que sur la date manquante : une
+        fiche stockee sans prenom, comparee a une saisie complete, affichait
+        alors « 100 % » sans reserve alors que le prenom n'avait jamais ete
+        regarde. Les deux eleves repris sans prenom sont exactement ce cas.
 
-        C'est exactement le cas des fiches reprises d'un ancien systeme, et
-        l'ecran doit le dire au lieu d'afficher un pourcentage qui inspire une
+        L'ecran doit le dire au lieu d'afficher un pourcentage qui inspire une
         confiance qu'il ne merite pas.
         """
         return bool(self.champs_manquants)
@@ -165,8 +172,7 @@ class Ressemblance:
 def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
     """Compare la fiche saisie a une fiche existante.
 
-    Les deux arguments ne sont PAS interchangeables : `champs_saisis`, et donc
-    le declenchement, se lisent sur la premiere. Les poids sont renormalises
+    Les poids sont renormalises
     sur les seuls champs comparables, pour que deux fiches sans etat civil se
     jugent sur nom et prenom a parts egales plutot que de plafonner par le seul
     fait qu'il manque des donnees.
@@ -190,18 +196,8 @@ def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
     total_poids = sum(POIDS[c] for c in details)
     score = sum(details[c] * POIDS[c] for c in details) / total_poids if total_poids else 0.0
 
-    # Ce que la SAISIE portait, sans `getattr` : le protocole declare ces
-    # attributs, les lire directement laisse le verificateur de types faire son
-    # travail.
-    valeurs_saisies = {
-        "last_name": saisie.last_name,
-        "first_name": saisie.first_name,
-        "birth_date": saisie.birth_date,
-    }
-    saisis = tuple(champ for champ, valeur in valeurs_saisies.items() if valeur)
     return Ressemblance(
         score=round(score, 4),
         champs_compares=tuple(details),
-        champs_saisis=saisis,
         champs_manquants=tuple(manquants),
     )

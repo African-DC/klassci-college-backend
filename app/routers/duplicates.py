@@ -12,12 +12,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import (
-    TokenData,
-    get_current_user,
-    get_tenant_db,
-    require_permission,
-)
+from app.core.dependencies import get_tenant_db, require_permission
 from app.schemas.duplicates import DoublonsResponse
 from app.services import duplicates
 
@@ -36,7 +31,6 @@ async def chercher_doublons_eleve(
     ignorer_student_id: int | None = Query(
         None, description="La fiche en cours de modification, qui ne doit pas se signaler"
     ),
-    current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> DoublonsResponse:
