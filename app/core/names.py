@@ -1,4 +1,4 @@
-"""La forme comparable d'un nom : une seule définition, pour toute l'application.
+"""La forme comparable d'un nom d'élève : une seule définition pour la comparaison.
 
 Ce module existe parce que la normalisation était écrite deux fois — une en
 Python pour comparer, une en SQL pour présélectionner — et que les deux ont
@@ -9,6 +9,17 @@ La règle est désormais unique et appliquée à l'écriture : un élève porte 
 forme comparable dans ses colonnes `last_name_key` et `first_name_key`, que le
 modèle maintient. La lecture n'a plus rien à replier, et ne peut donc plus
 replier autrement.
+
+D'autres normalisations de noms subsistent ailleurs (`account_service._slug`
+pour fabriquer une adresse e-mail, les generateurs du seed de demonstration).
+Elles servent un autre usage et n'ont pas a partager cette regle-ci.
+
+⚠ MODIFIER `compact()` OU `_LIGATURES` IMPOSE UNE MIGRATION DE REMPLISSAGE.
+Les cles deja en base ont ete calculees par la version precedente. Sans
+recalcul, les fiches anciennes repondent selon l'ancienne regle et les
+nouvelles selon la nouvelle : c'est exactement la divergence que ce module
+supprime, replantee sur l'axe du temps. Voir la revision alembic
+`0075_student_search_key`, qui montre le remplissage a faire.
 """
 
 from __future__ import annotations

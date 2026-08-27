@@ -176,11 +176,18 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     # espace. Elle est ce que la recherche de doublons interroge.
     #
     # Elle est stockee, pas calculee a la lecture. Le repliage vivait avant
-    # dans la requete, en 216 `replace()` imbriques : illisible pour la base,
-    # inutilisable par un index — donc un balayage complet du fichier a chaque
-    # frappe — et refuse net par SQLite, dont l'analyseur plafonne a une
-    # centaine de niveaux d'imbrication. Il vivait surtout en DEUX exemplaires,
-    # un en SQL et un en Python, qui ont fini par ne plus dire la meme chose.
+    # dans la requete : 54 `replace()` imbriques, repliques quatre fois dans
+    # le meme arbre — une fois par expression du OR. SQLite refusait de
+    # l'analyser, son analyseur plafonnant a une centaine de niveaux
+    # d'imbrication cumulee, et vingt tests tombaient sur un debordement de
+    # pile. Il vivait surtout en DEUX exemplaires, un en SQL et un en Python,
+    # qui ont fini par ne plus dire la meme chose.
+    #
+    # Les index sur ces colonnes ne servent que la branche d'EGALITE, celle
+    # des noms de trois lettres ou moins. La recherche courante compile un
+    # `LIKE '%...%'` — joker en tete — qui reste un balayage. Le gain de ce
+    # stockage est la lisibilite de la requete et l'unicite de la regle, pas
+    # la vitesse.
     last_name_key: Mapped[str] = mapped_column(String(100), nullable=False, default="", index=True)
     first_name_key: Mapped[str] = mapped_column(String(100), nullable=False, default="", index=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)

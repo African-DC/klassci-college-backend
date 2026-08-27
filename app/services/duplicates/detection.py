@@ -127,7 +127,8 @@ def _query_with_enrollment(
         conditions.append(exact)
     # Les colonnes normalisées que l'élève porte déjà (#343). La lecture ne
     # replie plus rien : elle ne peut donc plus replier autrement que
-    # l'écriture, et un index peut enfin servir.
+    # l'écriture. Les index posés dessus ne servent que la branche d'égalité
+    # plus bas ; le motif flou reste un balayage, joker en tête oblige.
     nom_compacte = Student.last_name_key
     prenom_compacte = Student.first_name_key
     for valeur in (nom, prenom):
