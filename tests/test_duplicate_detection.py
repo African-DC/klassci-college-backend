@@ -96,6 +96,27 @@ def db() -> Iterator[Session]:
                 # Noms de trois lettres : parmi les plus repandus ici, et
                 # invisibles tant que la recherche exigeait un fragment de
                 # quatre caracteres.
+                # Accent en MAJUSCULE : la table de repli ne se declenchait pas
+                # sous SQLite, donc rien ne la couvrait.
+                Student(
+                    id=8,
+                    last_name="KOUAMÉ",
+                    # Le prenom porte lui aussi un accent : sinon la fiche
+                    # remonterait par le chemin du prenom et le test ne
+                    # mesurerait pas la table de repli.
+                    first_name="Aïcha",
+                    enrollment_number="ECER0903",
+                ),
+                # Nom court AVEC apostrophe : seul le chemin de l'egalite peut
+                # le retrouver, donc retirer la regle d'apostrophe se voit.
+                Student(
+                    id=9,
+                    last_name="N'DA",
+                    # Le prenom porte lui aussi une apostrophe : sinon la fiche
+                    # remonte par ce chemin-la et la regle n'est pas eprouvee.
+                    first_name="N'GO",
+                    enrollment_number="ECER0904",
+                ),
                 Student(
                     id=7,
                     last_name="YAO",
@@ -248,30 +269,17 @@ def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
 
 @pytest.mark.asyncio
 async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None:
-    """N'DRI figure dans le fichier des arrieres et doit se retrouver lui-meme.
+    """Les trois ecritures d'un meme nom doivent se retrouver.
 
-    La normalisation Python remplacait l'apostrophe par une espace tandis que
-    la colonne la gardait : aucun des deux motifs ne retrouvait l'autre, et cet
-    eleve ne pouvait jamais etre signale comme doublon.
-
-    L'apostrophe courbe est celle des claviers de telephone : elle a ete
-    oubliee au premier correctif, qui ne traitait que la droite.
+    Droite, courbe, ou absente : la normalisation Python et celle du SQL
+    doivent tomber d'accord. Ce test emprunte le motif flou, qui traverse
+    l'apostrophe sans avoir besoin de la regle ; c'est
+    `test_un_nom_court_avec_apostrophe_se_retrouve_sans` qui l'eprouve.
     """
     for saisie in ("N'DRI", "N’DRI", "NDRI", "N DRI"):
-        reponse = await chercher_doublons(
-            _Pont(db), last_name=saisie, first_name="Etiakoun grace naomie"
-        )
+        reponse = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Etiakoun")
         assert any(c.last_name == "N'DRI" for c in reponse.correspondances), (
             f"« {saisie} » ne retrouve pas N'DRI"
-        )
-
-    # L'autre sens : la fiche STOCKEE avec une apostrophe courbe. C'est celui
-    # que le premier correctif laissait passer, parce qu'il ne nettoyait que la
-    # saisie et pas la colonne.
-    for saisie in ("N'GUESSAN", "NGUESSAN"):
-        reponse = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Ama beatrice")
-        assert any("GUESSAN" in c.last_name for c in reponse.correspondances), (
-            f"« {saisie} » ne retrouve pas la fiche stockee avec une apostrophe courbe"
         )
 
 
@@ -393,3 +401,51 @@ async def test_l_egalite_sur_un_nom_court_ne_ratisse_pas_large(db: Session) -> N
     """
     reponse = await chercher_doublons(_Pont(db), last_name="YAO", first_name="Aya")
     assert all(c.last_name != "TRAORE" for c in reponse.correspondances)
+
+
+@pytest.mark.asyncio
+async def test_la_certitude_survit_au_plafond(db: Session, monkeypatch) -> None:
+    """Un matricule exact ne doit jamais tomber sous la troncature.
+
+    Le plafond garde les candidats par identifiant croissant. Une fiche récente
+    portant le matricule saisi pouvait donc être évincée par des homonymes plus
+    anciens : la seule correspondance certaine disparaissait, et l'écran
+    n'affichait que des ressemblances.
+    """
+    from app.services.duplicates import detection
+
+    monkeypatch.setattr(detection, "PLAFOND_CANDIDATS", 1)
+    reponse = await chercher_doublons(
+        _Pont(db),
+        last_name="KOUASSI",
+        first_name="Aya marie adelaide",
+        enrollment_number="ECER0864",
+    )
+    # ECER0864 est KOUASSI David, identifiant 2 : sans le tri il serait derrière
+    # KOUASSI Aya, identifiant 1, et le plafond de 1 l'éliminerait.
+    assert [c.motif for c in reponse.correspondances] == ["matricule"]
+
+
+@pytest.mark.asyncio
+async def test_un_nom_accentue_se_retrouve_sans_accent(db: Session) -> None:
+    """« KOUAME » doit retrouver « KOUAMÉ ».
+
+    La table de repli des diacritiques n'etait couverte par rien : SQLite ne
+    minuscule que l'ASCII, donc les regles ecrites en minuscules accentuees ne
+    s'y declenchaient jamais. Les formes majuscules la rendent verifiable.
+    """
+    reponse = await chercher_doublons(_Pont(db), last_name="KOUAME", first_name="Aicha")
+    assert any(c.last_name == "KOUAMÉ" for c in reponse.correspondances)
+
+
+@pytest.mark.asyncio
+async def test_un_nom_court_avec_apostrophe_se_retrouve_sans(db: Session) -> None:
+    """« NDA » doit retrouver « N'DA ».
+
+    Trois lettres : le motif flou ne s'applique pas, seule l'egalite peut le
+    retrouver, et elle exige que l'apostrophe soit retiree des deux cotes.
+    L'ancien test passait par « %dri% », qui traversait l'apostrophe sans avoir
+    besoin de la regle.
+    """
+    reponse = await chercher_doublons(_Pont(db), last_name="NDA", first_name="NGO")
+    assert any(c.last_name == "N'DA" for c in reponse.correspondances)

@@ -25,12 +25,12 @@ def test_la_route_repond_200(client: TestClient) -> None:
         routeur_doublons,
         "chercher_doublons",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
+        return_value=DoublonsResponse(correspondances=[], tronque=False),
     ) as service:
         reponse = client.get(CHEMIN, params={"last_name": "KOUASSI", "first_name": "Aya"})
 
     assert reponse.status_code == 200, reponse.text
-    assert reponse.json() == {"correspondances": [], "total": 0, "tronque": False}
+    assert reponse.json() == {"correspondances": [], "tronque": False}
     service.assert_awaited_once()
 
 
@@ -40,7 +40,7 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
         routeur_doublons,
         "chercher_doublons",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
+        return_value=DoublonsResponse(correspondances=[], tronque=False),
     ) as service:
         client.get(
             CHEMIN,
@@ -76,7 +76,7 @@ def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
         routeur_doublons,
         "chercher_doublons",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], total=0, tronque=False),
+        return_value=DoublonsResponse(correspondances=[], tronque=False),
     ):
         reponse = client.get(f"/admin/students/{valeur}", params={"last_name": "KOUASSI"})
 

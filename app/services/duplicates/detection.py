@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Literal, cast
+from typing import Any, cast
 
 from sqlalchemy import ColumnElement, Select, and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +50,20 @@ STATUTS_OCCUPANTS = (
     EnrollmentStatus.VALIDE,
 )
 
-Motif = Literal["matricule", "ressemblance"]
+
+def _tri_certitude_dabord(matricule: str | None) -> list[ColumnElement[Any]]:
+    """Le tri des candidats : la certitude d'abord, puis un ordre stable.
+
+    Sans le premier critere, le plafond de candidats pouvait evincer la seule
+    correspondance sure — un matricule exact — au profit d'homonymes plus
+    anciens. Il n'est ajoute que s'il designe quelque chose : un `false()` nu
+    dans un ORDER BY se compile en `0`, que SQLite prend pour un numero de
+    colonne.
+    """
+    if not matricule or not matricule.strip():
+        return [Student.id]
+    exact = _minuscules(Student.enrollment_number) == matricule.strip().lower()
+    return [exact.desc(), Student.id]
 
 
 def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
@@ -63,6 +76,11 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     Suivi : #343 — une colonne normalisee et indexee supprimerait cette
     fonction entiere, et avec elle le risque de derive entre les deux
     normalisations.
+
+    Les formes MAJUSCULES sont listees en plus des minuscules : SQLite ne
+    minuscule que l'ASCII, donc la table des minuscules accentuees ne s'y
+    declenche jamais et aucun test ne pouvait la couvrir. MySQL les replie,
+    mais la liste doit rester verifiable sous les deux moteurs.
 
     MySQL et SQLite n'ont pas `unaccent`. On retire les diacritiques
     fréquents au copier-coller, on remplace la ponctuation par rien, et
@@ -101,6 +119,29 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
         ("-", ""),
         (" ", ""),
         (".", ""),
+        ("É", "e"),
+        ("È", "e"),
+        ("Ê", "e"),
+        ("Ë", "e"),
+        ("À", "a"),
+        ("Â", "a"),
+        ("Ä", "a"),
+        ("Î", "i"),
+        ("Ï", "i"),
+        ("Ô", "o"),
+        ("Ö", "o"),
+        ("Ù", "u"),
+        ("Û", "u"),
+        ("Ü", "u"),
+        ("Ç", "c"),
+        ("Ñ", "n"),
+        ("Á", "a"),
+        ("Í", "i"),
+        ("Ó", "o"),
+        ("Ú", "u"),
+        ("Ã", "a"),
+        ("Õ", "o"),
+        ("Œ", "oe"),
     ):
         texte = func.replace(texte, source, cible)
     return texte
@@ -201,7 +242,7 @@ def _requete_avec_inscription(
         .where(or_(false(), *conditions))
         # Sans ordre explicite, quels 200 remontent depend du plan choisi par
         # la base : deux saisies identiques pourraient ne pas voir les memes.
-        .order_by(Student.id)
+        .order_by(*_tri_certitude_dabord(matricule))
         .limit(PLAFOND_CANDIDATS)
     )
     return cast("Select[tuple[Student, Enrollment | None, Class | None]]", requete)
@@ -287,7 +328,7 @@ async def chercher_doublons(
     # Le `.strip()` retient le cas d'un matricule fait d'espaces, qui sinon
     # coutait un aller-retour pour une requete vide.
     if not ((enrollment_number or "").strip() or saisi.suffisante):
-        return DoublonsResponse(correspondances=[], total=0, tronque=False)
+        return DoublonsResponse(correspondances=[], tronque=False)
 
     resultat = await db.execute(
         _requete_avec_inscription(
