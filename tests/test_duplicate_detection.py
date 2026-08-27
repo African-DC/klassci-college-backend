@@ -19,7 +19,7 @@ from app.core.database import Base
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
-from app.services.duplicates.detection import _motifs, chercher_doublons
+from app.services.duplicates.detection import _noyau, chercher_doublons
 
 
 class _Pont:
@@ -218,11 +218,14 @@ def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
     prouve que la racine amputee est bien produite, et il tombe si on revient
     au prefixe strict.
     """
-    # Un seul motif : le préfixe strict est contenu dans celui-ci, il ne
-    # ramenait donc aucune ligne de plus.
-    assert _motifs("KOULIBALY") == ["%ouli%"]
-    # Trop court pour chercher quoi que ce soit sans tout remonter.
-    assert _motifs("KO") == []
+    # On cherche la racine privée de sa première lettre : c'est ce qui rattrape
+    # la faute de frappe de tête.
+    assert _noyau("KOULIBALY") == "oulib"
+    # « YAO » donnerait « ao », qui remonte TRAORE et la moitié du fichier. Le
+    # seuil porte sur le fragment réellement cherché, pas sur la racine avant
+    # amputation.
+    assert _noyau("YAO") is None
+    assert _noyau("KO") is None
 
 
 @pytest.mark.asyncio
@@ -260,7 +263,10 @@ async def test_deux_noms_etrangers_ne_se_rapprochent_pas(db: Session) -> None:
     signalement permanent, et un avertissement permanent n'est plus lu.
     """
     trouves, _ = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
-    assert all(c.last_name != "TRAORE" for c in trouves)
+    # Assertion sur le résultat entier : la version précédente vérifiait que
+    # TRAORE n'était pas là, alors qu'il n'était même pas candidat — elle
+    # passait aussi avec le seuil de signalement ramené à zéro.
+    assert trouves == []
 
 
 @pytest.mark.asyncio

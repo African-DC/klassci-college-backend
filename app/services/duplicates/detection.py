@@ -64,7 +64,6 @@ class Correspondance:
     first_name: str
     enrollment_number: str | None
     birth_date: date | None
-    birth_place: str | None
     motif: Motif
     ressemblance: Ressemblance | None
     inscription_annee_courante: InscriptionExistante | None
@@ -76,7 +75,6 @@ class Correspondance:
             first_name=self.first_name,
             enrollment_number=self.enrollment_number,
             birth_date=self.birth_date,
-            birth_place=self.birth_place,
             motif=self.motif,
             score=self.ressemblance.score if self.ressemblance else None,
             juge_sur_peu=self.ressemblance.juge_sur_peu if self.ressemblance else False,
@@ -147,22 +145,22 @@ PLAFOND_CANDIDATS = 200
 logger = logging.getLogger(__name__)
 
 
-def _motifs(valeur: str | None) -> list[str]:
-    """Les debuts de nom a chercher, y compris avec une premiere lettre fausse.
+def _noyau(valeur: str | None) -> str | None:
+    """Le fragment de nom a chercher, ou rien si le nom est trop court.
 
-    Un prefixe strict defait la raison d'etre du score : COULIBALY saisi
-    KOULIBALY n'est jamais candidat, donc la ressemblance ne tourne meme pas —
-    et c'est precisement le cas pour lequel elle existe. On cherche donc aussi
-    la racine amputee de sa premiere lettre, ce qui rattrape la faute de frappe
-    la plus frequente sans elargir a tout l'etablissement.
+    On cherche la racine PRIVEE de sa premiere lettre, ce qui rattrape la faute
+    de frappe la plus frequente : COULIBALY saisi KOULIBALY reste trouvable, et
+    le prefixe strict etait de toute facon contenu dans ce motif.
+
+    Le seuil porte sur le fragment reellement cherche, pas sur la racine avant
+    amputation. Une version anterieure exigeait trois caracteres AVANT de
+    retirer la premiere lettre : « YAO » cherchait alors « %ao% », qui remonte
+    TRAORE et une bonne part du fichier. YAO est un des noms les plus repandus
+    ici, et la troncature a 200 candidats aurait ecarte le vrai doublon.
     """
-    racine = compact(valeur)[:5]
-    if len(racine) < 3:
-        return []
-    # Un seul motif suffit : « couli% » est contenu dans « %ouli% », donc le
-    # prefixe strict ne ramenait aucune ligne que celui-ci ne ramene pas. Il
-    # doublait le nombre de predicats LIKE pour rien.
-    return [f"%{racine[1:]}%"]
+    racine = compact(valeur)[:6]
+    noyau = racine[1:]
+    return noyau if len(noyau) >= 3 else None
 
 
 def _requete_avec_inscription(
@@ -179,9 +177,11 @@ def _requete_avec_inscription(
     if matricule and matricule.strip():
         conditions.append(_minuscules(Student.enrollment_number) == matricule.strip().lower())
     for valeur in (nom, prenom):
-        for motif in _motifs(valeur):
-            conditions.append(_compact_sql(Student.last_name).like(motif))
-            conditions.append(_compact_sql(Student.first_name).like(motif))
+        noyau = _noyau(valeur)
+        if noyau is None:
+            continue
+        conditions.append(_compact_sql(Student.last_name).like(f"%{noyau}%"))
+        conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
     # La date de naissance ne depend pas de l'orthographe : elle rattrape les
     # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
     # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
@@ -215,29 +215,6 @@ def _requete_avec_inscription(
     )
 
 
-def _identite_saisie(
-    last_name: str | None,
-    first_name: str | None,
-    birth_date: date | None,
-    birth_place: str | None,
-) -> StudentIdentity:
-    return StudentIdentity(
-        last_name=last_name,
-        first_name=first_name,
-        birth_date=birth_date,
-        birth_place=birth_place,
-    )
-
-
-def _identite_eleve(eleve: Student) -> StudentIdentity:
-    return StudentIdentity(
-        last_name=eleve.last_name,
-        first_name=eleve.first_name,
-        birth_date=eleve.birth_date,
-        birth_place=eleve.birth_place,
-    )
-
-
 def _inscription_jointe(
     inscription: Enrollment | None, classe: Class | None
 ) -> InscriptionExistante | None:
@@ -256,9 +233,21 @@ def _criteres_exploitables(
     """Y a-t-il de quoi chercher ?"""
     if matricule and matricule.strip():
         return True
-    if naissance is not None:
-        return True
-    return any(_motifs(valeur) for valeur in (nom, prenom))
+    # Deux conditions distinctes, qu'une version anterieure confondait.
+    #
+    # De quoi CHERCHER : au moins un fragment assez long pour un motif SQL.
+    if _noyau(nom) is None and _noyau(prenom) is None:
+        return False
+    # De quoi RAPPORTER : `Ressemblance.saisie_suffisante` exige le nom plus un
+    # second element. Sans cet accord, le nom seul — l'etat le plus frequent du
+    # formulaire, avant que le prenom soit tape — lancait quatre LIKE a joker de
+    # tete sur deux colonnes non indexees, a chaque touche, pour un resultat qui
+    # ne pouvait etre rapporte.
+    #
+    # Le second element n'a pas besoin d'etre assez long pour un motif : « Aya »
+    # est un prenom courant, trois lettres, et suffit a departager deux
+    # homonymes une fois les candidats remontes par le nom.
+    return bool(compact(nom)) and (bool(compact(prenom)) or naissance is not None)
 
 
 async def chercher_doublons(
@@ -267,7 +256,6 @@ async def chercher_doublons(
     last_name: str | None,
     first_name: str | None,
     birth_date: date | None = None,
-    birth_place: str | None = None,
     enrollment_number: str | None = None,
     academic_year_id: int | None = None,
     ignorer_student_id: int | None = None,
@@ -289,7 +277,9 @@ async def chercher_doublons(
             last_name, first_name, enrollment_number, academic_year_id, birth_date
         )
     )
-    lignes = list(resultat.unique().all())
+    # Pas de `.unique()` : sans `joinedload` il ne dedoublonne rien, et se
+    # lirait comme s'il interagissait avec le compte de troncature ci-dessous.
+    lignes = list(resultat.all())
     tronque = len(lignes) >= PLAFOND_CANDIDATS
     if tronque:
         # Le vrai doublon peut etre au-dela : le dire, plutot que de laisser
@@ -301,7 +291,7 @@ async def chercher_doublons(
             first_name,
         )
 
-    saisi = _identite_saisie(last_name, first_name, birth_date, birth_place)
+    saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
     trouves: dict[int, Correspondance] = {}
     for existant, inscription, classe in lignes:
         if ignorer_student_id is not None and existant.id == ignorer_student_id:
@@ -310,7 +300,9 @@ async def chercher_doublons(
             continue
 
         meme_matricule = _meme_matricule(enrollment_number, existant.enrollment_number)
-        r = comparer(saisi, _identite_eleve(existant))
+        # `Student` satisfait `Identite` structurellement : c'est la raison
+        # d'etre du protocole, et le recopier l'annulait.
+        r = comparer(saisi, existant)
         if not meme_matricule and not r.a_signaler:
             continue
 
@@ -320,7 +312,6 @@ async def chercher_doublons(
             first_name=existant.first_name,
             enrollment_number=existant.enrollment_number,
             birth_date=existant.birth_date,
-            birth_place=existant.birth_place,
             motif="matricule" if meme_matricule else "ressemblance",
             ressemblance=None if meme_matricule else r,
             inscription_annee_courante=_inscription_jointe(inscription, classe),
@@ -339,7 +330,6 @@ async def reponse_doublons(
     last_name: str | None,
     first_name: str | None,
     birth_date: date | None = None,
-    birth_place: str | None = None,
     enrollment_number: str | None = None,
     academic_year_id: int | None = None,
     ignorer_student_id: int | None = None,
@@ -349,7 +339,6 @@ async def reponse_doublons(
         last_name=last_name,
         first_name=first_name,
         birth_date=birth_date,
-        birth_place=birth_place,
         enrollment_number=enrollment_number,
         academic_year_id=academic_year_id,
         ignorer_student_id=ignorer_student_id,

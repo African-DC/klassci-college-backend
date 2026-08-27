@@ -22,7 +22,6 @@ class CorrespondanceResponse(BaseModel):
     first_name: str
     enrollment_number: str | None = None
     birth_date: date | None = None
-    birth_place: str | None = None
     motif: Literal["matricule", "ressemblance"] = Field(
         description="« matricule » (certain) ou « ressemblance »"
     )

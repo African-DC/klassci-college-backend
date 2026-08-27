@@ -66,7 +66,6 @@ class Identite(Protocol):
     last_name: str | None
     first_name: str | None
     birth_date: date | None
-    birth_place: str | None
 
 
 @dataclass(frozen=True)
@@ -76,7 +75,6 @@ class StudentIdentity:
     last_name: str | None
     first_name: str | None
     birth_date: date | None = None
-    birth_place: str | None = None
 
 
 def _bigrammes(texte: str) -> set[str]:
@@ -133,7 +131,6 @@ class Ressemblance:
     #: avec une confiance reduite, pas etre condamnee au silence.
     champs_saisis: tuple[str, ...]
     champs_manquants: tuple[str, ...]
-    details: dict[str, float]
 
     @property
     def saisie_suffisante(self) -> bool:
@@ -146,27 +143,8 @@ class Ressemblance:
         return self.score >= SEUIL_QUASI_CERTAIN
 
     @property
-    def preuve_suffisante(self) -> bool:
-        """La personne au guichet a-t-elle saisi assez pour qu'on se prononce ?
-
-        La question porte sur la SAISIE, pas sur ce qui a pu etre compare. Une
-        version anterieure exigeait que le prenom ait ete compare, ce qui
-        condamnait toute fiche stockee sans prenom : les deux eleves repris
-        sans prenom, qui doivent 101 000 FCFA a eux deux, ne pouvaient plus
-        jamais etre signales. Une fiche degradee doit remonter avec une
-        confiance reduite, pas disparaitre.
-
-        Le nom seul ne suffit pas : c'est la saisie la plus frequente, avant
-        que le prenom soit tape, et elle rendrait 1.0 pour tous les homonymes.
-        Dans un etablissement qui compte trois KOUASSI, l'ecran signalerait
-        « 100 % » a chaque inscription, et un avertissement permanent n'est
-        plus lu.
-        """
-        return self.saisie_suffisante
-
-    @property
     def a_signaler(self) -> bool:
-        return self.preuve_suffisante and self.score >= SEUIL_SIGNALEMENT
+        return self.saisie_suffisante and self.score >= SEUIL_SIGNALEMENT
 
     @property
     def juge_sur_peu(self) -> bool:
@@ -181,27 +159,29 @@ class Ressemblance:
         l'ecran doit le dire au lieu d'afficher un pourcentage qui inspire une
         confiance qu'il ne merite pas.
         """
-        return "birth_date" not in self.champs_compares
+        return bool(self.champs_manquants)
 
 
-def comparer(gauche: Identite, droite: Identite) -> Ressemblance:
-    """Compare deux fiches sur les champs qu'elles ont en commun.
+def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
+    """Compare la fiche saisie a une fiche existante.
 
-    Les poids sont renormalisés sur les seuls champs comparables : deux fiches
-    sans état civil se jugent sur nom et prénom à parts égales, au lieu de
-    plafonner à 60 % par le seul fait qu'il manque des données.
+    Les deux arguments ne sont PAS interchangeables : `champs_saisis`, et donc
+    le declenchement, se lisent sur la premiere. Les poids sont renormalises
+    sur les seuls champs comparables, pour que deux fiches sans etat civil se
+    jugent sur nom et prenom a parts egales plutot que de plafonner par le seul
+    fait qu'il manque des donnees.
     """
     details: dict[str, float] = {}
     manquants: list[str] = []
 
     for champ in ("last_name", "first_name"):
-        r = ressemblance_texte(getattr(gauche, champ), getattr(droite, champ))
+        r = ressemblance_texte(getattr(saisie, champ), getattr(existante, champ))
         if r is None:
             manquants.append(champ)
         else:
             details[champ] = r
 
-    r_date = ressemblance_date(gauche.birth_date, droite.birth_date)
+    r_date = ressemblance_date(saisie.birth_date, existante.birth_date)
     if r_date is None:
         manquants.append("birth_date")
     else:
@@ -210,11 +190,18 @@ def comparer(gauche: Identite, droite: Identite) -> Ressemblance:
     total_poids = sum(POIDS[c] for c in details)
     score = sum(details[c] * POIDS[c] for c in details) / total_poids if total_poids else 0.0
 
-    saisis = tuple(champ for champ in POIDS if (getattr(gauche, champ, None) or "") != "")
+    # Ce que la SAISIE portait, sans `getattr` : le protocole declare ces
+    # attributs, les lire directement laisse le verificateur de types faire son
+    # travail.
+    valeurs_saisies = {
+        "last_name": saisie.last_name,
+        "first_name": saisie.first_name,
+        "birth_date": saisie.birth_date,
+    }
+    saisis = tuple(champ for champ, valeur in valeurs_saisies.items() if valeur)
     return Ressemblance(
         score=round(score, 4),
         champs_compares=tuple(details),
         champs_saisis=saisis,
         champs_manquants=tuple(manquants),
-        details=details,
     )

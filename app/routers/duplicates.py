@@ -28,8 +28,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def chercher_doublons_eleve(
     last_name: str | None = Query(None, description="Nom de famille saisi"),
     first_name: str | None = Query(None, description="Prénom saisi"),
-    birth_date: date | None = Query(None),
-    birth_place: str | None = Query(None),
+    birth_date: date | None = Query(None, description="Date de naissance, si connue"),
     enrollment_number: str | None = Query(None, description="Matricule, s'il est connu"),
     academic_year_id: int | None = Query(
         None, description="Pour signaler une inscription déjà ouverte sur cette année"
@@ -56,7 +55,6 @@ async def chercher_doublons_eleve(
         last_name=last_name,
         first_name=first_name,
         birth_date=birth_date,
-        birth_place=birth_place,
         enrollment_number=enrollment_number,
         academic_year_id=academic_year_id,
         ignorer_student_id=ignorer_student_id,
