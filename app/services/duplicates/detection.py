@@ -18,6 +18,7 @@ Le matricule identique, lui, est une collision : l'écriture la refuse.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from typing import Literal
@@ -85,7 +86,6 @@ class Correspondance:
             score=self.ressemblance.score if self.ressemblance else None,
             champs_compares=list(self.ressemblance.champs_compares) if self.ressemblance else [],
             juge_sur_peu=self.ressemblance.juge_sur_peu if self.ressemblance else False,
-            bloquant=self.bloquant,
             inscription_annee_courante=self.inscription_annee_courante,
         )
 
@@ -103,6 +103,10 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     """
     texte = _minuscules(colonne)
     for source, cible in (
+        # U+2019 : l'apostrophe des claviers de telephone et des copier-coller.
+        # Sans elle, `N’DRI` n'est pas retrouve alors que `N'DRI` l'est.
+        ("’", ""),
+        ("`", ""),
         ("é", "e"),
         ("è", "e"),
         ("ê", "e"),
@@ -117,6 +121,14 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
         ("ù", "u"),
         ("û", "u"),
         ("ü", "u"),
+        ("ç", "c"),
+        ("ñ", "n"),
+        ("á", "a"),
+        ("í", "i"),
+        ("ó", "o"),
+        ("ú", "u"),
+        ("ã", "a"),
+        ("õ", "o"),
         ("ç", "c"),
         ("œ", "oe"),
         ("'", ""),
@@ -135,8 +147,12 @@ def _meme_matricule(saisi: str | None, existant: str | None) -> bool:
     return saisi.strip().lower() == existant.strip().lower()
 
 
-#: Au-dela, on ne compare plus : on tronque, et on l'ecrit dans le journal.
+#: Au-dela, on ne compare plus. La troncature est annoncee a l'appelant
+#: (`tronque`) et journalisee : un plafond silencieux ferait passer « rien
+#: trouve » pour une certitude alors qu'on n'a pas regarde.
 PLAFOND_CANDIDATS = 200
+
+logger = logging.getLogger(__name__)
 
 
 def _motifs(valeur: str | None) -> list[str]:
@@ -177,15 +193,6 @@ def _requete_avec_inscription(
     # candidats ; c'est le score qui tranche ensuite.
     if naissance is not None:
         conditions.append(Student.birth_date == naissance)
-    if not conditions:
-        return (
-            select(Student, inscription, classe)
-            .select_from(Student)
-            .outerjoin(inscription, inscription.id.is_(None))
-            .outerjoin(classe, classe.id.is_(None))
-            .where(Student.id.is_(None))
-        )
-
     jointure_inscription = and_(
         inscription.student_id == Student.id,
         inscription.academic_year_id == academic_year_id if academic_year_id is not None else False,
@@ -199,6 +206,9 @@ def _requete_avec_inscription(
         .outerjoin(inscription, jointure_inscription)
         .outerjoin(classe, classe.id == inscription.class_id)
         .where(or_(*conditions))
+        # Sans ordre explicite, quels 200 remontent depend du plan choisi par
+        # la base : deux saisies identiques pourraient ne pas voir les memes.
+        .order_by(Student.id)
         .limit(PLAFOND_CANDIDATS)
     )
 
@@ -238,6 +248,17 @@ def _inscription_jointe(
     )
 
 
+def _criteres_exploitables(
+    nom: str | None, prenom: str | None, matricule: str | None, naissance: date | None
+) -> bool:
+    """Y a-t-il de quoi chercher ?"""
+    if matricule and matricule.strip():
+        return True
+    if naissance is not None:
+        return True
+    return any(_motifs(valeur) for valeur in (nom, prenom))
+
+
 async def chercher_doublons(
     db: AsyncSession,
     *,
@@ -250,12 +271,27 @@ async def chercher_doublons(
     ignorer_student_id: int | None = None,
 ) -> list[Correspondance]:
     """Les fiches existantes qui pourraient être la même personne, les plus sûres d'abord."""
+    # Sans critere exploitable, il n'y a rien a chercher : on evite
+    # l'aller-retour plutot que de demander a MySQL une requete batie pour ne
+    # rien rendre.
+    if not _criteres_exploitables(last_name, first_name, enrollment_number, birth_date):
+        return []
+
     resultat = await db.execute(
         _requete_avec_inscription(
             last_name, first_name, enrollment_number, academic_year_id, birth_date
         )
     )
     lignes = list(resultat.unique().all())
+    if len(lignes) >= PLAFOND_CANDIDATS:
+        # Le vrai doublon peut etre au-dela : le dire, plutot que de laisser
+        # croire qu'on a tout regarde.
+        logger.warning(
+            "doublons: %s candidats atteints, comparaison tronquee (nom=%r prenom=%r)",
+            PLAFOND_CANDIDATS,
+            last_name,
+            first_name,
+        )
 
     saisi = _identite_saisie(last_name, first_name, birth_date, birth_place)
     trouves: dict[int, Correspondance] = {}

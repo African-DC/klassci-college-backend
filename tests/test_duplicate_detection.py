@@ -19,7 +19,7 @@ from app.core.database import Base
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
-from app.services.duplicates.detection import chercher_doublons
+from app.services.duplicates.detection import _motifs, chercher_doublons
 
 
 class _Pont:
@@ -88,6 +88,16 @@ def db() -> Iterator[Session]:
                     last_name="TRAORE",
                     first_name="Cheick moussa",
                     enrollment_number="ECER0344",
+                ),
+                # Stocke avec l'apostrophe COURBE : celle que produisent les
+                # claviers de telephone et les copier-coller depuis Word. Le
+                # premier correctif ne traitait que la droite, donc cette fiche
+                # restait invisible cote base.
+                Student(
+                    id=6,
+                    last_name="N’GUESSAN",
+                    first_name="Ama beatrice",
+                    enrollment_number="ECER0901",
                 ),
             ]
         )
@@ -181,41 +191,89 @@ async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> Non
 
 @pytest.mark.asyncio
 async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> None:
-    """COULIBALY saisi KOULIBALY doit rester détectable.
+    """COULIBALY saisi KOULIBALY doit rester detectable.
 
-    Un préfixe strict défaisait la raison d'être du score : le candidat n'était
-    jamais remonté, donc la ressemblance ne tournait même pas. C'est pourtant
+    Un prefixe strict defaisait la raison d'etre du score : le candidat n'etait
+    jamais remonte, donc la ressemblance ne tournait meme pas. C'est pourtant
     exactement le cas pour lequel elle existe — une famille revient, le nom est
-    tapé d'oreille.
+    tape d'oreille.
     """
-    # Le nom seul : c'est l'ordre de saisie réel, et c'est le moment où le
-    # signalement est encore utile. Donner aussi le prénom ferait remonter le
-    # candidat par ce chemin-là, et le test ne mesurerait plus rien.
-    trouves = await chercher_doublons(_Pont(db), last_name="KOULIBALY", first_name=None)
-    assert any(c.last_name == "COULIBALY" for c in trouves), (
-        "le prefiltre a exclu le candidat avant que le score puisse juger"
+    trouves = await chercher_doublons(
+        _Pont(db), last_name="KOULIBALY", first_name="Souleymane ben junior"
     )
+    assert any(c.last_name == "COULIBALY" for c in trouves)
+
+
+def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
+    """Le prefiltre lui-meme, isole du reste.
+
+    Le test ci-dessus passe aussi par le chemin du prenom : seul celui-ci
+    prouve que la racine amputee est bien produite, et il tombe si on revient
+    au prefixe strict.
+    """
+    assert _motifs("KOULIBALY") == ["kouli%", "%ouli%"]
+    # Trop court pour chercher quoi que ce soit sans tout remonter.
+    assert _motifs("KO") == []
 
 
 @pytest.mark.asyncio
 async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None:
-    """N'DRI figure dans le fichier des arriérés et doit se retrouver lui-même.
+    """N'DRI figure dans le fichier des arrieres et doit se retrouver lui-meme.
 
-    La normalisation Python remplaçait l'apostrophe par une espace tandis que
+    La normalisation Python remplacait l'apostrophe par une espace tandis que
     la colonne la gardait : aucun des deux motifs ne retrouvait l'autre, et cet
-    élève ne pouvait jamais être signalé comme doublon.
+    eleve ne pouvait jamais etre signale comme doublon.
+
+    L'apostrophe courbe est celle des claviers de telephone : elle a ete
+    oubliee au premier correctif, qui ne traitait que la droite.
     """
-    for saisie in ("N'DRI", "NDRI", "N DRI"):
-        trouves = await chercher_doublons(_Pont(db), last_name=saisie, first_name=None)
+    for saisie in ("N'DRI", "N’DRI", "NDRI", "N DRI"):
+        trouves = await chercher_doublons(
+            _Pont(db), last_name=saisie, first_name="Etiakoun grace naomie"
+        )
         assert any(c.last_name == "N'DRI" for c in trouves), f"« {saisie} » ne retrouve pas N'DRI"
+
+    # L'autre sens : la fiche STOCKEE avec une apostrophe courbe. C'est celui
+    # que le premier correctif laissait passer, parce qu'il ne nettoyait que la
+    # saisie et pas la colonne.
+    for saisie in ("N'GUESSAN", "NGUESSAN"):
+        trouves = await chercher_doublons(
+            _Pont(db), last_name=saisie, first_name="Ama beatrice"
+        )
+        assert any("GUESSAN" in c.last_name for c in trouves), (
+            f"« {saisie} » ne retrouve pas la fiche stockee avec une apostrophe courbe"
+        )
 
 
 @pytest.mark.asyncio
 async def test_deux_noms_etrangers_ne_se_rapprochent_pas(db: Session) -> None:
-    """L'élargissement du préfiltre ne doit pas rapprocher n'importe quoi.
+    """L'elargissement du prefiltre ne doit pas rapprocher n'importe quoi.
 
-    Sans ce garde, tolérer une première lettre fausse dériverait vers un
+    Sans ce garde, tolerer une premiere lettre fausse deriverait vers un
     signalement permanent, et un avertissement permanent n'est plus lu.
     """
     trouves = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
     assert all(c.last_name != "TRAORE" for c in trouves)
+
+
+@pytest.mark.asyncio
+async def test_le_nom_seul_ne_declenche_rien(db: Session) -> None:
+    """Trois KOUASSI dans l'ecole : le nom seul rendrait 100 % pour chacun.
+
+    C'est la saisie la plus frequente — la secretaire tape le nom avant le
+    prenom. Signaler la ferait afficher « 100 % de ressemblance » a chaque
+    inscription, et un avertissement permanent cesse d'etre lu.
+    """
+    trouves = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name=None)
+    assert trouves == []
+
+
+@pytest.mark.asyncio
+async def test_le_matricule_seul_signale_malgre_tout(db: Session) -> None:
+    """L'exigence de preuve ne doit pas museler la certitude.
+
+    Un matricule identique n'est pas une ressemblance : il ne passe pas par le
+    score, et doit remonter meme sans prenom.
+    """
+    trouves = await chercher_doublons(_Pont(db), last_name=None, first_name=None, enrollment_number="ECER0882")
+    assert [c.motif for c in trouves] == ["matricule"]

@@ -131,19 +131,35 @@ class Ressemblance:
         return self.score >= SEUIL_QUASI_CERTAIN
 
     @property
+    def preuve_suffisante(self) -> bool:
+        """Le nom ET le prenom ont pu etre compares.
+
+        Sans cette condition, la saisie la plus frequente — le nom seul, avant
+        que le prenom soit tape — rend 1.0 pour tous les homonymes. Dans un
+        etablissement qui compte trois KOUASSI, l'ecran signalerait « 100 % de
+        ressemblance » a chaque fois. Un avertissement qui se declenche
+        toujours n'est plus lu, et c'est ce qu'on cherche a eviter.
+        """
+        return {"last_name", "first_name"} <= set(self.champs_compares)
+
+    @property
     def a_signaler(self) -> bool:
-        return self.score >= SEUIL_SIGNALEMENT
+        return self.preuve_suffisante and self.score >= SEUIL_SIGNALEMENT
 
     @property
     def juge_sur_peu(self) -> bool:
         """Vrai quand la naissance manque des deux côtés.
 
-        Le score ne repose alors que sur le nom et le prénom. C'est
-        exactement le cas des fiches reprises d'un ancien système, et l'écran
-        doit le dire au lieu d'afficher un pourcentage qui inspire une
-        confiance qu'il ne mérite pas.
+        Seule la date departage vraiment : a Bouake, le lieu de naissance
+        est le meme pour presque tout le monde. Le compter comme un etat civil
+        corrobore gonflait le score ET faisait taire cet avertissement, ce qui
+        est le pire des deux mondes.
+
+        C'est exactement le cas des fiches reprises d'un ancien systeme, et
+        l'ecran doit le dire au lieu d'afficher un pourcentage qui inspire une
+        confiance qu'il ne merite pas.
         """
-        return not ({"birth_date", "birth_place"} & set(self.champs_compares))
+        return "birth_date" not in self.champs_compares
 
 
 def comparer(gauche: Identite, droite: Identite) -> Ressemblance:

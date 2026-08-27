@@ -84,9 +84,7 @@ from app.schemas.admin import (
     UserAccountUpdate,
 )
 from app.schemas.duplicates import (
-    CorrespondanceResponse,
     DoublonsResponse,
-    InscriptionExistante,
 )
 from app.services import admin_service, enrollment_fees, matricule_service
 from app.services.duplicates import detection as duplicates
@@ -128,7 +126,10 @@ async def chercher_doublons_eleve(
     reviendrait à renvoyer un vrai nouvel élève qui porte le nom de son cousin,
     sans recours.
     """
-    trouvees = await duplicates.chercher_doublons(
+    # La mise en forme vit dans le service, qui la possede deja : la garder
+    # ici en faisait une seconde copie, dans un routeur qui frole les 1400
+    # lignes, pendant que celle du service n'etait appelee par personne.
+    return await duplicates.reponse_doublons(
         db,
         last_name=last_name,
         first_name=first_name,
@@ -138,28 +139,6 @@ async def chercher_doublons_eleve(
         academic_year_id=academic_year_id,
         ignorer_student_id=ignorer_student_id,
     )
-    correspondances = [
-        CorrespondanceResponse(
-            student_id=c.student_id,
-            last_name=c.last_name,
-            first_name=c.first_name,
-            enrollment_number=c.enrollment_number,
-            birth_date=c.birth_date,
-            birth_place=c.birth_place,
-            motif=c.motif,
-            score=c.ressemblance.score if c.ressemblance else None,
-            champs_compares=list(c.ressemblance.champs_compares) if c.ressemblance else [],
-            juge_sur_peu=c.ressemblance.juge_sur_peu if c.ressemblance else False,
-            bloquant=c.bloquant,
-            inscription_annee_courante=(
-                InscriptionExistante(**c.inscription_annee_courante)
-                if c.inscription_annee_courante
-                else None
-            ),
-        )
-        for c in trouvees
-    ]
-    return DoublonsResponse(correspondances=correspondances, total=len(correspondances))
 
 
 @router.get("/students", response_model=StudentListResponse)

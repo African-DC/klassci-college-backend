@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +23,9 @@ class CorrespondanceResponse(BaseModel):
     enrollment_number: str | None = None
     birth_date: date | None = None
     birth_place: str | None = None
-    motif: str = Field(description="« matricule » (certain) ou « ressemblance »")
+    motif: Literal["matricule", "ressemblance"] = Field(
+        description="« matricule » (certain) ou « ressemblance »"
+    )
     score: float | None = Field(
         default=None, description="0 à 1. Absent quand le matricule suffit à conclure."
     )
@@ -35,7 +38,6 @@ class CorrespondanceResponse(BaseModel):
             "le dire plutôt que d'afficher un pourcentage rassurant."
         ),
     )
-    bloquant: bool = False
     inscription_annee_courante: InscriptionExistante | None = None
 
 
