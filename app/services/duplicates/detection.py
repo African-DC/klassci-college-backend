@@ -51,7 +51,7 @@ STATUTS_OCCUPANTS = (
 )
 
 
-def _tri_certitude_dabord(matricule: str | None) -> list[ColumnElement[Any]]:
+def _tri_certitude_dabord(matricule: str | None) -> list[Any]:
     """Le tri des candidats : la certitude d'abord, puis un ordre stable.
 
     Sans le premier critere, le plafond de candidats pouvait evincer la seule
