@@ -15,6 +15,8 @@ from types import ModuleType
 import pytest
 from sqlalchemy import create_engine, text
 
+from app.models.user import Student
+
 
 def _charger_migration() -> ModuleType:
     """Importe la révision par son chemin : son nom de fichier commence par un chiffre."""
@@ -44,9 +46,10 @@ def test_les_fiches_existantes_recoivent_la_meme_cle_que_les_futures(
 ) -> None:
     """Une fiche d'hier doit répondre exactement comme une fiche de demain.
 
-    C'est la raison d'être du remplissage en Python plutôt qu'en SQL : si les
-    deux normalisations divergeaient, la moitié du fichier élèves deviendrait
-    introuvable sans que rien ne le signale.
+    L'attendu n'est pas un littéral écrit à la main : c'est la clé que le
+    MODÈLE produirait pour le même nom. Une version antérieure comparait à des
+    littéraux, et restait donc verte si le remplissage et le validateur
+    divergeaient — c'est-à-dire dans le seul cas qu'elle prétendait exclure.
     """
     migration = _charger_migration()
     moteur = create_engine("sqlite://")
@@ -67,6 +70,12 @@ def test_les_fiches_existantes_recoivent_la_meme_cle_que_les_futures(
         obtenu = connexion.execute(
             text("SELECT last_name_key, first_name_key FROM students WHERE id = 1")
         ).one()
+    fiche_neuve = Student(last_name=nom, first_name=prenom)
+    assert obtenu == (fiche_neuve.last_name_key, fiche_neuve.first_name_key), (
+        "le remplissage doit produire la meme cle que le validateur du modele"
+    )
+    # Les valeurs attendues sont aussi epinglees en clair : sans cela, les
+    # deux cotes pourraient deriver ensemble sans que rien ne le voie.
     assert obtenu == (cle_nom, cle_prenom)
 
 

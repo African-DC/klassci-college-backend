@@ -37,6 +37,15 @@ class TestNormalisation:
             ("MARIE-LINE", "marie line"),
             ("N'DRI", "n dri"),
             ("Aya   Marie  Adelaide", "aya marie adelaide"),
+            # Les ligatures sont l'incident fondateur de ce module : une
+            # fiche enregistree avec elles restait introuvable, parce que le
+            # SQL les depliait et Python non. La regle n'etait gardee que par
+            # un cas de parametrage dans un test de migration, qu'une purge
+            # aurait emporte sans bruit.
+            ("SŒUR ANNE", "soeur anne"),
+            ("sœur anne", "soeur anne"),
+            ("LÆTITIA", "laetitia"),
+            ("lætitia", "laetitia"),
             (None, ""),
         ],
     )

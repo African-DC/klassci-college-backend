@@ -2,30 +2,33 @@
 
 La recherche de doublons repliait les accents et la ponctuation dans la requête
 elle-même : 54 `replace()` imbriqués, répliqués quatre fois dans le même arbre
-d'analyse — une fois par expression du `OR`. SQLite refusait de l'analyser, son
-analyseur plafonnant à une centaine de niveaux d'imbrication cumulée, et vingt
-tests tombaient sur un débordement de pile.
+d'analyse, soit 216 appels dans le SQL compilé.
 
-Le repliage existait surtout en deux exemplaires, un en SQL et un en Python,
-qui avaient déjà divergé : un nom enregistré avec « œ » était introuvable.
+Cette requête était illisible, inutilisable par un index, et la CI l'a refusée
+net le 2026-08-27 (run 33086041547) : `sqlite3.OperationalError: parser stack
+overflow`, vingt tests tombés. Elle passe pourtant sur d'autres builds de
+SQLite, dont celui du poste de développement — la pile d'analyse grandit
+dynamiquement chez les uns et pas chez les autres. Le repliage était donc au
+bord d'une limite qui dépend de la machine, ce qui est pire qu'au-delà.
 
-Les deux colonnes ajoutées ici portent cette forme une fois pour toutes, et le
-modèle les tient à jour à chaque écriture du nom. Le remplissage des fiches
-existantes passe par la fonction Python, la même que celle qui servira ensuite,
-pour qu'aucune fiche d'aujourd'hui ne réponde autrement qu'une fiche de demain.
+Ce n'est pas la meilleure raison de stocker cette forme, seulement la plus
+bruyante. La vraie : le repliage vivait en deux exemplaires, un en SQL et un en
+Python, qui avaient fini par ne plus dire la même chose — un nom enregistré
+avec « œ » était introuvable. Écrite une seule fois, à l'écriture, la règle ne
+peut plus diverger d'elle-même.
 
-Ce que ces colonnes n'apportent PAS : de la vitesse. Leurs index ne servent que
-la recherche par égalité, celle des noms de trois lettres ou moins. La
-recherche courante compile un `LIKE '%...%'`, joker en tête, qui reste un
-balayage. Le gain est la lisibilité de la requête et l'unicité de la règle.
+Ce que ces colonnes n'apportent pas : de la vitesse sur la recherche floue. Le
+motif compile un `LIKE '%...%'`, joker en tête, qui reste un balayage. Leurs
+index ne servent que la recherche par égalité, celle des noms de trois lettres
+ou moins.
 
-ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et sans fenêtre
-d'écriture entre les deux. Le code neuf lit `last_name_key` : déployé avant la
-migration, toute vérification de doublon rend 500 (panne bruyante, immédiate).
-Migration jouée mais ancien code encore en place, les élèves créés pendant la
-fenêtre reçoivent une clé vide et deviennent invisibles à la détection dès que
-le code neuf arrive — panne muette, celle-là. Si la fenêtre a existé, rattraper
-avec la boucle de `_remplir` sur les lignes dont la clé est vide.
+ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code. Le code neuf lit
+`last_name_key` : déployé avant la migration, toute vérification de doublon rend
+500. L'ordre inverse est sans danger : les colonnes sont `NOT NULL` sans défaut,
+donc un `INSERT` de l'ancien code, qui ne les connaît pas, échoue avec
+« Field 'last_name_key' doesn't have a default value » au lieu d'enregistrer un
+élève invisible. Les deux fenêtres sont bruyantes ; aucune ne laisse passer une
+fiche muette.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm
@@ -42,6 +45,8 @@ revision: str = "0075_student_search_key"
 down_revision: str | None = "0074_enrol_validate_perm"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+_LARGEUR = 200
 
 
 def _remplir(connexion: sa.Connection) -> None:
@@ -74,21 +79,23 @@ def upgrade() -> None:
     # qu'on cherche a rendre impossible.
     op.add_column(
         "students",
-        sa.Column("last_name_key", sa.String(length=100), nullable=False, server_default=""),
+        sa.Column("last_name_key", sa.String(length=_LARGEUR), nullable=False, server_default=""),
     )
     op.add_column(
         "students",
-        sa.Column("first_name_key", sa.String(length=100), nullable=False, server_default=""),
+        sa.Column("first_name_key", sa.String(length=_LARGEUR), nullable=False, server_default=""),
     )
 
     _remplir(op.get_bind())
 
-    op.alter_column(
-        "students", "last_name_key", existing_type=sa.String(length=100), server_default=None
-    )
-    op.alter_column(
-        "students", "first_name_key", existing_type=sa.String(length=100), server_default=None
-    )
+    for colonne in ("last_name_key", "first_name_key"):
+        op.alter_column(
+            "students",
+            colonne,
+            existing_type=sa.String(length=_LARGEUR),
+            existing_nullable=False,
+            server_default=None,
+        )
 
     op.create_index("ix_students_last_name_key", "students", ["last_name_key"])
     op.create_index("ix_students_first_name_key", "students", ["first_name_key"])

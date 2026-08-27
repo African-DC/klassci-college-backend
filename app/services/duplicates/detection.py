@@ -151,6 +151,17 @@ def _query_with_enrollment(
     # candidats ; c'est le score qui tranche ensuite.
     if naissance is not None:
         conditions.append(Student.birth_date == naissance)
+    # La sentinelle, seulement si rien n'a ete construit : un or_() vide
+    # supprime la clause WHERE entiere et la requete rend TOUTE la table.
+    # Aucun critere ne doit jamais vouloir dire « tout le monde » sur un
+    # fichier d'eleves.
+    #
+    # En tete d'un OR NON vide, en revanche, elle coute cher : SQLite
+    # abandonne alors l'optimisation MULTI-INDEX OR et retombe sur un
+    # balayage, ce qui rendait les deux index de la migration 0075
+    # inutilisables. Mesure a EXPLAIN QUERY PLAN.
+    if not conditions:
+        conditions.append(false())
     # Sans année visee, aucune inscription ne peut occuper la place :
     # `false()` est l'expression SQL correspondante, `False` nu n'en est pas une.
     annee_visee = (
@@ -175,10 +186,7 @@ def _query_with_enrollment(
         .select_from(Student)
         .outerjoin(inscription, jointure_inscription)
         .outerjoin(classe, classe.id == inscription.class_id)
-        # `false()` en tete : un `or_()` vide supprime la clause WHERE entière
-        # et la requête rend TOUTE la table. Aucun critere ne doit jamais
-        # vouloir dire « tout le monde » sur un fichier d'élèves.
-        .where(or_(false(), *conditions))
+        .where(or_(*conditions))
         # Sans ordre explicite, quels 200 remontent depend du plan choisi par
         # la base : deux saisies identiques pourraient ne pas voir les mêmes.
         .order_by(*_certainty_first_order(matricule))

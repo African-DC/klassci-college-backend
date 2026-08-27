@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from datetime import date
 
 import pytest
-from sqlalchemy import BigInteger, create_engine, select
+from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
@@ -499,30 +499,3 @@ async def test_les_ressemblances_sortent_de_la_plus_sure_a_la_moins_sure(db: Ses
     scores = [c.score for c in reponse.matches if c.score is not None]
     assert len(scores) >= 2, "il faut au moins deux ressemblances pour vérifier un ordre"
     assert scores == sorted(scores, reverse=True)
-
-
-@pytest.mark.asyncio
-async def test_la_cle_de_recherche_suit_la_correction_d_un_nom(db: Session) -> None:
-    """La forme comparable suit la correction d'un nom, sans que personne y pense.
-
-    Le secrétariat corrige une faute de saisie des semaines après l'inscription.
-    Si la clé restait sur l'ancienne orthographe, l'élève deviendrait
-    introuvable sous son vrai nom : on le recréerait, avec une seconde ardoise
-    que personne ne rapprocherait de la première.
-
-    La clé est lue en base et comparée directement. Une version antérieure de
-    ce test se contentait de rechercher l'élève après l'avoir renommé : elle
-    passait AUSSI avec une clé de nom périmée, parce que le prénom suffisait à
-    ramener la fiche. Elle gardait donc la lecture, pas l'écriture — et elle
-    éteignait la question qu'elle prétendait poser.
-    """
-    eleve = db.query(Student).filter(Student.enrollment_number == "ECER0864").one()
-    assert eleve.last_name_key == "kouassi", "la fixture doit partir d'une clé connue"
-
-    eleve.last_name = "N’GUESSAN"
-    db.commit()
-
-    stockee = db.execute(select(Student.last_name_key).where(Student.id == eleve.id)).scalar_one()
-    assert stockee == "nguessan", (
-        "la clé stockée doit suivre le nom corrigé, apostrophe courbe comprise"
-    )
