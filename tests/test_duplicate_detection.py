@@ -76,6 +76,19 @@ def db() -> Iterator[Session]:
                     first_name="Souleymane ben junior",
                     enrollment_number="ECER0734",
                 ),
+                # L'apostrophe rendait cet élève introuvable par le préfiltre.
+                Student(
+                    id=4,
+                    last_name="N'DRI",
+                    first_name="Etiakoun grace naomie",
+                    enrollment_number="ECER0516",
+                ),
+                Student(
+                    id=5,
+                    last_name="TRAORE",
+                    first_name="Cheick moussa",
+                    enrollment_number="ECER0344",
+                ),
             ]
         )
         s.add(
@@ -131,8 +144,10 @@ async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
     )
     inscription = trouves[0].inscription_annee_courante
     assert inscription is not None
-    assert inscription["status"] == EnrollmentStatus.PROSPECT.value
-    assert inscription["class_name"] == "3eme 2"
+    # Le champ est un objet typé, plus un dictionnaire fourre-tout : une clé
+    # mal orthographiée est désormais une erreur, pas un `None` silencieux.
+    assert inscription.status == EnrollmentStatus.PROSPECT.value
+    assert inscription.class_name == "3eme 2"
 
 
 @pytest.mark.asyncio
@@ -162,3 +177,45 @@ async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> Non
         ignorer_student_id=2,
     )
     assert trouves == []
+
+
+@pytest.mark.asyncio
+async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> None:
+    """COULIBALY saisi KOULIBALY doit rester détectable.
+
+    Un préfixe strict défaisait la raison d'être du score : le candidat n'était
+    jamais remonté, donc la ressemblance ne tournait même pas. C'est pourtant
+    exactement le cas pour lequel elle existe — une famille revient, le nom est
+    tapé d'oreille.
+    """
+    # Le nom seul : c'est l'ordre de saisie réel, et c'est le moment où le
+    # signalement est encore utile. Donner aussi le prénom ferait remonter le
+    # candidat par ce chemin-là, et le test ne mesurerait plus rien.
+    trouves = await chercher_doublons(_Pont(db), last_name="KOULIBALY", first_name=None)
+    assert any(c.last_name == "COULIBALY" for c in trouves), (
+        "le prefiltre a exclu le candidat avant que le score puisse juger"
+    )
+
+
+@pytest.mark.asyncio
+async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None:
+    """N'DRI figure dans le fichier des arriérés et doit se retrouver lui-même.
+
+    La normalisation Python remplaçait l'apostrophe par une espace tandis que
+    la colonne la gardait : aucun des deux motifs ne retrouvait l'autre, et cet
+    élève ne pouvait jamais être signalé comme doublon.
+    """
+    for saisie in ("N'DRI", "NDRI", "N DRI"):
+        trouves = await chercher_doublons(_Pont(db), last_name=saisie, first_name=None)
+        assert any(c.last_name == "N'DRI" for c in trouves), f"« {saisie} » ne retrouve pas N'DRI"
+
+
+@pytest.mark.asyncio
+async def test_deux_noms_etrangers_ne_se_rapprochent_pas(db: Session) -> None:
+    """L'élargissement du préfiltre ne doit pas rapprocher n'importe quoi.
+
+    Sans ce garde, tolérer une première lettre fausse dériverait vers un
+    signalement permanent, et un avertissement permanent n'est plus lu.
+    """
+    trouves = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
+    assert all(c.last_name != "TRAORE" for c in trouves)

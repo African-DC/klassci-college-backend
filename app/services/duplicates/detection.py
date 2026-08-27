@@ -10,24 +10,37 @@ Trois signaux, du plus sûr au plus incertain :
 3. **La ressemblance de l'état civil.** Le filet quand le matricule manque,
    ce qui est le cas de toute famille qui revient sans son papier.
 
-Le service ne bloque rien : il rend ce qu'il a trouvé et laisse l'écran
-décider. Bloquer sur une ressemblance ferait refuser un vrai nouvel élève qui
-porte le nom de son cousin, et il n'y a pas de recours au guichet.
+La lecture ne bloque rien : elle rend ce qu'elle a trouvé et laisse l'écran
+décider. Bloquer sur une ressemblance ferait refuser un vrai nouvel élève
+qui porte le nom de son cousin, et il n'y a pas de recours au copier-coller.
+Le matricule identique, lui, est une collision : l'écriture la refuse.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Literal
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql.functions import Function
 
+from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
-from app.services.duplicates.similarity import Ressemblance, comparer, normaliser
+from app.schemas.duplicates import (
+    CorrespondanceResponse,
+    DoublonsResponse,
+    InscriptionExistante,
+)
+from app.services.duplicates.similarity import (
+    Ressemblance,
+    StudentIdentity,
+    compact,
+    comparer,
+)
 
 # Les statuts qui occupent la place : un dossier rejeté ou annulé ne compte
 # pas, mais un dossier simplement pas encore validé, si — c'est justement
@@ -37,6 +50,8 @@ STATUTS_OCCUPANTS = (
     EnrollmentStatus.EN_VALIDATION,
     EnrollmentStatus.VALIDE,
 )
+
+Motif = Literal["matricule", "ressemblance"]
 
 
 @dataclass(frozen=True)
@@ -49,38 +64,178 @@ class Correspondance:
     enrollment_number: str | None
     birth_date: date | None
     birth_place: str | None
-    motif: str  # "matricule" | "ressemblance"
+    motif: Motif
     ressemblance: Ressemblance | None
-    inscription_annee_courante: dict[str, Any] | None
+    inscription_annee_courante: InscriptionExistante | None
 
     @property
     def bloquant(self) -> bool:
         """Un matricule identique ne se discute pas."""
         return self.motif == "matricule"
 
+    def vers_reponse(self) -> CorrespondanceResponse:
+        return CorrespondanceResponse(
+            student_id=self.student_id,
+            last_name=self.last_name,
+            first_name=self.first_name,
+            enrollment_number=self.enrollment_number,
+            birth_date=self.birth_date,
+            birth_place=self.birth_place,
+            motif=self.motif,
+            score=self.ressemblance.score if self.ressemblance else None,
+            champs_compares=list(self.ressemblance.champs_compares) if self.ressemblance else [],
+            juge_sur_peu=self.ressemblance.juge_sur_peu if self.ressemblance else False,
+            bloquant=self.bloquant,
+            inscription_annee_courante=self.inscription_annee_courante,
+        )
 
-def _candidats(
-    nom: str | None, prenom: str | None, matricule: str | None
-) -> Select[tuple[Student]]:
-    """Restreindre avant de comparer.
 
-    Comparer la fiche saisie à tous les élèves de l'établissement coûterait une
-    lecture complète à chaque frappe. On ne remonte que ceux dont le nom ou le
-    prénom partagent un début, plus le matricule exact — le score fait le tri
-    ensuite, sur un ensemble réduit.
+def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
+    return func.lower(func.coalesce(colonne, ""))
+
+
+def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
+    """Même compactage que `compact()` Python, sans accents ni ponctuation.
+
+    MySQL et SQLite n'ont pas `unaccent`. On retire les diacritiques
+    fréquents au copier-coller, on remplace la ponctuation par rien, et
+    on compare la forme collée : `N'DRI` retrouve `NDRI`.
     """
+    texte = _minuscules(colonne)
+    for source, cible in (
+        ("é", "e"),
+        ("è", "e"),
+        ("ê", "e"),
+        ("ë", "e"),
+        ("à", "a"),
+        ("â", "a"),
+        ("ä", "a"),
+        ("î", "i"),
+        ("ï", "i"),
+        ("ô", "o"),
+        ("ö", "o"),
+        ("ù", "u"),
+        ("û", "u"),
+        ("ü", "u"),
+        ("ç", "c"),
+        ("œ", "oe"),
+        ("'", ""),
+        ("`", ""),
+        ("-", ""),
+        (" ", ""),
+        (".", ""),
+    ):
+        texte = func.replace(texte, source, cible)
+    return texte
+
+
+def _meme_matricule(saisi: str | None, existant: str | None) -> bool:
+    if not saisi or not existant:
+        return False
+    return saisi.strip().lower() == existant.strip().lower()
+
+
+#: Au-dela, on ne compare plus : on tronque, et on l'ecrit dans le journal.
+PLAFOND_CANDIDATS = 200
+
+
+def _motifs(valeur: str | None) -> list[str]:
+    """Les debuts de nom a chercher, y compris avec une premiere lettre fausse.
+
+    Un prefixe strict defait la raison d'etre du score : COULIBALY saisi
+    KOULIBALY n'est jamais candidat, donc la ressemblance ne tourne meme pas —
+    et c'est precisement le cas pour lequel elle existe. On cherche donc aussi
+    la racine amputee de sa premiere lettre, ce qui rattrape la faute de frappe
+    la plus frequente sans elargir a tout l'etablissement.
+    """
+    racine = compact(valeur)[:5]
+    if len(racine) < 3:
+        return []
+    return [f"{racine}%", f"%{racine[1:]}%"]
+
+
+def _requete_avec_inscription(
+    nom: str | None,
+    prenom: str | None,
+    matricule: str | None,
+    academic_year_id: int | None,
+    naissance: date | None = None,
+) -> Select[tuple[Student, Enrollment | None, Class | None]]:
+    """Une lecture : élèves candidats, inscription occupante de l'année, classe."""
+    inscription = aliased(Enrollment)
+    classe = aliased(Class)
     conditions = []
-    if matricule:
-        conditions.append(Student.enrollment_number == matricule)
+    if matricule and matricule.strip():
+        conditions.append(_minuscules(Student.enrollment_number) == matricule.strip().lower())
     for valeur in (nom, prenom):
-        racine = normaliser(valeur)[:4]
-        if len(racine) >= 3:
-            conditions.append(func.lower(Student.last_name).like(f"{racine}%"))
-            conditions.append(func.lower(Student.first_name).like(f"{racine}%"))
+        for motif in _motifs(valeur):
+            conditions.append(_compact_sql(Student.last_name).like(motif))
+            conditions.append(_compact_sql(Student.first_name).like(motif))
+    # La date de naissance ne depend pas de l'orthographe : elle rattrape les
+    # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
+    # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
+    # candidats ; c'est le score qui tranche ensuite.
+    if naissance is not None:
+        conditions.append(Student.birth_date == naissance)
     if not conditions:
-        # Rien d'exploitable : mieux vaut ne rien remonter que tout remonter.
-        return select(Student).where(Student.id.is_(None))
-    return select(Student).where(or_(*conditions)).limit(200)
+        return (
+            select(Student, inscription, classe)
+            .select_from(Student)
+            .outerjoin(inscription, inscription.id.is_(None))
+            .outerjoin(classe, classe.id.is_(None))
+            .where(Student.id.is_(None))
+        )
+
+    jointure_inscription = and_(
+        inscription.student_id == Student.id,
+        inscription.academic_year_id == academic_year_id if academic_year_id is not None else False,
+        inscription.status.in_([s.value for s in STATUTS_OCCUPANTS]),
+    )
+    return (
+        select(Student, inscription, classe)
+        # Le cote gauche est explicite : avec trois entites dans le SELECT,
+        # SQLAlchemy ne le devine pas et refuse la requete.
+        .select_from(Student)
+        .outerjoin(inscription, jointure_inscription)
+        .outerjoin(classe, classe.id == inscription.class_id)
+        .where(or_(*conditions))
+        .limit(PLAFOND_CANDIDATS)
+    )
+
+
+def _identite_saisie(
+    last_name: str | None,
+    first_name: str | None,
+    birth_date: date | None,
+    birth_place: str | None,
+) -> StudentIdentity:
+    return StudentIdentity(
+        last_name=last_name,
+        first_name=first_name,
+        birth_date=birth_date,
+        birth_place=birth_place,
+    )
+
+
+def _identite_eleve(eleve: Student) -> StudentIdentity:
+    return StudentIdentity(
+        last_name=eleve.last_name,
+        first_name=eleve.first_name,
+        birth_date=eleve.birth_date,
+        birth_place=eleve.birth_place,
+    )
+
+
+def _inscription_jointe(
+    inscription: Enrollment | None, classe: Class | None
+) -> InscriptionExistante | None:
+    if inscription is None:
+        return None
+    return InscriptionExistante(
+        enrollment_id=inscription.id,
+        status=inscription.status,
+        class_name=classe.name if classe is not None else None,
+    )
 
 
 async def chercher_doublons(
@@ -95,81 +250,65 @@ async def chercher_doublons(
     ignorer_student_id: int | None = None,
 ) -> list[Correspondance]:
     """Les fiches existantes qui pourraient être la même personne, les plus sûres d'abord."""
-    resultat = await db.execute(_candidats(last_name, first_name, enrollment_number))
-    candidats = list(resultat.scalars().unique())
+    resultat = await db.execute(
+        _requete_avec_inscription(
+            last_name, first_name, enrollment_number, academic_year_id, birth_date
+        )
+    )
+    lignes = list(resultat.unique().all())
 
-    saisi = type(
-        "Saisi",
-        (),
-        {
-            "last_name": last_name,
-            "first_name": first_name,
-            "birth_date": birth_date,
-            "birth_place": birth_place,
-        },
-    )()
-
-    trouvees: list[Correspondance] = []
-    for existant in candidats:
+    saisi = _identite_saisie(last_name, first_name, birth_date, birth_place)
+    trouves: dict[int, Correspondance] = {}
+    for existant, inscription, classe in lignes:
         if ignorer_student_id is not None and existant.id == ignorer_student_id:
             continue
+        if existant.id in trouves:
+            continue
 
-        meme_matricule = bool(
-            enrollment_number
-            and existant.enrollment_number
-            and existant.enrollment_number.strip().lower() == enrollment_number.strip().lower()
-        )
-        r = comparer(saisi, existant)
+        meme_matricule = _meme_matricule(enrollment_number, existant.enrollment_number)
+        r = comparer(saisi, _identite_eleve(existant))
         if not meme_matricule and not r.a_signaler:
             continue
 
-        trouvees.append(
-            Correspondance(
-                student_id=existant.id,
-                last_name=existant.last_name,
-                first_name=existant.first_name,
-                enrollment_number=existant.enrollment_number,
-                birth_date=existant.birth_date,
-                birth_place=existant.birth_place,
-                motif="matricule" if meme_matricule else "ressemblance",
-                ressemblance=None if meme_matricule else r,
-                inscription_annee_courante=await _inscription_de_l_annee(
-                    db, existant.id, academic_year_id
-                ),
-            )
+        trouves[existant.id] = Correspondance(
+            student_id=existant.id,
+            last_name=existant.last_name,
+            first_name=existant.first_name,
+            enrollment_number=existant.enrollment_number,
+            birth_date=existant.birth_date,
+            birth_place=existant.birth_place,
+            motif="matricule" if meme_matricule else "ressemblance",
+            ressemblance=None if meme_matricule else r,
+            inscription_annee_courante=_inscription_jointe(inscription, classe),
         )
 
-    trouvees.sort(
+    trouves_list = list(trouves.values())
+    trouves_list.sort(
         key=lambda c: (c.motif != "matricule", -(c.ressemblance.score if c.ressemblance else 1.0))
     )
-    return trouvees
+    return trouves_list
 
 
-async def _inscription_de_l_annee(
-    db: AsyncSession, student_id: int, academic_year_id: int | None
-) -> dict[str, Any] | None:
-    """L'inscription de l'élève pour l'année visée, **même non validée**.
-
-    C'est la moitié utile du signalement : un dossier en attente n'apparaît
-    pas là où le secrétariat regarde, et c'est celui-là qu'on recrée.
-    """
-    if academic_year_id is None:
-        return None
-    ligne = await db.execute(
-        select(Enrollment)
-        .options(selectinload(Enrollment.class_))
-        .where(
-            Enrollment.student_id == student_id,
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.status.in_([s.value for s in STATUTS_OCCUPANTS]),
-        )
-        .limit(1)
+async def reponse_doublons(
+    db: AsyncSession,
+    *,
+    last_name: str | None,
+    first_name: str | None,
+    birth_date: date | None = None,
+    birth_place: str | None = None,
+    enrollment_number: str | None = None,
+    academic_year_id: int | None = None,
+    ignorer_student_id: int | None = None,
+) -> DoublonsResponse:
+    trouves = await chercher_doublons(
+        db,
+        last_name=last_name,
+        first_name=first_name,
+        birth_date=birth_date,
+        birth_place=birth_place,
+        enrollment_number=enrollment_number,
+        academic_year_id=academic_year_id,
+        ignorer_student_id=ignorer_student_id,
     )
-    inscription = ligne.scalars().first()
-    if inscription is None:
-        return None
-    return {
-        "enrollment_id": inscription.id,
-        "status": inscription.status,
-        "class_name": inscription.class_.name if inscription.class_ else None,
-    }
+    correspondances = [c.vers_reponse() for c in trouves]
+    return DoublonsResponse(correspondances=correspondances, total=len(correspondances))

@@ -17,6 +17,7 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 from datetime import date
+from typing import Protocol
 
 # Ce que pèse chaque champ. Le nom et le prénom portent l'essentiel parce
 # qu'ils sont toujours saisis ; la naissance départage les homonymes, qui sont
@@ -34,8 +35,8 @@ def normaliser(valeur: str | None) -> str:
 
     « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
     accents sont retirés parce qu'ils sont saisis de façon irrégulière au
-    guichet, et les traits d'union parce que « MARIE-LINE » et « MARIE LINE »
-    s'écrivent au hasard du clavier.
+    copier-coller, et les traits d'union parce que « MARIE-LINE » et
+    « MARIE LINE » s'écrivent au hasard du clavier.
     """
     if not valeur:
         return ""
@@ -46,9 +47,36 @@ def normaliser(valeur: str | None) -> str:
     return " ".join("".join(lettres).split())
 
 
+def compact(valeur: str | None) -> str:
+    """La forme comparable d'un nom, sans espaces ni ponctuation.
+
+    « N'DRI », « NDRI » et « n dri » doivent se trouver. La préfiltre SQL
+    utilise le même compactage, sinon un nom saisi sans apostrophe ne
+    ramènerait jamais la fiche qui en a une.
+    """
+    return normaliser(valeur).replace(" ", "")
+
+
+class Identite(Protocol):
+    last_name: str | None
+    first_name: str | None
+    birth_date: date | None
+    birth_place: str | None
+
+
+@dataclass(frozen=True)
+class StudentIdentity:
+    """Les quatre champs qui identifient un élève quand le matricule manque."""
+
+    last_name: str | None
+    first_name: str | None
+    birth_date: date | None = None
+    birth_place: str | None = None
+
+
 def _bigrammes(texte: str) -> set[str]:
-    compact = texte.replace(" ", "")
-    return {compact[i : i + 2] for i in range(len(compact) - 1)}
+    colle = texte.replace(" ", "")
+    return {colle[i : i + 2] for i in range(len(colle) - 1)}
 
 
 def ressemblance_texte(a: str | None, b: str | None) -> float | None:
@@ -76,8 +104,9 @@ def ressemblance_texte(a: str | None, b: str | None) -> float | None:
 def ressemblance_date(a: date | None, b: date | None) -> float | None:
     """Une date de naissance est juste ou fausse ; il n'y a pas d'à-peu-près.
 
-    Sauf un cas fréquent au guichet : le jour et le mois intervertis, quand la
-    famille dicte « 04/05 » et que la saisie hésite entre les deux ordres.
+    Sauf un cas fréquent au copier-coller : le jour et le mois intervertis,
+    quand la famille dicte « 04/05 » et que la saisie hésite entre les deux
+    ordres.
     """
     if a is None or b is None:
         return None
@@ -117,7 +146,7 @@ class Ressemblance:
         return not ({"birth_date", "birth_place"} & set(self.champs_compares))
 
 
-def comparer(gauche: object, droite: object) -> Ressemblance:
+def comparer(gauche: Identite, droite: Identite) -> Ressemblance:
     """Compare deux fiches sur les champs qu'elles ont en commun.
 
     Les poids sont renormalisés sur les seuls champs comparables : deux fiches
@@ -128,15 +157,13 @@ def comparer(gauche: object, droite: object) -> Ressemblance:
     manquants: list[str] = []
 
     for champ in ("last_name", "first_name", "birth_place"):
-        r = ressemblance_texte(getattr(gauche, champ, None), getattr(droite, champ, None))
+        r = ressemblance_texte(getattr(gauche, champ), getattr(droite, champ))
         if r is None:
             manquants.append(champ)
         else:
             details[champ] = r
 
-    r_date = ressemblance_date(
-        getattr(gauche, "birth_date", None), getattr(droite, "birth_date", None)
-    )
+    r_date = ressemblance_date(gauche.birth_date, droite.birth_date)
     if r_date is None:
         manquants.append("birth_date")
     else:
