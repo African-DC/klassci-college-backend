@@ -42,6 +42,15 @@ class TestNormalisation:
             # SQL les depliait et Python non. La regle n'etait gardee que par
             # un cas de parametrage dans un test de migration, qu'une purge
             # aurait emporte sans bruit.
+            # Accent AU MILIEU du mot. Sans le filtre des diacritiques, le
+            # depliage NFD laisse la marque combinante, que le passage
+            # `isalnum` transforme en espace : « AICHA » deviendrait
+            # « ai cha », donc introuvable. Aucun test ne couvrait ce cas —
+            # les fiches d'essai portaient toutes leur accent en fin de mot,
+            # ou l'espace produit disparait au nettoyage.
+            ("AÏCHA", "aicha"),
+            ("MÉLÉDJE", "meledje"),
+            ("Kouaméa", "kouamea"),
             ("SŒUR ANNE", "soeur anne"),
             ("sœur anne", "soeur anne"),
             ("LÆTITIA", "laetitia"),

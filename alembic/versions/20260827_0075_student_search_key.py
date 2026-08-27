@@ -17,10 +17,12 @@ Python, qui avaient fini par ne plus dire la même chose — un nom enregistré
 avec « œ » était introuvable. Écrite une seule fois, à l'écriture, la règle ne
 peut plus diverger d'elle-même.
 
-Ce que ces colonnes n'apportent pas : de la vitesse sur la recherche floue. Le
-motif compile un `LIKE '%...%'`, joker en tête, qui reste un balayage. Leurs
-index ne servent que la recherche par égalité, celle des noms de trois lettres
-ou moins.
+Ce que ces colonnes n'apportent pas : de la vitesse. Le motif compile un
+`LIKE '%...%'`, joker en tête, qui reste un balayage. Leurs index ne servent
+que la recherche par égalité, celle des noms de trois lettres ou moins — et
+même celle-là tombe dès qu'un matricule est saisi en plus du nom, le terme du
+matricule étant enveloppé dans un `lower()` qui interdit l'usage de son index
+unique. Dette antérieure à cette migration, suivi #344.
 
 ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et les deux
 rapprochées.
@@ -30,10 +32,11 @@ dans chaque `SELECT`, donc ce n'est pas la seule détection de doublon qui tombe
 c'est TOUTE lecture d'élève — la liste, l'inscription, la caisse, les bulletins,
 les portails parent et élève. L'application est hors service, pas diminuée.
 
-Migration sans le code neuf : les colonnes sont `NOT NULL` sans défaut, et
-MySQL 8 tourne ici en `STRICT_TRANS_TABLES`. L'ancien code, qui ne les connaît
-pas, échoue donc à l'insertion avec « Field 'last_name_key' doesn't have a
-default value » : le secrétariat ne peut plus inscrire personne, mais aucune
+Migration sans le code neuf : les colonnes sont `NOT NULL` sans défaut.
+L'ancien code, qui ne les connaît pas, échoue donc à l'insertion avec
+« Field 'last_name_key' doesn't have a default value » — à condition que le
+mode strict soit actif, ce qui est le défaut de MySQL 8 mais n'est fixé
+nulle part dans le compose : rien dans le dépôt ne l'épingle : le secrétariat ne peut plus inscrire personne, mais aucune
 fiche muette n'est enregistrée. C'est la fenêtre à préférer si l'une des deux
 doit exister — elle abîme moins et se voit tout de suite.
 

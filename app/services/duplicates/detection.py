@@ -132,7 +132,10 @@ def _candidate_conditions(
     # Les colonnes normalisées que l'élève porte déjà (#343). La lecture ne
     # replie plus rien : elle ne peut donc plus replier autrement que
     # l'écriture. Les index posés dessus ne servent que la branche d'égalité
-    # plus bas ; le motif flou reste un balayage, joker en tête oblige.
+    # plus bas ; le motif flou reste un balayage, joker en tête oblige. Et
+    # dès qu'un matricule accompagne le nom, la disjonction entière retombe
+    # sur un balayage : le terme du matricule est enveloppé dans un `lower()`
+    # qui interdit l'usage de son index unique. Dette antérieure, suivi #344.
     for valeur in (nom, prenom):
         noyau = _search_fragment(valeur)
         if noyau is not None:
@@ -158,9 +161,12 @@ def _candidate_conditions(
     # Aucun critere ne doit jamais vouloir dire « tout le monde » sur un
     # fichier d'eleves.
     #
-    # En tete d'un OR NON vide, en revanche, elle coute cher : SQLite abandonne
-    # alors l'optimisation MULTI-INDEX OR et retombe sur un balayage, ce qui
-    # rendait les deux index de la migration 0075 inutilisables.
+    # Pourquoi conditionnelle plutot qu'en tete systematique : en SQL brut,
+    # `0=1 OR ...` fait tomber SQLite de MULTI-INDEX OR a un balayage. Ce
+    # n'est pas ce qui arrive aujourd'hui — SQLAlchemy 2.0 replie la
+    # constante hors d'un OR peuple, donc les deux formes compilent le meme
+    # SQL. La forme conditionnelle rend simplement l'index independant de ce
+    # repliage, qui est un detail d'implementation d'une bibliotheque tierce.
     if not conditions:
         conditions.append(false())
     return conditions

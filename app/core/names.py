@@ -15,10 +15,10 @@ pour fabriquer une adresse e-mail, les generateurs du seed de demonstration).
 Elles servent un autre usage et n'ont pas a partager cette regle-ci.
 
 ⚠ MODIFIER `normalize()`, `_LIGATURES` OU `compact()` IMPOSE UNE MIGRATION
-DE REMPLISSAGE. Tout le repliage est dans `normalize()` — depliage NFD,
-filtrage des diacritiques, `isalnum`, ecrasement des espaces ; `compact()`
-n'est qu'une delegation d'une ligne. Qui vient garder les traits d'union
-edite `normalize()`, c'est donc lui que ce panneau doit nommer d'abord.
+DE REMPLISSAGE. `normalize()` porte le depliage NFD, le filtrage des
+diacritiques et la reduction aux caracteres alphanumeriques ; `compact()`
+porte l'ecrasement des espaces, la regle qui fait que « N DRI » vaut
+« NDRI ». Les deux comptent, et `_LIGATURES` avec elles.
 Les cles deja en base ont ete calculees par la version precedente. Sans
 recalcul, les fiches anciennes repondent selon l'ancienne regle et les
 nouvelles selon la nouvelle : c'est exactement la divergence que ce module

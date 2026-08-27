@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Migration `0075` : chaque élève porte la forme normalisée de son nom, calculée à l'écriture. À jouer AVANT de déployer le code, les deux rapprochées : le code neuf sans la migration met toute lecture d'élève hors service, et la migration seule empêche d'inscrire *(technique, déploiement)*
 - Détection de doublon à la saisie d'un élève : matricule identique, ressemblance de l'état civil, et signalement d'une inscription déjà ouverte sur l'année même non validée *(admin, secrétariat)*
 - La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*

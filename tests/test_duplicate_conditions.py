@@ -17,9 +17,10 @@ import pytest
 from sqlalchemy import or_, select
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.exc import SADeprecationWarning
+from sqlalchemy.sql.elements import False_
 
 from app.models.user import Student
-from app.services.duplicates.detection import _candidate_conditions, _query_with_enrollment
+from app.services.duplicates.detection import _candidate_conditions
 
 
 def _sql(requete: object) -> str:
@@ -71,12 +72,19 @@ def test_sans_sentinelle_la_requete_rendrait_tout_le_fichier() -> None:
 
 
 def test_une_saisie_reelle_ne_porte_pas_la_sentinelle() -> None:
-    """La sentinelle en tête d'un OR non vide fait perdre l'usage des index.
+    """La sentinelle ne doit apparaître que seule.
 
-    SQLite abandonne l'optimisation MULTI-INDEX OR dès qu'un terme constant
-    ouvre la disjonction : les deux index de la migration 0075 deviennent
-    inutilisables. Elle ne doit donc apparaître que seule.
+    L'assertion porte sur la LISTE rendue, pas sur le SQL compilé. Une version
+    antérieure comparait la chaîne compilée et ne pouvait pas échouer :
+    SQLAlchemy 2.0 replie la constante hors d'un `or_()` peuplé, donc la
+    sentinelle ajoutée en tête disparaissait du SQL avant l'assertion. Le test
+    mesurait la bibliothèque, pas le code.
+
+    En SQL brut, la sentinelle en tête coûte cher — SQLite abandonne alors
+    MULTI-INDEX OR. Ne pas l'ajouter est ce qui rend l'index indépendant du
+    repliage de SQLAlchemy.
     """
-    sql = _sql(_query_with_enrollment("YAO", "Aya", None, 1))
-    ou = sql.split("WHERE", 1)[1].split("ORDER BY", 1)[0]
-    assert "0 = 1" not in ou, "aucune sentinelle ne doit ouvrir un OR déjà peuplé"
+    conditions = _candidate_conditions("YAO", "Aya", None, None)
+    assert len(conditions) > 1, "cette saisie doit produire de vrais critères"
+    constantes = [c for c in conditions if isinstance(c, False_)]
+    assert not constantes, "aucune sentinelle ne doit accompagner de vrais critères"
