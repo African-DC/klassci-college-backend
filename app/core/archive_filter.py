@@ -11,6 +11,7 @@ archivable est filtrée, y compris quand elle est chargée à travers une
 relation. Un écran qui veut voir la corbeille le demande explicitement.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy import event
@@ -26,8 +27,14 @@ INCLUDE_ARCHIVED = "include_archived"
 _ARCHIVABLE = (Student, Parent, TeacherProfile, StaffProfile, Enrollment)
 
 
-def register_archive_filter() -> None:
-    """Branche le filtre sur toutes les sessions ORM."""
+def register_archive_filter() -> Callable[[Any], None]:
+    """Branche le filtre sur toutes les sessions ORM.
+
+    Rend l'ecouteur pose, pour que le test qui verifie ce filtre puisse le
+    retirer ensuite : il est branche sur la classe `Session` entiere, donc
+    le laisser en place changerait le comportement de tous les tests qui
+    suivent dans le meme processus.
+    """
 
     @event.listens_for(Session, "do_orm_execute")
     def _hide_archived(execute_state: Any) -> None:
@@ -49,3 +56,5 @@ def register_archive_filter() -> None:
                     include_aliases=True,
                 )
             )
+
+    return _hide_archived

@@ -40,9 +40,10 @@ inscrire personne, mais rien de muet n'est enregistré — et c'est la fenêtre 
 préférer si l'une des deux doit exister, parce qu'elle se voit tout de suite.
 Cette franchise dépend du mode strict de MySQL : hors mode strict, le moteur
 insérerait une chaîne vide sans rien dire, et l'élève serait invisible à la
-détection. C'est le défaut de MySQL 8, et le compose de production l'écrit
-désormais explicitement (`--sql-mode=STRICT_TRANS_TABLES,...`). La démo
-Windows, elle, s'en remet encore au défaut du moteur.
+détection. Le compose de production écrit désormais les six modes relevés
+sur le serveur, `STRICT_TRANS_TABLES` compris, pour que cette protection
+cesse d'être une hypothèse sur le moteur. La démo Windows, elle, s'en remet
+encore au défaut de MySQL.
 
 Migration interrompue en cours de route. C'est la seule des trois dont on ne
 sort pas tout seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le

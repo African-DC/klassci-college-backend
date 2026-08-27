@@ -70,6 +70,7 @@ strict = true
 [[tool.mypy.overrides]]
 module = [
     "app.core.names",
+    "app.models.user",
     "app.services.duplicates.similarity",
     "app.services.duplicates.detection",
     "app.routers.duplicates",

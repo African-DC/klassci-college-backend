@@ -17,6 +17,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, text
 
+from app.core.names import compact
 from app.models.user import Student
 
 
@@ -155,3 +156,28 @@ def test_la_migration_refuse_le_mode_hors_ligne() -> None:
     )
     with Operations.context(contexte), pytest.raises(RuntimeError, match="hors ligne"):
         migration.upgrade()
+
+
+def test_la_largeur_de_la_cle_absorbe_le_pire_nom() -> None:
+    """La colonne doit tenir le nom le plus long que le modèle accepte.
+
+    `compact()` peut allonger : une ligature devient deux lettres. La marge est
+    nulle — cent « oe » ligaturés produisent exactement 200 caractères pour une
+    colonne de 200. Élargir `last_name`, ou ajouter une substitution qui
+    remplace un caractère par trois, casserait l'invariant en silence : MySQL
+    tronquerait la clé, et l'élève deviendrait introuvable sous son vrai nom.
+
+    La largeur est aussi écrite à deux endroits — le modèle et la migration.
+    Ce test les compare : elles ne peuvent plus diverger sans bruit.
+    """
+    migration = _charger_migration()
+    colonne_modele = Student.__table__.columns["last_name_key"]
+    assert colonne_modele.type.length == migration._LARGEUR, (
+        "le modèle et la migration doivent déclarer la même largeur"
+    )
+
+    nom_maximal = Student.__table__.columns["last_name"].type.length
+    pire_nom = "œ" * nom_maximal
+    assert len(compact(pire_nom)) <= migration._LARGEUR, (
+        f"un nom de {nom_maximal} caractères doit tenir dans la clé"
+    )
