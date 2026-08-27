@@ -69,6 +69,11 @@ enable_error_code = [
     "no-untyped-call",
     "type-arg",
     "valid-type",
+    "arg-type",
+    "assignment",
+    "index",
+    "misc",
+    "unused-ignore",
 ]
 
 [tool.pytest.ini_options]

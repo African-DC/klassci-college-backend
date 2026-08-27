@@ -31,38 +31,38 @@ from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
 from app.schemas.duplicates import (
-    CorrespondanceResponse,
-    DoublonsResponse,
-    InscriptionExistante,
+    DuplicatesResponse,
+    ExistingEnrollment,
+    MatchResponse,
 )
 from app.services.duplicates.similarity import (
     StudentIdentity,
     compact,
-    comparer,
+    compare,
 )
 
 # Les statuts qui occupent la place : un dossier rejeté ou annulé ne compte
 # pas, mais un dossier simplement pas encore validé, si — c'est justement
 # celui qu'on risque de recréer parce qu'il ne se voit pas dans les listes.
-STATUTS_OCCUPANTS = (
+OCCUPYING_STATUSES = (
     EnrollmentStatus.PROSPECT,
     EnrollmentStatus.EN_VALIDATION,
     EnrollmentStatus.VALIDE,
 )
 
 
-def _predicat_matricule_exact(matricule: str | None) -> ColumnElement[bool] | None:
-    """Le prédicat « ce matricule exactement », ou rien s'il n'y a rien à comparer.
+def _exact_enrollment_number(matricule: str | None) -> ColumnElement[bool] | None:
+    """Le prédicat « ce matricule exactement », ou rien s'il n'y a rien à compare.
 
     Un seul endroit : la même expression servait au filtre et au tri, et une
     règle ajoutée d'un seul côté aurait retiré au tri ce qu'il protège.
     """
     if not matricule or not matricule.strip():
         return None
-    return _minuscules(Student.enrollment_number) == matricule.strip().lower()
+    return _lowered(Student.enrollment_number) == matricule.strip().lower()
 
 
-def _tri_certitude_dabord(matricule: str | None) -> list[Any]:
+def _certainty_first_order(matricule: str | None) -> list[Any]:
     """Le tri des candidats : la certitude d'abord, puis un ordre stable.
 
     Sans le premier critere, le plafond de candidats pouvait évincer la seule
@@ -71,15 +71,15 @@ def _tri_certitude_dabord(matricule: str | None) -> list[Any]:
     dans un ORDER BY se compile en `0`, que SQLite prend pour un numéro de
     colonne.
     """
-    exact = _predicat_matricule_exact(matricule)
+    exact = _exact_enrollment_number(matricule)
     return [Student.id] if exact is None else [exact.desc(), Student.id]
 
 
-def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
+def _lowered(colonne: Any) -> Function[str]:
     return func.lower(func.coalesce(colonne, ""))
 
 
-def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
+def _compact_sql(colonne: Any) -> Function[str]:
     """Même compactage que `compact()` Python, sans accents ni ponctuation.
 
     Suivi : #343 — une colonne normalisee et indexee supprimerait cette
@@ -95,7 +95,7 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     fréquents au copier-coller, on remplace la ponctuation par rien, et
     on compare la forme collée : `N'DRI` retrouve `NDRI`.
     """
-    texte = _minuscules(colonne)
+    texte = _lowered(colonne)
     for source, cible in (
         # U+2019 : l'apostrophe des claviers de telephone et des copier-coller.
         # Sans elle, `N’DRI` n'est pas retrouve alors que `N'DRI` l'est.
@@ -124,6 +124,8 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
         ("ã", "a"),
         ("õ", "o"),
         ("œ", "oe"),
+        ("æ", "ae"),
+        ("Æ", "ae"),
         ("'", ""),
         ("-", ""),
         (" ", ""),
@@ -156,26 +158,26 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     return texte
 
 
-def _meme_matricule(saisi: str | None, existant: str | None) -> bool:
-    if not saisi or not existant:
+def _meme_matricule(typed: str | None, existing: str | None) -> bool:
+    if not typed or not existing:
         return False
-    return saisi.strip().lower() == existant.strip().lower()
+    return typed.strip().lower() == existing.strip().lower()
 
 
-#: Au-dela, on ne comparé plus. La troncature est annoncée a l'appelant
-#: (`tronque`) et journalisée : un plafond silencieux ferait passer « rien
+#: Au-dela, on ne compare plus. La troncature est annoncée a l'appelant
+#: (`truncated`) et journalisée : un plafond silencieux ferait passer « rien
 #: trouve » pour une certitude alors qu'on n'a pas regardé.
-PLAFOND_CANDIDATS = 200
+CANDIDATE_CAP = 200
 
 logger = logging.getLogger(__name__)
 
 
-def _noyau(valeur: str | None) -> str | None:
+def _search_fragment(valeur: str | None) -> str | None:
     """Le fragment de nom a chercher, ou rien si le nom est trop court.
 
     On cherche la racine PRIVEE de sa première lettre, ce qui rattrape la faute
-    de frappe la plus frequente : COULIBALY saisi KOULIBALY reste trouvable, et
-    le prefixe strict etait de toute facon contenu dans ce motif.
+    de frappe la plus frequente : COULIBALY typed KOULIBALY reste trouvable, et
+    le prefixe strict etait de toute facon contenu dans ce reason.
 
     Le seuil porte sur le fragment réellement cherche, pas sur la racine avant
     amputation. Une version antérieure exigeait trois caracteres AVANT de
@@ -188,7 +190,7 @@ def _noyau(valeur: str | None) -> str | None:
     return noyau if len(noyau) >= 3 else None
 
 
-def _requete_avec_inscription(
+def _query_with_enrollment(
     nom: str | None,
     prenom: str | None,
     matricule: str | None,
@@ -199,23 +201,23 @@ def _requete_avec_inscription(
     inscription = aliased(Enrollment)
     classe = aliased(Class)
     conditions = []
-    exact = _predicat_matricule_exact(matricule)
+    exact = _exact_enrollment_number(matricule)
     if exact is not None:
         conditions.append(exact)
     for valeur in (nom, prenom):
-        noyau = _noyau(valeur)
+        noyau = _search_fragment(valeur)
         if noyau is not None:
             conditions.append(_compact_sql(Student.last_name).like(f"%{noyau}%"))
             conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
             continue
-        # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
+        # Trop court pour un reason flou, mais pas pour une egalite. « YAO » et
         # « Aya » sont parmi les noms les plus répandus ici : les ignorer
         # rendait une fiche identique introuvable. L'egalite ne remonte pas
         # TRAORE, contrairement a « %ao% ».
-        exact = compact(valeur)
-        if exact:
-            conditions.append(_compact_sql(Student.last_name) == exact)
-            conditions.append(_compact_sql(Student.first_name) == exact)
+        entier = compact(valeur)
+        if entier:
+            conditions.append(_compact_sql(Student.last_name) == entier)
+            conditions.append(_compact_sql(Student.first_name) == entier)
     # La date de naissance ne depend pas de l'orthographe : elle rattrape les
     # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
     # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
@@ -232,7 +234,7 @@ def _requete_avec_inscription(
     jointure_inscription = and_(
         inscription.student_id == Student.id,
         annee_visee,
-        inscription.status.in_([s.value for s in STATUTS_OCCUPANTS]),
+        inscription.status.in_([s.value for s in OCCUPYING_STATUSES]),
     )
     # SQLAlchemy type un `outerjoin` comme s'il rendait toujours l'entite, alors
     # qu'une jointure externe rend `None` quand rien ne correspond — ce qui est
@@ -246,72 +248,88 @@ def _requete_avec_inscription(
         .select_from(Student)
         .outerjoin(inscription, jointure_inscription)
         .outerjoin(classe, classe.id == inscription.class_id)
-        # `false()` en tete : un `or_()` vide supprimé la clause WHERE entière
+        # `false()` en tete : un `or_()` vide supprime la clause WHERE entière
         # et la requête rend TOUTE la table. Aucun critere ne doit jamais
         # vouloir dire « tout le monde » sur un fichier d'élèves.
         .where(or_(false(), *conditions))
         # Sans ordre explicite, quels 200 remontent depend du plan choisi par
         # la base : deux saisies identiques pourraient ne pas voir les mêmes.
-        .order_by(*_tri_certitude_dabord(matricule))
-        .limit(PLAFOND_CANDIDATS)
+        .order_by(*_certainty_first_order(matricule))
+        .limit(CANDIDATE_CAP)
     )
     return cast("Select[tuple[Student, Enrollment | None, Class | None]]", requete)
 
 
-def _inscription_jointe(
+def _joined_enrollment(
     inscription: Enrollment | None, classe: Class | None
-) -> InscriptionExistante | None:
+) -> ExistingEnrollment | None:
     if inscription is None:
         return None
-    return InscriptionExistante(
+    return ExistingEnrollment(
         enrollment_id=inscription.id,
         status=inscription.status,
         class_name=classe.name if classe is not None else None,
     )
 
 
-def _correspondance_ou_rien(
-    saisi: StudentIdentity,
-    existant: Student,
+def _identity_of(eleve: Student) -> StudentIdentity:
+    """L'état civil d'une fiche, sous la forme que le comparateur attend.
+
+    Un protocole structurel a existé ici pour éviter cette conversion. Il ne
+    tenait pas : `Student.last_name` est un `Mapped[str]`, que le vérificateur
+    de types refuse contre `str | None`, et son unique appel de production ne
+    le satisfaisait donc pas. Trois lignes explicites valent mieux qu'une
+    abstraction qui ne vérifie rien.
+    """
+    return StudentIdentity(
+        last_name=eleve.last_name,
+        first_name=eleve.first_name,
+        birth_date=eleve.birth_date,
+    )
+
+
+def _match_or_none(
+    typed: StudentIdentity,
+    existing: Student,
     matricule_saisi: str | None,
     inscription: Enrollment | None,
     classe: Class | None,
-) -> CorrespondanceResponse | None:
+) -> MatchResponse | None:
     """La fiche est-elle a signaler, et a quel titre ?
 
     Rend `None` quand ni le matricule ni le score ne justifient de deranger
     quelqu'un.
     """
-    meme_matricule = _meme_matricule(matricule_saisi, existant.enrollment_number)
+    meme_matricule = _meme_matricule(matricule_saisi, existing.enrollment_number)
     # `Student` satisfait `Identite` structurellement : c'est la raison d'être
     # du protocole, et le recopier l'annulait.
-    r = comparer(saisi, existant)
-    if not meme_matricule and not r.a_signaler:
+    r = compare(typed, _identity_of(existing))
+    if not meme_matricule and not r.worth_reporting:
         return None
-    return CorrespondanceResponse(
-        student_id=existant.id,
-        last_name=existant.last_name,
-        first_name=existant.first_name,
-        enrollment_number=existant.enrollment_number,
-        birth_date=existant.birth_date,
-        motif="matricule" if meme_matricule else "ressemblance",
+    return MatchResponse(
+        student_id=existing.id,
+        last_name=existing.last_name,
+        first_name=existing.first_name,
+        enrollment_number=existing.enrollment_number,
+        birth_date=existing.birth_date,
+        reason="enrollment_number" if meme_matricule else "similarity",
         # Un matricule identique n'est pas une ressemblance : il ne passe pas
         # par le score, et n'a donc ni pourcentage ni réserve.
         score=None if meme_matricule else r.score,
-        juge_sur_peu=False if meme_matricule else r.juge_sur_peu,
-        inscription_annee_courante=_inscription_jointe(inscription, classe),
+        partial_identity=False if meme_matricule else r.partial_identity,
+        current_year_enrollment=_joined_enrollment(inscription, classe),
     )
 
 
-def _par_certitude_puis_score(c: CorrespondanceResponse) -> tuple[bool, float]:
+def _by_certainty_then_score(c: MatchResponse) -> tuple[bool, float]:
     """Une certitude avant une ressemblance, puis du plus sur au moins sur.
 
     Sinon l'écran met en avant la correspondance la moins fiable des deux.
     """
-    return (c.motif != "matricule", -(c.score if c.score is not None else 1.0))
+    return (c.reason != "enrollment_number", -(c.score if c.score is not None else 1.0))
 
 
-async def chercher_doublons(
+async def find_duplicates(
     db: AsyncSession,
     *,
     last_name: str | None,
@@ -319,8 +337,8 @@ async def chercher_doublons(
     birth_date: date | None = None,
     enrollment_number: str | None = None,
     academic_year_id: int | None = None,
-    ignorer_student_id: int | None = None,
-) -> DoublonsResponse:
+    exclude_student_id: int | None = None,
+) -> DuplicatesResponse:
     """Les fiches qui pourraient etre la meme personne, les plus sures d'abord.
 
     Rend aussi si la recherche a ete tronquee : le plafond de candidats peut
@@ -330,47 +348,45 @@ async def chercher_doublons(
     # Sans critere exploitable, il n'y a rien a chercher : on evite
     # l'aller-retour plutot que de demander a MySQL une requête batie pour ne
     # rien rendre.
-    saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
+    typed = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
     # Se prononcer ne coûte rien, chercher coûte un balayage complet. Un second
     # garde a existe ici : il ne pouvait plus se déclencher, celui-ci ayant déjà
     # établi ses conditions, et se lisait pourtant comme porteur.
     #
     # Le `.strip()` retient le cas d'un matricule fait d'espaces, qui sinon
     # coûtait un aller-retour pour une requête vide.
-    if not ((enrollment_number or "").strip() or saisi.suffisante):
-        return DoublonsResponse(correspondances=[], tronque=False)
+    if not ((enrollment_number or "").strip() or typed.is_actionable):
+        return DuplicatesResponse(matches=[], truncated=False)
 
     resultat = await db.execute(
-        _requete_avec_inscription(
+        _query_with_enrollment(
             last_name, first_name, enrollment_number, academic_year_id, birth_date
         )
     )
     # Pas de `.unique()` : sans `joinedload` il ne dedoublonne rien, et se
     # lirait comme s'il interagissait avec le compte de troncature ci-dessous.
     lignes = list(resultat.all())
-    tronque = len(lignes) >= PLAFOND_CANDIDATS
-    if tronque:
+    truncated = len(lignes) >= CANDIDATE_CAP
+    if truncated:
         # Le vrai doublon peut être au-dela : le dire, plutot que de laisser
         # croire qu'on a tout regardé.
         logger.warning(
             "doublons: %s candidats atteints, comparaison tronquee (nom=%r prenom=%r)",
-            PLAFOND_CANDIDATS,
+            CANDIDATE_CAP,
             last_name,
             first_name,
         )
 
-    trouves: dict[int, CorrespondanceResponse] = {}
-    for existant, inscription, classe in lignes:
-        if ignorer_student_id is not None and existant.id == ignorer_student_id:
+    trouves: dict[int, MatchResponse] = {}
+    for existing, inscription, classe in lignes:
+        if exclude_student_id is not None and existing.id == exclude_student_id:
             continue
-        if existant.id in trouves:
+        if existing.id in trouves:
             continue
 
-        correspondance = _correspondance_ou_rien(
-            saisi, existant, enrollment_number, inscription, classe
-        )
+        correspondance = _match_or_none(typed, existing, enrollment_number, inscription, classe)
         if correspondance is not None:
-            trouves[existant.id] = correspondance
+            trouves[existing.id] = correspondance
 
-    trouves_list = sorted(trouves.values(), key=_par_certitude_puis_score)
-    return DoublonsResponse(correspondances=trouves_list, tronque=tronque)
+    found = sorted(trouves.values(), key=_by_certainty_then_score)
+    return DuplicatesResponse(matches=found, truncated=truncated)

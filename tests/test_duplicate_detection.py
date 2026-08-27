@@ -19,7 +19,7 @@ from app.core.database import Base
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
-from app.services.duplicates.detection import _noyau, chercher_doublons
+from app.services.duplicates.detection import _search_fragment, find_duplicates
 
 
 class _Pont:
@@ -165,54 +165,52 @@ async def test_le_matricule_identique_passe_avant_la_ressemblance(db: Session) -
     l'ecran met en avant la moins sure des deux.
     """
     # Le matricule designe KOUASSI David, la saisie ressemble a KOUASSI Aya :
-    # deux correspondances, donc un ordre a verifier. Avec une seule, l'ancienne
+    # deux matches, donc un ordre a verifier. Avec une seule, l'ancienne
     # version etait vraie quoi qu'on fasse — le tri pouvait meme etre inverse.
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
         enrollment_number="ECER0864",
     )
-    assert reponse.correspondances[0].student_id == 2
-    assert reponse.correspondances[0].motif == "matricule"
+    assert reponse.matches[0].student_id == 2
+    assert reponse.matches[0].reason == "enrollment_number"
     # Et rien d'autre ne se glisse devant : les suivantes sont des
     # ressemblances, pas des certitudes.
-    assert all(c.motif == "ressemblance" for c in reponse.correspondances[1:])
-    assert len(reponse.correspondances) > 1, "il faut une suite pour vérifier une tête"
+    assert all(c.reason == "similarity" for c in reponse.matches[1:])
+    assert len(reponse.matches) > 1, "il faut une suite pour vérifier une tête"
 
 
 @pytest.mark.asyncio
 async def test_sans_matricule_la_ressemblance_retrouve_la_fiche(db: Session) -> None:
     # La famille revient sans son papier : c'est le cas qui fabrique les
     # doublons, et celui que le score doit rattraper.
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db), last_name="Coulibaly", first_name="souleymane ben junior"
     )
-    assert [t.student_id for t in reponse.correspondances] == [3]
-    assert reponse.correspondances[0].motif == "ressemblance"
-    assert reponse.correspondances[0].juge_sur_peu is True
+    assert [t.student_id for t in reponse.matches] == [3]
+    assert reponse.matches[0].reason == "similarity"
+    assert reponse.matches[0].partial_identity is True
 
 
 @pytest.mark.asyncio
 async def test_deux_kouassi_distincts_ne_sont_pas_confondus(db: Session) -> None:
-    reponse = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name="David")
-    assert [t.student_id for t in reponse.correspondances] == [2], (
-        "l'autre KOUASSI a été signalé à tort"
-    )
+    reponse = await find_duplicates(_Pont(db), last_name="KOUASSI", first_name="David")
+    assert [t.student_id for t in reponse.matches] == [2], "l'autre KOUASSI a été signalé à tort"
 
 
 @pytest.mark.asyncio
 async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
     # Le cœur de la demande : un dossier en attente ne se voit pas dans les
     # listes, et c'est celui-là qu'on recrée.
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
         enrollment_number="ECER0882",
         academic_year_id=2,
     )
-    inscription = reponse.correspondances[0].inscription_annee_courante
+    inscription = reponse.matches[0].current_year_enrollment
     assert inscription is not None
     # Le champ est un objet typé, plus un dictionnaire fourre-tout : une clé
     # mal orthographiée est désormais une erreur, pas un `None` silencieux.
@@ -222,46 +220,46 @@ async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
 
 @pytest.mark.asyncio
 async def test_sans_annee_on_ne_pretend_pas_connaitre_l_inscription(db: Session) -> None:
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
         enrollment_number="ECER0882",
     )
-    assert reponse.correspondances[0].inscription_annee_courante is None
+    assert reponse.matches[0].current_year_enrollment is None
 
 
 @pytest.mark.asyncio
 async def test_un_nouvel_eleve_ne_declenche_rien(db: Session) -> None:
-    reponse = await chercher_doublons(_Pont(db), last_name="ZOUZOUA", first_name="Emmanuella")
-    assert reponse.correspondances == []
+    reponse = await find_duplicates(_Pont(db), last_name="ZOUZOUA", first_name="Emmanuella")
+    assert reponse.matches == []
 
 
 @pytest.mark.asyncio
 async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> None:
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOUASSI",
         first_name="David",
         enrollment_number="ECER0864",
-        ignorer_student_id=2,
+        exclude_student_id=2,
     )
-    assert reponse.correspondances == []
+    assert reponse.matches == []
 
 
 @pytest.mark.asyncio
 async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> None:
-    """COULIBALY saisi KOULIBALY doit rester detectable.
+    """COULIBALY typed KOULIBALY doit rester detectable.
 
     Un prefixe strict defaisait la raison d'etre du score : le candidat n'etait
     jamais remonte, donc la ressemblance ne tournait meme pas. C'est pourtant
     exactement le cas pour lequel elle existe — une famille revient, le nom est
     tape d'oreille.
     """
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db), last_name="KOULIBALY", first_name="Souleymane ben junior"
     )
-    assert any(c.last_name == "COULIBALY" for c in reponse.correspondances)
+    assert any(c.last_name == "COULIBALY" for c in reponse.matches)
 
 
 def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
@@ -273,12 +271,12 @@ def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
     """
     # On cherche la racine privée de sa première lettre : c'est ce qui rattrape
     # la faute de frappe de tête.
-    assert _noyau("KOULIBALY") == "oulib"
+    assert _search_fragment("KOULIBALY") == "oulib"
     # « YAO » donnerait « ao », qui remonte TRAORE et la moitié du fichier. Le
     # seuil porte sur le fragment réellement cherché, pas sur la racine avant
     # amputation.
-    assert _noyau("YAO") is None
-    assert _noyau("KO") is None
+    assert _search_fragment("YAO") is None
+    assert _search_fragment("KO") is None
 
 
 @pytest.mark.asyncio
@@ -286,13 +284,13 @@ async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None
     """Les trois ecritures d'un meme nom doivent se retrouver.
 
     Droite, courbe, ou absente : la normalisation Python et celle du SQL
-    doivent tomber d'accord. Ce test emprunte le motif flou, qui traverse
+    doivent tomber d'accord. Ce test emprunte le reason flou, qui traverse
     l'apostrophe sans avoir besoin de la regle ; c'est
     `test_un_nom_court_avec_apostrophe_se_retrouve_sans` qui l'eprouve.
     """
     for saisie in ("N'DRI", "N’DRI", "NDRI", "N DRI"):
-        reponse = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Etiakoun")
-        assert any(c.last_name == "N'DRI" for c in reponse.correspondances), (
+        reponse = await find_duplicates(_Pont(db), last_name=saisie, first_name="Etiakoun")
+        assert any(c.last_name == "N'DRI" for c in reponse.matches), (
             f"« {saisie} » ne retrouve pas N'DRI"
         )
 
@@ -304,11 +302,11 @@ async def test_deux_noms_etrangers_ne_se_rapprochent_pas(db: Session) -> None:
     Sans ce garde, tolerer une premiere lettre fausse deriverait vers un
     signalement permanent, et un avertissement permanent n'est plus lu.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
+    reponse = await find_duplicates(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
     # Assertion sur le résultat entier : la version précédente vérifiait que
     # TRAORE n'était pas là, alors qu'il n'était même pas candidat — elle
     # passait aussi avec le seuil de signalement ramené à zéro.
-    assert reponse.correspondances == []
+    assert reponse.matches == []
 
 
 @pytest.mark.asyncio
@@ -319,8 +317,8 @@ async def test_le_nom_seul_ne_declenche_rien(db: Session) -> None:
     prenom. Signaler la ferait afficher « 100 % de ressemblance » a chaque
     inscription, et un avertissement permanent cesse d'etre lu.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name=None)
-    assert reponse.correspondances == []
+    reponse = await find_duplicates(_Pont(db), last_name="KOUASSI", first_name=None)
+    assert reponse.matches == []
 
 
 @pytest.mark.asyncio
@@ -330,10 +328,10 @@ async def test_le_matricule_seul_signale_malgre_tout(db: Session) -> None:
     Un matricule identique n'est pas une ressemblance : il ne passe pas par le
     score, et doit remonter meme sans prenom.
     """
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db), last_name=None, first_name=None, enrollment_number="ECER0882"
     )
-    assert [c.motif for c in reponse.correspondances] == ["matricule"]
+    assert [c.reason for c in reponse.matches] == ["enrollment_number"]
 
 
 @pytest.mark.asyncio
@@ -346,17 +344,15 @@ async def test_la_troncature_est_annoncee(db: Session, monkeypatch) -> None:
     """
     from app.services.duplicates import detection
 
-    monkeypatch.setattr(detection, "PLAFOND_CANDIDATS", 2)
-    reponse = await chercher_doublons(
-        _Pont(db), last_name="KOUASSI", first_name="Aya marie adelaide"
-    )
-    assert reponse.tronque is True
+    monkeypatch.setattr(detection, "CANDIDATE_CAP", 2)
+    reponse = await find_duplicates(_Pont(db), last_name="KOUASSI", first_name="Aya marie adelaide")
+    assert reponse.truncated is True
 
 
 @pytest.mark.asyncio
 async def test_sans_troncature_on_ne_le_pretend_pas(db: Session) -> None:
-    reponse = await chercher_doublons(_Pont(db), last_name="TIOTE", first_name="Personne")
-    assert reponse.tronque is False
+    reponse = await find_duplicates(_Pont(db), last_name="TIOTE", first_name="Personne")
+    assert reponse.truncated is False
 
 
 @pytest.mark.asyncio
@@ -382,10 +378,10 @@ async def test_le_nom_seul_ne_touche_pas_la_base(db: Session) -> None:
 
     pont.execute = compte  # type: ignore[method-assign]
 
-    await chercher_doublons(pont, last_name="KOUASSI", first_name=None)
+    await find_duplicates(pont, last_name="KOUASSI", first_name=None)
     assert appels == 0, "le nom seul a interrogé la base pour rien"
 
-    await chercher_doublons(pont, last_name="KOUASSI", first_name="Aya")
+    await find_duplicates(pont, last_name="KOUASSI", first_name="Aya")
     assert appels == 1, "nom + prénom doit interroger la base"
 
 
@@ -401,20 +397,20 @@ async def test_une_fiche_identique_aux_noms_courts_remonte(db: Session) -> None:
     # Sans la date de naissance : elle est aussi une condition de la requete,
     # et la fournir ferait remonter la fiche par ce chemin-la. Le test ne
     # mesurerait alors pas ce qu'il annonce.
-    reponse = await chercher_doublons(_Pont(db), last_name="YAO", first_name="Aya")
-    assert [c.last_name for c in reponse.correspondances] == ["YAO"]
+    reponse = await find_duplicates(_Pont(db), last_name="YAO", first_name="Aya")
+    assert [c.last_name for c in reponse.matches] == ["YAO"]
 
 
 @pytest.mark.asyncio
 async def test_l_egalite_sur_un_nom_court_ne_ratisse_pas_large(db: Session) -> None:
     """L'egalite ne doit pas se comporter comme « %ao% ».
 
-    Un motif flou sur trois lettres remonterait TRAORE et une bonne part du
+    Un reason flou sur trois lettres remonterait TRAORE et une bonne part du
     fichier ; c'est pour cela qu'il etait refuse. L'egalite, elle, ne remonte
     que la fiche exacte.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="YAO", first_name="Aya")
-    assert all(c.last_name != "TRAORE" for c in reponse.correspondances)
+    reponse = await find_duplicates(_Pont(db), last_name="YAO", first_name="Aya")
+    assert all(c.last_name != "TRAORE" for c in reponse.matches)
 
 
 @pytest.mark.asyncio
@@ -422,14 +418,14 @@ async def test_la_certitude_survit_au_plafond(db: Session, monkeypatch) -> None:
     """Un matricule exact ne doit jamais tomber sous la troncature.
 
     Le plafond garde les candidats par identifiant croissant. Une fiche récente
-    portant le matricule saisi pouvait donc être évincée par des homonymes plus
+    portant le matricule typed pouvait donc être évincée par des homonymes plus
     anciens : la seule correspondance certaine disparaissait, et l'écran
     n'affichait que des ressemblances.
     """
     from app.services.duplicates import detection
 
-    monkeypatch.setattr(detection, "PLAFOND_CANDIDATS", 1)
-    reponse = await chercher_doublons(
+    monkeypatch.setattr(detection, "CANDIDATE_CAP", 1)
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
@@ -437,7 +433,7 @@ async def test_la_certitude_survit_au_plafond(db: Session, monkeypatch) -> None:
     )
     # ECER0864 est KOUASSI David, identifiant 2 : sans le tri il serait derrière
     # KOUASSI Aya, identifiant 1, et le plafond de 1 l'éliminerait.
-    assert [c.motif for c in reponse.correspondances] == ["matricule"]
+    assert [c.reason for c in reponse.matches] == ["enrollment_number"]
 
 
 @pytest.mark.asyncio
@@ -448,40 +444,40 @@ async def test_un_nom_accentue_se_retrouve_sans_accent(db: Session) -> None:
     minuscule que l'ASCII, donc les regles ecrites en minuscules accentuees ne
     s'y declenchaient jamais. Les formes majuscules la rendent verifiable.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="KOUAME", first_name="AICHA")
-    assert any(c.last_name == "KOUAMÉ" for c in reponse.correspondances)
+    reponse = await find_duplicates(_Pont(db), last_name="KOUAME", first_name="AICHA")
+    assert any(c.last_name == "KOUAMÉ" for c in reponse.matches)
 
 
 @pytest.mark.asyncio
 async def test_un_nom_court_avec_apostrophe_se_retrouve_sans(db: Session) -> None:
     """« NDA » doit retrouver « N'DA ».
 
-    Trois lettres : le motif flou ne s'applique pas, seule l'egalite peut le
+    Trois lettres : le reason flou ne s'applique pas, seule l'egalite peut le
     retrouver, et elle exige que l'apostrophe soit retiree des deux cotes.
     L'ancien test passait par « %dri% », qui traversait l'apostrophe sans avoir
     besoin de la regle.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="NDA", first_name="NGO")
-    assert any(c.last_name == "N'DA" for c in reponse.correspondances)
+    reponse = await find_duplicates(_Pont(db), last_name="NDA", first_name="NGO")
+    assert any(c.last_name == "N'DA" for c in reponse.matches)
 
 
 @pytest.mark.asyncio
 async def test_la_date_de_naissance_elargit_la_recherche(db: Session) -> None:
     """La date ne dépend pas de l'orthographe : elle rattrape ce que le nom rate.
 
-    Une interversion de lettres à l'intérieur du début du nom échappe au motif
+    Une interversion de lettres à l'intérieur du début du nom échappe au reason
     flou. La date, elle, est exacte ou fausse, et remonte la fiche quand même.
     """
     # Deux lettres interverties de chaque côté : « oauss » ne retrouve pas
     # « kouassi », « aamar » ne retrouve pas « ayamarie ». Aucun fragment ne
     # mène à la fiche ; seule la date la ramène, et le score la retient.
-    reponse = await chercher_doublons(
+    reponse = await find_duplicates(
         _Pont(db),
         last_name="KOAUSSI",
         first_name="Yaa marie",
         birth_date=date(2012, 2, 2),
     )
-    assert any(c.enrollment_number == "ECER0905" for c in reponse.correspondances)
+    assert any(c.enrollment_number == "ECER0905" for c in reponse.matches)
 
 
 @pytest.mark.asyncio
@@ -495,7 +491,7 @@ async def test_les_ressemblances_sortent_de_la_plus_sure_a_la_moins_sure(db: Ses
     # La base rend les candidats par identifiant : 1 puis 10. Mais 10 ressemble
     # davantage à la saisie. Sans le tri Python, l'écran met le moins probable
     # en tête.
-    reponse = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name="Aya marie")
-    scores = [c.score for c in reponse.correspondances if c.score is not None]
+    reponse = await find_duplicates(_Pont(db), last_name="KOUASSI", first_name="Aya marie")
+    scores = [c.score for c in reponse.matches if c.score is not None]
     assert len(scores) >= 2, "il faut au moins deux ressemblances pour vérifier un ordre"
     assert scores == sorted(scores, reverse=True)

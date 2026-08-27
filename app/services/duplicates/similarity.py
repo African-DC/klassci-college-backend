@@ -17,7 +17,6 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass
 from datetime import date
-from typing import Protocol
 
 # Ce que pèse chaque champ. Le nom et le prénom portent l'essentiel parce
 # qu'ils sont toujours saisis ; la date de naissance départage les homonymes,
@@ -27,17 +26,17 @@ from typing import Protocol
 # l'effectif : lui laisser un poids fabriquait du signal à partir d'un champ
 # sans pouvoir discriminant, et pouvait à lui seul faire basculer un couple
 # au-dessus du seuil.
-POIDS = {"last_name": 0.40, "first_name": 0.35, "birth_date": 0.25}
+WEIGHTS = {"last_name": 0.40, "first_name": 0.35, "birth_date": 0.25}
 
 # En dessous, deux fiches ne se ressemblent pas assez pour qu'on dérange
 # quelqu'un. Il n'y a pas de second palier : une « quasi-certitude » a existé
 # ici, que ni le contrat ni l'écran ne portaient — un seuil que personne ne lit
 # est une promesse que personne ne tient.
-SEUIL_SIGNALEMENT = 0.72
+MATCH_THRESHOLD = 0.72
 
 
-def normaliser(valeur: str | None) -> str:
-    """Réduit un nom à ce qui compte pour le comparer.
+def normalize(valeur: str | None) -> str:
+    """Réduit un nom à ce qui compte pour le compare.
 
     « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
     accents sont retirés parce qu'ils sont saisis de façon irrégulière au
@@ -62,30 +61,10 @@ def compact(valeur: str | None) -> str:
     """La forme comparable d'un nom, sans espaces ni ponctuation.
 
     « N'DRI », « NDRI » et « n dri » doivent se trouver. Le préfiltre SQL
-    utilise le même compactage, sinon un nom saisi sans apostrophe ne
+    utilise le même compactage, sinon un nom typed sans apostrophe ne
     ramènerait jamais la fiche qui en a une.
     """
-    return normaliser(valeur).replace(" ", "")
-
-
-class Identite(Protocol):
-    """Ce qu'il faut porter pour etre compare.
-
-    En lecture seule, et c'est ce qui fait marcher le protocole. Declares comme
-    attributs mutables, ces membres sont INVARIANTS : `Student.last_name`, typé
-    `str`, ne satisfait alors pas `str | None`, et le commentaire qui affirmait
-    qu'un `Student` s'y conforme structurellement etait faux. En propriété, ils
-    sont covariants et l'affirmation devient vraie.
-    """
-
-    @property
-    def last_name(self) -> str | None: ...
-
-    @property
-    def first_name(self) -> str | None: ...
-
-    @property
-    def birth_date(self) -> date | None: ...
+    return normalize(valeur).replace(" ", "")
 
 
 @dataclass(frozen=True)
@@ -93,7 +72,7 @@ class StudentIdentity:
     """Les trois champs qui identifient un élève quand le matricule manque."""
 
     @property
-    def suffisante(self) -> bool:
+    def is_actionable(self) -> bool:
         """Y a-t-il de quoi se prononcer sur cette saisie ?
 
         Le nom, plus au moins un second element. Le nom seul est l'etat le plus
@@ -119,7 +98,7 @@ def _bigrammes(texte: str) -> set[str]:
     return {colle[i : i + 2] for i in range(len(colle) - 1)}
 
 
-def ressemblance_texte(a: str | None, b: str | None) -> float | None:
+def text_similarity(a: str | None, b: str | None) -> float | None:
     """Dice sur les bigrammes : 1.0 identique, 0.0 étranger, None si absent.
 
     Dice tolère l'inversion et la faute de frappe sans rapprocher n'importe
@@ -130,7 +109,7 @@ def ressemblance_texte(a: str | None, b: str | None) -> float | None:
     de naissance ne « diffère » pas de celle qui en a une, elle est muette, et
     la moyenne doit l'ignorer plutôt que de la compter comme un désaccord.
     """
-    na, nb = normaliser(a), normaliser(b)
+    na, nb = normalize(a), normalize(b)
     if not na or not nb:
         return None
     if na == nb:
@@ -142,7 +121,7 @@ def ressemblance_texte(a: str | None, b: str | None) -> float | None:
     return 2 * len(ba & bb) / (len(ba) + len(bb))
 
 
-def ressemblance_date(a: date | None, b: date | None) -> float | None:
+def date_similarity(a: date | None, b: date | None) -> float | None:
     """Une date de naissance est juste ou fausse ; il n'y a pas d'à-peu-près.
 
     Sauf un cas fréquent au copier-coller : le jour et le mois intervertis,
@@ -159,19 +138,19 @@ def ressemblance_date(a: date | None, b: date | None) -> float | None:
 
 
 @dataclass(frozen=True)
-class Ressemblance:
+class Similarity:
     """Ce que la comparaison a trouvé, et sur quoi elle s'est appuyée."""
 
     score: float
-    champs_compares: tuple[str, ...]
-    champs_manquants: tuple[str, ...]
+    compared_fields: tuple[str, ...]
+    missing_fields: tuple[str, ...]
 
     @property
-    def a_signaler(self) -> bool:
-        return self.score >= SEUIL_SIGNALEMENT
+    def worth_reporting(self) -> bool:
+        return self.score >= MATCH_THRESHOLD
 
     @property
-    def juge_sur_peu(self) -> bool:
+    def partial_identity(self) -> bool:
         """Vrai quand un champ n'a pas pu etre compare.
 
         Le score ne porte alors que sur une partie de l'identité. Une version
@@ -183,10 +162,10 @@ class Ressemblance:
         L'écran doit le dire au lieu d'afficher un pourcentage qui inspire une
         confiance qu'il ne merite pas.
         """
-        return bool(self.champs_manquants)
+        return bool(self.missing_fields)
 
 
-def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
+def compare(saisie: StudentIdentity, existante: StudentIdentity) -> Similarity:
     """Compare la fiche saisie a une fiche existante.
 
     Les poids sont renormalises
@@ -198,23 +177,23 @@ def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
     manquants: list[str] = []
 
     for champ in ("last_name", "first_name"):
-        r = ressemblance_texte(getattr(saisie, champ), getattr(existante, champ))
+        r = text_similarity(getattr(saisie, champ), getattr(existante, champ))
         if r is None:
             manquants.append(champ)
         else:
             details[champ] = r
 
-    r_date = ressemblance_date(saisie.birth_date, existante.birth_date)
+    r_date = date_similarity(saisie.birth_date, existante.birth_date)
     if r_date is None:
         manquants.append("birth_date")
     else:
         details["birth_date"] = r_date
 
-    total_poids = sum(POIDS[c] for c in details)
-    score = sum(details[c] * POIDS[c] for c in details) / total_poids if total_poids else 0.0
+    total_poids = sum(WEIGHTS[c] for c in details)
+    score = sum(details[c] * WEIGHTS[c] for c in details) / total_poids if total_poids else 0.0
 
-    return Ressemblance(
+    return Similarity(
         score=round(score, 4),
-        champs_compares=tuple(details),
-        champs_manquants=tuple(manquants),
+        compared_fields=tuple(details),
+        missing_fields=tuple(manquants),
     )

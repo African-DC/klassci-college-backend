@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class InscriptionExistante(BaseModel):
+class ExistingEnrollment(BaseModel):
     """Le dossier déjà ouvert pour l'année visée, validé ou non."""
 
     enrollment_id: int
@@ -16,19 +16,19 @@ class InscriptionExistante(BaseModel):
     class_name: str | None = None
 
 
-class CorrespondanceResponse(BaseModel):
+class MatchResponse(BaseModel):
     student_id: int
     last_name: str
     first_name: str
     enrollment_number: str | None = None
     birth_date: date | None = None
-    motif: Literal["matricule", "ressemblance"] = Field(
+    reason: Literal["enrollment_number", "similarity"] = Field(
         description="« matricule » (certain) ou « ressemblance »"
     )
     score: float | None = Field(
         default=None, description="0 à 1. Absent quand le matricule suffit à conclure."
     )
-    juge_sur_peu: bool = Field(
+    partial_identity: bool = Field(
         default=False,
         description=(
             "Vrai quand un des champs d'état civil n'a pas pu être comparé : "
@@ -36,12 +36,12 @@ class CorrespondanceResponse(BaseModel):
             "l'écran doit le dire plutôt que d'afficher un pourcentage rassurant."
         ),
     )
-    inscription_annee_courante: InscriptionExistante | None = None
+    current_year_enrollment: ExistingEnrollment | None = None
 
 
-class DoublonsResponse(BaseModel):
-    correspondances: list[CorrespondanceResponse] = Field(default_factory=list)
+class DuplicatesResponse(BaseModel):
+    matches: list[MatchResponse] = Field(default_factory=list)
     #: Vrai quand le plafond de candidats a ete atteint : le vrai doublon peut
     #: se trouver au-dela. Sans ce signal, « rien trouve » passerait pour une
     #: certitude alors qu'on n'a pas tout regarde.
-    tronque: bool = False
+    truncated: bool = False

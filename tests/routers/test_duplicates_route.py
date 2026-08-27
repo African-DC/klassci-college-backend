@@ -1,6 +1,6 @@
 """La route, appelée comme le frontend l'appelle.
 
-Trente-trois tests passaient par `chercher_doublons` en direct, aucun ne
+Trente-trois tests passaient par `find_duplicates` en direct, aucun ne
 traversait le routeur. Une passe de revue a donc pu remplacer l'appel par
 `duplicates.reponse_doublons`, un nom que le paquet n'exporte pas : l'import
 réussissait, l'application démarrait, le test d'ordre des routes restait vert,
@@ -14,23 +14,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.routers import duplicates as routeur_doublons
-from app.schemas.duplicates import DoublonsResponse
+from app.schemas.duplicates import DuplicatesResponse
 
-CHEMIN = "/admin/students/doublons"
+CHEMIN = "/admin/students/duplicates"
 
 
 def test_la_route_repond_200(client: TestClient) -> None:
     """Le câblage complet : URL, permission, sérialisation."""
     with patch.object(
         routeur_doublons,
-        "chercher_doublons",
+        "find_duplicates",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], tronque=False),
+        return_value=DuplicatesResponse(matches=[], truncated=False),
     ) as service:
         reponse = client.get(CHEMIN, params={"last_name": "KOUASSI", "first_name": "Aya"})
 
     assert reponse.status_code == 200, reponse.text
-    assert reponse.json() == {"correspondances": [], "tronque": False}
+    assert reponse.json() == {"matches": [], "truncated": False}
     service.assert_awaited_once()
 
 
@@ -38,9 +38,9 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
     """Un paramètre perdu en route rendrait 200 sur une recherche vide."""
     with patch.object(
         routeur_doublons,
-        "chercher_doublons",
+        "find_duplicates",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], tronque=False),
+        return_value=DuplicatesResponse(matches=[], truncated=False),
     ) as service:
         client.get(
             CHEMIN,
@@ -50,7 +50,7 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
                 "birth_date": "2010-03-14",
                 "enrollment_number": "ECER0734",
                 "academic_year_id": 7,
-                "ignorer_student_id": 3,
+                "exclude_student_id": 3,
             },
         )
 
@@ -60,10 +60,10 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
     assert str(recus["birth_date"]) == "2010-03-14"
     assert recus["enrollment_number"] == "ECER0734"
     assert recus["academic_year_id"] == 7
-    assert recus["ignorer_student_id"] == 3
+    assert recus["exclude_student_id"] == 3
 
 
-@pytest.mark.parametrize("valeur", ["doublons", "abc"])
+@pytest.mark.parametrize("valeur", ["duplicates", "abc"])
 def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
     client: TestClient, valeur: str
 ) -> None:
@@ -74,13 +74,13 @@ def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
     """
     with patch.object(
         routeur_doublons,
-        "chercher_doublons",
+        "find_duplicates",
         new_callable=AsyncMock,
-        return_value=DoublonsResponse(correspondances=[], tronque=False),
+        return_value=DuplicatesResponse(matches=[], truncated=False),
     ):
         reponse = client.get(f"/admin/students/{valeur}", params={"last_name": "KOUASSI"})
 
-    if valeur == "doublons":
+    if valeur == "duplicates":
         assert reponse.status_code == 200
     else:
         assert reponse.status_code == 422
