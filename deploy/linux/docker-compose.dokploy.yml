@@ -10,6 +10,12 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # Le mode strict est deja le defaut de MySQL 8 : l'ecrire ici ne change
+      # rien aujourd'hui, mais il cesse d'etre une hypothese. Une colonne
+      # NOT NULL sans defaut est ce qui empeche d'enregistrer un eleve sans
+      # cle de recherche, donc invisible a la detection de doublon. Hors mode
+      # strict, MySQL y mettrait une chaine vide sans rien dire.
+      - --sql-mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
     volumes:
       - klassci_mysql:/var/lib/mysql
     healthcheck:

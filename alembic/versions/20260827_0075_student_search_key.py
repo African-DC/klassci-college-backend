@@ -25,20 +25,34 @@ matricule étant enveloppé dans un `lower()` qui interdit l'usage de son index
 unique. Dette antérieure à cette migration, suivi #344.
 
 ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et les deux
-rapprochées.
+rapprochées. Trois choses peuvent mal tourner ; les voici toutes.
 
-Code neuf sans la migration : SQLAlchemy énumère toutes les colonnes du modèle
-dans chaque `SELECT`, donc ce n'est pas la seule détection de doublon qui tombe,
-c'est TOUTE lecture d'élève — la liste, l'inscription, la caisse, les bulletins,
-les portails parent et élève. L'application est hors service, pas diminuée.
+Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
+dans chaque `SELECT` : ce n'est donc pas la seule détection de doublon qui
+tombe, c'est TOUTE lecture d'élève — la liste, l'inscription, la caisse, les
+bulletins, les portails parent et élève. L'application est hors service, pas
+diminuée.
 
-Migration sans le code neuf : les colonnes sont `NOT NULL` sans défaut.
-L'ancien code, qui ne les connaît pas, échoue donc à l'insertion avec
-« Field 'last_name_key' doesn't have a default value » — à condition que le
-mode strict soit actif, ce qui est le défaut de MySQL 8 mais n'est fixé
-nulle part dans le compose : rien dans le dépôt ne l'épingle : le secrétariat ne peut plus inscrire personne, mais aucune
-fiche muette n'est enregistrée. C'est la fenêtre à préférer si l'une des deux
-doit exister — elle abîme moins et se voit tout de suite.
+Migration sans le code neuf. Les colonnes sont `NOT NULL` sans défaut, et
+l'ancien code ne les connaît pas : son `INSERT` échoue avec « Field
+'last_name_key' doesn't have a default value ». Le secrétariat ne peut plus
+inscrire personne, mais rien de muet n'est enregistré — et c'est la fenêtre à
+préférer si l'une des deux doit exister, parce qu'elle se voit tout de suite.
+Cette franchise dépend du mode strict de MySQL : hors mode strict, le moteur
+insérerait une chaîne vide sans rien dire, et l'élève serait invisible à la
+détection. C'est le défaut de MySQL 8, et le compose de production l'écrit
+désormais explicitement (`--sql-mode=STRICT_TRANS_TABLES,...`). La démo
+Windows, elle, s'en remet encore au défaut du moteur.
+
+Migration interrompue en cours de route. C'est la seule des trois dont on ne
+sort pas tout seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le
+remplissage échoue après le premier `add_column`, les colonnes restent, leur
+défaut serveur vide est toujours actif, aucune clé n'est calculée, et la
+révision n'est pas estampillée — un `upgrade` rejoué échouera sur « duplicate
+column ». La sortie est manuelle : retirer les deux colonnes, puis rejouer.
+Le risque est faible — le remplissage est du Python pur suivi d'un
+`executemany`, et la clé ne peut pas dépasser la largeur de la colonne — mais
+il n'est pas nul, d'où cette note.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm

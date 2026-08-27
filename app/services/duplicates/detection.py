@@ -10,6 +10,23 @@ Trois signaux, du plus sûr au plus incertain :
 3. **La ressemblance de l'état civil.** Le filet quand le matricule manque,
    ce qui est le cas de toute famille qui revient sans son papier.
 
+La sentinelle
+-------------
+
+`_candidate_conditions` ne rend jamais une liste vide : sans critère exploitable
+elle rend `false()`. Un `or_()` vide supprime la clause WHERE entière, et la
+requête rendrait TOUTE la table — 200 fiches arbitraires présentées comme des
+doublons possibles, sur l'écran où l'on décide de créer ou non un dossier.
+Aucun critère ne doit jamais vouloir dire « tout le monde » sur un fichier
+d'élèves.
+
+Pourquoi conditionnelle plutôt qu'en tête systématique : en SQL brut,
+`0=1 OR ...` fait tomber SQLite de MULTI-INDEX OR à un balayage. Ce n'est pas ce
+qui arrive aujourd'hui — SQLAlchemy 2.0 replie la constante hors d'un `OR`
+peuplé, donc les deux formes compilent le même SQL. La forme conditionnelle rend
+simplement l'index indépendant de ce repliage, qui est un détail
+d'implémentation d'une bibliothèque tierce.
+
 La lecture ne bloque rien : elle rend ce qu'elle a trouvé et laisse l'écran
 décider. Bloquer sur une ressemblance ferait refuser un vrai nouvel élève
 qui porte le nom de son cousin, et il n'y a pas de recours au copier-coller.
@@ -156,17 +173,7 @@ def _candidate_conditions(
     # candidats ; c'est le score qui tranche ensuite.
     if naissance is not None:
         conditions.append(Student.birth_date == naissance)
-    # La sentinelle, seulement si rien n'a ete construit : un `or_()` vide
-    # supprime la clause WHERE entiere et la requete rend TOUTE la table.
-    # Aucun critere ne doit jamais vouloir dire « tout le monde » sur un
-    # fichier d'eleves.
-    #
-    # Pourquoi conditionnelle plutot qu'en tete systematique : en SQL brut,
-    # `0=1 OR ...` fait tomber SQLite de MULTI-INDEX OR a un balayage. Ce
-    # n'est pas ce qui arrive aujourd'hui — SQLAlchemy 2.0 replie la
-    # constante hors d'un OR peuple, donc les deux formes compilent le meme
-    # SQL. La forme conditionnelle rend simplement l'index independant de ce
-    # repliage, qui est un detail d'implementation d'une bibliotheque tierce.
+    # La sentinelle : voir « La sentinelle » en tete de module.
     if not conditions:
         conditions.append(false())
     return conditions
@@ -283,6 +290,29 @@ def _by_certainty_then_score(c: MatchResponse) -> tuple[bool, float]:
     return (c.reason != "enrollment_number", -(c.score if c.score is not None else 1.0))
 
 
+def _rank_matches(
+    lignes: list[Any],
+    typed: StudentIdentity,
+    matricule: str | None,
+    exclude_student_id: int | None,
+) -> list[MatchResponse]:
+    """Note les candidats et les range, la certitude d'abord.
+
+    Le tri est ici et pas dans le SQL : la base sait mettre le matricule exact
+    en tete, elle ne sait rien du score de ressemblance. Sans ce second tri,
+    l'ecran met en avant la moins fiable de deux ressemblances.
+    """
+    trouves: list[MatchResponse] = []
+    for existing, inscription, classe in lignes:
+        if exclude_student_id is not None and existing.id == exclude_student_id:
+            continue
+        correspondance = _match_or_none(typed, existing, matricule, inscription, classe)
+        if correspondance is not None:
+            trouves.append(correspondance)
+    trouves.sort(key=_by_certainty_then_score)
+    return trouves
+
+
 async def find_duplicates(
     db: AsyncSession,
     *,
@@ -333,14 +363,5 @@ async def find_duplicates(
             first_name,
         )
 
-    found: list[MatchResponse] = []
-    for existing, inscription, classe in lignes:
-        if exclude_student_id is not None and existing.id == exclude_student_id:
-            continue
-
-        correspondance = _match_or_none(typed, existing, enrollment_number, inscription, classe)
-        if correspondance is not None:
-            found.append(correspondance)
-
-    found.sort(key=_by_certainty_then_score)
-    return DuplicatesResponse(matches=found, truncated=truncated)
+    trouves = _rank_matches(lignes, typed, enrollment_number, exclude_student_id)
+    return DuplicatesResponse(matches=trouves, truncated=truncated)
