@@ -63,6 +63,23 @@ class TestNormalisation:
 
 
 class TestChampAbsent:
+    def test_un_prenom_vide_ne_vaut_pas_desaccord(self):
+        """Deux fiches de la production ROSTAN n'ont pas de prénom.
+
+        Elles viennent d'un état d'arriérés qui listait ces deux familles par
+        leur seul nom. Si la chaîne vide comptait comme un désaccord au lieu
+        d'un champ absent, le score chuterait et la famille qui revient ne
+        serait pas signalée — c'est précisément celle qu'on veut rattraper,
+        puisqu'elle doit encore de l'argent.
+        """
+        assert text_similarity("", "Aya") is None
+        r = compare(fiche("TIOTE", "Mariam"), fiche("TIOTE", ""))
+        assert r.score == pytest.approx(1.0)
+        assert r.compared_fields == ("last_name",)
+        assert r.partial_identity, "l'écran doit dire que l'état civil est incomplet"
+        assert r.worth_reporting
+
+
     def test_un_champ_manquant_ne_vaut_pas_desaccord(self):
         # C'est le point qui décide si le score est honnête : une fiche sans
         # date de naissance ne « diffère » pas, elle se tait.
