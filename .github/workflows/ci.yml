@@ -39,7 +39,8 @@ jobs:
             app/core/sentry.py \
             app/services/email_service.py \
             app/cli/provision_tenant.py \
-            app/core/names.py \n            app/services/duplicates/similarity.py \
+            app/core/names.py \
+            app/services/duplicates/similarity.py \
             app/services/duplicates/detection.py \
             app/routers/duplicates.py
 
