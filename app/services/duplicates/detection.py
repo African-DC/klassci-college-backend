@@ -182,10 +182,18 @@ def _requete_avec_inscription(
         conditions.append(_minuscules(Student.enrollment_number) == matricule.strip().lower())
     for valeur in (nom, prenom):
         noyau = _noyau(valeur)
-        if noyau is None:
+        if noyau is not None:
+            conditions.append(_compact_sql(Student.last_name).like(f"%{noyau}%"))
+            conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
             continue
-        conditions.append(_compact_sql(Student.last_name).like(f"%{noyau}%"))
-        conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
+        # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
+        # « Aya » sont parmi les noms les plus repandus ici : les ignorer
+        # rendait une fiche identique introuvable. L'egalite ne remonte pas
+        # TRAORE, contrairement a « %ao% ».
+        exact = compact(valeur)
+        if exact:
+            conditions.append(_compact_sql(Student.last_name) == exact)
+            conditions.append(_compact_sql(Student.first_name) == exact)
     # La date de naissance ne depend pas de l'orthographe : elle rattrape les
     # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
     # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
@@ -216,7 +224,10 @@ def _requete_avec_inscription(
         .select_from(Student)
         .outerjoin(inscription, jointure_inscription)
         .outerjoin(classe, classe.id == inscription.class_id)
-        .where(or_(*conditions))
+        # `false()` en tete : un `or_()` vide supprime la clause WHERE entiere
+        # et la requete rend TOUTE la table. Aucun critere ne doit jamais
+        # vouloir dire « tout le monde » sur un fichier d'eleves.
+        .where(or_(false(), *conditions))
         # Sans ordre explicite, quels 200 remontent depend du plan choisi par
         # la base : deux saisies identiques pourraient ne pas voir les memes.
         .order_by(Student.id)
@@ -237,7 +248,9 @@ def _inscription_jointe(
     )
 
 
-def _fragment_cherchable(nom: str | None, prenom: str | None, matricule: str | None) -> bool:
+def _fragment_cherchable(
+    nom: str | None, prenom: str | None, matricule: str | None, naissance: date | None
+) -> bool:
     """Y a-t-il de quoi construire une requete ?
 
     Distinct de « y a-t-il de quoi se prononcer », qui vit sur
@@ -248,7 +261,11 @@ def _fragment_cherchable(nom: str | None, prenom: str | None, matricule: str | N
     """
     if matricule and matricule.strip():
         return True
-    return _noyau(nom) is not None or _noyau(prenom) is not None
+    if naissance is not None:
+        return True
+    # Un fragment flou, ou a defaut une valeur exacte : les noms de trois
+    # lettres se cherchent a l'identique plutot que pas du tout.
+    return bool(compact(nom)) or bool(compact(prenom))
 
 
 def _correspondance_ou_rien(
@@ -313,7 +330,7 @@ async def chercher_doublons(
     # un balayage complet.
     if not (enrollment_number or saisi.suffisante):
         return [], False
-    if not _fragment_cherchable(last_name, first_name, enrollment_number):
+    if not _fragment_cherchable(last_name, first_name, enrollment_number, birth_date):
         return [], False
 
     resultat = await db.execute(

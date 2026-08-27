@@ -120,8 +120,8 @@ def ressemblance_texte(a: str | None, b: str | None) -> float | None:
     quoi : « KOUASSI » et « KOUAKOU » partagent un début mais divergent
     ensuite, et le score le reflète.
 
-    `None` quand l'un des deux manque — ce n'est pas zéro. Une fiche sans lieu
-    de naissance ne « diffère » pas de celle qui en a un, elle est muette, et
+    `None` quand l'un des deux manque — ce n'est pas zéro. Une fiche sans date
+    de naissance ne « diffère » pas de celle qui en a une, elle est muette, et
     la moyenne doit l'ignorer plutôt que de la compter comme un désaccord.
     """
     na, nb = normaliser(a), normaliser(b)

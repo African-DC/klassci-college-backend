@@ -93,6 +93,16 @@ def db() -> Iterator[Session]:
                 # claviers de telephone et les copier-coller depuis Word. Le
                 # premier correctif ne traitait que la droite, donc cette fiche
                 # restait invisible cote base.
+                # Noms de trois lettres : parmi les plus repandus ici, et
+                # invisibles tant que la recherche exigeait un fragment de
+                # quatre caracteres.
+                Student(
+                    id=7,
+                    last_name="YAO",
+                    first_name="Aya",
+                    enrollment_number="ECER0902",
+                    birth_date=date(2011, 5, 4),
+                ),
                 Student(
                     id=6,
                     last_name="N’GUESSAN",
@@ -345,3 +355,31 @@ async def test_le_nom_seul_ne_touche_pas_la_base(db: Session) -> None:
 
     await chercher_doublons(pont, last_name="KOUASSI", first_name="Aya")
     assert appels == 1, "nom + prénom doit interroger la base"
+
+
+@pytest.mark.asyncio
+async def test_une_fiche_identique_aux_noms_courts_remonte(db: Session) -> None:
+    """« YAO / Aya » : deux des noms les plus repandus ici.
+
+    La recherche floue ampute la premiere lettre et exige trois caracteres
+    restants, donc quatre au depart. « YAO » et « Aya » n'en ont que trois :
+    aucune requete n'etait emise, et l'ecran annoncait « rien trouve » sur une
+    fiche IDENTIQUE. On les cherche a l'identique plutot que pas du tout.
+    """
+    # Sans la date de naissance : elle est aussi une condition de la requete,
+    # et la fournir ferait remonter la fiche par ce chemin-la. Le test ne
+    # mesurerait alors pas ce qu'il annonce.
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="YAO", first_name="Aya")
+    assert [c.last_name for c in trouves] == ["YAO"]
+
+
+@pytest.mark.asyncio
+async def test_l_egalite_sur_un_nom_court_ne_ratisse_pas_large(db: Session) -> None:
+    """L'egalite ne doit pas se comporter comme « %ao% ».
+
+    Un motif flou sur trois lettres remonterait TRAORE et une bonne part du
+    fichier ; c'est pour cela qu'il etait refuse. L'egalite, elle, ne remonte
+    que la fiche exacte.
+    """
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="YAO", first_name="Aya")
+    assert all(c.last_name != "TRAORE" for c in trouves)

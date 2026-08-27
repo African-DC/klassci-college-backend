@@ -62,7 +62,6 @@ strict = true
 # globalement plus haut. Le garde installe pour empecher les regressions
 # annoncait donc « Success » sur une version ou l'endpoint rendait 500 a chaque
 # requete, faute de voir un attribut absent. `enable_error_code` le rallume.
-disable_error_code = []
 enable_error_code = ["attr-defined", "no-any-return"]
 
 [tool.pytest.ini_options]
