@@ -63,9 +63,23 @@ def compact(valeur: str | None) -> str:
 
 
 class Identite(Protocol):
-    last_name: str | None
-    first_name: str | None
-    birth_date: date | None
+    """Ce qu'il faut porter pour etre compare.
+
+    En lecture seule, et c'est ce qui fait marcher le protocole. Declares comme
+    attributs mutables, ces membres sont INVARIANTS : `Student.last_name`, typé
+    `str`, ne satisfait alors pas `str | None`, et le commentaire qui affirmait
+    qu'un `Student` s'y conforme structurellement etait faux. En propriete, ils
+    sont covariants et l'affirmation devient vraie.
+    """
+
+    @property
+    def last_name(self) -> str | None: ...
+
+    @property
+    def first_name(self) -> str | None: ...
+
+    @property
+    def birth_date(self) -> date | None: ...
 
 
 @dataclass(frozen=True)
