@@ -40,6 +40,10 @@ MATCH_THRESHOLD = 0.72
 class StudentIdentity:
     """Les trois champs qui identifient un élève quand le matricule manque."""
 
+    last_name: str | None
+    first_name: str | None
+    birth_date: date | None = None
+
     @property
     def is_actionable(self) -> bool:
         """Y a-t-il de quoi se prononcer sur cette saisie ?
@@ -56,10 +60,6 @@ class StudentIdentity:
         return bool(compact(self.last_name)) and (
             bool(compact(self.first_name)) or self.birth_date is not None
         )
-
-    last_name: str | None
-    first_name: str | None
-    birth_date: date | None = None
 
 
 def _bigrammes(texte: str) -> set[str]:

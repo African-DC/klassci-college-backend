@@ -13,6 +13,8 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import create_engine, text
 
 from app.models.user import Student
@@ -31,6 +33,19 @@ def _charger_migration() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+class _Tampon:
+    """Recueille le DDL rendu en mode hors ligne, ligne par ligne."""
+
+    def __init__(self, lignes: list[str]) -> None:
+        self._lignes = lignes
+
+    def write(self, texte: str) -> None:
+        self._lignes.append(texte)
+
+    def flush(self) -> None:
+        return None
 
 
 @pytest.mark.parametrize(
@@ -92,3 +107,51 @@ def test_le_remplissage_ne_touche_pas_une_base_vide() -> None:
         )
         migration._remplir(connexion)
         assert connexion.execute(text("SELECT COUNT(*) FROM students")).scalar_one() == 0
+
+
+def test_le_defaut_serveur_est_retire_apres_le_remplissage(monkeypatch) -> None:
+    """Sans ce retrait, un INSERT sans clé réussirait en silence.
+
+    C'est le seul mécanisme structurel contre le mode de panne que tout ce
+    travail cherche à rendre impossible : un élève enregistré avec une clé vide
+    est invisible à la détection, donc recréable en double, avec une seconde
+    ardoise que personne ne rapproche de la première. Le commentaire du modèle
+    fait reposer sur ce retrait la phrase « un INSERT sans clé échoue durement ».
+
+    Le DDL est celui que produirait MySQL, pas une lecture du fichier source.
+    Le remplissage est neutralisé ici parce qu'il ne peut pas lire de lignes
+    sans connexion ; il a ses propres tests juste au-dessus.
+    """
+    migration = _charger_migration()
+    monkeypatch.setattr(migration, "_remplir", lambda _connexion: None)
+
+    lignes: list[str] = []
+    contexte = MigrationContext.configure(
+        dialect_name="mysql", opts={"as_sql": True, "output_buffer": _Tampon(lignes)}
+    )
+    with Operations.context(contexte):
+        migration.upgrade()
+    ddl = " ".join(lignes).upper()
+
+    for colonne in ("LAST_NAME_KEY", "FIRST_NAME_KEY"):
+        assert f"ALTER COLUMN {colonne} DROP DEFAULT" in ddl, (
+            f"le defaut serveur de {colonne} doit etre retire apres le remplissage"
+        )
+    # L'ordre compte : retirer le defaut AVANT d'ajouter la colonne ferait
+    # echouer l'ALTER TABLE sur les lignes existantes.
+    assert ddl.index("ADD COLUMN LAST_NAME_KEY") < ddl.index("ALTER COLUMN LAST_NAME_KEY DROP")
+
+
+def test_la_migration_refuse_le_mode_hors_ligne() -> None:
+    """`alembic upgrade --sql` produirait un script qui perd toutes les fiches.
+
+    Le DDL seul poserait les colonnes avec une chaîne vide et n'irait jamais
+    lire les élèves existants : tout le fichier deviendrait invisible à la
+    détection, sans un mot. Refuser est le seul comportement honnête.
+    """
+    migration = _charger_migration()
+    contexte = MigrationContext.configure(
+        dialect_name="mysql", opts={"as_sql": True, "output_buffer": _Tampon([])}
+    )
+    with Operations.context(contexte), pytest.raises(RuntimeError, match="hors ligne"):
+        migration.upgrade()

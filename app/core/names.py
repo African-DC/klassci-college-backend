@@ -37,10 +37,14 @@ _LIGATURES = (("œ", "oe"), ("Œ", "OE"), ("æ", "ae"), ("Æ", "AE"))
 def normalize(valeur: str | None) -> str:
     """Réduit un nom à ce qui compte pour la comparaison.
 
-    « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
-    accents sont retirés parce qu'ils sont saisis de façon irrégulière au
-    copier-coller, et les traits d'union parce que « MARIE-LINE » et
-    « MARIE LINE » s'écrivent au hasard du clavier.
+    ⚠ Modifier cette fonction périme toutes les clés déjà en base : voir
+        l'avertissement en tête de module, et la révision `0075_student_search_key`
+        pour le remplissage à refaire.
+
+        « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
+        accents sont retirés parce qu'ils sont saisis de façon irrégulière au
+        copier-coller, et les traits d'union parce que « MARIE-LINE » et
+        « MARIE LINE » s'écrivent au hasard du clavier.
     """
     if not valeur:
         return ""

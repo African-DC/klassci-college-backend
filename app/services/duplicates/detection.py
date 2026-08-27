@@ -111,6 +111,61 @@ def _search_fragment(valeur: str | None) -> str | None:
     return noyau if len(noyau) >= 3 else None
 
 
+def _candidate_conditions(
+    nom: str | None,
+    prenom: str | None,
+    matricule: str | None,
+    naissance: date | None,
+) -> list[ColumnElement[bool]]:
+    """Les critères qui désignent un candidat, réunis ensuite par un `OR`.
+
+    Extraite pour une raison précise : la sentinelle de fin — celle qui empêche
+    la requête de rendre le fichier élèves entier — n'avait pas de siège où on
+    puisse la tester. Elle vit ici, et `test_duplicate_conditions.py` la garde.
+
+    Ne rend jamais une liste vide.
+    """
+    conditions: list[ColumnElement[bool]] = []
+    exact = _exact_enrollment_number(matricule)
+    if exact is not None:
+        conditions.append(exact)
+    # Les colonnes normalisées que l'élève porte déjà (#343). La lecture ne
+    # replie plus rien : elle ne peut donc plus replier autrement que
+    # l'écriture. Les index posés dessus ne servent que la branche d'égalité
+    # plus bas ; le motif flou reste un balayage, joker en tête oblige.
+    for valeur in (nom, prenom):
+        noyau = _search_fragment(valeur)
+        if noyau is not None:
+            conditions.append(Student.last_name_key.like(f"%{noyau}%"))
+            conditions.append(Student.first_name_key.like(f"%{noyau}%"))
+            continue
+        # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
+        # « Aya » sont parmi les noms les plus répandus ici : les ignorer
+        # rendait une fiche identique introuvable. L'egalite ne remonte pas
+        # TRAORE, contrairement a « %ao% ».
+        entier = compact(valeur)
+        if entier:
+            conditions.append(Student.last_name_key == entier)
+            conditions.append(Student.first_name_key == entier)
+    # La date de naissance ne depend pas de l'orthographe : elle rattrape les
+    # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
+    # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
+    # candidats ; c'est le score qui tranche ensuite.
+    if naissance is not None:
+        conditions.append(Student.birth_date == naissance)
+    # La sentinelle, seulement si rien n'a ete construit : un `or_()` vide
+    # supprime la clause WHERE entiere et la requete rend TOUTE la table.
+    # Aucun critere ne doit jamais vouloir dire « tout le monde » sur un
+    # fichier d'eleves.
+    #
+    # En tete d'un OR NON vide, en revanche, elle coute cher : SQLite abandonne
+    # alors l'optimisation MULTI-INDEX OR et retombe sur un balayage, ce qui
+    # rendait les deux index de la migration 0075 inutilisables.
+    if not conditions:
+        conditions.append(false())
+    return conditions
+
+
 def _query_with_enrollment(
     nom: str | None,
     prenom: str | None,
@@ -121,47 +176,7 @@ def _query_with_enrollment(
     """Une lecture : élèves candidats, inscription occupante de l'année, classe."""
     inscription = aliased(Enrollment)
     classe = aliased(Class)
-    conditions = []
-    exact = _exact_enrollment_number(matricule)
-    if exact is not None:
-        conditions.append(exact)
-    # Les colonnes normalisées que l'élève porte déjà (#343). La lecture ne
-    # replie plus rien : elle ne peut donc plus replier autrement que
-    # l'écriture. Les index posés dessus ne servent que la branche d'égalité
-    # plus bas ; le motif flou reste un balayage, joker en tête oblige.
-    nom_compacte = Student.last_name_key
-    prenom_compacte = Student.first_name_key
-    for valeur in (nom, prenom):
-        noyau = _search_fragment(valeur)
-        if noyau is not None:
-            conditions.append(nom_compacte.like(f"%{noyau}%"))
-            conditions.append(prenom_compacte.like(f"%{noyau}%"))
-            continue
-        # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
-        # « Aya » sont parmi les noms les plus répandus ici : les ignorer
-        # rendait une fiche identique introuvable. L'egalite ne remonte pas
-        # TRAORE, contrairement a « %ao% ».
-        entier = compact(valeur)
-        if entier:
-            conditions.append(nom_compacte == entier)
-            conditions.append(prenom_compacte == entier)
-    # La date de naissance ne depend pas de l'orthographe : elle rattrape les
-    # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
-    # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
-    # candidats ; c'est le score qui tranche ensuite.
-    if naissance is not None:
-        conditions.append(Student.birth_date == naissance)
-    # La sentinelle, seulement si rien n'a ete construit : un or_() vide
-    # supprime la clause WHERE entiere et la requete rend TOUTE la table.
-    # Aucun critere ne doit jamais vouloir dire « tout le monde » sur un
-    # fichier d'eleves.
-    #
-    # En tete d'un OR NON vide, en revanche, elle coute cher : SQLite
-    # abandonne alors l'optimisation MULTI-INDEX OR et retombe sur un
-    # balayage, ce qui rendait les deux index de la migration 0075
-    # inutilisables. Mesure a EXPLAIN QUERY PLAN.
-    if not conditions:
-        conditions.append(false())
+    conditions = _candidate_conditions(nom, prenom, matricule, naissance)
     # Sans année visee, aucune inscription ne peut occuper la place :
     # `false()` est l'expression SQL correspondante, `False` nu n'en est pas une.
     annee_visee = (

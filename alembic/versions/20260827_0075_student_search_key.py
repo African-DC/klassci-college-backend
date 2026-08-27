@@ -22,13 +22,20 @@ motif compile un `LIKE '%...%'`, joker en tête, qui reste un balayage. Leurs
 index ne servent que la recherche par égalité, celle des noms de trois lettres
 ou moins.
 
-ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code. Le code neuf lit
-`last_name_key` : déployé avant la migration, toute vérification de doublon rend
-500. L'ordre inverse est sans danger : les colonnes sont `NOT NULL` sans défaut,
-donc un `INSERT` de l'ancien code, qui ne les connaît pas, échoue avec
-« Field 'last_name_key' doesn't have a default value » au lieu d'enregistrer un
-élève invisible. Les deux fenêtres sont bruyantes ; aucune ne laisse passer une
-fiche muette.
+ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et les deux
+rapprochées.
+
+Code neuf sans la migration : SQLAlchemy énumère toutes les colonnes du modèle
+dans chaque `SELECT`, donc ce n'est pas la seule détection de doublon qui tombe,
+c'est TOUTE lecture d'élève — la liste, l'inscription, la caisse, les bulletins,
+les portails parent et élève. L'application est hors service, pas diminuée.
+
+Migration sans le code neuf : les colonnes sont `NOT NULL` sans défaut, et
+MySQL 8 tourne ici en `STRICT_TRANS_TABLES`. L'ancien code, qui ne les connaît
+pas, échoue donc à l'insertion avec « Field 'last_name_key' doesn't have a
+default value » : le secrétariat ne peut plus inscrire personne, mais aucune
+fiche muette n'est enregistrée. C'est la fenêtre à préférer si l'une des deux
+doit exister — elle abîme moins et se voit tout de suite.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm
@@ -57,6 +64,17 @@ def _remplir(connexion: sa.Connection) -> None:
     repliage SQL écrit ici serait un troisième exemplaire de la règle, et le
     troisième aurait divergé aussi.
     """
+    if not isinstance(connexion, sa.Connection):
+        # `alembic upgrade --sql` rend du DDL sans se connecter : il fournit ici
+        # une connexion factice, incapable de lire une ligne. Le script produit
+        # poserait les colonnes avec une chaine vide et n'irait jamais calculer
+        # les cles — tout le fichier eleves deviendrait invisible a la
+        # detection, sans un mot. Refuser vaut mieux qu'un script faux.
+        raise RuntimeError(
+            "0075 ne peut pas etre jouee hors ligne : elle doit lire les eleves "
+            "existants pour calculer leur cle de recherche. Jouer la migration "
+            "en ligne (alembic upgrade head)."
+        )
     fiches = connexion.execute(sa.text("SELECT id, last_name, first_name FROM students")).fetchall()
     if not fiches:
         return
