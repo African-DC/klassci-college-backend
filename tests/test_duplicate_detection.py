@@ -237,9 +237,7 @@ async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None
     # que le premier correctif laissait passer, parce qu'il ne nettoyait que la
     # saisie et pas la colonne.
     for saisie in ("N'GUESSAN", "NGUESSAN"):
-        trouves = await chercher_doublons(
-            _Pont(db), last_name=saisie, first_name="Ama beatrice"
-        )
+        trouves = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Ama beatrice")
         assert any("GUESSAN" in c.last_name for c in trouves), (
             f"« {saisie} » ne retrouve pas la fiche stockee avec une apostrophe courbe"
         )
@@ -275,5 +273,7 @@ async def test_le_matricule_seul_signale_malgre_tout(db: Session) -> None:
     Un matricule identique n'est pas une ressemblance : il ne passe pas par le
     score, et doit remonter meme sans prenom.
     """
-    trouves = await chercher_doublons(_Pont(db), last_name=None, first_name=None, enrollment_number="ECER0882")
+    trouves = await chercher_doublons(
+        _Pont(db), last_name=None, first_name=None, enrollment_number="ECER0882"
+    )
     assert [c.motif for c in trouves] == ["matricule"]
