@@ -183,6 +183,12 @@ async def test_le_matricule_identique_passe_avant_la_ressemblance(db: Session) -
     # ressemblances, pas des certitudes.
     assert all(c.reason == "similarity" for c in reponse.matches[1:])
     assert len(reponse.matches) > 1, "il faut une suite pour vérifier une tête"
+    # Le contrat publié : « le score est absent quand le matricule suffit à
+    # conclure ». Sans ces deux lignes, le remplir d'un score de ressemblance
+    # passait inaperçu, et l'écran aurait affiché un pourcentage sous une
+    # certitude — invitant à douter de ce qui ne se discute pas.
+    assert reponse.matches[0].score is None, "une certitude ne porte pas de score"
+    assert reponse.matches[0].partial_identity is False
 
 
 @pytest.mark.asyncio

@@ -81,6 +81,22 @@ def session_filtree() -> Iterator[Session]:
                     first_name="Fatou",
                     enrollment_number="ECER0002",
                 ),
+                # Eleve vivant, inscription annulee puis mise a la
+                # corbeille : c'est le cas du troisieme axe.
+                Student(
+                    id=3,
+                    last_name="BAMBA",
+                    first_name="Ibrahim",
+                    enrollment_number="ECER0003",
+                ),
+                Enrollment(
+                    id=2,
+                    student_id=3,
+                    class_id=1,
+                    academic_year_id=1,
+                    status=EnrollmentStatus.VALIDE.value,
+                    archived_at=archive,
+                ),
                 Enrollment(
                     id=1,
                     student_id=1,
@@ -129,3 +145,30 @@ async def test_une_fiche_vivante_remonte_toujours(session_filtree: Session) -> N
         _Pont(session_filtree), last_name="TRAORE", first_name="Fatou", academic_year_id=1
     )
     assert [c.enrollment_number for c in trouve.matches] == ["ECER0002"]
+
+
+@pytest.mark.asyncio
+async def test_une_inscription_a_la_corbeille_ne_se_dit_pas_ouverte(
+    session_filtree: Session,
+) -> None:
+    """Le troisième axe : l'inscription occupante de l'année.
+
+    L'élève est vivant, son inscription a été annulée puis mise à la corbeille.
+    Il doit remonter comme doublon — c'est bien la même personne — mais SANS le
+    bandeau « inscription valide cette année », qui enverrait la secrétaire
+    vers une réinscription au lieu d'une inscription, et ferait croire à une
+    place déjà prise.
+
+    Le premier test de ce fichier ne pouvait pas atteindre cet axe : sa fixture
+    archive l'élève ET son inscription, donc l'élève disparaît avant qu'on
+    puisse regarder son inscription.
+    """
+    reponse = await find_duplicates(
+        _Pont(session_filtree), last_name="BAMBA", first_name="Ibrahim", academic_year_id=1
+    )
+
+    trouve = [c for c in reponse.matches if c.enrollment_number == "ECER0003"]
+    assert trouve, "l'élève lui-même est vivant : il doit se signaler"
+    assert trouve[0].current_year_enrollment is None, (
+        "une inscription à la corbeille n'occupe plus la place"
+    )

@@ -24,17 +24,34 @@ même celle-là tombe dès qu'un matricule est saisi en plus du nom, le terme du
 matricule étant enveloppé dans un `lower()` qui interdit l'usage de son index
 unique. Dette antérieure à cette migration, suivi #344.
 
-ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et les deux
-rapprochées. Quatre choses peuvent mal tourner.
+ORDRE DE DÉPLOIEMENT. Quatre choses peuvent mal tourner ; les trois premières
+se préviennent en suivant la marche ci-dessous, la quatrième est le seul cas
+dont on ne sort pas tout seul.
 
-UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS, et le plus facile
-à oublier : la migration doit être jouée sur CHAQUE base de tenant, pas une
-fois pour toutes. La CLI n'en migre qu'une à la fois
-(`klassci alembic upgrade --tenant <slug>`) et il n'existe pas de commande qui
-les parcoure. Sur la production du 2026-08-27 il y en a deux, `local` et
-`rostan-bouake` ; les énumérer avec `SHOW DATABASES` en écartant les quatre
-bases système. Une base oubliée, c'est le premier cas ci-dessous sur cette
-école-là — et sur elle seule, donc personne d'autre ne le signalera.
+MARCHE À SUIVRE, PRODUCTION DOCKER
+
+1. Sauvegarder chaque base, et vérifier que le dump n'est pas vide. Le script
+   `scripts/backup-mysql.sh` ne suffit pas : il ne prend que `local` et les
+   bases nommées `klassci_%`, alors qu'une école s'appelle de son slug —
+   `rostan-bouake` n'y entre pas. Faire un `mysqldump` nommément.
+2. Construire l'image neuve. La révision n'existe que dedans : le `Dockerfile`
+   copie `alembic/` et `app/`, et son `CMD` ne lance qu'uvicorn — rien ne migre
+   au démarrage.
+3. Jouer la migration depuis un conteneur JETABLE de cette image neuve, avant
+   de toucher au service vivant :
+   `docker compose run --rm backend python -m app.cli.migrate_all head`
+4. Recréer les services : `compose up -d --no-deps --force-recreate backend`.
+
+Recréer d'abord et migrer ensuite inverse l'ordre et produit le cas 2.
+
+UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS. `migrate_all` les
+parcourt toutes : il les reconnaît à la présence simultanée de quatre tables
+témoins, ce qui écarte tout schéma étranger, refuse de tourner s'il n'en trouve
+aucune, refuse en production si `local` manque, et sort en échec en listant les
+bases qui ont échoué. Sur la production du 2026-08-27 il y en a deux, `local` et
+`rostan-bouake`. Ne pas migrer base par base à la main : une base oubliée, c'est
+le cas 2 ci-dessous sur cette école-là — et sur elle seule, donc personne
+d'autre ne le signalera.
 
 Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
 dans chaque `SELECT` : ce n'est donc pas la seule détection de doublon qui
@@ -47,22 +64,20 @@ l'ancien code ne les connaît pas : son `INSERT` échoue avec « Field
 'last_name_key' doesn't have a default value ». Le secrétariat ne peut plus
 inscrire personne, mais rien de muet n'est enregistré — et c'est la fenêtre à
 préférer si l'une des deux doit exister, parce qu'elle se voit tout de suite.
-Cette franchise dépend du mode strict de MySQL : hors mode strict, le moteur
-insérerait une chaîne vide sans rien dire, et l'élève serait invisible à la
-détection. Le compose de production écrit désormais les six modes relevés sur
-le serveur, `STRICT_TRANS_TABLES` compris, pour que cette protection cesse
-d'être une hypothèse sur le moteur. La démo Windows, elle, s'en remet encore au
-défaut de MySQL.
+Cette franchise dépend du mode strict de MySQL, que le compose de production
+écrit désormais explicitement. Attention : `--sql-mode` est un argument de
+démarrage du serveur, il ne prendra effet qu'à la prochaine recréation du
+conteneur mysql — que le déploiement décrit ici ne fait pas. En attendant, la
+protection tient parce que le mode strict est le défaut de MySQL 8.
 
-Migration interrompue en cours de route. C'est la seule des quatre dont on ne
-sort pas tout seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le
-remplissage échoue après le premier `add_column`, les colonnes restent, leur
-défaut serveur vide est toujours actif, aucune clé n'est calculée, et la
-révision n'est pas estampillée — un `upgrade` rejoué échouera sur « duplicate
-column ». La sortie est manuelle : retirer les deux colonnes, puis rejouer. Le
-risque est faible — le remplissage est du Python pur suivi d'un `executemany`,
-et la clé ne peut pas dépasser la largeur de la colonne — mais il n'est pas nul,
-d'où cette note.
+Migration interrompue en cours de route. La seule dont on ne sort pas tout
+seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le remplissage
+échoue après le premier `add_column`, les colonnes restent, leur défaut serveur
+vide est toujours actif, aucune clé n'est calculée, et la révision n'est pas
+estampillée — un `upgrade` rejoué échouera sur « duplicate column ». La sortie
+est manuelle : retirer les deux colonnes, puis rejouer. Le risque est faible —
+le remplissage est du Python pur suivi d'un `executemany`, et la clé ne peut pas
+dépasser la largeur de la colonne — mais c'est pour lui que l'étape 1 existe.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm
