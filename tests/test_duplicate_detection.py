@@ -115,19 +115,26 @@ def db() -> Iterator[Session]:
 
 
 @pytest.mark.asyncio
-async def test_le_matricule_identique_est_bloquant(db: Session) -> None:
-    trouves = await chercher_doublons(
+async def test_le_matricule_identique_passe_avant_la_ressemblance(db: Session) -> None:
+    """Rien ne « bloque » : le service le dit lui-meme.
+
+    Le nom precedent promettait un blocage que le module ne fait pas, et
+    l'assertion doublait la ligne au-dessus. Ce qui compte vraiment est
+    l'ordre : une certitude doit arriver avant une ressemblance, sinon
+    l'ecran met en avant la moins sure des deux.
+    """
+    trouves, _ = await chercher_doublons(
         _Pont(db), last_name="KOUASSI", first_name="Aya", enrollment_number="ECER0882"
     )
-    assert [t.motif for t in trouves][:1] == ["matricule"]
-    assert trouves[0].bloquant is True
+    assert trouves[0].motif == "matricule"
+    assert all(t.motif == "ressemblance" for t in trouves[1:])
 
 
 @pytest.mark.asyncio
 async def test_sans_matricule_la_ressemblance_retrouve_la_fiche(db: Session) -> None:
     # La famille revient sans son papier : c'est le cas qui fabrique les
     # doublons, et celui que le score doit rattraper.
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db), last_name="Coulibaly", first_name="souleymane ben junior"
     )
     assert [t.student_id for t in trouves] == [3]
@@ -137,7 +144,7 @@ async def test_sans_matricule_la_ressemblance_retrouve_la_fiche(db: Session) -> 
 
 @pytest.mark.asyncio
 async def test_deux_kouassi_distincts_ne_sont_pas_confondus(db: Session) -> None:
-    trouves = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name="David")
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name="David")
     assert [t.student_id for t in trouves] == [2], "l'autre KOUASSI a été signalé à tort"
 
 
@@ -145,7 +152,7 @@ async def test_deux_kouassi_distincts_ne_sont_pas_confondus(db: Session) -> None
 async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
     # Le cœur de la demande : un dossier en attente ne se voit pas dans les
     # listes, et c'est celui-là qu'on recrée.
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
@@ -162,7 +169,7 @@ async def test_une_inscription_non_validee_est_signalee(db: Session) -> None:
 
 @pytest.mark.asyncio
 async def test_sans_annee_on_ne_pretend_pas_connaitre_l_inscription(db: Session) -> None:
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db),
         last_name="KOUASSI",
         first_name="Aya marie adelaide",
@@ -173,13 +180,13 @@ async def test_sans_annee_on_ne_pretend_pas_connaitre_l_inscription(db: Session)
 
 @pytest.mark.asyncio
 async def test_un_nouvel_eleve_ne_declenche_rien(db: Session) -> None:
-    trouves = await chercher_doublons(_Pont(db), last_name="ZOUZOUA", first_name="Emmanuella")
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="ZOUZOUA", first_name="Emmanuella")
     assert trouves == []
 
 
 @pytest.mark.asyncio
 async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> None:
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db),
         last_name="KOUASSI",
         first_name="David",
@@ -198,7 +205,7 @@ async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> No
     exactement le cas pour lequel elle existe — une famille revient, le nom est
     tape d'oreille.
     """
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db), last_name="KOULIBALY", first_name="Souleymane ben junior"
     )
     assert any(c.last_name == "COULIBALY" for c in trouves)
@@ -211,7 +218,9 @@ def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
     prouve que la racine amputee est bien produite, et il tombe si on revient
     au prefixe strict.
     """
-    assert _motifs("KOULIBALY") == ["kouli%", "%ouli%"]
+    # Un seul motif : le préfixe strict est contenu dans celui-ci, il ne
+    # ramenait donc aucune ligne de plus.
+    assert _motifs("KOULIBALY") == ["%ouli%"]
     # Trop court pour chercher quoi que ce soit sans tout remonter.
     assert _motifs("KO") == []
 
@@ -228,7 +237,7 @@ async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None
     oubliee au premier correctif, qui ne traitait que la droite.
     """
     for saisie in ("N'DRI", "N’DRI", "NDRI", "N DRI"):
-        trouves = await chercher_doublons(
+        trouves, _ = await chercher_doublons(
             _Pont(db), last_name=saisie, first_name="Etiakoun grace naomie"
         )
         assert any(c.last_name == "N'DRI" for c in trouves), f"« {saisie} » ne retrouve pas N'DRI"
@@ -237,7 +246,7 @@ async def test_une_apostrophe_ne_rend_pas_l_eleve_invisible(db: Session) -> None
     # que le premier correctif laissait passer, parce qu'il ne nettoyait que la
     # saisie et pas la colonne.
     for saisie in ("N'GUESSAN", "NGUESSAN"):
-        trouves = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Ama beatrice")
+        trouves, _ = await chercher_doublons(_Pont(db), last_name=saisie, first_name="Ama beatrice")
         assert any("GUESSAN" in c.last_name for c in trouves), (
             f"« {saisie} » ne retrouve pas la fiche stockee avec une apostrophe courbe"
         )
@@ -250,7 +259,7 @@ async def test_deux_noms_etrangers_ne_se_rapprochent_pas(db: Session) -> None:
     Sans ce garde, tolerer une premiere lettre fausse deriverait vers un
     signalement permanent, et un avertissement permanent n'est plus lu.
     """
-    trouves = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="DIOMANDE", first_name="Sebe")
     assert all(c.last_name != "TRAORE" for c in trouves)
 
 
@@ -262,7 +271,7 @@ async def test_le_nom_seul_ne_declenche_rien(db: Session) -> None:
     prenom. Signaler la ferait afficher « 100 % de ressemblance » a chaque
     inscription, et un avertissement permanent cesse d'etre lu.
     """
-    trouves = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name=None)
+    trouves, _ = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name=None)
     assert trouves == []
 
 
@@ -273,7 +282,30 @@ async def test_le_matricule_seul_signale_malgre_tout(db: Session) -> None:
     Un matricule identique n'est pas une ressemblance : il ne passe pas par le
     score, et doit remonter meme sans prenom.
     """
-    trouves = await chercher_doublons(
+    trouves, _ = await chercher_doublons(
         _Pont(db), last_name=None, first_name=None, enrollment_number="ECER0882"
     )
     assert [c.motif for c in trouves] == ["matricule"]
+
+
+@pytest.mark.asyncio
+async def test_la_troncature_est_annoncee(db: Session, monkeypatch) -> None:
+    """« Rien trouvé » ne doit pas passer pour « on a tout regardé ».
+
+    Le plafond de candidats peut couper avant le vrai doublon. Sans ce signal,
+    le silence de l'écran ressemble à une certitude, sur un formulaire dont
+    l'objet est d'empêcher une erreur à 2 287 000 FCFA.
+    """
+    from app.services.duplicates import detection
+
+    monkeypatch.setattr(detection, "PLAFOND_CANDIDATS", 2)
+    _, tronque = await chercher_doublons(
+        _Pont(db), last_name="KOUASSI", first_name="Aya marie adelaide"
+    )
+    assert tronque is True
+
+
+@pytest.mark.asyncio
+async def test_sans_troncature_on_ne_le_pretend_pas(db: Session) -> None:
+    _, tronque = await chercher_doublons(_Pont(db), last_name="TIOTE", first_name="Personne")
+    assert tronque is False

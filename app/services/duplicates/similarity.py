@@ -20,9 +20,14 @@ from datetime import date
 from typing import Protocol
 
 # Ce que pèse chaque champ. Le nom et le prénom portent l'essentiel parce
-# qu'ils sont toujours saisis ; la naissance départage les homonymes, qui sont
-# nombreux ici — un « KOUASSI Aya » par classe n'a rien d'exceptionnel.
-POIDS = {"last_name": 0.30, "first_name": 0.30, "birth_date": 0.25, "birth_place": 0.15}
+# qu'ils sont toujours saisis ; la date de naissance départage les homonymes,
+# qui sont nombreux ici — un « KOUASSI Aya » par classe n'a rien d'exceptionnel.
+#
+# Le LIEU de naissance a été retiré. À Bouaké il est le même pour presque tout
+# l'effectif : lui laisser un poids fabriquait du signal à partir d'un champ
+# sans pouvoir discriminant, et pouvait à lui seul faire basculer un couple
+# au-dessus du seuil.
+POIDS = {"last_name": 0.40, "first_name": 0.35, "birth_date": 0.25}
 
 # En dessous, deux fiches ne se ressemblent pas assez pour qu'on dérange
 # quelqu'un ; au-dessus du seuil haut, on considère que c'est la même personne.
@@ -123,8 +128,18 @@ class Ressemblance:
 
     score: float
     champs_compares: tuple[str, ...]
+    #: Les champs que la SAISIE portait, comparables ou non. C'est sur eux que
+    #: se decide le declenchement : une fiche stockee incomplete doit remonter
+    #: avec une confiance reduite, pas etre condamnee au silence.
+    champs_saisis: tuple[str, ...]
     champs_manquants: tuple[str, ...]
     details: dict[str, float]
+
+    @property
+    def saisie_suffisante(self) -> bool:
+        """Le nom, plus au moins un second element d'identite."""
+        saisis = set(self.champs_saisis)
+        return "last_name" in saisis and bool(saisis & {"first_name", "birth_date"})
 
     @property
     def quasi_certain(self) -> bool:
@@ -132,15 +147,22 @@ class Ressemblance:
 
     @property
     def preuve_suffisante(self) -> bool:
-        """Le nom ET le prenom ont pu etre compares.
+        """La personne au guichet a-t-elle saisi assez pour qu'on se prononce ?
 
-        Sans cette condition, la saisie la plus frequente — le nom seul, avant
-        que le prenom soit tape — rend 1.0 pour tous les homonymes. Dans un
-        etablissement qui compte trois KOUASSI, l'ecran signalerait « 100 % de
-        ressemblance » a chaque fois. Un avertissement qui se declenche
-        toujours n'est plus lu, et c'est ce qu'on cherche a eviter.
+        La question porte sur la SAISIE, pas sur ce qui a pu etre compare. Une
+        version anterieure exigeait que le prenom ait ete compare, ce qui
+        condamnait toute fiche stockee sans prenom : les deux eleves repris
+        sans prenom, qui doivent 101 000 FCFA a eux deux, ne pouvaient plus
+        jamais etre signales. Une fiche degradee doit remonter avec une
+        confiance reduite, pas disparaitre.
+
+        Le nom seul ne suffit pas : c'est la saisie la plus frequente, avant
+        que le prenom soit tape, et elle rendrait 1.0 pour tous les homonymes.
+        Dans un etablissement qui compte trois KOUASSI, l'ecran signalerait
+        « 100 % » a chaque inscription, et un avertissement permanent n'est
+        plus lu.
         """
-        return {"last_name", "first_name"} <= set(self.champs_compares)
+        return self.saisie_suffisante
 
     @property
     def a_signaler(self) -> bool:
@@ -172,7 +194,7 @@ def comparer(gauche: Identite, droite: Identite) -> Ressemblance:
     details: dict[str, float] = {}
     manquants: list[str] = []
 
-    for champ in ("last_name", "first_name", "birth_place"):
+    for champ in ("last_name", "first_name"):
         r = ressemblance_texte(getattr(gauche, champ), getattr(droite, champ))
         if r is None:
             manquants.append(champ)
@@ -188,9 +210,11 @@ def comparer(gauche: Identite, droite: Identite) -> Ressemblance:
     total_poids = sum(POIDS[c] for c in details)
     score = sum(details[c] * POIDS[c] for c in details) / total_poids if total_poids else 0.0
 
+    saisis = tuple(champ for champ in POIDS if (getattr(gauche, champ, None) or "") != "")
     return Ressemblance(
         score=round(score, 4),
         champs_compares=tuple(details),
+        champs_saisis=saisis,
         champs_manquants=tuple(manquants),
         details=details,
     )

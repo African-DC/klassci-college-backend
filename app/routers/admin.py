@@ -2,7 +2,6 @@
 
 import os
 import uuid
-from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,11 +82,7 @@ from app.schemas.admin import (
     UserAccountCreate,
     UserAccountUpdate,
 )
-from app.schemas.duplicates import (
-    DoublonsResponse,
-)
 from app.services import admin_service, enrollment_fees, matricule_service
-from app.services.duplicates import detection as duplicates
 from app.services.finance_visibility import FinanceView
 from app.utils.photo_upload import extension_pour
 
@@ -100,45 +95,6 @@ SIGNATURE_UPLOAD_DIR = "/tmp/klassci-uploads/signatures"
 # ---------------------------------------------------------------------------
 # Students
 # ---------------------------------------------------------------------------
-
-
-@router.get("/students/doublons", response_model=DoublonsResponse)
-async def chercher_doublons_eleve(
-    last_name: str | None = Query(None, description="Nom de famille saisi"),
-    first_name: str | None = Query(None, description="Prénom saisi"),
-    birth_date: date | None = Query(None),
-    birth_place: str | None = Query(None),
-    enrollment_number: str | None = Query(None, description="Matricule, s'il est connu"),
-    academic_year_id: int | None = Query(
-        None, description="Pour signaler une inscription déjà ouverte sur cette année"
-    ),
-    ignorer_student_id: int | None = Query(
-        None, description="La fiche en cours de modification, qui ne doit pas se signaler"
-    ),
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:students:read"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> DoublonsResponse:
-    """Les fiches qui pourraient déjà être cet élève.
-
-    Ne bloque rien et n'écrit rien : rend ce qui ressemble, et laisse la
-    personne au guichet trancher. Refuser une création sur une ressemblance
-    reviendrait à renvoyer un vrai nouvel élève qui porte le nom de son cousin,
-    sans recours.
-    """
-    # La mise en forme vit dans le service, qui la possede deja : la garder
-    # ici en faisait une seconde copie, dans un routeur qui frole les 1400
-    # lignes, pendant que celle du service n'etait appelee par personne.
-    return await duplicates.reponse_doublons(
-        db,
-        last_name=last_name,
-        first_name=first_name,
-        birth_date=birth_date,
-        birth_place=birth_place,
-        enrollment_number=enrollment_number,
-        academic_year_id=academic_year_id,
-        ignorer_student_id=ignorer_student_id,
-    )
 
 
 @router.get("/students", response_model=StudentListResponse)

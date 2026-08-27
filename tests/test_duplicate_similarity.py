@@ -59,7 +59,9 @@ class TestChampAbsent:
         r = comparer(fiche("KOUASSI", "Aya marie adelaide"), fiche("Kouassi", "AYA MARIE ADELAIDE"))
         assert r.score == pytest.approx(1.0)
         assert r.champs_compares == ("last_name", "first_name")
-        assert set(r.champs_manquants) == {"birth_place", "birth_date"}
+        # Le lieu de naissance ne fait plus partie du calcul : à Bouaké il est
+        # le même pour presque tout l'effectif.
+        assert set(r.champs_manquants) == {"birth_date"}
 
     def test_il_dit_quand_il_a_juge_sur_peu(self):
         r = comparer(fiche("TRAORE", "Siaka"), fiche("TRAORE", "Siaka"))

@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from sqlalchemy import ColumnElement, Select, and_, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.functions import Function
@@ -69,11 +69,6 @@ class Correspondance:
     ressemblance: Ressemblance | None
     inscription_annee_courante: InscriptionExistante | None
 
-    @property
-    def bloquant(self) -> bool:
-        """Un matricule identique ne se discute pas."""
-        return self.motif == "matricule"
-
     def vers_reponse(self) -> CorrespondanceResponse:
         return CorrespondanceResponse(
             student_id=self.student_id,
@@ -84,7 +79,6 @@ class Correspondance:
             birth_place=self.birth_place,
             motif=self.motif,
             score=self.ressemblance.score if self.ressemblance else None,
-            champs_compares=list(self.ressemblance.champs_compares) if self.ressemblance else [],
             juge_sur_peu=self.ressemblance.juge_sur_peu if self.ressemblance else False,
             inscription_annee_courante=self.inscription_annee_courante,
         )
@@ -129,10 +123,8 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
         ("ú", "u"),
         ("ã", "a"),
         ("õ", "o"),
-        ("ç", "c"),
         ("œ", "oe"),
         ("'", ""),
-        ("`", ""),
         ("-", ""),
         (" ", ""),
         (".", ""),
@@ -167,7 +159,10 @@ def _motifs(valeur: str | None) -> list[str]:
     racine = compact(valeur)[:5]
     if len(racine) < 3:
         return []
-    return [f"{racine}%", f"%{racine[1:]}%"]
+    # Un seul motif suffit : « couli% » est contenu dans « %ouli% », donc le
+    # prefixe strict ne ramenait aucune ligne que celui-ci ne ramene pas. Il
+    # doublait le nombre de predicats LIKE pour rien.
+    return [f"%{racine[1:]}%"]
 
 
 def _requete_avec_inscription(
@@ -193,9 +188,16 @@ def _requete_avec_inscription(
     # candidats ; c'est le score qui tranche ensuite.
     if naissance is not None:
         conditions.append(Student.birth_date == naissance)
+    # Sans annee visee, aucune inscription ne peut occuper la place :
+    # `false()` est l'expression SQL correspondante, `False` nu n'en est pas une.
+    annee_visee = (
+        inscription.academic_year_id == academic_year_id
+        if academic_year_id is not None
+        else false()
+    )
     jointure_inscription = and_(
         inscription.student_id == Student.id,
-        inscription.academic_year_id == academic_year_id if academic_year_id is not None else False,
+        annee_visee,
         inscription.status.in_([s.value for s in STATUTS_OCCUPANTS]),
     )
     return (
@@ -269,13 +271,18 @@ async def chercher_doublons(
     enrollment_number: str | None = None,
     academic_year_id: int | None = None,
     ignorer_student_id: int | None = None,
-) -> list[Correspondance]:
-    """Les fiches existantes qui pourraient être la même personne, les plus sûres d'abord."""
+) -> tuple[list[Correspondance], bool]:
+    """Les fiches qui pourraient etre la meme personne, les plus sures d'abord.
+
+    Rend aussi si la recherche a ete tronquee : le plafond de candidats peut
+    couper avant le vrai doublon, et l'ecran doit pouvoir le dire plutot que
+    d'afficher un silence qui ressemble a une certitude.
+    """
     # Sans critere exploitable, il n'y a rien a chercher : on evite
     # l'aller-retour plutot que de demander a MySQL une requete batie pour ne
     # rien rendre.
     if not _criteres_exploitables(last_name, first_name, enrollment_number, birth_date):
-        return []
+        return [], False
 
     resultat = await db.execute(
         _requete_avec_inscription(
@@ -283,7 +290,8 @@ async def chercher_doublons(
         )
     )
     lignes = list(resultat.unique().all())
-    if len(lignes) >= PLAFOND_CANDIDATS:
+    tronque = len(lignes) >= PLAFOND_CANDIDATS
+    if tronque:
         # Le vrai doublon peut etre au-dela : le dire, plutot que de laisser
         # croire qu'on a tout regarde.
         logger.warning(
@@ -322,7 +330,7 @@ async def chercher_doublons(
     trouves_list.sort(
         key=lambda c: (c.motif != "matricule", -(c.ressemblance.score if c.ressemblance else 1.0))
     )
-    return trouves_list
+    return trouves_list, tronque
 
 
 async def reponse_doublons(
@@ -336,7 +344,7 @@ async def reponse_doublons(
     academic_year_id: int | None = None,
     ignorer_student_id: int | None = None,
 ) -> DoublonsResponse:
-    trouves = await chercher_doublons(
+    trouves, tronque = await chercher_doublons(
         db,
         last_name=last_name,
         first_name=first_name,
@@ -347,4 +355,6 @@ async def reponse_doublons(
         ignorer_student_id=ignorer_student_id,
     )
     correspondances = [c.vers_reponse() for c in trouves]
-    return DoublonsResponse(correspondances=correspondances, total=len(correspondances))
+    return DoublonsResponse(
+        correspondances=correspondances, total=len(correspondances), tronque=tronque
+    )

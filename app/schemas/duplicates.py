@@ -29,7 +29,6 @@ class CorrespondanceResponse(BaseModel):
     score: float | None = Field(
         default=None, description="0 à 1. Absent quand le matricule suffit à conclure."
     )
-    champs_compares: list[str] = Field(default_factory=list)
     juge_sur_peu: bool = Field(
         default=False,
         description=(
@@ -43,4 +42,8 @@ class CorrespondanceResponse(BaseModel):
 
 class DoublonsResponse(BaseModel):
     correspondances: list[CorrespondanceResponse] = Field(default_factory=list)
-    total: int = 0
+    total: int
+    #: Vrai quand le plafond de candidats a ete atteint : le vrai doublon peut
+    #: se trouver au-dela. Sans ce signal, « rien trouve » passerait pour une
+    #: certitude alors qu'on n'a pas tout regarde.
+    tronque: bool = False
