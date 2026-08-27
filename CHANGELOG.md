@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La recherche de doublon s'appuie sur une forme normalisée du nom, portée par l'élève et tenue à jour à chaque écriture : la recherche est indexable, et la même règle vaut à l'écriture et à la lecture *(technique)*
 - Détection de doublon à la saisie d'un élève : matricule identique, ressemblance de l'état civil, et signalement d'une inscription déjà ouverte sur l'année même non validée *(admin, secrétariat)*
 - La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*

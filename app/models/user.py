@@ -15,9 +15,10 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base
+from app.core.names import compact
 from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
@@ -171,6 +172,17 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     )
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # La forme comparable des deux noms : sans accent, sans apostrophe, sans
+    # espace. Elle est ce que la recherche de doublons interroge.
+    #
+    # Elle est stockee, pas calculee a la lecture. Le repliage vivait avant
+    # dans la requete, en 216 `replace()` imbriques : illisible pour la base,
+    # inutilisable par un index — donc un balayage complet du fichier a chaque
+    # frappe — et refuse net par SQLite, dont l'analyseur plafonne a une
+    # centaine de niveaux d'imbrication. Il vivait surtout en DEUX exemplaires,
+    # un en SQL et un en Python, qui ont fini par ne plus dire la meme chose.
+    last_name_key: Mapped[str] = mapped_column(String(100), nullable=False, default="", index=True)
+    first_name_key: Mapped[str] = mapped_column(String(100), nullable=False, default="", index=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Lieu de naissance : sur toute piece officielle ivoirienne un eleve est
     # identifie par « ne(e) le ... a ... ». Distinct de `city`/`commune`, qui
@@ -190,6 +202,18 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     # precedent a chaque demande, avec les fautes que cela suppose.
     previous_school: Mapped[str | None] = mapped_column(String(200), nullable=True)
     transfer_decision_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    @validates("last_name", "first_name")
+    def _tenir_la_forme_comparable(self, champ: str, valeur: str) -> str:
+        """Maintenir la cle de recherche a chaque ecriture du nom.
+
+        Ici, et pas dans les appelants : un eleve s'ecrit depuis la creation
+        manuelle, depuis l'import CSV et depuis l'inscription, et une cle
+        oubliee dans un seul de ces chemins rend l'eleve introuvable — donc
+        creable une seconde fois, avec une seconde ardoise.
+        """
+        setattr(self, f"{champ}_key", compact(valeur))
+        return valeur
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")

@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.functions import Function
 
+from app.core.names import compact
 from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
@@ -37,7 +38,6 @@ from app.schemas.duplicates import (
 )
 from app.services.duplicates.similarity import (
     StudentIdentity,
-    compact,
     compare,
 )
 
@@ -77,85 +77,6 @@ def _certainty_first_order(matricule: str | None) -> list[Any]:
 
 def _lowered(colonne: Any) -> Function[str]:
     return func.lower(func.coalesce(colonne, ""))
-
-
-def _compact_sql(colonne: Any) -> Function[str]:
-    """Même compactage que `compact()` Python, sans accents ni ponctuation.
-
-    Suivi : #343 — une colonne normalisee et indexee supprimerait cette
-    fonction entière, et avec elle le risque de dérive entre les deux
-    normalisations.
-
-    Les formes MAJUSCULES sont listees en plus des minuscules : SQLite ne
-    minuscule que l'ASCII, donc la table des minuscules accentuees ne s'y
-    déclenche jamais et aucun test ne pouvait la couvrir. MySQL les replie,
-    mais la liste doit rester vérifiable sous les deux moteurs.
-
-    MySQL et SQLite n'ont pas `unaccent`. On retire les diacritiques
-    fréquents au copier-coller, on remplace la ponctuation par rien, et
-    on compare la forme collée : `N'DRI` retrouve `NDRI`.
-    """
-    texte = _lowered(colonne)
-    for source, cible in (
-        # U+2019 : l'apostrophe des claviers de telephone et des copier-coller.
-        # Sans elle, `N’DRI` n'est pas retrouve alors que `N'DRI` l'est.
-        ("’", ""),
-        ("`", ""),
-        ("é", "e"),
-        ("è", "e"),
-        ("ê", "e"),
-        ("ë", "e"),
-        ("à", "a"),
-        ("â", "a"),
-        ("ä", "a"),
-        ("î", "i"),
-        ("ï", "i"),
-        ("ô", "o"),
-        ("ö", "o"),
-        ("ù", "u"),
-        ("û", "u"),
-        ("ü", "u"),
-        ("ç", "c"),
-        ("ñ", "n"),
-        ("á", "a"),
-        ("í", "i"),
-        ("ó", "o"),
-        ("ú", "u"),
-        ("ã", "a"),
-        ("õ", "o"),
-        ("œ", "oe"),
-        ("æ", "ae"),
-        ("Æ", "ae"),
-        ("'", ""),
-        ("-", ""),
-        (" ", ""),
-        (".", ""),
-        ("É", "e"),
-        ("È", "e"),
-        ("Ê", "e"),
-        ("Ë", "e"),
-        ("À", "a"),
-        ("Â", "a"),
-        ("Ä", "a"),
-        ("Î", "i"),
-        ("Ï", "i"),
-        ("Ô", "o"),
-        ("Ö", "o"),
-        ("Ù", "u"),
-        ("Û", "u"),
-        ("Ü", "u"),
-        ("Ç", "c"),
-        ("Ñ", "n"),
-        ("Á", "a"),
-        ("Í", "i"),
-        ("Ó", "o"),
-        ("Ú", "u"),
-        ("Ã", "a"),
-        ("Õ", "o"),
-        ("Œ", "oe"),
-    ):
-        texte = func.replace(texte, source, cible)
-    return texte
 
 
 def _meme_matricule(typed: str | None, existing: str | None) -> bool:
@@ -204,13 +125,11 @@ def _query_with_enrollment(
     exact = _exact_enrollment_number(matricule)
     if exact is not None:
         conditions.append(exact)
-    # Construites une fois, pour que la lecture ne repete pas quatre fois la
-    # même chose. Cela ne raccourcit PAS la requête : SQLAlchemy réinsère
-    # l'expression à chaque usage, et le SQL compilé est identique au caractère
-    # près, avec 216 `replace()` dans les deux cas. Le vrai remède est la
-    # colonne normalisée et indexée de #343.
-    nom_compacte = _compact_sql(Student.last_name)
-    prenom_compacte = _compact_sql(Student.first_name)
+    # Les colonnes normalisées que l'élève porte déjà (#343). La lecture ne
+    # replie plus rien : elle ne peut donc plus replier autrement que
+    # l'écriture, et un index peut enfin servir.
+    nom_compacte = Student.last_name_key
+    prenom_compacte = Student.first_name_key
     for valeur in (nom, prenom):
         noyau = _search_fragment(valeur)
         if noyau is not None:

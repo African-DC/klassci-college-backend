@@ -69,6 +69,7 @@ strict = true
 # la restreindre.
 [[tool.mypy.overrides]]
 module = [
+    "app.core.names",
     "app.services.duplicates.similarity",
     "app.services.duplicates.detection",
     "app.routers.duplicates",

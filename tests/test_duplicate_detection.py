@@ -499,3 +499,27 @@ async def test_les_ressemblances_sortent_de_la_plus_sure_a_la_moins_sure(db: Ses
     scores = [c.score for c in reponse.matches if c.score is not None]
     assert len(scores) >= 2, "il faut au moins deux ressemblances pour vérifier un ordre"
     assert scores == sorted(scores, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_un_eleve_renomme_se_retrouve_sous_son_nouveau_nom(db: Session) -> None:
+    """La forme comparable suit la correction d'un nom, sans que personne y pense.
+
+    Le secrétariat corrige une faute de saisie des semaines après l'inscription.
+    Si la clé de recherche restait sur l'ancienne orthographe, l'élève
+    deviendrait introuvable sous son vrai nom : on le recréerait, avec une
+    seconde ardoise que personne ne rapprocherait de la première.
+    """
+    eleve = db.query(Student).filter(Student.enrollment_number == "ECER0864").one()
+    eleve.last_name = "N’GUESSAN"
+    db.commit()
+
+    trouve = await find_duplicates(_Pont(db), last_name="NGUESSAN", first_name="David")
+    assert any(c.enrollment_number == "ECER0864" for c in trouve.matches), (
+        "l'élève doit se retrouver sous le nom corrigé"
+    )
+
+    perdu = await find_duplicates(_Pont(db), last_name="KOUASSI", first_name="David")
+    assert not any(c.enrollment_number == "ECER0864" for c in perdu.matches), (
+        "il ne doit plus se retrouver sous l'ancien nom"
+    )

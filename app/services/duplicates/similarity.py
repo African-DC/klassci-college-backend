@@ -14,9 +14,10 @@ et l'écran doit pouvoir le dire.
 
 from __future__ import annotations
 
-import unicodedata
 from dataclasses import dataclass
 from datetime import date
+
+from app.core.names import compact, normalize
 
 # Ce que pèse chaque champ. Le nom et le prénom portent l'essentiel parce
 # qu'ils sont toujours saisis ; la date de naissance départage les homonymes,
@@ -33,38 +34,6 @@ WEIGHTS = {"last_name": 0.40, "first_name": 0.35, "birth_date": 0.25}
 # ici, que ni le contrat ni l'écran ne portaient — un seuil que personne ne lit
 # est une promesse que personne ne tient.
 MATCH_THRESHOLD = 0.72
-
-
-def normalize(valeur: str | None) -> str:
-    """Réduit un nom à ce qui compte pour la comparaison.
-
-    « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
-    accents sont retirés parce qu'ils sont saisis de façon irrégulière au
-    copier-coller, et les traits d'union parce que « MARIE-LINE » et
-    « MARIE LINE » s'écrivent au hasard du clavier.
-    """
-    if not valeur:
-        return ""
-    # Les ligatures ne sont pas des accents : NFD les laisse entières. Le
-    # dépliage SQL les traite, donc sans cette ligne les deux normalisations
-    # divergeaient et une fiche stockée avec « œ » restait introuvable.
-    deplie = valeur.replace("œ", "oe").replace("Œ", "OE")
-    deplie = deplie.replace("æ", "ae").replace("Æ", "AE")
-    sans_accent = "".join(
-        c for c in unicodedata.normalize("NFD", deplie) if unicodedata.category(c) != "Mn"
-    )
-    lettres = [c if c.isalnum() else " " for c in sans_accent.lower()]
-    return " ".join("".join(lettres).split())
-
-
-def compact(valeur: str | None) -> str:
-    """La forme comparable d'un nom, sans espaces ni ponctuation.
-
-    « N'DRI », « NDRI » et « n dri » doivent se trouver. Le préfiltre SQL
-    utilise le même compactage, sinon un nom saisi sans apostrophe ne
-    ramènerait jamais la fiche qui en a une.
-    """
-    return normalize(valeur).replace(" ", "")
 
 
 @dataclass(frozen=True)

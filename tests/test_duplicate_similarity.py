@@ -15,11 +15,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.core.names import normalize
 from app.services.duplicates.similarity import (
     MATCH_THRESHOLD,
     compare,
     date_similarity,
-    normalize,
     text_similarity,
 )
 
