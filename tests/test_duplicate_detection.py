@@ -66,6 +66,16 @@ def db() -> Iterator[Session]:
                     last_name="KOUASSI",
                     first_name="Aya marie adelaide",
                     enrollment_number="ECER0882",
+                    birth_date=date(2011, 1, 1),
+                ),
+                # Prenom proche du precedent : deux ressemblances, donc un ordre
+                # entre elles a verifier.
+                Student(
+                    id=10,
+                    last_name="KOUASSI",
+                    first_name="Aya marie",
+                    enrollment_number="ECER0905",
+                    birth_date=date(2012, 2, 2),
                 ),
                 Student(
                     id=2, last_name="KOUASSI", first_name="David", enrollment_number="ECER0864"
@@ -101,10 +111,10 @@ def db() -> Iterator[Session]:
                 Student(
                     id=8,
                     last_name="KOUAMÉ",
-                    # Le prenom porte lui aussi un accent : sinon la fiche
-                    # remonterait par le chemin du prenom et le test ne
-                    # mesurerait pas la table de repli.
-                    first_name="Aïcha",
+                    # En MAJUSCULES : `ï` minuscule serait replie par la regle
+                    # minuscule, que SQLite applique, et le test ne mesurerait
+                    # alors pas la table majuscule.
+                    first_name="AÏCHA",
                     enrollment_number="ECER0903",
                 ),
                 # Nom court AVEC apostrophe : seul le chemin de l'egalite peut
@@ -163,8 +173,12 @@ async def test_le_matricule_identique_passe_avant_la_ressemblance(db: Session) -
         first_name="Aya marie adelaide",
         enrollment_number="ECER0864",
     )
-    assert [t.student_id for t in reponse.correspondances] == [2, 1]
+    assert reponse.correspondances[0].student_id == 2
     assert reponse.correspondances[0].motif == "matricule"
+    # Et rien d'autre ne se glisse devant : les suivantes sont des
+    # ressemblances, pas des certitudes.
+    assert all(c.motif == "ressemblance" for c in reponse.correspondances[1:])
+    assert len(reponse.correspondances) > 1, "il faut une suite pour vérifier une tête"
 
 
 @pytest.mark.asyncio
@@ -434,7 +448,7 @@ async def test_un_nom_accentue_se_retrouve_sans_accent(db: Session) -> None:
     minuscule que l'ASCII, donc les regles ecrites en minuscules accentuees ne
     s'y declenchaient jamais. Les formes majuscules la rendent verifiable.
     """
-    reponse = await chercher_doublons(_Pont(db), last_name="KOUAME", first_name="Aicha")
+    reponse = await chercher_doublons(_Pont(db), last_name="KOUAME", first_name="AICHA")
     assert any(c.last_name == "KOUAMÉ" for c in reponse.correspondances)
 
 
@@ -449,3 +463,39 @@ async def test_un_nom_court_avec_apostrophe_se_retrouve_sans(db: Session) -> Non
     """
     reponse = await chercher_doublons(_Pont(db), last_name="NDA", first_name="NGO")
     assert any(c.last_name == "N'DA" for c in reponse.correspondances)
+
+
+@pytest.mark.asyncio
+async def test_la_date_de_naissance_elargit_la_recherche(db: Session) -> None:
+    """La date ne dépend pas de l'orthographe : elle rattrape ce que le nom rate.
+
+    Une interversion de lettres à l'intérieur du début du nom échappe au motif
+    flou. La date, elle, est exacte ou fausse, et remonte la fiche quand même.
+    """
+    # Deux lettres interverties de chaque côté : « oauss » ne retrouve pas
+    # « kouassi », « aamar » ne retrouve pas « ayamarie ». Aucun fragment ne
+    # mène à la fiche ; seule la date la ramène, et le score la retient.
+    reponse = await chercher_doublons(
+        _Pont(db),
+        last_name="KOAUSSI",
+        first_name="Yaa marie",
+        birth_date=date(2012, 2, 2),
+    )
+    assert any(c.enrollment_number == "ECER0905" for c in reponse.correspondances)
+
+
+@pytest.mark.asyncio
+async def test_les_ressemblances_sortent_de_la_plus_sure_a_la_moins_sure(db: Session) -> None:
+    """Le second critère du tri, celui que le SQL ne fournit pas.
+
+    `ORDER BY` place déjà la certitude en tête, mais rien en base ne connaît le
+    score : c'est le tri Python qui range les ressemblances entre elles. Sans
+    lui, l'écran met en avant la moins fiable des deux.
+    """
+    # La base rend les candidats par identifiant : 1 puis 10. Mais 10 ressemble
+    # davantage à la saisie. Sans le tri Python, l'écran met le moins probable
+    # en tête.
+    reponse = await chercher_doublons(_Pont(db), last_name="KOUASSI", first_name="Aya marie")
+    scores = [c.score for c in reponse.correspondances if c.score is not None]
+    assert len(scores) >= 2, "il faut au moins deux ressemblances pour vérifier un ordre"
+    assert scores == sorted(scores, reverse=True)

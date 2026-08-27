@@ -51,19 +51,28 @@ STATUTS_OCCUPANTS = (
 )
 
 
+def _predicat_matricule_exact(matricule: str | None) -> ColumnElement[bool] | None:
+    """Le prédicat « ce matricule exactement », ou rien s'il n'y a rien à comparer.
+
+    Un seul endroit : la même expression servait au filtre et au tri, et une
+    règle ajoutée d'un seul côté aurait retiré au tri ce qu'il protège.
+    """
+    if not matricule or not matricule.strip():
+        return None
+    return _minuscules(Student.enrollment_number) == matricule.strip().lower()
+
+
 def _tri_certitude_dabord(matricule: str | None) -> list[Any]:
     """Le tri des candidats : la certitude d'abord, puis un ordre stable.
 
-    Sans le premier critere, le plafond de candidats pouvait evincer la seule
-    correspondance sure — un matricule exact — au profit d'homonymes plus
+    Sans le premier critere, le plafond de candidats pouvait évincer la seule
+    correspondance sûre — un matricule exact — au profit d'homonymes plus
     anciens. Il n'est ajoute que s'il designe quelque chose : un `false()` nu
-    dans un ORDER BY se compile en `0`, que SQLite prend pour un numero de
+    dans un ORDER BY se compile en `0`, que SQLite prend pour un numéro de
     colonne.
     """
-    if not matricule or not matricule.strip():
-        return [Student.id]
-    exact = _minuscules(Student.enrollment_number) == matricule.strip().lower()
-    return [exact.desc(), Student.id]
+    exact = _predicat_matricule_exact(matricule)
+    return [Student.id] if exact is None else [exact.desc(), Student.id]
 
 
 def _minuscules(colonne: ColumnElement[str | None]) -> Function[str]:
@@ -74,13 +83,13 @@ def _compact_sql(colonne: ColumnElement[str | None]) -> Function[str]:
     """Même compactage que `compact()` Python, sans accents ni ponctuation.
 
     Suivi : #343 — une colonne normalisee et indexee supprimerait cette
-    fonction entiere, et avec elle le risque de derive entre les deux
+    fonction entière, et avec elle le risque de dérive entre les deux
     normalisations.
 
     Les formes MAJUSCULES sont listees en plus des minuscules : SQLite ne
     minuscule que l'ASCII, donc la table des minuscules accentuees ne s'y
-    declenche jamais et aucun test ne pouvait la couvrir. MySQL les replie,
-    mais la liste doit rester verifiable sous les deux moteurs.
+    déclenche jamais et aucun test ne pouvait la couvrir. MySQL les replie,
+    mais la liste doit rester vérifiable sous les deux moteurs.
 
     MySQL et SQLite n'ont pas `unaccent`. On retire les diacritiques
     fréquents au copier-coller, on remplace la ponctuation par rien, et
@@ -153,9 +162,9 @@ def _meme_matricule(saisi: str | None, existant: str | None) -> bool:
     return saisi.strip().lower() == existant.strip().lower()
 
 
-#: Au-dela, on ne compare plus. La troncature est annoncee a l'appelant
-#: (`tronque`) et journalisee : un plafond silencieux ferait passer « rien
-#: trouve » pour une certitude alors qu'on n'a pas regarde.
+#: Au-dela, on ne comparé plus. La troncature est annoncée a l'appelant
+#: (`tronque`) et journalisée : un plafond silencieux ferait passer « rien
+#: trouve » pour une certitude alors qu'on n'a pas regardé.
 PLAFOND_CANDIDATS = 200
 
 logger = logging.getLogger(__name__)
@@ -164,14 +173,14 @@ logger = logging.getLogger(__name__)
 def _noyau(valeur: str | None) -> str | None:
     """Le fragment de nom a chercher, ou rien si le nom est trop court.
 
-    On cherche la racine PRIVEE de sa premiere lettre, ce qui rattrape la faute
+    On cherche la racine PRIVEE de sa première lettre, ce qui rattrape la faute
     de frappe la plus frequente : COULIBALY saisi KOULIBALY reste trouvable, et
     le prefixe strict etait de toute facon contenu dans ce motif.
 
-    Le seuil porte sur le fragment reellement cherche, pas sur la racine avant
-    amputation. Une version anterieure exigeait trois caracteres AVANT de
+    Le seuil porte sur le fragment réellement cherche, pas sur la racine avant
+    amputation. Une version antérieure exigeait trois caracteres AVANT de
     retirer la premiere lettre : « YAO » cherchait alors « %ao% », qui remonte
-    TRAORE et une bonne part du fichier. YAO est un des noms les plus repandus
+    TRAORE et une bonne part du fichier. YAO est un des noms les plus répandus
     ici, et la troncature a 200 candidats aurait ecarte le vrai doublon.
     """
     racine = compact(valeur)[:6]
@@ -190,8 +199,9 @@ def _requete_avec_inscription(
     inscription = aliased(Enrollment)
     classe = aliased(Class)
     conditions = []
-    if matricule and matricule.strip():
-        conditions.append(_minuscules(Student.enrollment_number) == matricule.strip().lower())
+    exact = _predicat_matricule_exact(matricule)
+    if exact is not None:
+        conditions.append(exact)
     for valeur in (nom, prenom):
         noyau = _noyau(valeur)
         if noyau is not None:
@@ -199,7 +209,7 @@ def _requete_avec_inscription(
             conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
             continue
         # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
-        # « Aya » sont parmi les noms les plus repandus ici : les ignorer
+        # « Aya » sont parmi les noms les plus répandus ici : les ignorer
         # rendait une fiche identique introuvable. L'egalite ne remonte pas
         # TRAORE, contrairement a « %ao% ».
         exact = compact(valeur)
@@ -212,7 +222,7 @@ def _requete_avec_inscription(
     # candidats ; c'est le score qui tranche ensuite.
     if naissance is not None:
         conditions.append(Student.birth_date == naissance)
-    # Sans annee visee, aucune inscription ne peut occuper la place :
+    # Sans année visee, aucune inscription ne peut occuper la place :
     # `false()` est l'expression SQL correspondante, `False` nu n'en est pas une.
     annee_visee = (
         inscription.academic_year_id == academic_year_id
@@ -226,22 +236,22 @@ def _requete_avec_inscription(
     )
     # SQLAlchemy type un `outerjoin` comme s'il rendait toujours l'entite, alors
     # qu'une jointure externe rend `None` quand rien ne correspond — ce qui est
-    # le cas le plus frequent ici : la plupart des eleves n'ont pas
-    # d'inscription ouverte sur l'annee visee. Le type declare par la fonction
+    # le cas le plus fréquent ici : la plupart des élèves n'ont pas
+    # d'inscription ouverte sur l'année visee. Le type declare par la fonction
     # est le vrai ; ce `cast` ne fait que le dire au verificateur.
     requete = (
         select(Student, inscription, classe)
-        # Le cote gauche est explicite : avec trois entites dans le SELECT,
-        # SQLAlchemy ne le devine pas et refuse la requete.
+        # Le côté gauche est explicite : avec trois entites dans le SELECT,
+        # SQLAlchemy ne le devine pas et refuse la requête.
         .select_from(Student)
         .outerjoin(inscription, jointure_inscription)
         .outerjoin(classe, classe.id == inscription.class_id)
-        # `false()` en tete : un `or_()` vide supprime la clause WHERE entiere
-        # et la requete rend TOUTE la table. Aucun critere ne doit jamais
-        # vouloir dire « tout le monde » sur un fichier d'eleves.
+        # `false()` en tete : un `or_()` vide supprimé la clause WHERE entière
+        # et la requête rend TOUTE la table. Aucun critere ne doit jamais
+        # vouloir dire « tout le monde » sur un fichier d'élèves.
         .where(or_(false(), *conditions))
         # Sans ordre explicite, quels 200 remontent depend du plan choisi par
-        # la base : deux saisies identiques pourraient ne pas voir les memes.
+        # la base : deux saisies identiques pourraient ne pas voir les mêmes.
         .order_by(*_tri_certitude_dabord(matricule))
         .limit(PLAFOND_CANDIDATS)
     )
@@ -273,7 +283,7 @@ def _correspondance_ou_rien(
     quelqu'un.
     """
     meme_matricule = _meme_matricule(matricule_saisi, existant.enrollment_number)
-    # `Student` satisfait `Identite` structurellement : c'est la raison d'etre
+    # `Student` satisfait `Identite` structurellement : c'est la raison d'être
     # du protocole, et le recopier l'annulait.
     r = comparer(saisi, existant)
     if not meme_matricule and not r.a_signaler:
@@ -286,7 +296,7 @@ def _correspondance_ou_rien(
         birth_date=existant.birth_date,
         motif="matricule" if meme_matricule else "ressemblance",
         # Un matricule identique n'est pas une ressemblance : il ne passe pas
-        # par le score, et n'a donc ni pourcentage ni reserve.
+        # par le score, et n'a donc ni pourcentage ni réserve.
         score=None if meme_matricule else r.score,
         juge_sur_peu=False if meme_matricule else r.juge_sur_peu,
         inscription_annee_courante=_inscription_jointe(inscription, classe),
@@ -296,7 +306,7 @@ def _correspondance_ou_rien(
 def _par_certitude_puis_score(c: CorrespondanceResponse) -> tuple[bool, float]:
     """Une certitude avant une ressemblance, puis du plus sur au moins sur.
 
-    Sinon l'ecran met en avant la correspondance la moins fiable des deux.
+    Sinon l'écran met en avant la correspondance la moins fiable des deux.
     """
     return (c.motif != "matricule", -(c.score if c.score is not None else 1.0))
 
@@ -314,19 +324,19 @@ async def chercher_doublons(
     """Les fiches qui pourraient etre la meme personne, les plus sures d'abord.
 
     Rend aussi si la recherche a ete tronquee : le plafond de candidats peut
-    couper avant le vrai doublon, et l'ecran doit pouvoir le dire plutot que
+    couper avant le vrai doublon, et l'écran doit pouvoir le dire plutot que
     d'afficher un silence qui ressemble a une certitude.
     """
     # Sans critere exploitable, il n'y a rien a chercher : on evite
-    # l'aller-retour plutot que de demander a MySQL une requete batie pour ne
+    # l'aller-retour plutot que de demander a MySQL une requête batie pour ne
     # rien rendre.
     saisi = StudentIdentity(last_name=last_name, first_name=first_name, birth_date=birth_date)
-    # Se prononcer ne coute rien, chercher coute un balayage complet. Un second
-    # garde a existe ici : il ne pouvait plus se declencher, celui-ci ayant deja
-    # etabli ses conditions, et se lisait pourtant comme porteur.
+    # Se prononcer ne coûte rien, chercher coûte un balayage complet. Un second
+    # garde a existe ici : il ne pouvait plus se déclencher, celui-ci ayant déjà
+    # établi ses conditions, et se lisait pourtant comme porteur.
     #
     # Le `.strip()` retient le cas d'un matricule fait d'espaces, qui sinon
-    # coutait un aller-retour pour une requete vide.
+    # coûtait un aller-retour pour une requête vide.
     if not ((enrollment_number or "").strip() or saisi.suffisante):
         return DoublonsResponse(correspondances=[], tronque=False)
 
@@ -340,8 +350,8 @@ async def chercher_doublons(
     lignes = list(resultat.all())
     tronque = len(lignes) >= PLAFOND_CANDIDATS
     if tronque:
-        # Le vrai doublon peut etre au-dela : le dire, plutot que de laisser
-        # croire qu'on a tout regarde.
+        # Le vrai doublon peut être au-dela : le dire, plutot que de laisser
+        # croire qu'on a tout regardé.
         logger.warning(
             "doublons: %s candidats atteints, comparaison tronquee (nom=%r prenom=%r)",
             PLAFOND_CANDIDATS,
@@ -363,4 +373,4 @@ async def chercher_doublons(
             trouves[existant.id] = correspondance
 
     trouves_list = sorted(trouves.values(), key=_par_certitude_puis_score)
-    return DoublonsResponse(correspondances=trouves_list, total=len(trouves_list), tronque=tronque)
+    return DoublonsResponse(correspondances=trouves_list, tronque=tronque)

@@ -46,8 +46,13 @@ def normaliser(valeur: str | None) -> str:
     """
     if not valeur:
         return ""
+    # Les ligatures ne sont pas des accents : NFD les laisse entières. Le
+    # dépliage SQL les traite, donc sans cette ligne les deux normalisations
+    # divergeaient et une fiche stockée avec « œ » restait introuvable.
+    deplie = valeur.replace("œ", "oe").replace("Œ", "OE")
+    deplie = deplie.replace("æ", "ae").replace("Æ", "AE")
     sans_accent = "".join(
-        c for c in unicodedata.normalize("NFD", valeur) if unicodedata.category(c) != "Mn"
+        c for c in unicodedata.normalize("NFD", deplie) if unicodedata.category(c) != "Mn"
     )
     lettres = [c if c.isalnum() else " " for c in sans_accent.lower()]
     return " ".join("".join(lettres).split())
@@ -56,7 +61,7 @@ def normaliser(valeur: str | None) -> str:
 def compact(valeur: str | None) -> str:
     """La forme comparable d'un nom, sans espaces ni ponctuation.
 
-    « N'DRI », « NDRI » et « n dri » doivent se trouver. La préfiltre SQL
+    « N'DRI », « NDRI » et « n dri » doivent se trouver. Le préfiltre SQL
     utilise le même compactage, sinon un nom saisi sans apostrophe ne
     ramènerait jamais la fiche qui en a une.
     """
@@ -69,7 +74,7 @@ class Identite(Protocol):
     En lecture seule, et c'est ce qui fait marcher le protocole. Declares comme
     attributs mutables, ces membres sont INVARIANTS : `Student.last_name`, typé
     `str`, ne satisfait alors pas `str | None`, et le commentaire qui affirmait
-    qu'un `Student` s'y conforme structurellement etait faux. En propriete, ils
+    qu'un `Student` s'y conforme structurellement etait faux. En propriété, ils
     sont covariants et l'affirmation devient vraie.
     """
 
@@ -92,13 +97,13 @@ class StudentIdentity:
         """Y a-t-il de quoi se prononcer sur cette saisie ?
 
         Le nom, plus au moins un second element. Le nom seul est l'etat le plus
-        frequent du formulaire — la secretaire le tape avant le prenom — et il
+        fréquent du formulaire — la secretaire le tape avant le prénom — et il
         rendrait 1.0 pour tous les homonymes : dans un etablissement qui compte
-        trois KOUASSI, l'ecran signalerait a chaque inscription, et un
+        trois KOUASSI, l'écran signalerait a chaque inscription, et un
         avertissement permanent n'est plus lu.
 
-        Seul proprietaire de cette regle. Elle etait ecrite trois fois, dont une
-        seule verifiee, et les trois ne disaient pas la meme chose.
+        Seul proprietaire de cette règle. Elle etait écrite trois fois, dont une
+        seule verifiee, et les trois ne disaient pas la même chose.
         """
         return bool(compact(self.last_name)) and (
             bool(compact(self.first_name)) or self.birth_date is not None
@@ -132,7 +137,8 @@ def ressemblance_texte(a: str | None, b: str | None) -> float | None:
         return 1.0
     ba, bb = _bigrammes(na), _bigrammes(nb)
     if not ba or not bb:
-        return 1.0 if na == nb else 0.0
+        # L'égalité a déjà été traitée plus haut : ici les deux diffèrent.
+        return 0.0
     return 2 * len(ba & bb) / (len(ba) + len(bb))
 
 
@@ -168,13 +174,13 @@ class Ressemblance:
     def juge_sur_peu(self) -> bool:
         """Vrai quand un champ n'a pas pu etre compare.
 
-        Le score ne porte alors que sur une partie de l'identite. Une version
+        Le score ne porte alors que sur une partie de l'identité. Une version
         anterieure ne levait cette reserve que sur la date manquante : une
-        fiche stockee sans prenom, comparee a une saisie complete, affichait
-        alors « 100 % » sans reserve alors que le prenom n'avait jamais ete
-        regarde. Les deux eleves repris sans prenom sont exactement ce cas.
+        fiche stockee sans prénom, comparee a une saisie complete, affichait
+        alors « 100 % » sans réserve alors que le prénom n'avait jamais ete
+        regardé. Les deux élèves repris sans prénom sont exactement ce cas.
 
-        L'ecran doit le dire au lieu d'afficher un pourcentage qui inspire une
+        L'écran doit le dire au lieu d'afficher un pourcentage qui inspire une
         confiance qu'il ne merite pas.
         """
         return bool(self.champs_manquants)
@@ -185,7 +191,7 @@ def comparer(saisie: Identite, existante: Identite) -> Ressemblance:
 
     Les poids sont renormalises
     sur les seuls champs comparables, pour que deux fiches sans etat civil se
-    jugent sur nom et prenom a parts egales plutot que de plafonner par le seul
+    jugent sur nom et prénom a parts egales plutot que de plafonner par le seul
     fait qu'il manque des donnees.
     """
     details: dict[str, float] = {}

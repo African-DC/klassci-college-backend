@@ -1,8 +1,8 @@
 """La route qui signale qu'un eleve existe peut-etre deja.
 
 Sortie du routeur `admin`, qui depasse largement la limite de taille du
-projet. La fonctionnalite a deja son paquet de service ; elle a maintenant
-sa route, montee sous le meme prefixe pour que l'URL ne bouge pas.
+projet. La fonctionnalite a déjà son paquet de service ; elle a maintenant
+sa route, montee sous le même prefixe pour que l'URL ne bouge pas.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ async def chercher_doublons_eleve(
     reviendrait à renvoyer un vrai nouvel élève qui porte le nom de son cousin,
     sans recours.
     """
-    # La mise en forme vit dans le service, qui la possede deja : la garder
+    # La mise en forme vit dans le service, qui la possede déjà : la garder
     # ici en faisait une seconde copie, dans un routeur qui frole les 1400
     # lignes, pendant que celle du service n'etait appelee par personne.
     return await chercher_doublons(

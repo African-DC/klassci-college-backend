@@ -84,3 +84,24 @@ def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
         assert reponse.status_code == 200
     else:
         assert reponse.status_code == 422
+
+
+def test_la_route_refuse_sans_le_droit_de_lire_les_eleves(client: TestClient) -> None:
+    """La permission n'était gardée par rien.
+
+    L'endpoint rend le nom, le prénom, le matricule et la date de naissance de
+    mineurs. Supprimer `require_permission` laissait la suite entière verte : un
+    garde que rien ne teste est un garde que la prochaine refonte enlève.
+
+    On coupe la résolution des droits au niveau où elle décide, pas au niveau du
+    routeur, pour que le test suive si le câblage change.
+    """
+    with patch(
+        "app.core.dependencies._resolve_permission",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        reponse = client.get(CHEMIN, params={"last_name": "KOUASSI", "first_name": "Aya"})
+
+    assert reponse.status_code == 403, reponse.text
+    assert "admin:students:read" in reponse.text
