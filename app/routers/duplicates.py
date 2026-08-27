@@ -21,8 +21,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/students/duplicates", response_model=DuplicatesResponse)
 async def search_student_duplicates(
-    last_name: str | None = Query(None, description="Nom de famille typed"),
-    first_name: str | None = Query(None, description="Prénom typed"),
+    last_name: str | None = Query(None, description="Nom de famille saisi"),
+    first_name: str | None = Query(None, description="Prénom saisi"),
     birth_date: date | None = Query(None, description="Date de naissance, si connue"),
     enrollment_number: str | None = Query(None, description="Matricule, s'il est connu"),
     academic_year_id: int | None = Query(

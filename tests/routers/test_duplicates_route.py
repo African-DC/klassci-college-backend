@@ -67,7 +67,7 @@ def test_les_criteres_saisis_parviennent_au_service(client: TestClient) -> None:
 def test_le_segment_litteral_ne_part_pas_dans_la_route_parametrique(
     client: TestClient, valeur: str
 ) -> None:
-    """`/students/doublons` ne doit pas tenter `int("doublons")`.
+    """`/students/duplicates` ne doit pas tenter `int("duplicates")`.
 
     Sans l'ordre de montage, FastAPI essaie `/students/{student_id}` et rend
     422 à chaque frappe.

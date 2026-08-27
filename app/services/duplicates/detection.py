@@ -52,7 +52,7 @@ OCCUPYING_STATUSES = (
 
 
 def _exact_enrollment_number(matricule: str | None) -> ColumnElement[bool] | None:
-    """Le prédicat « ce matricule exactement », ou rien s'il n'y a rien à compare.
+    """Le prédicat « ce matricule exactement », ou rien s'il n'y a rien à comparer.
 
     Un seul endroit : la même expression servait au filtre et au tri, et une
     règle ajoutée d'un seul côté aurait retiré au tri ce qu'il protège.
@@ -176,8 +176,8 @@ def _search_fragment(valeur: str | None) -> str | None:
     """Le fragment de nom a chercher, ou rien si le nom est trop court.
 
     On cherche la racine PRIVEE de sa première lettre, ce qui rattrape la faute
-    de frappe la plus frequente : COULIBALY typed KOULIBALY reste trouvable, et
-    le prefixe strict etait de toute facon contenu dans ce reason.
+    de frappe la plus frequente : COULIBALY saisi KOULIBALY reste trouvable, et
+    le prefixe strict etait de toute facon contenu dans ce motif.
 
     Le seuil porte sur le fragment réellement cherche, pas sur la racine avant
     amputation. Une version antérieure exigeait trois caracteres AVANT de
@@ -204,20 +204,26 @@ def _query_with_enrollment(
     exact = _exact_enrollment_number(matricule)
     if exact is not None:
         conditions.append(exact)
+    # Construites une fois, pour que la lecture ne repete pas quatre fois la
+    # meme chose. Cela ne raccourcit PAS la requete : SQLAlchemy reinsere
+    # l'expression a chaque usage, et le SQL compile fait 5 564 caracteres dans
+    # les deux cas. Le vrai remede est la colonne normalisee indexee de #343.
+    nom_compacte = _compact_sql(Student.last_name)
+    prenom_compacte = _compact_sql(Student.first_name)
     for valeur in (nom, prenom):
         noyau = _search_fragment(valeur)
         if noyau is not None:
-            conditions.append(_compact_sql(Student.last_name).like(f"%{noyau}%"))
-            conditions.append(_compact_sql(Student.first_name).like(f"%{noyau}%"))
+            conditions.append(nom_compacte.like(f"%{noyau}%"))
+            conditions.append(prenom_compacte.like(f"%{noyau}%"))
             continue
-        # Trop court pour un reason flou, mais pas pour une egalite. « YAO » et
+        # Trop court pour un motif flou, mais pas pour une egalite. « YAO » et
         # « Aya » sont parmi les noms les plus répandus ici : les ignorer
         # rendait une fiche identique introuvable. L'egalite ne remonte pas
         # TRAORE, contrairement a « %ao% ».
         entier = compact(valeur)
         if entier:
-            conditions.append(_compact_sql(Student.last_name) == entier)
-            conditions.append(_compact_sql(Student.first_name) == entier)
+            conditions.append(nom_compacte == entier)
+            conditions.append(prenom_compacte == entier)
     # La date de naissance ne depend pas de l'orthographe : elle rattrape les
     # fautes que le prefixe laisse passer, dont l'interversion de deux lettres
     # a l'interieur du debut du nom. Elle ne sert qu'a elargir l'ensemble des
@@ -301,8 +307,6 @@ def _match_or_none(
     quelqu'un.
     """
     meme_matricule = _meme_matricule(matricule_saisi, existing.enrollment_number)
-    # `Student` satisfait `Identite` structurellement : c'est la raison d'être
-    # du protocole, et le recopier l'annulait.
     r = compare(typed, _identity_of(existing))
     if not meme_matricule and not r.worth_reporting:
         return None
@@ -363,8 +367,8 @@ async def find_duplicates(
             last_name, first_name, enrollment_number, academic_year_id, birth_date
         )
     )
-    # Pas de `.unique()` : sans `joinedload` il ne dedoublonne rien, et se
-    # lirait comme s'il interagissait avec le compte de troncature ci-dessous.
+    # Pas de `.unique()` : il dédoublonnerait les lignes et fausserait le
+    # compte de troncature juste en dessous, qui porte sur les lignes lues.
     lignes = list(resultat.all())
     truncated = len(lignes) >= CANDIDATE_CAP
     if truncated:

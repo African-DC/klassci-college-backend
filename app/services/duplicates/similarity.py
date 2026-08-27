@@ -36,7 +36,7 @@ MATCH_THRESHOLD = 0.72
 
 
 def normalize(valeur: str | None) -> str:
-    """Réduit un nom à ce qui compte pour le compare.
+    """Réduit un nom à ce qui compte pour la comparaison.
 
     « KOUAMÉ », « kouame » et « Kouamé  » désignent la même personne. Les
     accents sont retirés parce qu'ils sont saisis de façon irrégulière au
@@ -61,7 +61,7 @@ def compact(valeur: str | None) -> str:
     """La forme comparable d'un nom, sans espaces ni ponctuation.
 
     « N'DRI », « NDRI » et « n dri » doivent se trouver. Le préfiltre SQL
-    utilise le même compactage, sinon un nom typed sans apostrophe ne
+    utilise le même compactage, sinon un nom saisi sans apostrophe ne
     ramènerait jamais la fiche qui en a une.
     """
     return normalize(valeur).replace(" ", "")
@@ -151,7 +151,7 @@ class Similarity:
 
     @property
     def partial_identity(self) -> bool:
-        """Vrai quand un champ n'a pas pu etre compare.
+        """Vrai quand un champ n'a pas pu être comparé.
 
         Le score ne porte alors que sur une partie de l'identité. Une version
         anterieure ne levait cette reserve que sur la date manquante : une

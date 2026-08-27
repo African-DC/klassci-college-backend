@@ -23,7 +23,7 @@ class MatchResponse(BaseModel):
     enrollment_number: str | None = None
     birth_date: date | None = None
     reason: Literal["enrollment_number", "similarity"] = Field(
-        description="« matricule » (certain) ou « ressemblance »"
+        description="Certitude (matricule identique) ou ressemblance de l'état civil."
     )
     score: float | None = Field(
         default=None, description="0 à 1. Absent quand le matricule suffit à conclure."

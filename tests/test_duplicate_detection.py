@@ -249,7 +249,7 @@ async def test_la_fiche_modifiee_ne_se_signale_pas_elle_meme(db: Session) -> Non
 
 @pytest.mark.asyncio
 async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> None:
-    """COULIBALY typed KOULIBALY doit rester detectable.
+    """COULIBALY saisi KOULIBALY doit rester detectable.
 
     Un prefixe strict defaisait la raison d'etre du score : le candidat n'etait
     jamais remonte, donc la ressemblance ne tournait meme pas. C'est pourtant
@@ -262,7 +262,7 @@ async def test_une_faute_sur_la_premiere_lettre_est_rattrapee(db: Session) -> No
     assert any(c.last_name == "COULIBALY" for c in reponse.matches)
 
 
-def test_le_motif_tolere_une_premiere_lettre_fausse() -> None:
+def test_le_fragment_tolere_une_premiere_lettre_fausse() -> None:
     """Le prefiltre lui-meme, isole du reste.
 
     Le test ci-dessus passe aussi par le chemin du prenom : seul celui-ci
