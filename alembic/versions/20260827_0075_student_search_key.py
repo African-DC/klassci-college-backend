@@ -25,7 +25,16 @@ matricule étant enveloppé dans un `lower()` qui interdit l'usage de son index
 unique. Dette antérieure à cette migration, suivi #344.
 
 ORDRE DE DÉPLOIEMENT — cette migration AVANT le nouveau code, et les deux
-rapprochées. Trois choses peuvent mal tourner ; les voici toutes.
+rapprochées. Quatre choses peuvent mal tourner.
+
+UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS, et le plus facile
+à oublier : la migration doit être jouée sur CHAQUE base de tenant, pas une
+fois pour toutes. La CLI n'en migre qu'une à la fois
+(`klassci alembic upgrade --tenant <slug>`) et il n'existe pas de commande qui
+les parcoure. Sur la production du 2026-08-27 il y en a deux, `local` et
+`rostan-bouake` ; les énumérer avec `SHOW DATABASES` en écartant les quatre
+bases système. Une base oubliée, c'est le premier cas ci-dessous sur cette
+école-là — et sur elle seule, donc personne d'autre ne le signalera.
 
 Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
 dans chaque `SELECT` : ce n'est donc pas la seule détection de doublon qui
@@ -40,20 +49,20 @@ inscrire personne, mais rien de muet n'est enregistré — et c'est la fenêtre 
 préférer si l'une des deux doit exister, parce qu'elle se voit tout de suite.
 Cette franchise dépend du mode strict de MySQL : hors mode strict, le moteur
 insérerait une chaîne vide sans rien dire, et l'élève serait invisible à la
-détection. Le compose de production écrit désormais les six modes relevés
-sur le serveur, `STRICT_TRANS_TABLES` compris, pour que cette protection
-cesse d'être une hypothèse sur le moteur. La démo Windows, elle, s'en remet
-encore au défaut de MySQL.
+détection. Le compose de production écrit désormais les six modes relevés sur
+le serveur, `STRICT_TRANS_TABLES` compris, pour que cette protection cesse
+d'être une hypothèse sur le moteur. La démo Windows, elle, s'en remet encore au
+défaut de MySQL.
 
-Migration interrompue en cours de route. C'est la seule des trois dont on ne
+Migration interrompue en cours de route. C'est la seule des quatre dont on ne
 sort pas tout seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le
 remplissage échoue après le premier `add_column`, les colonnes restent, leur
 défaut serveur vide est toujours actif, aucune clé n'est calculée, et la
 révision n'est pas estampillée — un `upgrade` rejoué échouera sur « duplicate
-column ». La sortie est manuelle : retirer les deux colonnes, puis rejouer.
-Le risque est faible — le remplissage est du Python pur suivi d'un
-`executemany`, et la clé ne peut pas dépasser la largeur de la colonne — mais
-il n'est pas nul, d'où cette note.
+column ». La sortie est manuelle : retirer les deux colonnes, puis rejouer. Le
+risque est faible — le remplissage est du Python pur suivi d'un `executemany`,
+et la clé ne peut pas dépasser la largeur de la colonne — mais il n'est pas nul,
+d'où cette note.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm

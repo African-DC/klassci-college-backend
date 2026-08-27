@@ -42,7 +42,7 @@ async def search_student_duplicates(
     sans recours.
     """
     # La mise en forme vit dans le service, qui la possede déjà : la garder
-    # ici en faisait une seconde copie, dans un routeur qui frole les 1400
+    # ici en faisait une seconde copie, dans un routeur qui depasse deja 1300
     # lignes, pendant que celle du service n'etait appelee par personne.
     return await find_duplicates(
         db,

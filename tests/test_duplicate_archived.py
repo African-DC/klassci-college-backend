@@ -17,11 +17,10 @@ from collections.abc import Iterator
 from datetime import date, datetime
 
 import pytest
-from sqlalchemy import BigInteger, create_engine, event
+from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
-from app.core.archive_filter import register_archive_filter
 from app.core.database import Base
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import Enrollment, EnrollmentStatus
@@ -43,11 +42,11 @@ class _Pont:
 def session_filtree() -> Iterator[Session]:
     """Une session qui se comporte comme en production : corbeille filtrée.
 
-    L'ecouteur est retire a la fin. Il est branche sur la classe `Session`
-    entiere : le laisser en place changerait silencieusement le comportement de
-    tous les tests qui suivent dans le meme processus.
+    Le filtre n'est pas branché ici : `tests/conftest.py` importe `app.main`,
+    qui l'enregistre pour tout le processus de test. Le brancher une seconde
+    fois ferait croire que ce test le porte, alors qu'il vérifie justement le
+    câblage de `app/main.py` en même temps que la requête.
     """
-    ecouteur = register_archive_filter()
     moteur = create_engine("sqlite://")
 
     @compiles(BigInteger, "sqlite")
@@ -55,48 +54,45 @@ def session_filtree() -> Iterator[Session]:
         return "INTEGER"
 
     Base.metadata.create_all(moteur)
-    try:
-        with Session(moteur) as s:
-            archive = datetime(2026, 1, 1)
-            s.add_all(
-                [
-                    AcademicYear(
-                        id=1,
-                        name="2026-2027",
-                        start_date=date(2026, 9, 14),
-                        end_date=date(2027, 7, 30),
-                        is_current=True,
-                    ),
-                    Level(id=1, name="6eme"),
-                    Class(id=1, name="6eme A", level_id=1),
-                    Student(
-                        id=1,
-                        last_name="KOUASSI",
-                        first_name="Aya",
-                        enrollment_number="ECER0001",
-                        archived_at=archive,
-                        archive_reason="fiche creee en double",
-                    ),
-                    Student(
-                        id=2,
-                        last_name="TRAORE",
-                        first_name="Fatou",
-                        enrollment_number="ECER0002",
-                    ),
-                    Enrollment(
-                        id=1,
-                        student_id=1,
-                        class_id=1,
-                        academic_year_id=1,
-                        status=EnrollmentStatus.VALIDE.value,
-                        archived_at=archive,
-                    ),
-                ]
-            )
-            s.commit()
-            yield s
-    finally:
-        event.remove(Session, "do_orm_execute", ecouteur)
+    with Session(moteur) as s:
+        archive = datetime(2026, 1, 1)
+        s.add_all(
+            [
+                AcademicYear(
+                    id=1,
+                    name="2026-2027",
+                    start_date=date(2026, 9, 14),
+                    end_date=date(2027, 7, 30),
+                    is_current=True,
+                ),
+                Level(id=1, name="6eme"),
+                Class(id=1, name="6eme A", level_id=1),
+                Student(
+                    id=1,
+                    last_name="KOUASSI",
+                    first_name="Aya",
+                    enrollment_number="ECER0001",
+                    archived_at=archive,
+                    archive_reason="fiche creee en double",
+                ),
+                Student(
+                    id=2,
+                    last_name="TRAORE",
+                    first_name="Fatou",
+                    enrollment_number="ECER0002",
+                ),
+                Enrollment(
+                    id=1,
+                    student_id=1,
+                    class_id=1,
+                    academic_year_id=1,
+                    status=EnrollmentStatus.VALIDE.value,
+                    archived_at=archive,
+                ),
+            ]
+        )
+        s.commit()
+        yield s
 
 
 @pytest.mark.asyncio

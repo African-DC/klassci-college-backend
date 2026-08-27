@@ -171,13 +171,14 @@ def test_la_largeur_de_la_cle_absorbe_le_pire_nom() -> None:
     Ce test les compare : elles ne peuvent plus diverger sans bruit.
     """
     migration = _charger_migration()
-    colonne_modele = Student.__table__.columns["last_name_key"]
-    assert colonne_modele.type.length == migration._LARGEUR, (
-        "le modèle et la migration doivent déclarer la même largeur"
-    )
+    for champ in ("last_name", "first_name"):
+        colonne_cle = Student.__table__.columns[f"{champ}_key"]
+        assert colonne_cle.type.length == migration._LARGEUR, (
+            f"le modèle et la migration doivent déclarer la même largeur pour {champ}_key"
+        )
 
-    nom_maximal = Student.__table__.columns["last_name"].type.length
-    pire_nom = "œ" * nom_maximal
-    assert len(compact(pire_nom)) <= migration._LARGEUR, (
-        f"un nom de {nom_maximal} caractères doit tenir dans la clé"
-    )
+        maximal = Student.__table__.columns[champ].type.length
+        pire = "œ" * maximal
+        assert len(compact(pire)) <= migration._LARGEUR, (
+            f"un {champ} de {maximal} caractères doit tenir dans sa clé"
+        )

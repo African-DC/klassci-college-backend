@@ -499,3 +499,20 @@ async def test_les_ressemblances_sortent_de_la_plus_sure_a_la_moins_sure(db: Ses
     scores = [c.score for c in reponse.matches if c.score is not None]
     assert len(scores) >= 2, "il faut au moins deux ressemblances pour vérifier un ordre"
     assert scores == sorted(scores, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_un_matricule_saisi_en_minuscules_reste_une_certitude(db: Session) -> None:
+    """La casse ne change pas l'identité d'un matricule.
+
+    Le SQL compare en minuscules, le Python aussi — mais en deux endroits
+    distincts. Sans ce test, retirer la mise en minuscules du côté Python
+    laissait le SQL ramener la fiche pendant que la comparaison ne la
+    reconnaissait plus : la fiche remontait alors comme simple ressemblance,
+    et l'écran perdait sa seule certitude.
+    """
+    reponse = await find_duplicates(
+        _Pont(db), last_name="KOUASSI", first_name="David", enrollment_number="ecer0864"
+    )
+    certitudes = [c for c in reponse.matches if c.reason == "enrollment_number"]
+    assert [c.enrollment_number for c in certitudes] == ["ECER0864"]
