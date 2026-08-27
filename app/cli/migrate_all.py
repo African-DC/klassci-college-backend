@@ -19,6 +19,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+#: Delai par base. Deux minutes suffisaient tant qu'aucune migration ne
+#: touchait aux donnees ; une migration qui remplit une colonne sur un gros
+#: fichier eleves peut les depasser, et un depassement est pire qu'une
+#: attente : il coupe alembic au milieu.
+_DELAI_PAR_TENANT = 900
+
 
 async def list_tenant_databases() -> list[str]:
     """List databases carrying the KLASSCI tenant schema markers."""
@@ -72,14 +78,27 @@ async def migrate_all(revision: str = "head") -> None:
         logger.info("Migrating '%s'...", tenant)
         env = os.environ.copy()
         env["TENANT_ID"] = tenant
-        result = subprocess.run(
-            ["alembic", "upgrade", revision],
-            cwd=project_root,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+        try:
+            result = subprocess.run(
+                ["alembic", "upgrade", revision],
+                cwd=project_root,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=_DELAI_PAR_TENANT,
+            )
+        except subprocess.TimeoutExpired:
+            # Le depassement TUE alembic en pleine migration, ce qui laisse la
+            # base dans l'etat partiel dont on ne sort qu'a la main. On ne peut
+            # pas l'empecher ici, mais on peut le dire fort et continuer les
+            # autres tenants au lieu de remonter une exception nue.
+            message = (
+                f"delai de {_DELAI_PAR_TENANT}s depasse : alembic a ete interrompu EN COURS "
+                "de migration, cette base est probablement dans un etat partiel"
+            )
+            failed.append((tenant, message))
+            logger.error("  %s", message)
+            continue
         if result.returncode != 0:
             failed.append((tenant, result.stderr[:200]))
             logger.error("  Failed: %s", result.stderr[:200])

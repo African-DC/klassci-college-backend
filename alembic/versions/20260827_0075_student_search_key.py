@@ -35,12 +35,37 @@ MARCHE À SUIVRE, PRODUCTION DOCKER
    bases nommées `klassci_%`, alors qu'une école s'appelle de son slug —
    `rostan-bouake` n'y entre pas. Faire un `mysqldump` nommément.
 2. Construire l'image neuve. La révision n'existe que dedans : le `Dockerfile`
-   copie `alembic/` et `app/`, et son `CMD` ne lance qu'uvicorn — rien ne migre
-   au démarrage.
-3. Jouer la migration depuis un conteneur JETABLE de cette image neuve, avant
-   de toucher au service vivant :
-   `docker compose run --rm backend python -m app.cli.migrate_all head`
-4. Recréer les services : `compose up -d --no-deps --force-recreate backend`.
+   copie `alembic.ini` et `alembic/`, et son `CMD` ne lance qu'uvicorn — rien
+   ne migre au démarrage.
+3. Jouer la migration depuis un conteneur JETABLE de l'image neuve, AVANT de
+   toucher aux services vivants :
+
+       cd /etc/dokploy/compose/klassci-college-prod/code
+       docker compose -p klassci-college-prod run --rm --no-deps backend \
+         python -m app.cli.migrate_all head
+
+   `-p klassci-college-prod` et `--no-deps` ne sont pas du confort. Ce fichier
+   ne porte pas de clé `name:`, donc sans `-p` Compose prend le nom du
+   répertoire — `code` — et croit devoir créer sa propre pile. Les volumes
+   étant `external`, le mysql neuf s'attacherait aux données de la production :
+   c'est l'incident du 2026-08-25 que raconte le commentaire des volumes en bas
+   de ce compose. `--no-deps` rend l'opération indépendante de cette hypothèse.
+
+   Contrôler la ligne « Found N tenant databases » : elle doit afficher le
+   nombre de bases attendu. `information_schema` est filtrée par privilèges,
+   donc une base sur laquelle le compte n'a pas de droit est ignorée SANS un
+   mot — et ce serait le cas 2 sur cette école-là.
+
+   Si `/etc/dokploy` n'est pas lisible par l'utilisateur, passer par la forme
+   déjà employée dans `deploy/linux/adopt_dokploy.py` : `docker run --rm -v
+   /var/run/docker.sock:/var/run/docker.sock -v <code>:/work -w /work
+   docker:27-cli compose -p klassci-college-prod run ...`.
+
+4. Recréer les TROIS services qui portent cette image — `backend`, `worker` et
+   `beat` : `compose -p klassci-college-prod up -d --no-deps --force-recreate
+   backend worker beat`. Ne recréer que `backend` laisserait les deux autres
+   sur l'ancien code : ils liraient encore les élèves, mais ne pourraient plus
+   en enregistrer.
 
 Recréer d'abord et migrer ensuite inverse l'ordre et produit le cas 2.
 
@@ -48,9 +73,9 @@ UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS. `migrate_all` le
 parcourt toutes : il les reconnaît à la présence simultanée de quatre tables
 témoins, ce qui écarte tout schéma étranger, refuse de tourner s'il n'en trouve
 aucune, refuse en production si `local` manque, et sort en échec en listant les
-bases qui ont échoué. Sur la production du 2026-08-27 il y en a deux, `local` et
-`rostan-bouake`. Ne pas migrer base par base à la main : une base oubliée, c'est
-le cas 2 ci-dessous sur cette école-là — et sur elle seule, donc personne
+bases ratées. Sur la production du 2026-08-27 il y en a deux, `local` et
+`rostan-bouake`. Ne pas migrer base par base à la main : une base oubliée,
+c'est le cas 2 ci-dessous sur cette école-là — et sur elle seule, donc personne
 d'autre ne le signalera.
 
 Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
@@ -67,17 +92,22 @@ préférer si l'une des deux doit exister, parce qu'elle se voit tout de suite.
 Cette franchise dépend du mode strict de MySQL, que le compose de production
 écrit désormais explicitement. Attention : `--sql-mode` est un argument de
 démarrage du serveur, il ne prendra effet qu'à la prochaine recréation du
-conteneur mysql — que le déploiement décrit ici ne fait pas. En attendant, la
+conteneur mysql — que cette marche à suivre ne fait pas. En attendant, la
 protection tient parce que le mode strict est le défaut de MySQL 8.
 
 Migration interrompue en cours de route. La seule dont on ne sort pas tout
 seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le remplissage
 échoue après le premier `add_column`, les colonnes restent, leur défaut serveur
 vide est toujours actif, aucune clé n'est calculée, et la révision n'est pas
-estampillée — un `upgrade` rejoué échouera sur « duplicate column ». La sortie
-est manuelle : retirer les deux colonnes, puis rejouer. Le risque est faible —
-le remplissage est du Python pur suivi d'un `executemany`, et la clé ne peut pas
-dépasser la largeur de la colonne — mais c'est pour lui que l'étape 1 existe.
+estampillée — un `upgrade` rejoué échouera sur « duplicate column ». La sortie,
+sur la base concernée :
+
+    ALTER TABLE students DROP COLUMN last_name_key, DROP COLUMN first_name_key;
+
+Les index tombent avec leurs colonnes, quel que soit l'état partiel atteint.
+Puis rejouer l'étape 3. Le risque est faible — le remplissage est du Python pur
+suivi d'un `executemany`, et la clé ne peut pas dépasser la largeur de la
+colonne — mais c'est pour lui que l'étape 1 existe.
 
 Revision ID: 0075_student_search_key
 Revises: 0074_enrol_validate_perm

@@ -24,7 +24,7 @@ from app.services.duplicates.similarity import (
 )
 
 
-def fiche(nom, prenom, naissance=None, lieu=None):
+def fiche(nom, prenom, naissance=None):
     return SimpleNamespace(last_name=nom, first_name=prenom, birth_date=naissance)
 
 
