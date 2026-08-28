@@ -24,9 +24,11 @@ même celle-là tombe dès qu'un matricule est saisi en plus du nom, le terme du
 matricule étant enveloppé dans un `lower()` qui interdit l'usage de son index
 unique. Dette antérieure à cette migration, suivi #344.
 
-ORDRE DE DÉPLOIEMENT. Quatre choses peuvent mal tourner ; les trois premières
-se préviennent en suivant la marche ci-dessous, la quatrième est le seul cas
-dont on ne sort pas tout seul.
+ORDRE DE DÉPLOIEMENT. Quatre choses peuvent mal tourner. Les cas 1 et 2 se
+préviennent en suivant la marche ci-dessous. Le cas 3 n'est pas évité, il est
+choisi : la marche ouvre délibérément cette fenêtre-là, entre les étapes 3 et
+4, parce que c'est la moins dommageable des deux. Le cas 4 est le seul dont on
+ne sort pas tout seul.
 
 MARCHE À SUIVRE, PRODUCTION DOCKER
 
@@ -61,7 +63,11 @@ MARCHE À SUIVRE, PRODUCTION DOCKER
    /var/run/docker.sock:/var/run/docker.sock -v <code>:/work -w /work
    docker:27-cli compose -p klassci-college-prod run ...`.
 
-4. Recréer les TROIS services qui portent cette image — `backend`, `worker` et
+4. NE PASSER À CETTE ÉTAPE QUE SI L'ÉTAPE 3 EST SORTIE À ZÉRO. `migrate_all`
+   sort en 1 et liste les bases ratées ; déployer le code neuf sur une base
+   non migrée, c'est le cas 2 sur cette école-là.
+
+   Recréer les TROIS services qui portent cette image — `backend`, `worker` et
    `beat` : `compose -p klassci-college-prod up -d --no-deps --force-recreate
    backend worker beat`. Ne recréer que `backend` laisserait les deux autres
    sur l'ancien code : ils liraient encore les élèves, mais ne pourraient plus
@@ -69,7 +75,7 @@ MARCHE À SUIVRE, PRODUCTION DOCKER
 
 Recréer d'abord et migrer ensuite inverse l'ordre et produit le cas 2.
 
-UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS. `migrate_all` les
+CAS 1 — UNE BASE PAR ÉTABLISSEMENT. C'est le piège propre à ce SaaS. `migrate_all` les
 parcourt toutes : il les reconnaît à la présence simultanée de quatre tables
 témoins, ce qui écarte tout schéma étranger, refuse de tourner s'il n'en trouve
 aucune, refuse en production si `local` manque, et sort en échec en listant les
@@ -78,13 +84,13 @@ bases ratées. Sur la production du 2026-08-27 il y en a deux, `local` et
 c'est le cas 2 ci-dessous sur cette école-là — et sur elle seule, donc personne
 d'autre ne le signalera.
 
-Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
+CAS 2 — Code neuf sans la migration. SQLAlchemy énumère toutes les colonnes du modèle
 dans chaque `SELECT` : ce n'est donc pas la seule détection de doublon qui
 tombe, c'est TOUTE lecture d'élève — la liste, l'inscription, la caisse, les
 bulletins, les portails parent et élève. L'application est hors service, pas
 diminuée.
 
-Migration sans le code neuf. Les colonnes sont `NOT NULL` sans défaut, et
+CAS 3 — Migration sans le code neuf. Les colonnes sont `NOT NULL` sans défaut, et
 l'ancien code ne les connaît pas : son `INSERT` échoue avec « Field
 'last_name_key' doesn't have a default value ». Le secrétariat ne peut plus
 inscrire personne, mais rien de muet n'est enregistré — et c'est la fenêtre à
@@ -95,16 +101,22 @@ démarrage du serveur, il ne prendra effet qu'à la prochaine recréation du
 conteneur mysql — que cette marche à suivre ne fait pas. En attendant, la
 protection tient parce que le mode strict est le défaut de MySQL 8.
 
-Migration interrompue en cours de route. La seule dont on ne sort pas tout
+CAS 4 — Migration interrompue en cours de route. La seule dont on ne sort pas tout
 seul. Sur MySQL, un `ALTER TABLE` valide implicitement : si le remplissage
 échoue après le premier `add_column`, les colonnes restent, leur défaut serveur
 vide est toujours actif, aucune clé n'est calculée, et la révision n'est pas
 estampillée — un `upgrade` rejoué échouera sur « duplicate column ». La sortie,
 sur la base concernée :
 
-    ALTER TABLE students DROP COLUMN last_name_key, DROP COLUMN first_name_key;
+    ALTER TABLE students DROP COLUMN last_name_key;
+    ALTER TABLE students DROP COLUMN first_name_key;
 
-Les index tombent avec leurs colonnes, quel que soit l'état partiel atteint.
+Deux instructions séparées, et non une seule à deux clauses : une interruption
+entre les deux `ADD COLUMN` laisse une seule colonne, et MySQL n'a pas de
+`DROP COLUMN IF EXISTS` — la forme groupée échouerait alors en bloc, sans rien
+supprimer. Prise séparément, celle qui porte sur la colonne absente échoue en
+1091 en la nommant, et l'autre fait son travail. Les index tombent avec leurs
+colonnes, quel que soit l'état partiel atteint.
 Puis rejouer l'étape 3. Le risque est faible — le remplissage est du Python pur
 suivi d'un `executemany`, et la clé ne peut pas dépasser la largeur de la
 colonne — mais c'est pour lui que l'étape 1 existe.
