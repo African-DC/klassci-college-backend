@@ -206,8 +206,17 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     # pas « ne a Cocody ». Facultatif, les anciens dossiers ne le portent pas.
     birth_place: Mapped[str | None] = mapped_column(String(150), nullable=True)
     genre: Mapped[str | None] = mapped_column(ValueEnum(Genre, name="genre"), nullable=True)
+    # `NOCASE` sur SQLite seulement : MySQL applique deja la collation de la
+    # table, `utf8mb4_unicode_ci`, qui compare sans tenir compte de la casse
+    # (verifie sur la production). La variante rend la base de test fidele a
+    # celle de production, au lieu d'obliger la requete a envelopper la colonne
+    # dans un `lower()` — ce qui interdisait l'usage de cet index unique,
+    # justement sur le chemin le plus sur de la detection de doublon.
     enrollment_number: Mapped[str | None] = mapped_column(
-        String(50), nullable=True, unique=True, index=True
+        String(50).with_variant(String(50, collation="NOCASE"), "sqlite"),
+        nullable=True,
+        unique=True,
+        index=True,
     )
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)

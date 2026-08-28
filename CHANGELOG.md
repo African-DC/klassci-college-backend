@@ -64,6 +64,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie *(admin, secrétariat)*
 - La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route *(super-admin)*
 - Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses *(technique)*
 - Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles *(technique)*

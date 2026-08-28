@@ -14,11 +14,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from sqlalchemy import or_, select
+from sqlalchemy import BigInteger, create_engine, or_, select
 from sqlalchemy.dialects import sqlite
 from sqlalchemy.exc import SADeprecationWarning
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import False_
 
+from app.core.database import Base
 from app.models.user import Student
 from app.services.duplicates.detection import _candidate_conditions
 
@@ -88,3 +91,54 @@ def test_une_saisie_reelle_ne_porte_pas_la_sentinelle() -> None:
     assert len(conditions) > 1, "cette saisie doit produire de vrais critères"
     constantes = [c for c in conditions if isinstance(c, False_)]
     assert not constantes, "aucune sentinelle ne doit accompagner de vrais critères"
+
+
+def test_le_matricule_se_compare_sans_envelopper_la_colonne() -> None:
+    """Le chemin le plus sûr de la détection doit pouvoir utiliser son index.
+
+    Envelopper `enrollment_number` dans un `lower()` interdisait à la base
+    d'utiliser son index unique : le matricule exact — le seul signal qui
+    désigne une personne — balayait la table entière, et entraînait les deux
+    autres index avec lui dès qu'un nom accompagnait la saisie.
+
+    L'insensibilité à la casse ne vient pas d'une fonction mais de la collation
+    de la colonne, déclarée sur le modèle : `utf8mb4_unicode_ci` en production,
+    `NOCASE` sur SQLite. Le test suivant vérifie qu'elle fonctionne vraiment.
+    """
+    conditions = _candidate_conditions(None, None, "ECER0864", None)
+    assert conditions, "un matricule seul doit produire un critère"
+    rendu = _sql(select(Student.id).where(or_(*conditions)))
+    assert "lower(" not in rendu.lower(), (
+        "la colonne doit être comparée nue, sinon son index unique est inutilisable"
+    )
+    assert "enrollment_number" in rendu
+
+
+def test_le_matricule_reste_insensible_a_la_casse() -> None:
+    """La collation doit rendre ce que la fonction rendait.
+
+    Sans ce test, retirer le `lower()` pour gagner l'index aurait pu rendre la
+    comparaison sensible à la casse sans que rien ne le dise — et un matricule
+    recopié en minuscules du papier de la famille ne désignerait plus personne.
+    """
+    moteur = create_engine("sqlite://")
+
+    @compiles(BigInteger, "sqlite")
+    def _bigint(type_, compiler, **kw):  # noqa: ARG001
+        return "INTEGER"
+
+    Base.metadata.create_all(moteur)
+    with Session(moteur) as session:
+        session.add(
+            Student(
+                last_name="KOUASSI",
+                first_name="David",
+                enrollment_number="ECER0864",
+            )
+        )
+        session.commit()
+
+        for saisie in ("ECER0864", "ecer0864", "EcEr0864"):
+            conditions = _candidate_conditions(None, None, saisie, None)
+            trouve = session.execute(select(Student.id).where(or_(*conditions))).scalars().all()
+            assert len(trouve) == 1, f"« {saisie} » doit désigner la même fiche"
