@@ -39,10 +39,9 @@ import logging
 from datetime import date
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, Select, and_, false, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
-from sqlalchemy.sql.functions import Function
 
 from app.core.names import compact
 from app.models.academic import Class
@@ -76,7 +75,12 @@ def _exact_enrollment_number(matricule: str | None) -> ColumnElement[bool] | Non
     """
     if not matricule or not matricule.strip():
         return None
-    return _lowered(Student.enrollment_number) == matricule.strip().lower()
+    # La colonne nue, pas une fonction de la colonne : l'envelopper dans un
+    # `lower()` interdisait a la base d'utiliser son index unique, et faisait
+    # balayer toute la table sur le chemin le PLUS sur de la detection.
+    # L'insensibilite a la casse vient de la collation (`utf8mb4_unicode_ci` en
+    # production, `NOCASE` sur SQLite), declaree une fois sur le modele.
+    return Student.enrollment_number == matricule.strip()
 
 
 def _certainty_first_order(matricule: str | None) -> list[Any]:
@@ -90,10 +94,6 @@ def _certainty_first_order(matricule: str | None) -> list[Any]:
     """
     exact = _exact_enrollment_number(matricule)
     return [Student.id] if exact is None else [exact.desc(), Student.id]
-
-
-def _lowered(colonne: Any) -> Function[str]:
-    return func.lower(func.coalesce(colonne, ""))
 
 
 def _meme_matricule(typed: str | None, existing: str | None) -> bool:
