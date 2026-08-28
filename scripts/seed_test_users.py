@@ -35,6 +35,7 @@ from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.core.config import settings  # noqa: E402
+from app.core.names import compact  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -164,13 +165,21 @@ async def _ensure_user(db: Any, email: str, role: str, profile: dict[str, Any]) 
             await db.execute(
                 text(
                     "INSERT INTO students "
-                    "(user_id, first_name, last_name, enrollment_number) "
-                    "VALUES (:user_id, :first_name, :last_name, :enrollment_number)"
+                    "(user_id, first_name, last_name, first_name_key, last_name_key, "
+                    "enrollment_number) "
+                    "VALUES (:user_id, :first_name, :last_name, :first_name_key, "
+                    ":last_name_key, :enrollment_number)"
                 ),
                 {
                     "user_id": user_id,
                     "first_name": profile["first_name"],
                     "last_name": profile["last_name"],
+                    # Cet INSERT contourne l'ORM, donc le validateur du modele
+                    # ne se declenche pas. Sans ces deux valeurs, l'eleve seme
+                    # est invisible a la detection de doublons : on le
+                    # recreerait sans etre averti.
+                    "first_name_key": compact(profile["first_name"]),
+                    "last_name_key": compact(profile["last_name"]),
                     "enrollment_number": profile["enrollment_number"],
                 },
             )

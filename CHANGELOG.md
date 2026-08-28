@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le mode SQL de la base de production est désormais écrit dans sa configuration au lieu d'être hérité du moteur : c'est lui qui fait échouer franchement un enregistrement incomplet plutôt que de le laisser passer à moitié *(devops)*
+- Migration `0075` : chaque élève porte la forme normalisée de son nom, calculée à l'écriture. À jouer sur CHAQUE base d'établissement, et avant de déployer le code : le code neuf sans la migration met toute lecture d'élève hors service, et la migration seule empêche d'inscrire. La marche à suivre est écrite en tête de la révision *(technique, déploiement)*
+- Détection de doublon à la saisie d'un élève : matricule identique, ressemblance de l'état civil, et signalement d'une inscription déjà ouverte sur l'année même non validée *(admin, secrétariat)*
 - La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*
 - Validation de plusieurs inscriptions en une fois, chaque refus étant rendu avec son motif *(admin)*

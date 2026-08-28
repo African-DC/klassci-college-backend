@@ -15,9 +15,10 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.core.database import Base
+from app.core.names import compact
 from app.models.archivable import ArchivableMixin
 from app.models.base import TimestampMixin, ValueEnum
 
@@ -171,6 +172,33 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     )
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    # La forme comparable des deux noms : sans accent, sans apostrophe, sans
+    # espace. Elle est ce que la recherche de doublons interroge.
+    #
+    # Elle est stockee, pas calculee a la lecture. Le repliage vivait avant
+    # dans la requete : 54 replace() imbriques, repliques quatre fois dans le
+    # meme arbre — 216 appels dans le SQL compile. Cette requete etait
+    # illisible, inutilisable par un index, et la CI l'a refusee net le
+    # 2026-08-27 (run 33086041547) : sqlite3.OperationalError, parser stack
+    # overflow, vingt tests tombes. Elle passe pourtant sur d'autres builds
+    # de SQLite, dont celui du poste de dev — la pile d'analyse grandit
+    # dynamiquement chez les uns et pas chez les autres. Le repliage etait
+    # donc au bord d'une limite qui depend de la machine.
+    #
+    # Ce n'est pas la meilleure raison de stocker cette forme, seulement la
+    # plus bruyante. La vraie : le repliage vivait en DEUX exemplaires, un en
+    # SQL et un en Python, qui avaient fini par ne plus dire la meme chose —
+    # une fiche enregistree avec une ligature restait introuvable. Ecrite a
+    # l'ecriture, la regle ne peut plus diverger d'elle-meme.
+    #
+    # Pas de `default` Python : la migration retire le defaut serveur pour
+    # qu'un INSERT sans cle echoue durement. Un defaut ORM le rouvrirait,
+    # l'ORM incluant ses defauts dans chaque INSERT.
+    #
+    # 200 et non 100 : `compact()` peut allonger, une ligature devenant deux
+    # lettres.
+    last_name_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
+    first_name_key: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Lieu de naissance : sur toute piece officielle ivoirienne un eleve est
     # identifie par « ne(e) le ... a ... ». Distinct de `city`/`commune`, qui
@@ -190,6 +218,18 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     # precedent a chaque demande, avec les fautes que cela suppose.
     previous_school: Mapped[str | None] = mapped_column(String(200), nullable=True)
     transfer_decision_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+    @validates("last_name", "first_name")
+    def _tenir_la_forme_comparable(self, champ: str, valeur: str) -> str:
+        """Maintenir la cle de recherche a chaque ecriture du nom.
+
+        Ici, et pas dans les appelants : un eleve s'ecrit depuis la creation
+        manuelle, depuis l'import CSV et depuis l'inscription, et une cle
+        oubliee dans un seul de ces chemins rend l'eleve introuvable — donc
+        creable une seconde fois, avec une seconde ardoise.
+        """
+        setattr(self, f"{champ}_key", compact(valeur))
+        return valeur
 
     user: Mapped[User | None] = relationship(back_populates="student_profile")
     parents: Mapped[list[ParentStudent]] = relationship(back_populates="student")
