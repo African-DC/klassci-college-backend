@@ -25,6 +25,10 @@
 #   MYSQL_DOCKER_CONTAINER    défaut: klassci-college-prod-mysql-1
 #   LOCAL_BACKUP_DIR          défaut: $HOME/klassci-backups
 #   LOCAL_RETENTION_DAYS      défaut: 7 (daily; weekly=28, monthly=365 fixes)
+#   OFFSITE_SSH_TARGET        optionnel — <user>@<hote> recevant une copie
+#   OFFSITE_SSH_DIR           défaut: klassci-backups/from-prod
+#   OFFSITE_SSH_KEY           défaut: $HOME/.ssh/id_offsite
+#   OFFSITE_RETENTION_DAYS    défaut: 30
 #   RCLONE_REMOTE             optionnel — si vide, pas d'upload
 #   SPACES_BUCKET             défaut: klassci-backups
 #   HEALTHCHECKS_BACKUP_UUID  optionnel — si vide, pas de ping
@@ -44,6 +48,10 @@ fi
 : "${MYSQL_DOCKER_CONTAINER:=klassci-college-prod-mysql-1}"
 : "${LOCAL_BACKUP_DIR:=$HOME/klassci-backups}"
 : "${LOCAL_RETENTION_DAYS:=7}"
+OFFSITE_SSH_TARGET="${OFFSITE_SSH_TARGET:-}"
+: "${OFFSITE_SSH_DIR:=klassci-backups/from-prod}"
+: "${OFFSITE_SSH_KEY:=$HOME/.ssh/id_offsite}"
+: "${OFFSITE_RETENTION_DAYS:=30}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 : "${SPACES_BUCKET:=klassci-backups}"
 HEALTHCHECKS_BACKUP_UUID="${HEALTHCHECKS_BACKUP_UUID:-}"
@@ -192,6 +200,39 @@ esac
 
 LOCAL_COUNT=$(find "$LOCAL_TIER_DIR" -name "klassci-mysql-*.tar.gz" -type f | wc -l)
 log "Rétention $TIER : $LOCAL_COUNT fichier(s) conservé(s) dans $LOCAL_TIER_DIR"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4 bis) Copie sur une seconde machine — opt-in
+#
+# Une sauvegarde posée sur le disque qu'elle protège couvre l'erreur humaine et
+# la corruption, pas la panne du disque. Copier l'archive ailleurs coûte une
+# seconde et change la nature de ce qui est couvert.
+#
+# La clé utilisée ici doit être restreinte côté destinataire à la seule
+# réception de fichiers (`restrict,command="..."` dans authorized_keys) : ce
+# serveur porte des données d'élèves, et il n'a aucune raison d'obtenir un shell
+# sur une autre machine.
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -n "$OFFSITE_SSH_TARGET" ]]; then
+  if [[ ! -f "$OFFSITE_SSH_KEY" ]]; then
+    log "ERREUR: OFFSITE_SSH_TARGET est défini mais la clé $OFFSITE_SSH_KEY est absente"
+    ping_healthcheck fail "Cle hors-site absente"
+    exit 1
+  fi
+  log "Copie vers $OFFSITE_SSH_TARGET:$OFFSITE_SSH_DIR ..."
+  # `-O` : protocole scp classique, exigé par la commande forcée côté
+  # destinataire. Sans lui OpenSSH 9 passe en SFTP et la restriction refuse.
+  if scp -O -q -i "$OFFSITE_SSH_KEY"         -o BatchMode=yes -o ConnectTimeout=30 -o StrictHostKeyChecking=accept-new         "$ARCHIVE" "$OFFSITE_SSH_TARGET:$OFFSITE_SSH_DIR/$ARCHIVE_NAME"; then
+    log "  copie hors-site faite"
+  else
+    # Echec fort : une copie qu'on croit faite est pire que pas de copie.
+    log "ERREUR: la copie vers $OFFSITE_SSH_TARGET a echoue"
+    ping_healthcheck fail "Copie hors-site echouee vers $OFFSITE_SSH_TARGET"
+    exit 1
+  fi
+else
+  log "Pas de seconde machine configuree (OFFSITE_SSH_TARGET vide)"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 5) Upload S3/Spaces — opt-in (si RCLONE_REMOTE configuré et rclone installé)
