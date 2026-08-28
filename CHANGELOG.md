@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*
 - La sauvegarde nocturne couvre désormais toutes les bases d'établissement : elle les reconnaît à leur contenu et non à leur nom, et refuse d'archiver un fichier vide *(devops)*
 - Le mode SQL de la base de production est désormais écrit dans sa configuration au lieu d'être hérité du moteur : c'est lui qui fait échouer franchement un enregistrement incomplet plutôt que de le laisser passer à moitié *(devops)*
 - Migration `0075` : chaque élève porte la forme normalisée de son nom, calculée à l'écriture. À jouer sur CHAQUE base d'établissement, et avant de déployer le code : le code neuf sans la migration met toute lecture d'élève hors service, et la migration seule empêche d'inscrire. La marche à suivre est écrite en tête de la révision *(technique, déploiement)*
