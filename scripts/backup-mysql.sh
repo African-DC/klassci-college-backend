@@ -6,14 +6,24 @@
 # Tier 2 (opt-in)         : upload vers S3/Spaces si RCLONE_REMOTE configuré
 # Tier 3 (opt-in)         : ping healthchecks.io si HEALTHCHECKS_BACKUP_UUID configuré
 #
-# Tourne quotidien à 02:00 UTC via systemd timer (voir backup-mysql.timer).
-# Énumère toutes les DBs tenant (pattern klassci_% + local), dump avec
-# consistance InnoDB via docker exec sur le container MySQL.
+# Tourne quotidien via cron ou systemd timer.
+#
+# Énumère les bases par leur CONTENU, pas par leur nom : une base est un tenant
+# KLASSCI si elle porte les quatre tables témoins (alembic_version, users,
+# roles, academic_years). Le critère par nom qui existait ici — `klassci_%` ou
+# `local` — laissait dehors toute école provisionnée, puisqu'une école porte son
+# slug comme nom de base : `rostan-bouake` n'entrait dans aucun des deux motifs.
+# La seule école cliente n'a donc jamais été sauvegardée.
+#
+# Chaque dump est vérifié avant d'être archivé : un mysqldump qui échoue
+# d'authentification sort en douceur avec un fichier de 130 octets et un code de
+# retour que le pipe avale. Un tel fichier a l'air d'une sauvegarde jusqu'au jour
+# où on essaie de s'en servir.
 #
 # Variables d'env (charger via /etc/klassci/backup.env) :
 #   MYSQL_ROOT_PASSWORD       requis
-#   MYSQL_DOCKER_CONTAINER    défaut: klassci-mysql
-#   LOCAL_BACKUP_DIR          défaut: /home/ubuntu/klassci/backups
+#   MYSQL_DOCKER_CONTAINER    défaut: klassci-college-prod-mysql-1
+#   LOCAL_BACKUP_DIR          défaut: $HOME/klassci-backups
 #   LOCAL_RETENTION_DAYS      défaut: 7 (daily; weekly=28, monthly=365 fixes)
 #   RCLONE_REMOTE             optionnel — si vide, pas d'upload
 #   SPACES_BUCKET             défaut: klassci-backups
@@ -31,8 +41,8 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 : "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD requis (cf /etc/klassci/backup.env)}"
-: "${MYSQL_DOCKER_CONTAINER:=klassci-mysql}"
-: "${LOCAL_BACKUP_DIR:=/home/ubuntu/klassci/backups}"
+: "${MYSQL_DOCKER_CONTAINER:=klassci-college-prod-mysql-1}"
+: "${LOCAL_BACKUP_DIR:=$HOME/klassci-backups}"
 : "${LOCAL_RETENTION_DAYS:=7}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 : "${SPACES_BUCKET:=klassci-backups}"
@@ -91,12 +101,15 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Énumérer les DBs tenant : klassci_% + local
 # ─────────────────────────────────────────────────────────────────────────────
-DBS_QUERY="SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'klassci_%' OR SCHEMA_NAME = 'local';"
+# Le même critère que app/cli/migrate_all.py : une base est un tenant si elle
+# porte les quatre tables témoins. Indépendant du nom, donc une école nouvelle
+# est sauvegardée le soir même de sa création, sans que personne y pense.
+DBS_QUERY="SELECT table_schema FROM information_schema.tables   WHERE table_name IN ('alembic_version', 'users', 'roles', 'academic_years')   GROUP BY table_schema HAVING COUNT(DISTINCT table_name) = 4;"
 
 DBS=$(mysql_exec --batch --skip-column-names -e "$DBS_QUERY" 2>>"$LOG_FILE")
 
 if [[ -z "${DBS// /}" ]]; then
-  log "ERREUR: aucune DB tenant trouvée (pattern klassci_% ou local)"
+  log "ERREUR: aucune base portant les quatre tables temoins KLASSCI"
   ping_healthcheck fail "Aucune DB trouvée"
   exit 1
 fi
@@ -123,7 +136,17 @@ for DB in $DBS; do
     > "$DUMP_DIR/$DB.sql" 2>>"$LOG_FILE"
 
   SIZE=$(stat -c%s "$DUMP_DIR/$DB.sql" 2>/dev/null || stat -f%z "$DUMP_DIR/$DB.sql")
-  log "  → $DB.sql (${SIZE} bytes)"
+  TABLES=$(grep -c '^CREATE TABLE' "$DUMP_DIR/$DB.sql" || true)
+  log "  → $DB.sql (${SIZE} bytes, ${TABLES} tables)"
+
+  # Un dump sans une seule table n'est pas une sauvegarde, c'est un message
+  # d'erreur avec une extension .sql. Echouer ici, fort, plutot que d'archiver
+  # un fichier qui ne se revelera vide que le jour de la restauration.
+  if [[ "$TABLES" -lt 1 ]]; then
+    log "ERREUR: le dump de $DB ne contient aucune table (${SIZE} octets)"
+    ping_healthcheck fail "Dump vide pour $DB (${SIZE} octets)"
+    exit 1
+  fi
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
