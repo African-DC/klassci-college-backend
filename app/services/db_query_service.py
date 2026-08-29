@@ -31,6 +31,33 @@ _DANGER_PATTERNS = [
 _WHERE_LESS_DELETE = re.compile(r"\bDELETE[ \t]+FROM[ \t]+\w+[ \t]*(?:;|$)", re.IGNORECASE)
 _WHERE_LESS_UPDATE = re.compile(r"\bUPDATE[ \t]+\w+[ \t]+SET[ \t]+[^;]+?(?:;|$)", re.IGNORECASE)
 
+# Écrire le nom d'un élève sans écrire sa clé de recherche le rend introuvable.
+#
+# `students.last_name_key` et `first_name_key` portent la forme comparable du
+# nom, celle qu'interroge la détection de doublon. Le modèle les maintient à
+# chaque écriture ORM — mais cette console écrit en SQL brut, donc hors du
+# modèle, et c'est le seul chemin du dépôt qui contourne ce validateur. Un
+# `UPDATE students SET last_name = ...` laisse la clé sur l'ancienne
+# orthographe : l'élève devient invisible à la détection, donc recréable en
+# double, avec une seconde ardoise que personne ne rapprochera de la première.
+#
+# La frontière de mot distingue `last_name` de `last_name_key` : `_` est un
+# caractère de mot, donc `\blast_name\b` ne trouve rien dans `last_name_key`.
+_STUDENT_WRITE = re.compile(r"\b(?:UPDATE|INSERT[ \t]+INTO)[ \t]+`?students`?\b", re.IGNORECASE)
+_NAME_COLUMNS = (("last_name", "last_name_key"), ("first_name", "first_name_key"))
+
+
+def _stale_search_keys(sql: str) -> list[str]:
+    """Colonnes de nom écrites sans leur clé — vide si la requête est saine."""
+    if not _STUDENT_WRITE.search(sql):
+        return []
+    return [
+        name
+        for name, key in _NAME_COLUMNS
+        if re.search(rf"\b{name}\b", sql, re.IGNORECASE)
+        and not re.search(rf"\b{key}\b", sql, re.IGNORECASE)
+    ]
+
 
 def analyse_sql(sql: str) -> list[dict[str, str]]:
     warnings: list[dict[str, str]] = []
@@ -50,6 +77,21 @@ def analyse_sql(sql: str) -> list[dict[str, str]]:
             {
                 "code": "UPDATE_WITHOUT_WHERE",
                 "message": "UPDATE statement without a WHERE clause — every row affected",
+                "severity": "danger",
+            }
+        )
+    stale = _stale_search_keys(sql)
+    if stale:
+        columns = ", ".join(f"{name} (without {name}_key)" for name in stale)
+        warnings.append(
+            {
+                "code": "STUDENT_NAME_WITHOUT_SEARCH_KEY",
+                "message": (
+                    f"Writing {columns} leaves the duplicate-detection key stale: the "
+                    "student becomes unfindable by name, so a second record can be created "
+                    "for the same person. Set the *_key column in the same statement, to "
+                    "the value app.core.names.compact() would produce."
+                ),
                 "severity": "danger",
             }
         )

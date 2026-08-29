@@ -10,6 +10,15 @@ forme comparable dans ses colonnes `last_name_key` et `first_name_key`, que le
 modèle maintient. La lecture n'a plus rien à replier, et ne peut donc plus
 replier autrement.
 
+Une exception, et une seule : la console SQL super-admin
+(`db_query_service.execute_sql`) écrit en SQL brut, donc hors du modèle. Un
+`UPDATE students SET last_name = ...` y laisse la clé sur l'ancienne
+orthographe, et l'élève devient introuvable sous son vrai nom. La console
+avertit désormais quand une requête écrit un nom sans sa clé
+(`STUDENT_NAME_WITHOUT_SEARCH_KEY`), mais elle n'empêche pas : c'est un outil
+délibérément sans garde-fous, réservé au super-admin et journalisé. Le dire ici
+plutôt que de laisser croire que le modèle couvre tout.
+
 D'autres normalisations de noms subsistent ailleurs (`account_service._slug`
 pour fabriquer une adresse e-mail, les generateurs du seed de demonstration).
 Elles servent un autre usage et n'ont pas a partager cette regle-ci.
