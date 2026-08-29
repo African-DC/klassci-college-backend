@@ -43,19 +43,88 @@ _WHERE_LESS_UPDATE = re.compile(r"\bUPDATE[ \t]+\w+[ \t]+SET[ \t]+[^;]+?(?:;|$)"
 #
 # La frontière de mot distingue `last_name` de `last_name_key` : `_` est un
 # caractère de mot, donc `\blast_name\b` ne trouve rien dans `last_name_key`.
-_STUDENT_WRITE = re.compile(r"\b(?:UPDATE|INSERT[ \t]+INTO)[ \t]+`?students`?\b", re.IGNORECASE)
+#
+# On ne regarde QUE la partie qui écrit — la clause `SET`, ou la liste de
+# colonnes d'un `INSERT`. Chercher dans l'énoncé entier faisait crier
+# l'avertissement sur `UPDATE students SET archived_at = NOW() WHERE last_name
+# = 'KOUASSI'`, où le nom est une condition et non une écriture : le conseil
+# « posez aussi last_name_key » y était activement nuisible. Un avertissement
+# qui se trompe sur une forme courante cesse d'être lu, et emporte avec lui les
+# fois où il a raison.
 _NAME_COLUMNS = (("last_name", "last_name_key"), ("first_name", "first_name_key"))
+
+
+def _without_comments(sql: str) -> str:
+    """Retire les commentaires SQL, en un seul passage de gauche à droite.
+
+    Les commentaires sont retirés avant analyse : une clé citée en commentaire
+    désamorçait l'avertissement, et un `UPDATE` commenté le déclenchait.
+
+    Écrit à la main plutôt qu'en expression régulière, et pas par goût : un
+    `/\\*.*?\\*/` paresseux devient quadratique sur un commentaire jamais fermé.
+    Mesuré sur `"/*" + "a/*" * n` — 2 secondes à n = 12800, contre 0,05 ms ici.
+    Cette console prend du texte fourni par un humain : le rendre lent à volonté
+    est un déni de service, et le fichier mettait déjà en garde contre cette
+    classe de défaut sur ses autres motifs.
+    """
+    morceaux: list[str] = []
+    i, n = 0, len(sql)
+    while i < n:
+        if sql.startswith("--", i):
+            fin = sql.find("\n", i)
+            i = n if fin == -1 else fin
+        elif sql.startswith("/*", i):
+            fin = sql.find("*/", i + 2)
+            i = n if fin == -1 else fin + 2
+            morceaux.append(" ")
+        else:
+            suivant = i
+            while suivant < n and not (
+                sql.startswith("--", suivant) or sql.startswith("/*", suivant)
+            ):
+                suivant += 1
+            morceaux.append(sql[i:suivant])
+            i = suivant
+    return "".join(morceaux)
+
+
+#: `\s` et non `[ \t]` : un saut de ligne entre `UPDATE` et le nom de table est
+#: courant dès qu'une requête est mise en forme.
+_UPDATE_SET = re.compile(
+    r"\bUPDATE\s+`?students`?\s+SET\s+(?P<ecriture>.*?)(?:\bWHERE\b|\bORDER\s+BY\b|\bLIMIT\b|;|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+#: `REPLACE INTO` écrit comme `INSERT INTO`, et se faisait oublier.
+_INSERT_COLUMNS = re.compile(
+    r"\b(?:INSERT|REPLACE)\s+INTO\s+`?students`?\s*\((?P<ecriture>[^)]*)\)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _written_columns(sql: str) -> str | None:
+    """La partie de la requête qui ÉCRIT des colonnes de `students`, ou rien.
+
+    Rien ne veut dire : cette requête n'écrit pas dans `students`. Un `SELECT`,
+    un `DELETE`, ou une écriture dans une autre table n'ont pas de clé à tenir.
+    """
+    nu = _without_comments(sql)
+    for motif in (_UPDATE_SET, _INSERT_COLUMNS):
+        trouve = motif.search(nu)
+        if trouve is not None:
+            return trouve.group("ecriture")
+    return None
 
 
 def _stale_search_keys(sql: str) -> list[str]:
     """Colonnes de nom écrites sans leur clé — vide si la requête est saine."""
-    if not _STUDENT_WRITE.search(sql):
+    ecriture = _written_columns(sql)
+    if ecriture is None:
         return []
     return [
         name
         for name, key in _NAME_COLUMNS
-        if re.search(rf"\b{name}\b", sql, re.IGNORECASE)
-        and not re.search(rf"\b{key}\b", sql, re.IGNORECASE)
+        if re.search(rf"\b{name}\b", ecriture, re.IGNORECASE)
+        and not re.search(rf"\b{key}\b", ecriture, re.IGNORECASE)
     ]
 
 
