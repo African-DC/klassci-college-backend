@@ -1,29 +1,31 @@
 [Unit]
-Description=KLASSCI College — Backup MySQL multi-tenant
-Documentation=file:/home/ubuntu/klassci/klassci-backend/scripts/README.md
-After=network-online.target docker.service
+# Unité UTILISATEUR : `systemctl --user`, installée dans ~/.config/systemd/user/.
+# Elle ne demande aucun droit root, parce que le compte de la production n'en a
+# pas. Une version antérieure visait /home/ubuntu et User=ubuntu, sur une EC2
+# qui n'existe plus : elle ne pouvait ni être installée, ni fonctionner.
+#
+# Ce qui tourne aujourd'hui en production est une tâche cron utilisateur, pas
+# cette unité — voir scripts/backup.env.example. Elle est fournie pour un hôte
+# où le lingering est activé (`loginctl enable-linger <user>`), sans quoi le
+# minuteur ne se déclenche pas quand personne n'est connecté.
+Description=KLASSCI College — Sauvegarde MySQL multi-tenant
+Documentation=file:%h/klassci-backend/scripts/README.md
+After=network-online.target
 Wants=network-online.target
-Requires=docker.service
 
 [Service]
 Type=oneshot
-User=ubuntu
-Group=ubuntu
-EnvironmentFile=-/etc/klassci/backup.env
-ExecStartPre=+/usr/bin/install -d -o ubuntu -g ubuntu -m 0755 /home/ubuntu/klassci/backups
-ExecStart=/home/ubuntu/klassci/klassci-backend/scripts/backup-mysql.sh
+EnvironmentFile=-%h/klassci-backup.env
+ExecStartPre=/usr/bin/install -d -m 0700 %h/klassci-backups
+ExecStart=%h/klassci-backup-mysql.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=klassci-backup
 
-# Protection systemd (relaxée pour permettre docker exec + écriture local backup dir)
-NoNewPrivileges=false
 PrivateTmp=true
-ProtectSystem=full
-ProtectHome=false
-ReadWritePaths=/home/ubuntu/klassci/backups /tmp /var/tmp
 
-# Limite ressources
+# Généreux à dessein : un dépassement ne suspend pas la sauvegarde, il la tue
+# au milieu et laisse une archive tronquée qui a l'air d'une sauvegarde.
+TimeoutStartSec=1800
 MemoryMax=512M
 TasksMax=64
-TimeoutStartSec=1800
