@@ -7,25 +7,28 @@
 #
 # Tourne hebdomadaire le dimanche 03:00 UTC via systemd timer.
 #
-# Variables d'env (cf /etc/klassci/backup.env) :
+# Variables d'env (cf backup.env.example) :
 #   MYSQL_ROOT_PASSWORD       requis
-#   MYSQL_DOCKER_CONTAINER    défaut: klassci-mysql
-#   LOCAL_BACKUP_DIR          défaut: /home/ubuntu/klassci/backups
+#   MYSQL_DOCKER_CONTAINER    défaut: klassci-college-prod-mysql-1
+#   LOCAL_BACKUP_DIR          défaut: $HOME/klassci-backups
 #   RCLONE_REMOTE             optionnel — si vide ou local existe, on utilise local
 #   SPACES_BUCKET             défaut: klassci-backups
 #   HEALTHCHECKS_RESTORE_UUID optionnel — si vide, pas de ping
 
 set -euo pipefail
 
-ENV_FILE="${KLASSCI_BACKUP_ENV:-/etc/klassci/backup.env}"
+# Le compte de la production n'a pas sudo : /etc/klassci n'est pas creable.
+# On tombe donc sur le HOME, et /etc reste possible sur un hote ou l'on est root.
+ENV_FILE="${KLASSCI_BACKUP_ENV:-$HOME/klassci-backup.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE=/etc/klassci/backup.env
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
 fi
 
 : "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD requis}"
-: "${MYSQL_DOCKER_CONTAINER:=klassci-mysql}"
-: "${LOCAL_BACKUP_DIR:=/home/ubuntu/klassci/backups}"
+: "${MYSQL_DOCKER_CONTAINER:=klassci-college-prod-mysql-1}"
+: "${LOCAL_BACKUP_DIR:=$HOME/klassci-backups}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 : "${SPACES_BUCKET:=klassci-backups}"
 HEALTHCHECKS_RESTORE_UUID="${HEALTHCHECKS_RESTORE_UUID:-}"
