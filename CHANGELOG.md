@@ -9,6 +9,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La console SQL avertit quand une requête renomme un élève sans mettre à jour sa clé de recherche, ce qui le rendrait introuvable *(super-admin)*
+- L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*
+- La sauvegarde nocturne couvre désormais toutes les bases d'établissement : elle les reconnaît à leur contenu et non à leur nom, et refuse d'archiver un fichier vide *(devops)*
+- Le mode SQL de la base de production est désormais écrit dans sa configuration au lieu d'être hérité du moteur : c'est lui qui fait échouer franchement un enregistrement incomplet plutôt que de le laisser passer à moitié *(devops)*
+- Migration `0075` : chaque élève porte la forme normalisée de son nom, calculée à l'écriture. À jouer sur CHAQUE base d'établissement, et avant de déployer le code : le code neuf sans la migration met toute lecture d'élève hors service, et la migration seule empêche d'inscrire. La marche à suivre est écrite en tête de la révision *(technique, déploiement)*
+- Détection de doublon à la saisie d'un élève : matricule identique, ressemblance de l'état civil, et signalement d'une inscription déjà ouverte sur l'année même non validée *(admin, secrétariat)*
 - La configuration de déploiement des deux serveurs est versionnée dans `deploy/` : elle n'existait que sur un poste *(technique)*
 - Valider une inscription devient un droit qu'on peut confier seul, sans ouvrir l'édition complète des dossiers *(admin)*
 - Validation de plusieurs inscriptions en une fois, chaque refus étant rendu avec son motif *(admin)*
@@ -60,6 +66,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 - La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante *(technique)*
+- La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie *(admin, secrétariat)*
+- La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route *(super-admin)*
 - Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses *(technique)*
 - Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles *(technique)*
 - Le script d'intégration d'un établissement refuse désormais de démarrer sans confirmation : relancé tel quel, il réinitialisait le mot de passe admin d'une école en service *(technique)*
@@ -115,6 +123,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
 ### Security
+- Quatre dépendances montées pour corriger 25 alertes de sécurité, dont deux de sévérité haute sur le traitement des formulaires et sur les jetons de session
+- La copie de sauvegarde vers la seconde machine vérifie désormais strictement l'identité de l'hôte, et ne peut plus supprimer la copie distante en cas de coupure réseau *(devops)*
+- La console SQL ne peut plus être ralentie à volonté par une requête hostile : l'analyse des commentaires est désormais linéaire *(super-admin)*
 - Supprimer définitivement une fiche coupe désormais l'accès au logiciel : le compte de connexion est désactivé et ses jetons révoqués dans le même geste. Une comptable renvoyée dont on supprime la fiche le lundi ne se reconnecte plus le mardi avec son mot de passe, ni depuis une session restée ouverte *(admin, directeur)*
 - Le journal d'audit et le courriel de traçabilité disent maintenant ce qu'est devenu le compte : « fiche supprimée, accès révoqué » n'est pas la même information que « fiche supprimée » *(admin, directeur)*
 

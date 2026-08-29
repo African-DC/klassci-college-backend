@@ -6,15 +6,31 @@
 # Tier 2 (opt-in)         : upload vers S3/Spaces si RCLONE_REMOTE configuré
 # Tier 3 (opt-in)         : ping healthchecks.io si HEALTHCHECKS_BACKUP_UUID configuré
 #
-# Tourne quotidien à 02:00 UTC via systemd timer (voir backup-mysql.timer).
-# Énumère toutes les DBs tenant (pattern klassci_% + local), dump avec
-# consistance InnoDB via docker exec sur le container MySQL.
+# Tourne quotidien via cron ou systemd timer.
 #
-# Variables d'env (charger via /etc/klassci/backup.env) :
+# Énumère les bases par leur CONTENU, pas par leur nom : une base est un tenant
+# KLASSCI si elle porte les quatre tables témoins (alembic_version, users,
+# roles, academic_years). Le critère par nom qui existait ici — `klassci_%` ou
+# `local` — laissait dehors toute école provisionnée, puisqu'une école porte son
+# slug comme nom de base : `rostan-bouake` n'entrait dans aucun des deux motifs.
+# La seule école cliente n'a donc jamais été sauvegardée.
+#
+# Chaque dump est vérifié avant d'être archivé, par son nombre de tables.
+# `set -e` attrape déjà un mysqldump qui sort non nul, mais mysqldump peut
+# aussi sortir ZÉRO sur un dump tronqué — et un fichier presque vide a l'air
+# d'une sauvegarde jusqu'au jour où on essaie de s'en servir.
+#
+# Variables d'env (charger via $HOME/klassci-backup.env, cf backup.env.example) :
 #   MYSQL_ROOT_PASSWORD       requis
-#   MYSQL_DOCKER_CONTAINER    défaut: klassci-mysql
-#   LOCAL_BACKUP_DIR          défaut: /home/ubuntu/klassci/backups
+#   MYSQL_DOCKER_CONTAINER    défaut: klassci-college-prod-mysql-1
+#   LOCAL_BACKUP_DIR          défaut: $HOME/klassci-backups
 #   LOCAL_RETENTION_DAYS      défaut: 7 (daily; weekly=28, monthly=365 fixes)
+#   OFFSITE_SSH_TARGET        optionnel — <user>@<hote> recevant une copie
+#   OFFSITE_SSH_DIR           défaut: klassci-backups/from-prod
+#                             (la rétention des archives reçues vit du côté qui
+#                              reçoit : la clé y est restreinte au dépôt seul)
+#   OFFSITE_SSH_KEY           défaut: $HOME/.ssh/id_offsite
+#   OFFSITE_SSH_KNOWN_HOSTS   optionnel — active la vérification d'hôte stricte
 #   RCLONE_REMOTE             optionnel — si vide, pas d'upload
 #   SPACES_BUCKET             défaut: klassci-backups
 #   HEALTHCHECKS_BACKUP_UUID  optionnel — si vide, pas de ping
@@ -24,16 +40,23 @@ set -euo pipefail
 # ─────────────────────────────────────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────────────────────────────────────
-ENV_FILE="${KLASSCI_BACKUP_ENV:-/etc/klassci/backup.env}"
+# Le compte de la production n'a pas sudo : /etc/klassci n'est pas creable.
+# On tombe donc sur le HOME, et /etc reste possible sur un hote ou l'on est root.
+ENV_FILE="${KLASSCI_BACKUP_ENV:-$HOME/klassci-backup.env}"
+[[ -f "$ENV_FILE" ]] || ENV_FILE=/etc/klassci/backup.env
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   set -a; source "$ENV_FILE"; set +a
 fi
 
-: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD requis (cf /etc/klassci/backup.env)}"
-: "${MYSQL_DOCKER_CONTAINER:=klassci-mysql}"
-: "${LOCAL_BACKUP_DIR:=/home/ubuntu/klassci/backups}"
+: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD requis (cf backup.env.example)}"
+: "${MYSQL_DOCKER_CONTAINER:=klassci-college-prod-mysql-1}"
+: "${LOCAL_BACKUP_DIR:=$HOME/klassci-backups}"
 : "${LOCAL_RETENTION_DAYS:=7}"
+OFFSITE_SSH_TARGET="${OFFSITE_SSH_TARGET:-}"
+: "${OFFSITE_SSH_DIR:=klassci-backups/from-prod}"
+: "${OFFSITE_SSH_KEY:=$HOME/.ssh/id_offsite}"
+OFFSITE_SSH_KNOWN_HOSTS="${OFFSITE_SSH_KNOWN_HOSTS:-}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
 : "${SPACES_BUCKET:=klassci-backups}"
 HEALTHCHECKS_BACKUP_UUID="${HEALTHCHECKS_BACKUP_UUID:-}"
@@ -91,12 +114,17 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 1) Énumérer les DBs tenant : klassci_% + local
 # ─────────────────────────────────────────────────────────────────────────────
-DBS_QUERY="SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME LIKE 'klassci_%' OR SCHEMA_NAME = 'local';"
+# Les quatre tables témoins, comme app/cli/migrate_all.py — qui ajoute en plus un
+# filtre sur la forme du nom de schéma. Ici on prend plus large à dessein : une
+# base résiduelle d'un test de restauration mérite d'être sauvegardée aussi.
+# Le critère ne dépend pas du nom, donc une école nouvelle est couverte le soir
+# même de sa création, sans que personne y pense.
+DBS_QUERY="SELECT table_schema FROM information_schema.tables   WHERE table_name IN ('alembic_version', 'users', 'roles', 'academic_years')   GROUP BY table_schema HAVING COUNT(DISTINCT table_name) = 4;"
 
 DBS=$(mysql_exec --batch --skip-column-names -e "$DBS_QUERY" 2>>"$LOG_FILE")
 
 if [[ -z "${DBS// /}" ]]; then
-  log "ERREUR: aucune DB tenant trouvée (pattern klassci_% ou local)"
+  log "ERREUR: aucune base portant les quatre tables temoins KLASSCI"
   ping_healthcheck fail "Aucune DB trouvée"
   exit 1
 fi
@@ -123,7 +151,17 @@ for DB in $DBS; do
     > "$DUMP_DIR/$DB.sql" 2>>"$LOG_FILE"
 
   SIZE=$(stat -c%s "$DUMP_DIR/$DB.sql" 2>/dev/null || stat -f%z "$DUMP_DIR/$DB.sql")
-  log "  → $DB.sql (${SIZE} bytes)"
+  TABLES=$(grep -c '^CREATE TABLE' "$DUMP_DIR/$DB.sql" || true)
+  log "  → $DB.sql (${SIZE} bytes, ${TABLES} tables)"
+
+  # Un dump sans une seule table n'est pas une sauvegarde, c'est un message
+  # d'erreur avec une extension .sql. Echouer ici, fort, plutot que d'archiver
+  # un fichier qui ne se revelera vide que le jour de la restauration.
+  if [[ "$TABLES" -lt 1 ]]; then
+    log "ERREUR: le dump de $DB ne contient aucune table (${SIZE} octets)"
+    ping_healthcheck fail "Dump vide pour $DB (${SIZE} octets)"
+    exit 1
+  fi
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -189,6 +227,55 @@ elif [[ -n "$RCLONE_REMOTE" ]]; then
   log "RCLONE_REMOTE configuré mais rclone non installé — skip upload"
 else
   log "Mode local-only (RCLONE_REMOTE non configuré) — pas d'upload off-site"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5 bis) Copie sur une seconde machine — opt-in
+#
+# Une sauvegarde posée sur le disque qu'elle protège couvre l'erreur humaine et
+# la corruption, pas la panne du disque. Copier l'archive ailleurs coûte une
+# seconde et change la nature de ce qui est couvert.
+#
+# Placée APRÈS l'envoi S3, et non avant : ce bloc échoue fort, et le mettre en
+# premier faisait qu'une coupure réseau passagère vers la seconde machine
+# supprimait aussi la copie distante, alors que l'archive locale était faite.
+#
+# La clé utilisée ici doit être restreinte côté destinataire à la seule
+# réception de fichiers (`restrict,command="..."` dans authorized_keys) : ce
+# serveur porte des données d'élèves, et il n'a aucune raison d'obtenir un shell
+# sur une autre machine.
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ -n "$OFFSITE_SSH_TARGET" ]]; then
+  if [[ ! -f "$OFFSITE_SSH_KEY" ]]; then
+    log "ERREUR: OFFSITE_SSH_TARGET est défini mais la clé $OFFSITE_SSH_KEY est absente"
+    ping_healthcheck fail "Cle hors-site absente"
+    exit 1
+  fi
+  log "Copie vers $OFFSITE_SSH_TARGET:$OFFSITE_SSH_DIR ..."
+  # La vérification d'hôte : stricte dès qu'un fichier `known_hosts` est fourni.
+  # Sans lui on retombe sur `accept-new`, qui accepte la première empreinte
+  # rencontrée — et si le HOME de la tâche planifiée diffère de celui de
+  # l'installation, « la première » se répète à chaque exécution. Ce chemin
+  # transporte le dump entier : dossiers d'élèves mineurs et empreintes de mots
+  # de passe. Renseigner OFFSITE_SSH_KNOWN_HOSTS en production.
+  if [[ -n "$OFFSITE_SSH_KNOWN_HOSTS" ]]; then
+    VERIF_HOTE=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$OFFSITE_SSH_KNOWN_HOSTS")
+  else
+    log "  ATTENTION: OFFSITE_SSH_KNOWN_HOSTS non renseigné, vérification d'hôte faible"
+    VERIF_HOTE=(-o StrictHostKeyChecking=accept-new)
+  fi
+  # `-O` : protocole scp classique, exigé par la commande forcée côté
+  # destinataire. Sans lui OpenSSH 9 passe en SFTP et la restriction refuse.
+  if scp -O -q -i "$OFFSITE_SSH_KEY" -o BatchMode=yes -o ConnectTimeout=30         "${VERIF_HOTE[@]}"         "$ARCHIVE" "$OFFSITE_SSH_TARGET:$OFFSITE_SSH_DIR/$ARCHIVE_NAME"; then
+    log "  copie hors-site faite"
+  else
+    # Echec fort : une copie qu'on croit faite est pire que pas de copie.
+    log "ERREUR: la copie vers $OFFSITE_SSH_TARGET a echoue"
+    ping_healthcheck fail "Copie hors-site echouee vers $OFFSITE_SSH_TARGET"
+    exit 1
+  fi
+else
+  log "Pas de seconde machine configuree (OFFSITE_SSH_TARGET vide)"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
