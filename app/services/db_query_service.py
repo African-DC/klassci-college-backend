@@ -53,9 +53,40 @@ _WHERE_LESS_UPDATE = re.compile(r"\bUPDATE[ \t]+\w+[ \t]+SET[ \t]+[^;]+?(?:;|$)"
 # fois où il a raison.
 _NAME_COLUMNS = (("last_name", "last_name_key"), ("first_name", "first_name_key"))
 
-#: Les commentaires SQL sont retirés avant analyse : une clé citée en commentaire
-#: désamorçait l'avertissement, et un `UPDATE` commenté le déclenchait.
-_SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+
+def _without_comments(sql: str) -> str:
+    """Retire les commentaires SQL, en un seul passage de gauche à droite.
+
+    Les commentaires sont retirés avant analyse : une clé citée en commentaire
+    désamorçait l'avertissement, et un `UPDATE` commenté le déclenchait.
+
+    Écrit à la main plutôt qu'en expression régulière, et pas par goût : un
+    `/\\*.*?\\*/` paresseux devient quadratique sur un commentaire jamais fermé.
+    Mesuré sur `"/*" + "a/*" * n` — 2 secondes à n = 12800, contre 0,05 ms ici.
+    Cette console prend du texte fourni par un humain : le rendre lent à volonté
+    est un déni de service, et le fichier mettait déjà en garde contre cette
+    classe de défaut sur ses autres motifs.
+    """
+    morceaux: list[str] = []
+    i, n = 0, len(sql)
+    while i < n:
+        if sql.startswith("--", i):
+            fin = sql.find("\n", i)
+            i = n if fin == -1 else fin
+        elif sql.startswith("/*", i):
+            fin = sql.find("*/", i + 2)
+            i = n if fin == -1 else fin + 2
+            morceaux.append(" ")
+        else:
+            suivant = i
+            while suivant < n and not (
+                sql.startswith("--", suivant) or sql.startswith("/*", suivant)
+            ):
+                suivant += 1
+            morceaux.append(sql[i:suivant])
+            i = suivant
+    return "".join(morceaux)
+
 
 #: `\s` et non `[ \t]` : un saut de ligne entre `UPDATE` et le nom de table est
 #: courant dès qu'une requête est mise en forme.
@@ -76,7 +107,7 @@ def _written_columns(sql: str) -> str | None:
     Rien ne veut dire : cette requête n'écrit pas dans `students`. Un `SELECT`,
     un `DELETE`, ou une écriture dans une autre table n'ont pas de clé à tenir.
     """
-    nu = _SQL_COMMENT.sub(" ", sql)
+    nu = _without_comments(sql)
     for motif in (_UPDATE_SET, _INSERT_COLUMNS):
         trouve = motif.search(nu)
         if trouve is not None:

@@ -13,6 +13,8 @@ L'outil est risqué par construction et réservé au super-admin ; on ne l'inter
 pas, on prévient. L'avertissement paraît en mode `dry_run`, avant exécution.
 """
 
+import time
+
 import pytest
 
 from app.services.db_query_service import analyse_sql
@@ -99,3 +101,28 @@ def test_le_message_dit_la_colonne_et_le_remede() -> None:
     assert "last_name_key" in avertissement["message"]
     assert "compact()" in avertissement["message"]
     assert avertissement["severity"] == "danger"
+
+
+def test_un_commentaire_jamais_ferme_ne_ralentit_pas_la_console() -> None:
+    """Rendre l'analyse lente à volonté serait un déni de service.
+
+    Cette console reçoit du texte écrit par un humain. Une version antérieure
+    retirait les commentaires avec un `/*.*?*/` paresseux, quadratique sur un
+    commentaire jamais fermé : deux secondes pour 12 800 répétitions, contre
+    huit millisecondes après. CodeQL l'a signalé en sévérité haute, et le
+    fichier mettait déjà en garde contre cette classe de défaut sur ses autres
+    motifs.
+
+    Le seuil est large — on garde contre un retour au comportement quadratique,
+    pas contre une machine lente.
+    """
+    charge = "UPDATE students SET last_name=1 /*" + "a/*" * 12800
+
+    debut = time.perf_counter()
+    analyse_sql(charge)
+    ecoule = time.perf_counter() - debut
+
+    assert ecoule < 0.5, (
+        f"l'analyse a pris {ecoule:.2f}s sur une entrée hostile : le retrait des "
+        "commentaires est probablement redevenu quadratique"
+    )

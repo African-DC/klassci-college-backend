@@ -122,6 +122,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé *(comptable, parent, secrétariat)*
 - Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté *(comptable)*
 ### Security
+- La console SQL ne peut plus être ralentie à volonté par une requête hostile : l'analyse des commentaires est désormais linéaire *(super-admin)*
 - Supprimer définitivement une fiche coupe désormais l'accès au logiciel : le compte de connexion est désactivé et ses jetons révoqués dans le même geste. Une comptable renvoyée dont on supprime la fiche le lundi ne se reconnecte plus le mardi avec son mot de passe, ni depuis une session restée ouverte *(admin, directeur)*
 - Le journal d'audit et le courriel de traçabilité disent maintenant ce qu'est devenu le compte : « fiche supprimée, accès révoqué » n'est pas la même information que « fiche supprimée » *(admin, directeur)*
 
