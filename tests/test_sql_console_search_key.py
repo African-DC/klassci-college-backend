@@ -33,6 +33,17 @@ def _codes(sql: str) -> list[str]:
         "INSERT INTO students (last_name, first_name) VALUES ('X', 'Y')",
         # Une seule des deux clés est posée : l'autre reste périmée.
         "UPDATE students SET last_name='X', last_name_key='x', first_name='Y' WHERE id=3",
+        # `REPLACE INTO` écrit comme `INSERT INTO`, et se faisait oublier.
+        "REPLACE INTO students (last_name) VALUES ('X')",
+        # Un saut de ligne entre le verbe et la table, courant dès qu'une
+        # requête est mise en forme.
+        "UPDATE\nstudents SET last_name='X' WHERE id=1",
+        # La clé citée en commentaire désamorçait l'avertissement.
+        "-- last_name_key\nUPDATE students SET last_name='X' WHERE id=1",
+        # Et le cas qui compte vraiment : le commentaire est DANS la clause
+        # écrite, là où l'extraction le verrait sans le retrait.
+        "UPDATE students SET last_name='X' /* last_name_key */ WHERE id=1",
+        "UPDATE students SET last_name='X', -- last_name_key\n  city='Y' WHERE id=1",
     ],
 )
 def test_une_ecriture_de_nom_sans_sa_cle_est_signalee(sql: str) -> None:
@@ -55,6 +66,14 @@ def test_une_ecriture_de_nom_sans_sa_cle_est_signalee(sql: str) -> None:
         "UPDATE payments SET amount = 100 WHERE id = 1",
         # Une lecture ne périme rien.
         "SELECT last_name FROM students WHERE id = 3",
+        # LE FAUX POSITIF QUI COMPTE : le nom est une CONDITION, pas une
+        # écriture. Conseiller d'y ajouter `last_name_key` serait nuisible,
+        # et un avertissement qui se trompe sur une forme courante cesse
+        # d'être lu — emportant avec lui les fois où il a raison.
+        "UPDATE students SET archived_at = NOW() WHERE last_name = 'KOUASSI'",
+        "UPDATE students SET city='Y' WHERE first_name='Aya'",
+        # Une suppression n'écrit aucune colonne.
+        "DELETE FROM students WHERE last_name = 'X'",
     ],
 )
 def test_une_ecriture_saine_ne_derange_personne(sql: str) -> None:
