@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
+from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.user import Parent, ParentStudent
 from app.repositories import admin_repository
 from app.repositories import parent_portal_repository as repo
@@ -162,7 +163,7 @@ async def build_child_summaries(db: AsyncSession, parent: Parent) -> list[Parent
                 paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
                 for ef in enrollment.enrollment_fees:
                     paid = paid_by_fee.get(ef.id, Decimal("0"))
-                    remaining = ef.amount - paid
+                    remaining = cash_remaining(ef.status, ef.amount, paid)
                     if remaining > 0:
                         fees_remaining += remaining
 
@@ -252,7 +253,6 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
     total_paid = Decimal("0.00")
 
     for ef in enrollment.enrollment_fees:
-        total_due += ef.amount
         payments = [
             PaymentDetail(
                 id=p.id,
@@ -266,7 +266,9 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
             for p, montant in payments_by_fee.get(ef.id, [])
         ]
         fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
-        total_paid += fee_paid
+        if not is_not_cash_due(ef.status):
+            total_due += ef.amount
+            total_paid += fee_paid
 
         categorie = ef.fee_variant.category if ef.fee_variant else None
         category_name = categorie.name if categorie else "N/A"

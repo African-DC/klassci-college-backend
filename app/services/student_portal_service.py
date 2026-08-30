@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.attendance import AttendanceRecord, AttendanceStatus
+from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.grade import Evaluation, Grade
 from app.models.user import Student
 from app.repositories import admin_repository
@@ -126,10 +127,10 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
 
     total_due = Decimal("0.00")
     total_paid = Decimal("0.00")
+    total_remaining = Decimal("0.00")
     fee_responses = []
 
     for ef in enrollment_fees:
-        total_due += ef.amount
         payments = [
             PaymentResponse(
                 id=p.id,
@@ -143,7 +144,11 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
             for p, montant in payments_by_fee.get(ef.id, [])
         ]
         fee_paid = paid_by_fee.get(ef.id, Decimal("0"))
-        total_paid += fee_paid
+        rest = cash_remaining(ef.status, ef.amount, fee_paid)
+        total_remaining += rest
+        if not is_not_cash_due(ef.status):
+            total_due += ef.amount
+            total_paid += fee_paid
 
         categorie = ef.fee_variant.category if ef.fee_variant else None
         category_name = categorie.name if categorie else "N/A"
@@ -161,7 +166,7 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
     return StudentFeesResponse(
         total_due=total_due,
         total_paid=total_paid,
-        balance=total_due - total_paid,
+        balance=total_remaining,
         fees=fee_responses,
     )
 
@@ -368,7 +373,7 @@ async def get_dashboard(db: AsyncSession, user_id: int) -> StudentDashboardRespo
         paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
         for fee in fees:
             paid = paid_by_fee.get(fee.id, Decimal("0"))
-            balance = fee.amount - paid
+            balance = cash_remaining(fee.status, fee.amount, paid)
             if balance > 0:
                 fees_remaining += balance
 

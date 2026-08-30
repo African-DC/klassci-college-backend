@@ -139,6 +139,7 @@ STATUS_LABELS_FR: dict[str, str] = {
     "partial": "Partiel",
     "pending": "En attente",
     "waived": "Exonéré",
+    "in_kind": "Déposé",
     "completed": "Validé",
     "cancelled": "Annulé",
     "refunded": "Remboursé",
