@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, FeeCategory, FeeVariant
+from app.models.fee import NOT_CASH_DUE, EnrollmentFee, FeeCategory, FeeVariant
 from app.models.installment import EnrollmentInstallment, FeeInstallment
 
 
@@ -116,7 +116,7 @@ def _frais_dus():
         .join(FeeCategory, FeeCategory.id == FeeVariant.fee_category_id)
         .where(
             FeeCategory.is_mandatory.is_(True),
-            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+            EnrollmentFee.status.notin_(NOT_CASH_DUE),
         )
     )
 

@@ -45,7 +45,8 @@ disable_error_code = [
     "misc",
 ]
 
-# Modules nouvellement écrits ou refondus — empêcher la régression
+# Modules refondus — empêcher la régression, avec les codes que le projet
+# désactive encore globalement.
 [[tool.mypy.overrides]]
 module = [
     "app.core.middleware",
@@ -55,7 +56,39 @@ module = [
     "app.cli.provision_tenant",
 ]
 strict = true
-disable_error_code = []
+
+# Détection de doublons : strict RÉEL, sur du code écrit sous ce régime.
+#
+# `disable_error_code = []` ne suffit pas : il ne rallume pas un code éteint
+# globalement plus haut, et le garde annonçait donc « Success » sur une version
+# où l'endpoint rendait 500 à chaque requête. `enable_error_code` le rallume.
+#
+# Ces codes vivent dans leur propre bloc : appliqués aux modules ci-dessus, ils
+# réveillent deux erreurs préexistantes de `middleware.py` et rendent la CI
+# rouge — ce qui pousserait le prochain pressé à supprimer la ligne plutôt qu'à
+# la restreindre.
+[[tool.mypy.overrides]]
+module = [
+    "app.core.names",
+    "app.models.user",
+    "app.services.duplicates.similarity",
+    "app.services.duplicates.detection",
+    "app.routers.duplicates",
+]
+strict = true
+enable_error_code = [
+    "attr-defined",
+    "no-any-return",
+    "no-untyped-def",
+    "no-untyped-call",
+    "type-arg",
+    "valid-type",
+    "arg-type",
+    "assignment",
+    "index",
+    "misc",
+    "unused-ignore",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

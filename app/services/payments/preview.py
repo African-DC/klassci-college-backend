@@ -10,7 +10,7 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessValidationError
-from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
+from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, cash_remaining, is_not_cash_due
 from app.repositories import payment_repository as repo
 from app.schemas.fee import FeeEntitlement
 from app.schemas.payment import AllocationPreviewLine, AllocationPreviewResponse
@@ -31,8 +31,8 @@ def _resolve_category(fee: EnrollmentFee) -> tuple[str, int, list[FeeEntitlement
 
 def _status_after(fee: EnrollmentFee, paid_after: Decimal) -> str:
     """Calcule le statut prévu après allocation hypothétique."""
-    if fee.status == EnrollmentFeeStatus.WAIVED.value:
-        return EnrollmentFeeStatus.WAIVED.value
+    if is_not_cash_due(fee.status):
+        return fee.status
     if paid_after >= fee.amount:
         return EnrollmentFeeStatus.PAID.value
     if paid_after > 0:
@@ -73,20 +73,15 @@ async def preview_allocation(
     ]
 
     total_remaining_before = sum(
-        (
-            f.amount - paid
-            for f, paid in fees_with_paid
-            if f.status != EnrollmentFeeStatus.WAIVED.value
-        ),
+        (cash_remaining(f.status, f.amount, paid) for f, paid in fees_with_paid),
         Decimal("0"),
     )
-    total_remaining_before = max(total_remaining_before, Decimal("0"))
 
     plannable = [
         (f, paid)
         for f, paid in fees_with_paid
         if f.status in (EnrollmentFeeStatus.PENDING.value, EnrollmentFeeStatus.PARTIAL.value)
-        and (f.amount - paid) > 0
+        and cash_remaining(f.status, f.amount, paid) > 0
     ]
     splits, surplus = plan_allocation(amount, plannable)
     split_map = {fee.id: allocated for fee, allocated in splits}

@@ -124,6 +124,9 @@ async def create_enrollment(
             data.academic_year_id,
             enrollment.assignment_status,
         )
+        await enrollment_fees.apply_in_kind_deposits(
+            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        )
 
         await audit_log(
             db,
@@ -152,13 +155,13 @@ async def create_enrollment(
 
 
 def _nom_eleve(enrollment: object) -> str:
-    """Le nom affichable de l'eleve, ou son matricule s'il manque."""
+    """Le nom affichable de l'élève, ou son matricule s'il manque."""
     student = getattr(enrollment, "student", None)
     if student is None:
-        return "Un eleve"
+        return "Un élève"
     parts = [getattr(student, "last_name", ""), getattr(student, "first_name", "")]
     nom = " ".join(p for p in parts if p).strip()
-    return nom or getattr(student, "enrollment_number", "") or "Un eleve"
+    return nom or getattr(student, "enrollment_number", "") or "Un élève"
 
 
 async def list_enrollments(
@@ -469,6 +472,9 @@ async def create_enrollment_with_student(
             academic_year_id,
             enrollment.assignment_status,
         )
+        await enrollment_fees.apply_in_kind_deposits(
+            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        )
 
         await audit_log(
             db,
@@ -489,6 +495,18 @@ async def create_enrollment_with_student(
     refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment.id)
+
+    # Même avertissement que dans `create_enrollment`, et pour la même raison :
+    # c'est ce chemin-ci que le formulaire « Nouvelle inscription » emprunte,
+    # celui où la secrétaire saisit l'élève et son inscription d'un seul geste.
+    # Sans cet appel, la chaîne restait muette précisément là où elle sert.
+    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
+        db,
+        enrollment_id=refreshed.id,
+        student_name=_nom_eleve(refreshed),
+        class_name=refreshed.class_.name if refreshed.class_ else "",
+        acteur_id=created_by,
+    )
     return _to_response(refreshed)
 
 
@@ -515,6 +533,7 @@ async def re_enroll_student(
         academic_year_id=academic_year_id,
         fee_variant_id=data.fee_variant_id,
         notes=data.notes,
+        in_kind_deposits=data.in_kind_deposits,
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by)
 

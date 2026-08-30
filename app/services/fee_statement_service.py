@@ -59,8 +59,8 @@ def _student_full_name(student: Student) -> str:
 
 async def _build_fees_section(
     db: AsyncSession, enrollment: Enrollment
-) -> tuple[list[dict], Decimal, Decimal]:
-    """Compose les rows fees + retourne total_expected & total_paid.
+) -> tuple[list[dict], Decimal, Decimal, Decimal]:
+    """Compose les rows fees + totaux de `fee_situation`.
 
     Le tri, la soustraction et les totaux vivent dans `fee_situation`, partagé
     avec le reçu de versement : l'état des frais et le reçu que la famille
@@ -84,7 +84,7 @@ async def _build_fees_section(
         }
         for line in situation.lines
     ]
-    return rows, situation.total_due, situation.total_paid
+    return rows, situation.total_due, situation.total_paid, situation.total_remaining
 
 
 async def _build_payments_section(db: AsyncSession, enrollment_id: int) -> list[dict]:
@@ -109,10 +109,11 @@ async def get_fee_statement_pdf(db: AsyncSession, enrollment_id: int) -> bytes:
     """Génère et retourne l'état des frais en PDF pour une inscription."""
     enrollment = await _load_enrollment_context(db, enrollment_id)
 
-    fees_rows, total_expected, total_paid = await _build_fees_section(db, enrollment)
+    fees_rows, total_expected, total_paid, total_remaining = await _build_fees_section(
+        db, enrollment
+    )
     payments_rows = await _build_payments_section(db, enrollment_id)
 
-    total_remaining = max(total_expected - total_paid, Decimal("0"))
     completion_rate = float(total_paid / total_expected * 100) if total_expected > 0 else 0.0
 
     student = enrollment.student

@@ -18,6 +18,7 @@ from app.schemas.enrollment import (
     EnrollmentUpdate,
     EnrollmentWithStudentCreate,
     FeeVariantResponse,
+    InKindDepositResponse,
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
@@ -120,6 +121,34 @@ async def get_enrollment(
 ) -> EnrollmentResponse:
     """Retourne une inscription par ID."""
     return await enrollment_service.get_enrollment(db, enrollment_id)
+
+
+@router.patch(
+    "/{enrollment_id}/fees/{fee_id}/in-kind-deposit",
+    response_model=InKindDepositResponse,
+)
+async def mark_in_kind_deposit(
+    enrollment_id: int,
+    fee_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> InKindDepositResponse:
+    """Dépôt tardif : pending sans versement → déposé. Sinon 409."""
+    async with db.begin_nested():
+        fee = await enrollment_fees.mark_in_kind_deposit(
+            db,
+            enrollment_id=enrollment_id,
+            fee_id=fee_id,
+            deposited_by=current_user.user_id,
+        )
+    await db.commit()
+    return InKindDepositResponse(
+        id=fee.id,
+        status=fee.status,
+        deposited_at=fee.deposited_at,
+        deposited_by_user_id=fee.deposited_by_user_id,
+    )
 
 
 @router.patch("/{enrollment_id}", response_model=EnrollmentResponse)

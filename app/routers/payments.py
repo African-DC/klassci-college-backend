@@ -131,6 +131,14 @@ async def get_payments_summary(
     date_to: datetime | None = Query(None),
     search: str | None = Query(None),
     fee_category_id: int | None = Query(None),
+    received_by: int | None = Query(
+        None,
+        description=(
+            "Restreint a une caisse. Accepte ici parce que l'ecran l'envoie : "
+            "sans lui, filtrer « Encaisse par » donnait un tableau de douze "
+            "lignes sous un bandeau qui en comptait cent vingt-huit."
+        ),
+    ),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
@@ -167,7 +175,7 @@ async def get_payments_summary(
             fee_category_id=fee_category_id,
         ),
         received_by=cashier_scope(
-            requested_received_by=None,
+            requested_received_by=received_by,
             can_read_all=can_read_all,
             current_user_id=current_user.user_id,
         ),

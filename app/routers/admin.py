@@ -84,6 +84,7 @@ from app.schemas.admin import (
 )
 from app.services import admin_service, enrollment_fees, matricule_service
 from app.services.finance_visibility import FinanceView
+from app.utils.photo_upload import extension_pour
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -202,11 +203,9 @@ async def upload_student_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un eleve."""
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+    ext = extension_pour(file.content_type)
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
     filename = f"{student_id}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
@@ -383,11 +382,9 @@ async def upload_teacher_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un enseignant."""
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+    ext = extension_pour(file.content_type)
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
     filename = f"teacher_{teacher_id}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
@@ -486,11 +483,9 @@ async def upload_staff_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un membre du personnel."""
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+    ext = extension_pour(file.content_type)
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "jpg"
     filename = f"staff_{staff_id}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
@@ -933,11 +928,9 @@ async def upload_school_signature(
     Reutilise le pattern d'upload des photos eleves : MIME whitelist,
     5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
     """
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(400, "Format invalide. Accepte: JPEG, PNG, WebP")
+    ext = extension_pour(file.content_type)
 
     os.makedirs(SIGNATURE_UPLOAD_DIR, exist_ok=True)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png"
     filename = f"signature_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(SIGNATURE_UPLOAD_DIR, filename)
 

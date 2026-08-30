@@ -1,6 +1,6 @@
 [Unit]
 Description=KLASSCI College — Restore-test hebdo dimanche 03:00 UTC
-Documentation=file:/home/ubuntu/klassci/klassci-backend/scripts/README.md
+Documentation=file:%h/klassci-backend/scripts/README.md
 
 [Timer]
 OnCalendar=Sun *-*-* 03:00:00 UTC

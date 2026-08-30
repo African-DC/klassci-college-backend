@@ -18,7 +18,17 @@ all importing from here.
 
 import re
 
-TENANT_SLUG_PATTERN = r"^[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]$"
+# `\A` et `\Z` plutôt que `^` et `$`.
+#
+# En Python, `$` accepte une fin de chaîne **ou** la position juste avant un
+# saut de ligne final : un slug terminé par un saut de ligne passait donc la
+# validation. Le slug finit
+# entre accents graves dans un `CREATE DATABASE`, qui ne peut pas prendre de
+# paramètre lié — la classe de caractères y interdit l'accent grave et le
+# point-virgule, donc aucune injection n'était possible, mais une base pouvait
+# naître avec un saut de ligne dans son nom, indiscernable à l'affichage de
+# celle qui n'en a pas.
+TENANT_SLUG_PATTERN = r"\A[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]\Z"
 TENANT_SLUG_RE: re.Pattern[str] = re.compile(TENANT_SLUG_PATTERN)
 
 # Slugs that must never be assigned to a new tenant: they collide with

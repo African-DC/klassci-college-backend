@@ -1,0 +1,25 @@
+# Alias SSH des deux serveurs. Copier en `deploy/ssh_config` et corriger les
+# chemins de clés, qui dépendent du poste. Le fichier rempli n'est pas versionné.
+#
+#   ssh -F deploy/ssh_config klassci        → démo Windows
+#   ssh -4 -F deploy/ssh_config klassci-prod → production Linux
+#
+# Le `-4` sur la production n'est pas décoratif : la résolution IPv6 y échoue.
+
+Host klassci
+    HostName 94.72.96.119
+    User administrator
+    IdentityFile <chemin-vers>/deploy/.ssh/klassci_deploy
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 15
+    ServerAliveCountMax 4
+    ConnectTimeout 15
+
+Host klassci-prod
+    HostName 169.58.156.206
+    User marcel
+    IdentityFile ~/.ssh/id_ecdsa
+    StrictHostKeyChecking accept-new
+    ServerAliveInterval 15
+    ServerAliveCountMax 4
+    ConnectTimeout 15

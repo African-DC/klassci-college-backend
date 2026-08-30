@@ -1,0 +1,9 @@
+# Les scripts shell gardent des fins de ligne LF, meme extraits sur Windows.
+#
+# Sans cette regle, `git archive` depuis un poste Windows produit un script en
+# CRLF, et Linux repond « /usr/bin/env: 'bash\r': No such file or directory ».
+# C'est arrive en installant la sauvegarde nocturne le 2026-08-28 : le script
+# etait correct, le depot etait correct, seul le chemin entre les deux ne l'etait
+# pas.
+*.sh text eol=lf
+*.bash text eol=lf

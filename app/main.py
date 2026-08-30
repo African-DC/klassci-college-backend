@@ -27,6 +27,7 @@ from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.deep_report import router as deep_report_router
 from app.routers.dren_stats import router as dren_stats_router
+from app.routers.duplicates import router as duplicates_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
@@ -98,6 +99,7 @@ register_exception_handlers(app)
 register_archive_filter()
 
 # --- Routers ---
+app.include_router(duplicates_router)
 app.include_router(admin_router)
 app.include_router(archive_router)
 app.include_router(attachments_router)

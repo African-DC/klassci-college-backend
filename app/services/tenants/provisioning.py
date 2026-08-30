@@ -57,14 +57,30 @@ async def run_migrations(tenant_slug: str) -> None:
     validate_tenant_slug(tenant_slug)
     env = os.environ.copy()
     env["TENANT_ID"] = tenant_slug
-    result = subprocess.run(
-        ["alembic", "upgrade", "head"],
-        cwd=str(Path(__file__).resolve().parents[3]),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=str(Path(__file__).resolve().parents[3]),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=settings.ALEMBIC_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as depassement:
+        # Le depassement ne suspend pas la migration : il la TUE. La base existe
+        # deja (creee a l'etape precedente) et se retrouve a moitie migree, avec
+        # une exception nue qui ne disait ni ou on en etait, ni quoi faire.
+        raise RuntimeError(
+            f"La migration du tenant '{tenant_slug}' a depasse "
+            f"{settings.ALEMBIC_TIMEOUT_SECONDS}s et a ete INTERROMPUE EN COURS : "
+            f"la base existe et est partiellement migree. Relancer le "
+            f"provisionnement suffit dans la plupart des cas — la creation de base "
+            f"est idempotente et alembic reprend a la derniere revision estampillee. "
+            f"Si le relancement echoue sur une colonne ou un index deja present, "
+            f"c'est que la coupure est tombee AU MILIEU d'une revision : MySQL ne "
+            f"defait pas un ALTER TABLE, il faut alors annuler cette revision-la a "
+            f"la main avant de reprendre."
+        ) from depassement
     if result.returncode != 0:
         raise RuntimeError(f"Alembic migration failed for tenant '{tenant_slug}': {result.stderr}")
     logger.info("Migrations applied for tenant '%s'", tenant_slug)

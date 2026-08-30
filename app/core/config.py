@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str  # ex: mysql+aiomysql://user:pass@host:3306/{tenant}
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
+    # Delai laisse a `alembic upgrade` par base. Un depassement ne suspend
+    # rien : il TUE la migration en cours et laisse la base a moitie migree.
+    # Genereux a dessein — attendre coute moins cher que reparer a la main.
+    ALEMBIC_TIMEOUT_SECONDS: int = 900
 
     # Redis
     REDIS_URL: str  # ex: redis://localhost:6379/0

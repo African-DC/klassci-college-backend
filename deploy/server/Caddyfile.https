@@ -1,0 +1,48 @@
+{
+	admin off
+	email adcdevteam2025@gmail.com
+}
+
+# --- Domaine principal avec HTTPS auto (Let's Encrypt) ---
+college.klassci.com {
+	encode gzip zstd
+
+	@svc path /svc/*
+	handle @svc {
+		uri strip_prefix /svc
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
+
+# --- Accès direct par IP (HTTP, pas de certificat possible sur une IP) ---
+http://94.72.96.119 {
+	encode gzip zstd
+
+	@svc path /svc/*
+	handle @svc {
+		uri strip_prefix /svc
+		reverse_proxy 127.0.0.1:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

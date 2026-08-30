@@ -874,7 +874,8 @@ class StudentEnrollmentFeeResponse(BaseModel):
     amount: float  # total dû
     paid: float  # somme des paiements complétés
     remaining: float
-    status: str  # pending/partial/paid/waived
+    status: str  # pending/partial/paid/waived/in_kind
+    accepts_in_kind: bool = False
     is_optional: bool = False  # True pour les options facultatives
     option_name: str | None = None  # nom de l'option si facultatif
 

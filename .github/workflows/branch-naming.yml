@@ -21,8 +21,16 @@ jobs:
           # test/42-description
           # chore/42-description (no issue number required for chore)
           # hotfix/42-description
+          # dependabot/... : nom impose par Dependabot, que nous ne choisissons pas.
+          #
+          # Sans cette ligne, chaque montee de dependance echoue sur ce seul
+          # controle, et la seule facon de la fusionner est `--admin`, qui passe
+          # outre TOUS les controles, tests compris. Une regle cosmetique rendait
+          # donc muettes les verifications qui comptent, sur les PR que personne
+          # ne relit ligne a ligne.
           if [[ "$BRANCH" =~ ^(feature|fix|refactor|test|hotfix)/[0-9]+-[a-z0-9-]+$ ]] || \
              [[ "$BRANCH" =~ ^chore/[a-z0-9-]+$ ]] || \
+             [[ "$BRANCH" == dependabot/* ]] || \
              [[ "$BRANCH" == "develop" ]] || \
              [[ "$BRANCH" == "staging" ]]; then
             echo "✅ Branch name valid: $BRANCH"
@@ -36,6 +44,7 @@ jobs:
             echo "  refactor/42-description-courte"
             echo "  test/42-description-courte"
             echo "  chore/description-courte"
+            echo "  dependabot/... (cree par Dependabot)"
             echo ""
             echo "Exemples valides :"
             echo "  feature/1-core-bootstrap-fastapi"

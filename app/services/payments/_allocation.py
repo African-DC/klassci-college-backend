@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
+from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, cash_remaining, is_not_cash_due
 from app.services import fees_paid
 
 
@@ -30,7 +30,7 @@ def plan_allocation(
     for fee, paid_so_far in fees_with_paid:
         if remaining <= 0:
             break
-        fee_remaining = fee.amount - paid_so_far
+        fee_remaining = cash_remaining(fee.status, fee.amount, paid_so_far)
         if fee_remaining <= 0:
             continue
         allocated = min(remaining, fee_remaining)
@@ -63,7 +63,7 @@ def recompute_fee_status(fee: EnrollmentFee, total_paid: Decimal) -> None:
 
     Idempotent : appelable après create, validate ou cancel sans état préalable.
     """
-    if fee.status == EnrollmentFeeStatus.WAIVED.value:
+    if is_not_cash_due(fee.status):
         return
     if total_paid >= fee.amount:
         fee.status = EnrollmentFeeStatus.PAID.value

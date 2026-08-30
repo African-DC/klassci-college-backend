@@ -2357,6 +2357,7 @@ async def get_student_enrollment_fees(
         EnrollmentFee,
         FeeVariant,
         OptionalFeeOption,
+        cash_remaining,
     )
 
     student = await repo.get_student_by_id(db, student_id)
@@ -2385,7 +2386,8 @@ async def get_student_enrollment_fees(
         category_name = categorie.name if categorie else "Inconnu"
         paid = float(paid_by_fee.get(ef.id, 0))
         amount = float(ef.amount)
-        remaining = max(0.0, amount - paid)
+        remaining = float(cash_remaining(ef.status, ef.amount, paid_by_fee.get(ef.id, 0)))
+        accepts = bool(categorie.accepts_in_kind) if categorie else False
 
         items.append(
             StudentEnrollmentFeeResponse(
@@ -2397,6 +2399,7 @@ async def get_student_enrollment_fees(
                 paid=paid,
                 remaining=remaining,
                 status=ef.status,
+                accepts_in_kind=accepts,
                 is_optional=False,
             )
         )

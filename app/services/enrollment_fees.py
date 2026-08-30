@@ -11,18 +11,27 @@ que l'école a saisis pour elle.
 """
 
 from collections.abc import Iterable, Sequence
+from datetime import datetime
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import AssignmentStatus
-from app.models.fee import EnrollmentFee, FeeAssignmentScope, FeeCategory, FeeVariant
+from app.models.fee import (
+    EnrollmentFee,
+    EnrollmentFeeStatus,
+    FeeAssignmentScope,
+    FeeCategory,
+    FeeVariant,
+    PaymentAllocation,
+    is_not_cash_due,
+)
 from app.repositories import enrollment_repository as repo
-from app.schemas.enrollment import FeeVariantResponse
+from app.schemas.enrollment import FeeVariantResponse, InKindDeposit
 from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services.deletion import Dependent
@@ -230,7 +239,10 @@ async def regenerate_enrollment_fees(
         # On ne détruit jamais un frais sur lequel de l'argent est imputé :
         # le versement perdrait sa contrepartie, et le journal d'audit ne
         # rattrape pas un trou comptable.
-        if ef.id in protected_fee_ids:
+        if ef.id in protected_fee_ids or is_not_cash_due(ef.status):
+            # Versement imputé, exonération, ou dépôt en nature : on ne
+            # détruit pas. Un in_kind n'a pas d'allocation — sans ce garde
+            # la régénération le recréerait en pending.
             kept_count += 1
         else:
             await db.delete(ef)
@@ -299,6 +311,7 @@ def _to_variant_response(fv: FeeVariant) -> FeeVariantResponse:
         category_name=fv.category.name if fv.category else str(fv.fee_category_id),
         entitlements=entitlements.read(fv.category),
         is_mandatory=fv.category.is_mandatory if fv.category else True,
+        accepts_in_kind=bool(fv.category.accepts_in_kind) if fv.category else False,
         level_id=fv.level_id,
         series_id=fv.series_id,
         academic_year_id=fv.academic_year_id,
@@ -368,3 +381,107 @@ async def get_applicable_fee_variants(
     retenus.update(fv.id for fv in rows if not _is_mandatory(fv))
 
     return [_to_variant_response(fv) for fv in rows if fv.id in retenus]
+
+
+def _stamp_in_kind(fee: EnrollmentFee, deposited_by: int, *, when: datetime) -> None:
+    fee.status = EnrollmentFeeStatus.IN_KIND
+    fee.deposited_at = when
+    fee.deposited_by_user_id = deposited_by
+
+
+# ---------------------------------------------------------------------------
+# Dépôt en nature — le parent apporte l'article, la ligne n'est plus due
+# ---------------------------------------------------------------------------
+
+
+async def apply_in_kind_deposits(
+    db: AsyncSession,
+    enrollment_id: int,
+    deposits: Sequence[InKindDeposit],
+    *,
+    deposited_by: int,
+) -> None:
+    """Coche les dépôts saisis à l'inscription. Les autres lignes restent dues."""
+    wanted = {int(d.fee_category_id) for d in deposits if d.deposited}
+    if not wanted:
+        return
+
+    stmt = (
+        select(EnrollmentFee)
+        .join(FeeCategory, FeeCategory.id == EnrollmentFee.fee_category_id)
+        .where(
+            EnrollmentFee.enrollment_id == enrollment_id,
+            EnrollmentFee.fee_category_id.in_(wanted),
+            FeeCategory.accepts_in_kind.is_(True),
+            EnrollmentFee.status == EnrollmentFeeStatus.PENDING,
+        )
+    )
+    now = datetime.now()
+    for fee in (await db.execute(stmt)).scalars().all():
+        _stamp_in_kind(fee, deposited_by, when=now)
+    await db.flush()
+
+
+async def mark_in_kind_deposit(
+    db: AsyncSession,
+    *,
+    enrollment_id: int,
+    fee_id: int,
+    deposited_by: int,
+) -> EnrollmentFee:
+    """Dépôt tardif : pending sans allocation → in_kind. Sinon 409."""
+    fee = (
+        await db.execute(
+            select(EnrollmentFee).where(
+                EnrollmentFee.id == fee_id,
+                EnrollmentFee.enrollment_id == enrollment_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if fee is None:
+        raise NotFoundError("EnrollmentFee", fee_id)
+
+    if fee.status == EnrollmentFeeStatus.IN_KIND:
+        raise ConflictError("Cette ligne est déjà marquée déposée.")
+
+    if fee.status != EnrollmentFeeStatus.PENDING:
+        raise ConflictError(
+            "Impossible de marquer ce frais comme déposé : un versement y est "
+            "déjà imputé, ou la ligne n'est plus due. On n'annule pas un paiement."
+        )
+
+    has_alloc = (
+        await db.execute(
+            select(PaymentAllocation.id)
+            .where(PaymentAllocation.enrollment_fee_id == fee.id)
+            .limit(1)
+        )
+    ).first()
+    if has_alloc is not None:
+        raise ConflictError(
+            "Impossible de marquer ce frais comme déposé : un versement y est déjà imputé."
+        )
+
+    category = (
+        await db.execute(select(FeeCategory).where(FeeCategory.id == fee.fee_category_id))
+    ).scalar_one_or_none()
+    if category is None or not category.accepts_in_kind:
+        raise ConflictError("Ce frais n'accepte pas de dépôt en nature.")
+
+    _stamp_in_kind(fee, deposited_by, when=datetime.now())
+    await db.flush()
+
+    await audit_log(
+        db,
+        entity_type="enrollment_fee",
+        action=AuditAction.UPDATE,
+        user_id=deposited_by,
+        entity_id=fee.id,
+        new_values={
+            "action": "in_kind_deposit",
+            "enrollment_id": enrollment_id,
+            "fee_category_id": fee.fee_category_id,
+            "status": EnrollmentFeeStatus.IN_KIND.value,
+        },
+    )
+    return fee

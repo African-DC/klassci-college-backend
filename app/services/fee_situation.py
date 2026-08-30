@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.fee import cash_remaining, is_in_kind
 from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services.pdf._helpers import enum_value
@@ -86,9 +87,13 @@ def situation_from_fees(fees: Iterable[object], paid_by_fee: dict[int, Decimal])
     lines: list[FeeLine] = []
     total_due = Decimal("0")
     total_paid = Decimal("0")
+    total_remaining = Decimal("0")
     for fee in ordered:
         due = Decimal(str(getattr(fee, "amount", 0) or 0))
         paid = paid_by_fee.get(int(getattr(fee, "id", 0) or 0), Decimal("0"))
+        raw_status = getattr(fee, "status", "") or ""
+        status = str(enum_value(raw_status) or "")
+        remaining = cash_remaining(status, due, paid)
         category = _category(fee)
         lines.append(
             FeeLine(
@@ -101,18 +106,22 @@ def situation_from_fees(fees: Iterable[object], paid_by_fee: dict[int, Decimal])
                 ),
                 due=due,
                 paid=paid,
-                remaining=max(due - paid, Decimal("0")),
-                status=str(enum_value(getattr(fee, "status", "")) or ""),
+                remaining=remaining,
+                status=status,
             )
         )
-        total_due += due
-        total_paid += paid
+        # Le reçu montre l'argent, y compris versé puis exonéré. Un dépôt
+        # en nature n'est pas de l'argent : hors grand total.
+        if not is_in_kind(status):
+            total_due += due
+            total_paid += paid
+        total_remaining += remaining
 
     return FeeSituation(
         lines=tuple(lines),
         total_due=total_due,
         total_paid=total_paid,
-        total_remaining=max(total_due - total_paid, Decimal("0")),
+        total_remaining=total_remaining,
     )
 
 

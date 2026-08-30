@@ -198,6 +198,7 @@ def base_styles(
         .pdf-pill-partial {{ background: #fef3c7; color: #92400e; }}
         .pdf-pill-pending, .pdf-pill-prospect {{ background: #eef2f6; color: #475569; }}
         .pdf-pill-waived {{ background: #f3e8ff; color: #6b21a8; }}
+        .pdf-pill-in_kind {{ background: #e0f2fe; color: #075985; }}
         .pdf-pill-cancelled, .pdf-pill-rejete, .pdf-pill-failed {{ background: #fee2e2; color: #991b1b; }}
         .pdf-pill-en_validation, .pdf-pill-refunded {{ background: #dbeafe; color: #1e40af; }}
 

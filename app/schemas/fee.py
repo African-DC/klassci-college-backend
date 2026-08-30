@@ -73,6 +73,8 @@ class FeeCategoryCreate(BaseModel):
     #: qui n'a rien a promettre ne doit pas etre forcee d'inventer une ligne.
     entitlements: list[FeeEntitlement] = Field(default_factory=list, max_length=MAX_ENTITLEMENTS)
     is_mandatory: bool = True
+    #: Le parent peut déposer l'article à la place de payer. Décoché par défaut.
+    accepts_in_kind: bool = False
     # Ordre d'imputation des versements : plus petit = servi en premier.
     # Sans ce champ, toute categorie creee tombait a 100, donc derniere, et
     # rien ne permettait de la remonter depuis l'interface.
@@ -87,6 +89,7 @@ class FeeCategoryUpdate(BaseModel):
     #: passage tout ce qu'elle promet.
     entitlements: list[FeeEntitlement] | None = Field(default=None, max_length=MAX_ENTITLEMENTS)
     is_mandatory: bool | None = None
+    accepts_in_kind: bool | None = None
     priority: int | None = Field(default=None, ge=0, le=999)
 
 
@@ -98,6 +101,7 @@ class FeeCategoryResponse(BaseModel):
     description: str | None
     entitlements: list[FeeEntitlement] = Field(default_factory=list)
     is_mandatory: bool
+    accepts_in_kind: bool = False
     priority: int
     created_at: datetime
     updated_at: datetime
