@@ -15,23 +15,45 @@ OpenAPI machine : `GET {BASE}/openapi.json` (pas de `/docs` en démo, `DEBUG=fal
 
 ---
 
-## Environnement démo (Windows)
+## Serveurs (vérifié 2026-08-30, IPv4)
+
+| Rôle | IP | Domaine HTTPS | Tenant | Code établissement |
+|---|---|---|---|---|
+| **Démo Windows** | `94.72.96.119` | `https://college-demo.klassci.com` | `local` uniquement | `LOCAL` |
+| **Production Contabo** | `169.58.156.206` | `https://college.klassci.com` | `rostan-bouake` (+ `local` superadmin) | `ROSTAN` |
+| **Local (ton PC)** | `127.0.0.1` | — | `local` | `LOCAL` |
+
+`college.klassci.com` n’est **pas** la démo. DNS A : `169.58.156.206`.  
+`college-demo.klassci.com` DNS A : `94.72.96.119`. L’AAAA IPv6 de la démo pointe ailleurs (cache 404) : forcer IPv4.
+
+## Environnement démo (Windows) — cible mobile
 
 | | |
 |---|---|
-| App web | `https://college.klassci.com` |
-| API | `https://college.klassci.com/svc` |
-| Health | `GET https://college.klassci.com/svc/health` → `{"status":"ok"}` |
-| Préfixe | Caddy strip `/svc` → FastAPI. Toutes les routes ci-dessous sont relatives à cette base. |
-| Tenant démo | slug `local` |
-| Code établissement (champ login) | `LOCAL` |
+| App web | `https://college-demo.klassci.com/login` |
+| API | `https://college-demo.klassci.com/svc` |
+| Health | `GET https://college-demo.klassci.com/svc/health` → `{"status":"ok"}` |
+| IP brute HTTP | `http://94.72.96.119` (même stack, sans TLS) |
+| Préfixe | Caddy strip `/svc` → FastAPI. Routes ci-dessous relatives à cette base. |
+| Tenant | `local` — **pas de ROSTAN ici** (`X-Tenant-Slug: rostan-bouake` → 500) |
+| Code établissement | `LOCAL` |
 
 Comptes (mot de passe `Admin@2026`) :
 
 | Rôle | Email |
 |---|---|
-| Élève | `eleve@klassci.com` (Aminata Traoré) |
-| Parent | `parent.kone@klassci.com` (Mariam Koné) |
+| Élève | `eleve@klassci.com` (Aminata Traoré, 3ème A) |
+| Parent | `parent.kone@klassci.com` (Mariam Koné, 2 enfants) |
+
+## Local (machine de dev)
+
+| | |
+|---|---|
+| Frontend | `http://127.0.0.1:3000` (`pnpm dev`) |
+| Backend | `http://127.0.0.1:8001` (uvicorn) — pas 8000 |
+| MySQL | `127.0.0.1:3306` (XAMPP), DB `local` |
+| Header login | `X-Tenant-Slug: local` |
+| `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:8001` (pas `localhost`, IPv6 vs uvicorn) |
 
 Repos (branche `develop`) :
 
@@ -49,7 +71,7 @@ Ordre de résolution côté serveur :
 1. Claim JWT `tenant_id` (après login)
 2. Header `X-Tenant-Slug` (login et refresh, **avant** JWT)
 3. Sous-domaine legacy
-4. Host IP / `college.klassci.com` → tenant `local`
+4. Host IP (`94.72.96.119`) ou `college-demo.klassci.com` sans header → tenant `local`
 
 Le body de login n’a **pas** de `school_code`. Le code établissement se transforme en slug, puis part dans le header.
 
@@ -61,13 +83,15 @@ Content-Type: application/json
 { "email": "eleve@klassci.com", "password": "Admin@2026" }
 ```
 
-| Ce que tape l’utilisateur | Header `X-Tenant-Slug` |
-|---|---|
-| `LOCAL` | `local` |
-| `ROSTAN` | `rostan-bouake` |
-| slug déjà technique (`lycee-moderne`) | le slug en minuscules |
+| Ce que tape l’utilisateur | Header `X-Tenant-Slug` | Où |
+|---|---|---|
+| `LOCAL` | `local` | Démo Windows + local |
+| `ROSTAN` | `rostan-bouake` | **Production seulement** (`college.klassci.com`) |
+| slug déjà technique | le slug en minuscules | si le tenant existe sur ce serveur |
 
-La map d’alias (`ROSTAN` → `rostan-bouake`) vit **uniquement** dans le frontend web (`klassci-frontend/lib/utils/tenant-slug.ts`). L’app native doit la dupliquer ou envoyer le slug technique. Envoyer `X-Tenant-Slug: rostan` ouvre la mauvaise base.
+La map d’alias (`ROSTAN` → `rostan-bouake`) vit **uniquement** dans le frontend web (`klassci-frontend/lib/utils/tenant-slug.ts`). L’app native doit la dupliquer ou envoyer le slug technique.
+
+Ne pas tester `ROSTAN` sur `college-demo.klassci.com` : ce tenant n’y existe pas.
 
 Après login, le JWT porte `tenant_id` : plus besoin du header sur les GET authentifiés. Le refresh **sans** Bearer doit renvoyer `X-Tenant-Slug`.
 
@@ -557,7 +581,7 @@ Si `blocked: true` : 402 au téléchargement. Le parent n’a pas le droit de d�
 ## Smoke démo
 
 ```
-BASE=https://college.klassci.com/svc
+BASE=https://college-demo.klassci.com/svc
 
 curl -s "$BASE/health"
 
