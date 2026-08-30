@@ -19,8 +19,8 @@ from app.cli.seed_demo.context import SeedContext
 from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
+    NOT_CASH_DUE,
     EnrollmentFee,
-    EnrollmentFeeStatus,
     FeeCategory,
     FeeVariant,
     Payment,
@@ -50,7 +50,7 @@ async def expected_mandatory_total(ctx: SeedContext) -> Decimal:
         .where(
             Enrollment.academic_year_id == ctx.academic_year_id,
             FeeCategory.is_mandatory.is_(True),
-            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+            EnrollmentFee.status.notin_(NOT_CASH_DUE),
         )
     )
     return Decimal(str((await ctx.db.execute(statement)).scalar_one() or 0))

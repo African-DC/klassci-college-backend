@@ -124,6 +124,9 @@ async def create_enrollment(
             data.academic_year_id,
             enrollment.assignment_status,
         )
+        await enrollment_fees.apply_in_kind_deposits(
+            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        )
 
         await audit_log(
             db,
@@ -469,6 +472,9 @@ async def create_enrollment_with_student(
             academic_year_id,
             enrollment.assignment_status,
         )
+        await enrollment_fees.apply_in_kind_deposits(
+            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        )
 
         await audit_log(
             db,
@@ -527,6 +533,7 @@ async def re_enroll_student(
         academic_year_id=academic_year_id,
         fee_variant_id=data.fee_variant_id,
         notes=data.notes,
+        in_kind_deposits=data.in_kind_deposits,
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by)
 

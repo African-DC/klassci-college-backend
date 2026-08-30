@@ -34,6 +34,7 @@ from app.models.fee import (
     FeeCategory,
     FeeVariant,
     PaymentAllocation,
+    is_not_cash_due,
 )
 from app.schemas.fee import FeePropagationPreview, FeePropagationResult
 from app.services.deletion import Dependent
@@ -138,7 +139,9 @@ async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
 
     nouveau_montant = Decimal(str(variant.amount))
     exonerees = [f for f in lignes if f.status == EnrollmentFeeStatus.WAIVED]
-    dues = [f for f in lignes if f.status != EnrollmentFeeStatus.WAIVED]
+    # Un dépôt en nature n'est pas une exonération DRENA : on l'ignore ici,
+    # il ne gonfle ni fees_waived ni la dette à répercuter.
+    dues = [f for f in lignes if not is_not_cash_due(f.status)]
     deja_a_jour = [f for f in dues if Decimal(str(f.amount)) == nouveau_montant]
 
     a_examiner = [f for f in dues if Decimal(str(f.amount)) != nouveau_montant]

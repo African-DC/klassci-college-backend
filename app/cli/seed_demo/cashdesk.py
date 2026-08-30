@@ -35,8 +35,8 @@ from app.core.exceptions import BusinessValidationError
 from app.models.cash_session import CashSession, CashSessionStatus, is_locked
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
+    NOT_CASH_DUE,
     EnrollmentFee,
-    EnrollmentFeeStatus,
     FeeCategory,
     Payment,
     PaymentAllocation,
@@ -190,7 +190,7 @@ async def _dues_by_enrollment(ctx: SeedContext) -> dict[int, list[Decimal]]:
         .where(
             Enrollment.academic_year_id == ctx.academic_year_id,
             Enrollment.status == EnrollmentStatus.VALIDE.value,
-            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED.value,
+            EnrollmentFee.status.notin_(NOT_CASH_DUE),
         )
         .order_by(EnrollmentFee.enrollment_id, FeeCategory.priority)
     )
