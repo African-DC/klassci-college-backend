@@ -67,8 +67,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Fixed
 - Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*
-- Remplacer ou retirer le logo ou le tampon de signature efface l'ancien fichier : maintenant que les téléversements survivent aux mises à jour, chaque changement en laissait une copie définitive sur le serveur *(technique)*
-- Un envoi trop volumineux est refusé au fil de la lecture au lieu d'être chargé entièrement en mémoire avant d'être rejeté *(technique)*
+- Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur *(technique)*
+- Un envoi trop volumineux est refusé pendant la lecture, sans être d'abord chargé entièrement en mémoire *(technique)*
 - La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante *(technique)*
 - La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie *(admin, secrétariat)*
 - La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route *(super-admin)*
