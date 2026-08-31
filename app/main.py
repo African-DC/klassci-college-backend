@@ -3,8 +3,6 @@
 Point d'entrée de l'application FastAPI.
 """
 
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +12,7 @@ from app.core.config import settings
 from app.core.exceptions import UnexpectedErrorMiddleware, register_exception_handlers
 from app.core.middleware import TenantMiddleware
 from app.core.sentry import init_sentry
+from app.core.uploads import UPLOAD_ROOT, ensure_upload_dirs
 from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
 from app.routers.archive import router as archive_router
@@ -73,9 +72,12 @@ app = FastAPI(
 )
 
 # --- Static files (uploads) ---
-UPLOAD_DIR = "/tmp/klassci-uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# La racine vient de `app.core.uploads` : un seul endroit la définit, et le
+# montage suit automatiquement le volume persistant configuré par l'environnement.
+# `check_dir=False` : la racine peut être absente au démarrage (poste de dev,
+# intégration continue) sans empêcher l'API entière de se lancer.
+ensure_upload_dirs()
+app.mount("/uploads", StaticFiles(directory=UPLOAD_ROOT, check_dir=False), name="uploads")
 
 # --- Middleware (ordre : dernier ajouté = premier exécuté) ---
 # TenantMiddleware ajouté en 1er → s'exécute en dernier (inner layer)

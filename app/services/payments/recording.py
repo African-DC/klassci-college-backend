@@ -9,6 +9,7 @@ pour rester cohérent avec la nouvelle source de vérité.
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,15 +18,20 @@ from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
 from app.models.enrollment import EnrollmentStatus
-from app.models.fee import EnrollmentFee, PaymentStatus, cash_remaining
+from app.models.fee import (
+    EnrollmentFee,
+    PaymentStatus,
+    cash_remaining,
+)
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
 from app.services import cash_session_service, enrollment_notifications, fees_paid
 from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
     paid_for_fees,
-    plan_allocation,
+    plannable_fees,
     recompute_fee_status,
+    resolve_allocation,
 )
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
@@ -54,6 +60,37 @@ async def _guard_method_and_drawer(
         await cash_session_service.ensure_open_session(db, actor.user_id, when)
 
 
+def _journal_versement(
+    enrollment_id: int,
+    data: EnrollmentPaymentCreate,
+    splits: list[tuple[EnrollmentFee, Decimal]],
+    demandees: dict[int, Decimal],
+) -> dict[str, Any]:
+    """Ce que le journal d'audit retient du versement.
+
+    Il dit ce qui a été écrit ET qui l'a décidé : `allocations` est la
+    répartition réellement portée en base, `directed_allocations` ce que le
+    caissier a nommé. Les confondre laisserait croire qu'une cascade calculée
+    est un choix humain, ou l'inverse.
+    """
+    journal: dict[str, Any] = {
+        "enrollment_id": enrollment_id,
+        "amount": str(data.amount),
+        "method": data.method,
+        "reference": data.reference,
+        "allocation_mode": "manual" if demandees else "cascade",
+        "allocations": [
+            {"enrollment_fee_id": fee.id, "amount": str(allocated)} for fee, allocated in splits
+        ],
+    }
+    if demandees:
+        journal["directed_allocations"] = [
+            {"enrollment_fee_id": fee_id, "amount": str(montant)}
+            for fee_id, montant in demandees.items()
+        ]
+    return journal
+
+
 async def record_enrollment_payment(
     db: AsyncSession,
     enrollment_id: int,
@@ -61,13 +98,20 @@ async def record_enrollment_payment(
     *,
     actor: TokenData,
 ) -> PaymentResponse:
-    """Enregistre un versement à la caisse, auto-alloué par priorité.
+    """Enregistre un versement à la caisse, alloué par priorité ou à la main.
 
     Décisions métier validées 2026-05-17 :
     - Priorité ASC sur `FeeCategory.priority` (Inscription 10 → Tenue 60 → reste 100).
     - Surplus → reject avec message clair (P0). Credit balance différé V2.
-    - Override manuel → pas en P0 (priorité stricte).
     - Audit log unique avec breakdown allocation.
+
+    `data.allocations` ouvre la répartition manuelle. Absente, la cascade
+    s'applique inchangée. Présente, chaque montant va au frais nommé et le
+    reliquat cascade sur le reste dû. C'est le geste du guichet : « 30 000 sur
+    l'inscription, le reste où il doit aller ». Ce qui borne la cascade borne
+    aussi la répartition manuelle : jamais plus que le reste dû d'un frais,
+    jamais sur un frais exonéré ou déposé en nature, jamais sur le frais d'une
+    autre inscription.
     """
     received_by = actor.user_id
     await _guard_method_and_drawer(db, actor, data.method, when=datetime.now())
@@ -77,22 +121,29 @@ async def record_enrollment_payment(
         if enrollment is None:
             raise NotFoundError("Enrollment", enrollment_id)
 
-        unpaid_fees = await repo.get_unpaid_fees_ordered_by_priority(db, enrollment_id)
-        if not unpaid_fees:
-            raise BusinessValidationError(
-                "Aucun frais à régler sur cette inscription "
-                "(tous payés/exonérés ou frais non configurés)"
-            )
+        # Tous les frais, pas seulement ceux qui restent dus : c'est ce qui
+        # permet de distinguer un frais deja solde d'un frais qui n'appartient
+        # pas a cette inscription, sans payer une requete de plus pour le dire.
+        tous_les_frais = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
 
         # Une requete groupee pour toute l'inscription, pas une par frais :
         # encaisser sur une inscription a six frais coutait six allers-retours
         # sequentiels a la base, le tiroir ouvert et la famille au guichet.
         deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_id)
         fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
-            (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in unpaid_fees
+            (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in tous_les_frais
         ]
+
+        # Le meme predicat que l'apercu, pas un filtre recopie : les deux
+        # chemins doivent voir exactement la meme liste.
+        plannable = plannable_fees(fees_with_paid)
+        if not plannable:
+            raise BusinessValidationError(
+                "Aucun frais à régler sur cette inscription "
+                "(tous payés/exonérés ou frais non configurés)"
+            )
         total_remaining = sum(
-            (cash_remaining(fee.status, fee.amount, paid) for fee, paid in fees_with_paid),
+            (cash_remaining(fee.status, fee.amount, paid) for fee, paid in plannable),
             Decimal("0"),
         )
 
@@ -103,7 +154,17 @@ async def record_enrollment_payment(
                 f"inscription pour l'année suivante."
             )
 
-        splits, _surplus = plan_allocation(data.amount, fees_with_paid)
+        # La meme porte que l'apercu affiche pendant la frappe : l'ecran ne peut
+        # donc pas promettre une imputation refusee ici. Sans montant nomme,
+        # elle ne trouve rien a redire et la cascade s'applique seule.
+        issue = resolve_allocation(
+            data.amount,
+            fees_with_paid,
+            ((ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations),
+        )
+        if issue.problems:
+            raise BusinessValidationError(issue.problems[0].message)
+        demandees, splits = issue.directed, issue.splits
 
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son
@@ -139,22 +200,15 @@ async def record_enrollment_payment(
 
         await db.flush()
 
+        journal = _journal_versement(enrollment_id, data, splits, demandees)
+
         await audit_log(
             db,
             entity_type="payment",
             action=AuditAction.CREATE,
             user_id=received_by,
             entity_id=payment.id,
-            new_values={
-                "enrollment_id": enrollment_id,
-                "amount": str(data.amount),
-                "method": data.method,
-                "reference": data.reference,
-                "allocations": [
-                    {"enrollment_fee_id": fee.id, "amount": str(allocated)}
-                    for fee, allocated in splits
-                ],
-            },
+            new_values=journal,
         )
 
     await db.commit()

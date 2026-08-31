@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Tenant
     LOCAL_TENANT_ID: str = "local"  # tenant utilisé en dev local
 
+    # Uploads : racine des fichiers servis sous /uploads (photos, signatures,
+    # logos, documents). Doit pointer sur un volume persistant : un chemin
+    # temporaire est vidé à chaque recréation du conteneur, donc les photos
+    # d'élèves et le tampon de l'établissement disparaissent au redéploiement.
+    UPLOAD_ROOT: str = "/app/uploads"
+
     # Public login URL template — utilisé pour générer le lien envoyé dans
     # l'email de bienvenue tenant et l'URL affichée côté super-admin.
     # {slug} est remplacé par le slug du tenant.

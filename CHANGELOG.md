@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le logo de l'établissement s'installe et se retire depuis les paramètres, et apparaît sur les documents officiels *(admin)*
 - La console SQL avertit quand une requête renomme un élève sans mettre à jour sa clé de recherche, ce qui le rendrait introuvable *(super-admin)*
 - L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*
 - La sauvegarde nocturne couvre désormais toutes les bases d'établissement : elle les reconnaît à leur contenu et non à leur nom, et refuse d'archiver un fichier vide *(devops)*
@@ -46,8 +47,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
 - Le reçu de versement s'imprime en deux exemplaires sur une seule feuille A4, à couper au milieu : un pour la famille, un pour le classeur *(caissier, comptable)*
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
+- Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*
 - Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3 *(technique)*
 - L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement *(tous)*
@@ -65,6 +68,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*
+- La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis *(devops)*
+- Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur *(technique)*
+- Un envoi trop volumineux est refusé pendant la lecture, sans être d'abord chargé entièrement en mémoire *(technique)*
 - La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante *(technique)*
 - La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie *(admin, secrétariat)*
 - La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route *(super-admin)*
