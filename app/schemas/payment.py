@@ -26,6 +26,25 @@ _ALLOWED_METHODS = set(SELECTABLE_METHODS)
 # ---------------------------------------------------------------------------
 
 
+class PaymentAllocationItem(BaseModel):
+    """Une imputation nommée par le caissier : ce montant, sur ce frais.
+
+    Sert le cas du guichet : « je pose 30 000 sur l'inscription, et le reste va
+    où il doit aller ». Les lignes nommées sont imputées telles quelles, le
+    reliquat éventuel cascade ensuite par priorité comme d'habitude.
+    """
+
+    enrollment_fee_id: int = Field(gt=0)
+    amount: Decimal
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("allocation amount must be positive")
+        return v
+
+
 class EnrollmentPaymentCreate(BaseModel):
     """Body du nouvel endpoint POST /enrollments/{id}/payments (Wave-style)."""
 
@@ -33,6 +52,12 @@ class EnrollmentPaymentCreate(BaseModel):
     method: str
     reference: str | None = None
     notes: str | None = None
+    #: Imputations nommées, facultatives. Absent ou vide : allocation en
+    #: cascade par priorité, le comportement historique, inchangé. Renseigné :
+    #: chaque montant va au frais désigné et le reliquat cascade sur le reste
+    #: dû. Le plafond borne la taille du corps reçu, pas le métier : une
+    #: inscription compte une dizaine de frais, pas cinquante.
+    allocations: list[PaymentAllocationItem] = Field(default_factory=list, max_length=50)
 
     @field_validator("amount")
     @classmethod
@@ -40,6 +65,17 @@ class EnrollmentPaymentCreate(BaseModel):
         if v <= 0:
             raise ValueError("amount must be positive")
         return v
+
+    @field_validator("allocations", mode="before")
+    @classmethod
+    def null_vaut_vide(cls, v: object) -> object:
+        """`"allocations": null` vaut « rien de nommé », pas un refus.
+
+        Un formulaire qui ne coche aucune imputation envoie tantôt le champ
+        absent, tantôt `null` : les deux disent la même chose et doivent
+        cascader, plutôt que rendre une erreur de validation illisible.
+        """
+        return [] if v is None else v
 
     @field_validator("method")
     @classmethod

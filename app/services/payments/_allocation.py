@@ -39,6 +39,55 @@ def plan_allocation(
     return splits, remaining
 
 
+def merge_manual_allocations(items: Iterable[tuple[int, Decimal]]) -> dict[int, Decimal]:
+    """Regroupe les lignes qui visent le même frais. Pure.
+
+    Deux lignes sur un même frais sont une seule imputation de leur somme, et
+    non deux imputations calculées chacune sur le même reste dû : c'est ainsi
+    qu'on écrirait deux fois le même argent. Le regroupement précède toute
+    vérification, pour que le plafond du frais soit opposé au total réel.
+    """
+    merged: dict[int, Decimal] = {}
+    for fee_id, amount in items:
+        merged[fee_id] = merged.get(fee_id, Decimal("0")) + amount
+    return merged
+
+
+def plan_manual_allocation(
+    amount: Decimal,
+    fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
+    requested: dict[int, Decimal],
+) -> tuple[list[tuple[EnrollmentFee, Decimal]], Decimal]:
+    """Impute les montants nommés, puis cascade le reliquat. Pure.
+
+    `requested` est supposé déjà vérifié par l'appelant : frais de cette
+    inscription, encore dus en argent, montants tenables. Le retour a la même
+    forme que `plan_allocation` : (splits, surplus), un seul split par frais,
+    pour que l'écriture des allocations, le recalcul des statuts et l'audit ne
+    connaissent qu'un seul chemin quel que soit le mode.
+
+    Le reliquat cascade sur ce qui reste dû **après** les imputations nommées :
+    sans ce report, la cascade re-remplirait un frais déjà servi à la main et
+    le versement dépasserait la dette.
+    """
+    connus = {fee.id for fee, _ in fees_with_paid}
+    nommees = {fee_id: montant for fee_id, montant in requested.items() if fee_id in connus}
+    reliquat = amount - sum(nommees.values(), Decimal("0"))
+
+    apres_nommees = [
+        (fee, paid + nommees.get(fee.id, Decimal("0"))) for fee, paid in fees_with_paid
+    ]
+    cascade, surplus = plan_allocation(reliquat, apres_nommees)
+    en_cascade = {fee.id: montant for fee, montant in cascade}
+
+    splits: list[tuple[EnrollmentFee, Decimal]] = []
+    for fee, _paid in fees_with_paid:
+        total = nommees.get(fee.id, Decimal("0")) + en_cascade.get(fee.id, Decimal("0"))
+        if total > 0:
+            splits.append((fee, total))
+    return splits, surplus
+
+
 async def paid_for_fees(db: AsyncSession, fees: Iterable[EnrollmentFee]) -> dict[int, Decimal]:
     """Ce qui est versé sur chacun de ces frais, indexé par frais.
 

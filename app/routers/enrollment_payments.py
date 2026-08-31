@@ -27,7 +27,7 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments", "payments"])
     "/{enrollment_id}/payments",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Enregistrer un versement caissier (auto-allocation prioritaire)",
+    summary="Enregistrer un versement caissier (allocation prioritaire ou dirigée)",
 )
 async def record_enrollment_payment(
     enrollment_id: int,
@@ -40,6 +40,13 @@ async def record_enrollment_payment(
 
     Priorité catégorie ASC : Inscription → T1 → T2 → T3 → COGES → Tenue →
     reste. Si le montant dépasse la dette restante : 422.
+
+    `allocations` est facultatif. Absent ou vide, l'allocation reste la
+    cascade ci-dessus. Renseigné (`[{enrollment_fee_id, amount}]`), chaque
+    montant va au frais nommé et le reliquat cascade sur le reste dû. Refus en
+    422 si la répartition dépasse le montant versé, dépasse le reste dû d'un
+    frais, ou vise un frais soldé, exonéré, déposé en nature, ou appartenant à
+    une autre inscription.
 
     Le moyen de paiement doit être accepté par l'établissement ET autorisé pour
     le profil de l'appelant (`payments:method:*`) ; sinon 403 avec le détail de

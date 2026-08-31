@@ -46,6 +46,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
 - Le reçu de versement s'imprime en deux exemplaires sur une seule feuille A4, à couper au milieu : un pour la famille, un pour le classeur *(caissier, comptable)*
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
+- Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*

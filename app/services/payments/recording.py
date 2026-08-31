@@ -9,6 +9,7 @@ pour rester cohérent avec la nouvelle source de vérité.
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,14 +18,16 @@ from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
 from app.models.enrollment import EnrollmentStatus
-from app.models.fee import EnrollmentFee, PaymentStatus, cash_remaining
+from app.models.fee import EnrollmentFee, PaymentStatus, cash_remaining, is_in_kind, is_not_cash_due
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
 from app.services import cash_session_service, enrollment_notifications, fees_paid
 from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
+    merge_manual_allocations,
     paid_for_fees,
     plan_allocation,
+    plan_manual_allocation,
     recompute_fee_status,
 )
 from app.services.payments._notification import dispatch_payment_notification
@@ -54,6 +57,75 @@ async def _guard_method_and_drawer(
         await cash_session_service.ensure_open_session(db, actor.user_id, when)
 
 
+async def _pourquoi_inimputable(db: AsyncSession, enrollment_id: int, fee_id: int) -> str:
+    """La phrase à rendre au guichet pour un frais qui ne peut rien recevoir.
+
+    Une requête, et seulement dans le chemin d'erreur : le cas passant ne paie
+    rien pour ce diagnostic, puisque les frais encaissables sont déjà chargés.
+
+    Un frais d'une autre inscription et un frais qui n'existe pas reçoivent
+    sciemment la même phrase. Répondre « introuvable » d'un côté et « pas à
+    vous » de l'autre apprendrait à qui essaie quels identifiants existent
+    ailleurs, sur un objet qui porte de l'argent.
+    """
+    tous = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
+    frais = next((f for f in tous if f.id == fee_id), None)
+    if frais is None:
+        return (
+            f"Le frais #{fee_id} n'appartient pas à cette inscription : "
+            "aucun versement ne peut y être imputé."
+        )
+    if is_in_kind(frais.status):
+        return (
+            f"Le frais #{fee_id} a été réglé en nature : il n'attend plus d'argent. "
+            "Retirez cette ligne de la répartition."
+        )
+    if is_not_cash_due(frais.status):
+        return (
+            f"Le frais #{fee_id} est exonéré : il n'attend plus d'argent. "
+            "Retirez cette ligne de la répartition."
+        )
+    return (
+        f"Le frais #{fee_id} est déjà soldé : il n'attend plus d'argent. "
+        "Retirez cette ligne de la répartition."
+    )
+
+
+async def _verifier_imputations(
+    db: AsyncSession,
+    enrollment_id: int,
+    demandees: dict[int, Decimal],
+    fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
+    *,
+    montant: Decimal,
+) -> None:
+    """Refuse une répartition que la caisse ne peut pas honorer, avant d'écrire.
+
+    Les identifiants viennent du client : rien n'est imputé tant que chacun
+    n'est pas reconnu comme un frais de CETTE inscription, encore dû en
+    argent, et pour un montant qui tient dans son reste.
+    """
+    total = sum(demandees.values(), Decimal("0"))
+    if total > montant:
+        raise BusinessValidationError(
+            f"La répartition demandée ({total} XOF) dépasse le montant versé "
+            f"({montant} XOF). Corrigez la répartition ou le montant encaissé."
+        )
+
+    encaissable = {
+        fee.id: cash_remaining(fee.status, fee.amount, paid) for fee, paid in fees_with_paid
+    }
+    for fee_id, demande in demandees.items():
+        reste = encaissable.get(fee_id)
+        if reste is None or reste <= 0:
+            raise BusinessValidationError(await _pourquoi_inimputable(db, enrollment_id, fee_id))
+        if demande > reste:
+            raise BusinessValidationError(
+                f"Le frais #{fee_id} ne peut recevoir que {reste} XOF, or la répartition "
+                f"lui affecte {demande} XOF. On n'impute jamais plus que le reste dû."
+            )
+
+
 async def record_enrollment_payment(
     db: AsyncSession,
     enrollment_id: int,
@@ -61,13 +133,20 @@ async def record_enrollment_payment(
     *,
     actor: TokenData,
 ) -> PaymentResponse:
-    """Enregistre un versement à la caisse, auto-alloué par priorité.
+    """Enregistre un versement à la caisse, alloué par priorité ou à la main.
 
     Décisions métier validées 2026-05-17 :
     - Priorité ASC sur `FeeCategory.priority` (Inscription 10 → Tenue 60 → reste 100).
     - Surplus → reject avec message clair (P0). Credit balance différé V2.
-    - Override manuel → pas en P0 (priorité stricte).
     - Audit log unique avec breakdown allocation.
+
+    `data.allocations` ouvre la répartition manuelle. Absente, la cascade
+    s'applique inchangée. Présente, chaque montant va au frais nommé et le
+    reliquat cascade sur le reste dû. C'est le geste du guichet : « 30 000 sur
+    l'inscription, le reste où il doit aller ». Ce qui borne la cascade borne
+    aussi la répartition manuelle : jamais plus que le reste dû d'un frais,
+    jamais sur un frais exonéré ou déposé en nature, jamais sur le frais d'une
+    autre inscription.
     """
     received_by = actor.user_id
     await _guard_method_and_drawer(db, actor, data.method, when=datetime.now())
@@ -103,7 +182,18 @@ async def record_enrollment_payment(
                 f"inscription pour l'année suivante."
             )
 
-        splits, _surplus = plan_allocation(data.amount, fees_with_paid)
+        # Sans répartition nommée, rien ne change : la cascade par priorité
+        # reste le défaut, et c'est elle qui a été éprouvée au guichet.
+        demandees = merge_manual_allocations(
+            (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
+        )
+        if demandees:
+            await _verifier_imputations(
+                db, enrollment_id, demandees, fees_with_paid, montant=data.amount
+            )
+            splits, _surplus = plan_manual_allocation(data.amount, fees_with_paid, demandees)
+        else:
+            splits, _surplus = plan_allocation(data.amount, fees_with_paid)
 
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son
@@ -139,22 +229,33 @@ async def record_enrollment_payment(
 
         await db.flush()
 
+        # Le journal dit ce qui a été écrit ET qui l'a décidé : `allocations`
+        # est la répartition réellement portée en base, `directed_allocations`
+        # ce que le caissier a nommé. Les confondre laisserait croire qu'une
+        # cascade calculée est un choix humain, ou l'inverse.
+        journal: dict[str, Any] = {
+            "enrollment_id": enrollment_id,
+            "amount": str(data.amount),
+            "method": data.method,
+            "reference": data.reference,
+            "allocation_mode": "manual" if demandees else "cascade",
+            "allocations": [
+                {"enrollment_fee_id": fee.id, "amount": str(allocated)} for fee, allocated in splits
+            ],
+        }
+        if demandees:
+            journal["directed_allocations"] = [
+                {"enrollment_fee_id": fee_id, "amount": str(montant)}
+                for fee_id, montant in demandees.items()
+            ]
+
         await audit_log(
             db,
             entity_type="payment",
             action=AuditAction.CREATE,
             user_id=received_by,
             entity_id=payment.id,
-            new_values={
-                "enrollment_id": enrollment_id,
-                "amount": str(data.amount),
-                "method": data.method,
-                "reference": data.reference,
-                "allocations": [
-                    {"enrollment_fee_id": fee.id, "amount": str(allocated)}
-                    for fee, allocated in splits
-                ],
-            },
+            new_values=journal,
         )
 
     await db.commit()

@@ -2,7 +2,7 @@
 
 | Sub-module | Responsabilité |
 |------------|----------------|
-| `_allocation` | `plan_allocation` (pur) + `recompute_fee_status` |
+| `_allocation` | `plan_allocation` / `plan_manual_allocation` (purs) + `recompute_fee_status` |
 | `_response`   | builders Pydantic (Payment, PaymentAllocation) |
 | `_notification` | dispatcher notif paiement (best-effort) |
 | `_state`      | VALID_TRANSITIONS + logger commun |
