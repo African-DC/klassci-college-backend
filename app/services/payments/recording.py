@@ -18,16 +18,22 @@ from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
 from app.models.enrollment import EnrollmentStatus
-from app.models.fee import EnrollmentFee, PaymentStatus, cash_remaining, is_in_kind, is_not_cash_due
+from app.models.fee import (
+    EnrollmentFee,
+    PaymentStatus,
+    cash_remaining,
+)
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
 from app.services import cash_session_service, enrollment_notifications, fees_paid
 from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
+    check_directed_allocations,
     merge_manual_allocations,
     paid_for_fees,
     plan_allocation,
     plan_manual_allocation,
+    plannable_fees,
     recompute_fee_status,
 )
 from app.services.payments._notification import dispatch_payment_notification
@@ -57,73 +63,62 @@ async def _guard_method_and_drawer(
         await cash_session_service.ensure_open_session(db, actor.user_id, when)
 
 
-async def _pourquoi_inimputable(db: AsyncSession, enrollment_id: int, fee_id: int) -> str:
-    """La phrase à rendre au guichet pour un frais qui ne peut rien recevoir.
-
-    Une requête, et seulement dans le chemin d'erreur : le cas passant ne paie
-    rien pour ce diagnostic, puisque les frais encaissables sont déjà chargés.
-
-    Un frais d'une autre inscription et un frais qui n'existe pas reçoivent
-    sciemment la même phrase. Répondre « introuvable » d'un côté et « pas à
-    vous » de l'autre apprendrait à qui essaie quels identifiants existent
-    ailleurs, sur un objet qui porte de l'argent.
-    """
-    tous = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
-    frais = next((f for f in tous if f.id == fee_id), None)
-    if frais is None:
-        return (
-            f"Le frais #{fee_id} n'appartient pas à cette inscription : "
-            "aucun versement ne peut y être imputé."
-        )
-    if is_in_kind(frais.status):
-        return (
-            f"Le frais #{fee_id} a été réglé en nature : il n'attend plus d'argent. "
-            "Retirez cette ligne de la répartition."
-        )
-    if is_not_cash_due(frais.status):
-        return (
-            f"Le frais #{fee_id} est exonéré : il n'attend plus d'argent. "
-            "Retirez cette ligne de la répartition."
-        )
-    return (
-        f"Le frais #{fee_id} est déjà soldé : il n'attend plus d'argent. "
-        "Retirez cette ligne de la répartition."
-    )
-
-
-async def _verifier_imputations(
-    db: AsyncSession,
-    enrollment_id: int,
-    demandees: dict[int, Decimal],
+def _choisir_repartition(
+    amount: Decimal,
+    plannable: list[tuple[EnrollmentFee, Decimal]],
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
-    *,
-    montant: Decimal,
-) -> None:
-    """Refuse une répartition que la caisse ne peut pas honorer, avant d'écrire.
+    demandees: dict[int, Decimal],
+) -> list[tuple[EnrollmentFee, Decimal]]:
+    """Décide où va l'argent, et refuse avant d'écrire ce qui ne tient pas.
 
-    Les identifiants viennent du client : rien n'est imputé tant que chacun
-    n'est pas reconnu comme un frais de CETTE inscription, encore dû en
-    argent, et pour un montant qui tient dans son reste.
+    Sans répartition nommée, rien ne change : la cascade par priorité reste le
+    défaut, et c'est elle qui a été éprouvée au guichet.
+
+    La vérification est celle de l'aperçu, à la lettre : `check_directed_allocations`
+    est appelée par les deux. L'écran ne peut donc pas promettre une imputation
+    que la caisse refusera, ni l'inverse.
     """
-    total = sum(demandees.values(), Decimal("0"))
-    if total > montant:
-        raise BusinessValidationError(
-            f"La répartition demandée ({total} XOF) dépasse le montant versé "
-            f"({montant} XOF). Corrigez la répartition ou le montant encaissé."
-        )
+    if not demandees:
+        splits, _surplus = plan_allocation(amount, plannable)
+        return splits
 
-    encaissable = {
-        fee.id: cash_remaining(fee.status, fee.amount, paid) for fee, paid in fees_with_paid
+    problemes = check_directed_allocations(demandees, fees_with_paid, amount)
+    if problemes:
+        raise BusinessValidationError(problemes[0].message)
+
+    splits, _surplus = plan_manual_allocation(amount, plannable, demandees)
+    return splits
+
+
+def _journal_versement(
+    enrollment_id: int,
+    data: EnrollmentPaymentCreate,
+    splits: list[tuple[EnrollmentFee, Decimal]],
+    demandees: dict[int, Decimal],
+) -> dict[str, Any]:
+    """Ce que le journal d'audit retient du versement.
+
+    Il dit ce qui a été écrit ET qui l'a décidé : `allocations` est la
+    répartition réellement portée en base, `directed_allocations` ce que le
+    caissier a nommé. Les confondre laisserait croire qu'une cascade calculée
+    est un choix humain, ou l'inverse.
+    """
+    journal: dict[str, Any] = {
+        "enrollment_id": enrollment_id,
+        "amount": str(data.amount),
+        "method": data.method,
+        "reference": data.reference,
+        "allocation_mode": "manual" if demandees else "cascade",
+        "allocations": [
+            {"enrollment_fee_id": fee.id, "amount": str(allocated)} for fee, allocated in splits
+        ],
     }
-    for fee_id, demande in demandees.items():
-        reste = encaissable.get(fee_id)
-        if reste is None or reste <= 0:
-            raise BusinessValidationError(await _pourquoi_inimputable(db, enrollment_id, fee_id))
-        if demande > reste:
-            raise BusinessValidationError(
-                f"Le frais #{fee_id} ne peut recevoir que {reste} XOF, or la répartition "
-                f"lui affecte {demande} XOF. On n'impute jamais plus que le reste dû."
-            )
+    if demandees:
+        journal["directed_allocations"] = [
+            {"enrollment_fee_id": fee_id, "amount": str(montant)}
+            for fee_id, montant in demandees.items()
+        ]
+    return journal
 
 
 async def record_enrollment_payment(
@@ -156,22 +151,29 @@ async def record_enrollment_payment(
         if enrollment is None:
             raise NotFoundError("Enrollment", enrollment_id)
 
-        unpaid_fees = await repo.get_unpaid_fees_ordered_by_priority(db, enrollment_id)
-        if not unpaid_fees:
-            raise BusinessValidationError(
-                "Aucun frais à régler sur cette inscription "
-                "(tous payés/exonérés ou frais non configurés)"
-            )
+        # Tous les frais, pas seulement ceux qui restent dus : c'est ce qui
+        # permet de distinguer un frais deja solde d'un frais qui n'appartient
+        # pas a cette inscription, sans payer une requete de plus pour le dire.
+        tous_les_frais = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
 
         # Une requete groupee pour toute l'inscription, pas une par frais :
         # encaisser sur une inscription a six frais coutait six allers-retours
         # sequentiels a la base, le tiroir ouvert et la famille au guichet.
         deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_id)
         fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
-            (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in unpaid_fees
+            (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in tous_les_frais
         ]
+
+        # Le meme predicat que l'apercu, pas un filtre recopie : les deux
+        # chemins doivent voir exactement la meme liste.
+        plannable = plannable_fees(fees_with_paid)
+        if not plannable:
+            raise BusinessValidationError(
+                "Aucun frais à régler sur cette inscription "
+                "(tous payés/exonérés ou frais non configurés)"
+            )
         total_remaining = sum(
-            (cash_remaining(fee.status, fee.amount, paid) for fee, paid in fees_with_paid),
+            (cash_remaining(fee.status, fee.amount, paid) for fee, paid in plannable),
             Decimal("0"),
         )
 
@@ -182,18 +184,10 @@ async def record_enrollment_payment(
                 f"inscription pour l'année suivante."
             )
 
-        # Sans répartition nommée, rien ne change : la cascade par priorité
-        # reste le défaut, et c'est elle qui a été éprouvée au guichet.
         demandees = merge_manual_allocations(
             (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
         )
-        if demandees:
-            await _verifier_imputations(
-                db, enrollment_id, demandees, fees_with_paid, montant=data.amount
-            )
-            splits, _surplus = plan_manual_allocation(data.amount, fees_with_paid, demandees)
-        else:
-            splits, _surplus = plan_allocation(data.amount, fees_with_paid)
+        splits = _choisir_repartition(data.amount, plannable, fees_with_paid, demandees)
 
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son
@@ -229,25 +223,7 @@ async def record_enrollment_payment(
 
         await db.flush()
 
-        # Le journal dit ce qui a été écrit ET qui l'a décidé : `allocations`
-        # est la répartition réellement portée en base, `directed_allocations`
-        # ce que le caissier a nommé. Les confondre laisserait croire qu'une
-        # cascade calculée est un choix humain, ou l'inverse.
-        journal: dict[str, Any] = {
-            "enrollment_id": enrollment_id,
-            "amount": str(data.amount),
-            "method": data.method,
-            "reference": data.reference,
-            "allocation_mode": "manual" if demandees else "cascade",
-            "allocations": [
-                {"enrollment_fee_id": fee.id, "amount": str(allocated)} for fee, allocated in splits
-            ],
-        }
-        if demandees:
-            journal["directed_allocations"] = [
-                {"enrollment_fee_id": fee_id, "amount": str(montant)}
-                for fee_id, montant in demandees.items()
-            ]
+        journal = _journal_versement(enrollment_id, data, splits, demandees)
 
         await audit_log(
             db,

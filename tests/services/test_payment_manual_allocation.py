@@ -77,12 +77,6 @@ class Caisse:
         self.audit: dict[str, Any] = {}
         self._brancher(monkeypatch)
 
-    @property
-    def impayes(self) -> list[EnrollmentFee]:
-        """Ce que le repository rend : les frais encore dus, priorité ASC."""
-        encaissables = (EnrollmentFeeStatus.PENDING.value, EnrollmentFeeStatus.PARTIAL.value)
-        return [frais for frais in self.tous if frais.status in encaissables]
-
     def frais(self, fee_id: int) -> EnrollmentFee:
         return next(frais for frais in self.tous if frais.id == fee_id)
 
@@ -113,9 +107,6 @@ class Caisse:
         async def _inscription(_db: object, _id: int) -> object:
             return MagicMock(id=INSCRIPTION)
 
-        async def _impayes(_db: object, _id: int) -> list[EnrollmentFee]:
-            return self.impayes
-
         async def _tous(_db: object, _id: int) -> list[EnrollmentFee]:
             return self.tous
 
@@ -145,7 +136,6 @@ class Caisse:
             return MagicMock(id=PAIEMENT, enrollment=None)
 
         monkeypatch.setattr(recording.repo, "get_enrollment_for_update", _inscription)
-        monkeypatch.setattr(recording.repo, "get_unpaid_fees_ordered_by_priority", _impayes)
         monkeypatch.setattr(recording.repo, "get_enrollment_fees_ordered_by_priority", _tous)
         monkeypatch.setattr(recording.repo, "create_payment", _create_payment)
         monkeypatch.setattr(recording.repo, "create_allocation", _create_allocation)

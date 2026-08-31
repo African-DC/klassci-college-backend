@@ -5,20 +5,20 @@ limite no-god-code et garder le sous-domaine paiement-caissier
 identifiable au premier coup d'oeil.
 """
 
-from decimal import Decimal
-
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
+    AllocationPreviewRequest,
     AllocationPreviewResponse,
     EnrollmentPaymentCreate,
     PaymentResponse,
 )
 from app.services import enrollment_form_service, fee_statement_service, payment_service
+from app.services.payments._allocation import merge_manual_allocations
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments", "payments"])
 
@@ -72,23 +72,33 @@ async def list_enrollment_payments(
     return await payment_service.get_student_payments(db, enrollment_id)
 
 
-@router.get(
+@router.post(
     "/{enrollment_id}/payments/preview",
     response_model=AllocationPreviewResponse,
     summary="Preview de l'allocation d'un versement (UX caissier avant submit)",
 )
 async def preview_enrollment_payment(
     enrollment_id: int,
-    amount: Decimal = Query(..., gt=0, description="Montant proposé en XOF"),
+    data: AllocationPreviewRequest,
     _: None = require_permission("payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> AllocationPreviewResponse:
-    """Montre comment `amount` serait alloué sans rien écrire.
+    """Montre comment le versement serait alloué sans rien écrire.
 
-    Inclut le surplus et la raison de rejet si le montant excède la dette.
-    Utilisé côté FE pour le bloc "Aperçu allocation" avant le click final.
+    Inclut le surplus, la raison de rejet si le montant excède la dette, et ce
+    qui empêcherait d'honorer la répartition nommée par le caissier.
+
+    `POST` sur une lecture : la répartition est une liste, elle appartient au
+    corps. Rien n'est écrit, la permission reste `payments:read`.
     """
-    return await payment_service.preview_allocation(db, enrollment_id, amount)
+    return await payment_service.preview_allocation(
+        db,
+        enrollment_id,
+        data.amount,
+        directed=merge_manual_allocations(
+            (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
+        ),
+    )
 
 
 @router.get(
