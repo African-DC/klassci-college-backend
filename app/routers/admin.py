@@ -11,7 +11,7 @@ from app.core.dependencies import (
     has_permission,
     require_permission,
 )
-from app.core.uploads import LOGOS, PHOTOS, SIGNATURES, delete_public_file
+from app.core.uploads import LOGOS, PHOTOS, SIGNATURES
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -886,7 +886,7 @@ async def upload_school_signature(
     """
     ancienne = (await admin_service.get_school_settings(db)).signature_image_url
     signature_url = await save_image_upload(file, kind=SIGNATURES, prefix="signature")
-    delete_public_file(ancienne)
+    SIGNATURES.delete_public(ancienne)
     school = await admin_service.update_school_info(
         db,
         SchoolInfoUpdate(signature_image_url=signature_url),
@@ -904,7 +904,7 @@ async def delete_school_signature(
     """Retire la signature officielle de l'etablissement."""
     ancienne = (await admin_service.get_school_settings(db)).signature_image_url
     await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
-    delete_public_file(ancienne)
+    SIGNATURES.delete_public(ancienne)
 
 
 @router.post("/settings/logo")
@@ -921,7 +921,7 @@ async def upload_school_logo(
     """
     ancien = (await admin_service.get_school_settings(db)).logo_url
     logo_url = await save_image_upload(file, kind=LOGOS, prefix="logo")
-    delete_public_file(ancien)
+    LOGOS.delete_public(ancien)
     school = await admin_service.update_school_info(
         db,
         SchoolInfoUpdate(logo_url=logo_url),
@@ -939,7 +939,7 @@ async def delete_school_logo(
     """Retire le logo de l'etablissement."""
     ancien = (await admin_service.get_school_settings(db)).logo_url
     await admin_service.clear_school_logo(db, updated_by=current_user.user_id)
-    delete_public_file(ancien)
+    LOGOS.delete_public(ancien)
 
 
 # ---------------------------------------------------------------------------

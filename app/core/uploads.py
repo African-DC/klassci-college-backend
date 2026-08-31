@@ -56,6 +56,35 @@ class UploadKind:
         """Le chemin disque correspondant a `public_url(filename)`."""
         return self.directory / filename
 
+    def delete_public(self, url: str | None) -> None:
+        """Efface le fichier derriere une de MES URL, si elle en designe un.
+
+        Remplacer un logo laissait l'ancien fichier sur le disque pour toujours.
+        Tant que le stockage etait jetable la fuite mourait avec le conteneur ;
+        maintenant qu'il persiste, chaque remplacement deviendrait un dechet
+        definitif dans le volume.
+
+        La sorte est celle de l'appelant, pas une devinette tiree de l'URL :
+        l'endpoint du logo sait qu'il efface un logo. Une URL malformee ne peut
+        donc pas atteindre le dossier d'une autre sorte, elle est simplement
+        ignoree.
+
+        L'URL vient de la base, donc d'une ecriture precedente, mais on ne lui
+        fait pas confiance pour autant : seul un chemin qui retombe a plat dans
+        mon dossier est efface. Une URL etrangere, relative ou remontante est
+        ignoree en silence, et l'absence du fichier n'est pas une erreur.
+        """
+        prefixe = f"{self.url_prefix}/"
+        if not url or not url.startswith(prefixe):
+            return
+        cible = self.path_for(url[len(prefixe) :])
+        try:
+            if cible.resolve().parent != self.directory.resolve():
+                return
+            cible.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Ancien fichier non supprime : %s", cible, exc_info=True)
+
 
 PHOTOS = UploadKind("photos", 5 * _MO)
 SIGNATURES = UploadKind("signatures", 5 * _MO)
@@ -95,34 +124,3 @@ def ensure_upload_dirs() -> None:
             if _en_production():
                 raise
             logger.warning("Dossier d'upload non creable : %s", directory, exc_info=True)
-
-
-def delete_public_file(url: str | None) -> None:
-    """Efface le fichier derriere une URL `/uploads/...`, si elle en designe un.
-
-    Remplacer un logo laissait l'ancien fichier sur le disque pour toujours.
-    Tant que le stockage etait jetable la fuite mourait avec le conteneur ;
-    maintenant qu'il persiste, chaque remplacement deviendrait un dechet
-    definitif dans le volume.
-
-    L'URL vient de la base, donc d'une ecriture precedente, mais on ne lui fait
-    pas confiance pour autant : seul un chemin qui retombe reellement sous un
-    dossier connu est efface. Une URL etrangere, relative ou remontante est
-    ignoree en silence, et l'absence du fichier n'est pas une erreur.
-    """
-    if not url:
-        return
-    for kind in KINDS:
-        prefixe = f"{kind.url_prefix}/"
-        if not url.startswith(prefixe):
-            continue
-        cible = kind.path_for(url[len(prefixe) :])
-        try:
-            racine = kind.directory.resolve()
-            chemin = cible.resolve()
-            if chemin.parent != racine:
-                return
-            chemin.unlink(missing_ok=True)
-        except OSError:
-            logger.warning("Ancien fichier non supprime : %s", cible, exc_info=True)
-        return

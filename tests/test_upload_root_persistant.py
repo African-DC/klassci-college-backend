@@ -28,7 +28,6 @@ from app.core.uploads import (
     PHOTOS,
     SIGNATURES,
     UPLOAD_ROOT,
-    delete_public_file,
 )
 from app.main import app
 from app.utils.file_upload import DOCUMENT_UPLOAD_DIR
@@ -133,7 +132,7 @@ def test_une_racine_non_creable_empeche_de_demarrer_en_production(
 
 
 # ---------------------------------------------------------------------------
-# delete_public_file : le remplacement ne laisse pas de dechet dans le volume
+# UploadKind.delete_public : le remplacement ne laisse pas de dechet dans le volume
 # ---------------------------------------------------------------------------
 
 
@@ -149,7 +148,7 @@ def test_l_ancien_fichier_est_efface(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
     ancien = _fichier(LOGOS, "logo_abcd1234.png")
 
-    delete_public_file(LOGOS.public_url("logo_abcd1234.png"))
+    LOGOS.delete_public(LOGOS.public_url("logo_abcd1234.png"))
 
     assert not ancien.exists()
 
@@ -161,17 +160,33 @@ def test_seul_le_fichier_vise_est_efface(monkeypatch: pytest.MonkeyPatch, tmp_pa
     voisin = _fichier(LOGOS, "logo_ffff9999.png")
     photo = _fichier(PHOTOS, "logo_abcd1234.png")
 
-    delete_public_file(LOGOS.public_url("logo_abcd1234.png"))
+    LOGOS.delete_public(LOGOS.public_url("logo_abcd1234.png"))
 
     assert not cible.exists()
     assert voisin.exists()
     assert photo.exists()
 
 
+def test_une_sorte_n_efface_pas_le_fichier_d_une_autre(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """La sorte est celle de l'appelant, jamais devinee depuis l'URL.
+
+    L'endpoint du logo sait qu'il efface un logo. Une URL de photo stockee par
+    erreur dans le champ du logo ne doit donc pas emporter la photo.
+    """
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
+    photo = _fichier(PHOTOS, "p_abcd1234.png")
+
+    LOGOS.delete_public(PHOTOS.public_url("p_abcd1234.png"))
+
+    assert photo.exists()
+
+
 def test_une_url_absente_ou_vide_ne_fait_rien() -> None:
     """Un champ jamais renseigne n'est pas une erreur."""
-    delete_public_file(None)
-    delete_public_file("")
+    LOGOS.delete_public(None)
+    LOGOS.delete_public("")
 
 
 def test_un_fichier_deja_absent_ne_fait_rien(
@@ -181,7 +196,7 @@ def test_un_fichier_deja_absent_ne_fait_rien(
     monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
     LOGOS.directory.mkdir(parents=True, exist_ok=True)
 
-    delete_public_file(LOGOS.public_url("logo_introuvable.png"))
+    LOGOS.delete_public(LOGOS.public_url("logo_introuvable.png"))
 
 
 @pytest.mark.parametrize(
@@ -200,7 +215,7 @@ def test_une_url_etrangere_est_ignoree(
     monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
     temoin = _fichier(LOGOS, "logo_abcd1234.png")
 
-    delete_public_file(url)
+    LOGOS.delete_public(url)
 
     assert temoin.exists()
 
@@ -222,7 +237,7 @@ def test_une_url_qui_remonte_n_efface_rien(
     dehors = tmp_path / "evade.png"
     dehors.write_bytes(b"contenu")
 
-    delete_public_file(f"{LOGOS.url_prefix}/{suffixe}")
+    LOGOS.delete_public(f"{LOGOS.url_prefix}/{suffixe}")
 
     assert voisine.exists()
     assert dehors.exists()
