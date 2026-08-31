@@ -106,11 +106,36 @@ async def get_applicable_fee_variants(
             "Class étant universel (refactor #97), l'AY n'est plus inférée depuis la classe."
         ),
     ),
+    assignment_status: str | None = Query(
+        None,
+        description="Statut d'affectation de l'inscription, pour resoudre les tarifs qui en dependent.",
+    ),
+    is_new_student: bool | None = Query(
+        None,
+        description=(
+            "Profil de l'inscription. Omis, l'apercu ne montre que les tarifs "
+            "sans profil, comme une inscription non tranchee."
+        ),
+    ),
     _: None = require_permission("enrollments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_fees.get_applicable_fee_variants(db, class_id, academic_year_id)
+    """Retourne les fee variants applicables pour une classe donnee.
+
+    Les deux dimensions sont passees au service, et c'est le point de cet
+    endpoint : sans elles il resout les tarifs comme une inscription dont on
+    ne sait rien, donc en ecartant tout tarif porteur d'une portee ou d'un
+    profil. Le guichet lisait alors une facture ou la chemise cartonnee
+    n'apparaissait jamais, alors que l'inscription creee juste apres la
+    portait. L'apercu et la generation reelle doivent annoncer la meme chose.
+    """
+    return await enrollment_fees.get_applicable_fee_variants(
+        db,
+        class_id,
+        academic_year_id,
+        assignment_status=assignment_status,
+        is_new_student=is_new_student,
+    )
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)

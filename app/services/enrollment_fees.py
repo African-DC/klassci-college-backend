@@ -20,12 +20,13 @@ from sqlalchemy.orm import selectinload
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import AssignmentStatus
+from app.models.enrollment import AssignmentStatus, Enrollment
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
     FeeAssignmentScope,
     FeeCategory,
+    FeeEnrollmentProfile,
     FeeVariant,
     PaymentAllocation,
     is_not_cash_due,
@@ -41,6 +42,7 @@ from app.services.deletion import Dependent
 #: contrainte d'unicité `uq_fee_variant_dimensions` réellement effective.
 _NO_SCOPE = ""
 _NO_SERIES = 0
+_NO_PROFILE = ""
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +69,28 @@ def applicable_scope_keys(assignment_status: object) -> tuple[str, ...]:
     return (_NO_SCOPE, scope.value)
 
 
+def applicable_profile_keys(is_new_student: bool | None) -> tuple[str, ...]:
+    """Profils qu'une inscription peut se voir appliquer, sentinelle comprise.
+
+    Copie exacte d'`applicable_scope_keys`, et pour la même raison. Un tarif
+    sans profil s'applique à tout le monde ; une inscription dont le profil
+    n'est pas tranché ne reçoit QUE ceux-là.
+
+    C'est l'invariant central de cette dimension : `None` veut dire « on ne
+    sait pas », et un établissement dont les années passées ne sont pas
+    reconstituées en est plein. Lui donner le tarif « nouveau » facturerait le
+    dossier d'entrée à tous ses anciens élèves ; lui donner le tarif « ancien »
+    ferait perdre à l'école ce qu'elle facture aux arrivants. On ne choisit ni
+    l'un ni l'autre à sa place : la case reste à cocher, et la grille générale
+    s'applique en attendant.
+    """
+    if is_new_student is None:
+        return (_NO_PROFILE,)
+
+    profile = FeeEnrollmentProfile.NOUVEAU if is_new_student else FeeEnrollmentProfile.ANCIEN
+    return (_NO_PROFILE, profile.value)
+
+
 def applicable_series_keys(series_id: int | None) -> tuple[int, ...]:
     """Séries qu'une classe peut se voir appliquer, sentinelle comprise.
 
@@ -78,15 +102,73 @@ def applicable_series_keys(series_id: int | None) -> tuple[int, ...]:
     return (_NO_SERIES, series_id)
 
 
-def _specificity(variant: FeeVariant) -> tuple[bool, bool]:
+def _sentinelle(valeur: object, vide: object) -> object:
+    """La valeur telle que la colonne générée la range : `vide` quand elle manque.
+
+    `getattr(valeur, "value", valeur)` parce que SQLAlchemy rend tantôt le
+    membre d'enum, tantôt la chaîne, selon que la ligne vient d'être écrite ou
+    d'être relue.
+    """
+    if valeur is None:
+        return vide
+    return getattr(valeur, "value", valeur)
+
+
+def variant_applies_to(
+    variant: FeeVariant,
+    *,
+    series_id: int | None,
+    assignment_status: object,
+    is_new_student: bool | None,
+) -> bool:
+    """Ce tarif peut-il atteindre cette inscription, dimension par dimension ?
+
+    La même règle que le WHERE de `get_mandatory_fee_variants`, dite en Python
+    pour qui tient déjà les lignes en mémoire — la répercussion d'un tarif,
+    qui doit savoir à quelles inscriptions il manque. Deux formulations d'une
+    même règle divergeraient : celle-ci se lit donc sur les fonctions
+    `applicable_*`, exactement comme la requête.
+
+    Le niveau n'est pas testé ici : il est déjà la clause la plus sélective de
+    l'appelant, et il se compare sans sentinelle.
+    """
+    return (
+        _sentinelle(variant.series_id, _NO_SERIES) in applicable_series_keys(series_id)
+        and _sentinelle(variant.assignment_scope, _NO_SCOPE)
+        in applicable_scope_keys(assignment_status)
+        and _sentinelle(variant.enrollment_profile, _NO_PROFILE)
+        in applicable_profile_keys(is_new_student)
+    )
+
+
+def _specificity(variant: FeeVariant) -> tuple[bool, bool, bool]:
     """Plus le tarif est précis, plus il l'emporte.
 
-    Une portée renseignée bat une portée vide ; à portée égale, une série
-    renseignée bat une série vide. C'est l'ordre que l'école a en tête quand
-    elle ajoute un tarif affecté par-dessus sa grille générale : le nouveau
-    remplace l'ancien pour les élèves concernés, il ne s'y ajoute pas.
+    L'ordre des composantes décide qui gagne quand deux tarifs de la même
+    catégorie sont précis sur des dimensions différentes. Il est choisi, pas
+    subi :
+
+    1. **La portée d'affectation d'abord.** C'est l'État qui la confère et
+       c'est elle qui déplace le plus le montant : un affecté est subventionné,
+       un non affecté ne l'est pas. Facturer le plein tarif à une famille
+       subventionnée est l'erreur la plus coûteuse des trois, et la plus dure
+       à rattraper une fois la facture partie.
+    2. **Le profil d'inscription ensuite.** C'est une décision prise sur cet
+       élève-là, à son dossier ; elle vise moins de monde qu'une règle de
+       classe. Un tarif « nouveau » posé par-dessus la grille générale doit
+       donc la remplacer, mais ne doit pas défaire un tarif affecté.
+    3. **La série en dernier.** Elle est une propriété de la classe, largement
+       impliquée par le niveau déjà exigé à l'identique : c'est la dimension
+       qui discrimine le moins d'élèves à elle seule.
+
+    L'ordre relatif de la portée et de la série ne bouge pas : les grilles
+    déjà saisies continuent de se résoudre exactement comme avant.
     """
-    return (variant.assignment_scope is not None, variant.series_id is not None)
+    return (
+        variant.assignment_scope is not None,
+        variant.enrollment_profile is not None,
+        variant.series_id is not None,
+    )
 
 
 def most_specific_variant_per_category(variants: Iterable[FeeVariant]) -> list[FeeVariant]:
@@ -99,7 +181,7 @@ def most_specific_variant_per_category(variants: Iterable[FeeVariant]) -> list[F
     de scolarité de la famille est retenu pour un impayé qui n'existe pas.
 
     Les égalités ne peuvent plus se produire : à spécificité égale, deux tarifs
-    de la même catégorie partagent leurs cinq dimensions et se heurtent à
+    de la même catégorie partagent leurs six dimensions et se heurtent à
     `uq_fee_variant_dimensions`. On garde tout de même le premier rencontré
     pour que le résultat reste déterministe si une base ancienne en portait.
     """
@@ -123,6 +205,7 @@ async def get_mandatory_fee_variants(
     class_id: int,
     academic_year_id: int,
     assignment_status: object = None,
+    is_new_student: bool | None = None,
 ) -> list[FeeVariant]:
     """Un tarif obligatoire par catégorie pour cette classe et cette année.
 
@@ -139,6 +222,7 @@ async def get_mandatory_fee_variants(
             FeeVariant.level_id == class_.level_id,
             FeeVariant.series_key.in_(applicable_series_keys(class_.series_id)),
             FeeVariant.scope_key.in_(applicable_scope_keys(assignment_status)),
+            FeeVariant.profile_key.in_(applicable_profile_keys(is_new_student)),
             FeeCategory.is_mandatory.is_(True),
         )
         .order_by(FeeVariant.fee_category_id, FeeVariant.id)
@@ -180,12 +264,15 @@ async def create_mandatory_enrollment_fees(
     class_id: int,
     academic_year_id: int,
     assignment_status: object = None,
+    is_new_student: bool | None = None,
 ) -> None:
     """Crée les `EnrollmentFee` des frais obligatoires d'une classe.
 
     Idempotent : une catégorie déjà facturée n'est pas refacturée.
     """
-    variants = await get_mandatory_fee_variants(db, class_id, academic_year_id, assignment_status)
+    variants = await get_mandatory_fee_variants(
+        db, class_id, academic_year_id, assignment_status, is_new_student
+    )
     if not variants:
         return
 
@@ -206,6 +293,57 @@ async def create_mandatory_enrollment_fees(
         )
 
     await db.flush()
+
+
+async def create_explicit_enrollment_fee(
+    db: AsyncSession,
+    *,
+    enrollment: Enrollment,
+    fee_variant_id: int,
+) -> EnrollmentFee:
+    """Pose le tarif nommé par le guichet, à condition qu'il vise cette inscription.
+
+    `repo.create_enrollment_fee` écrit une ligne à partir du seul identifiant
+    reçu, sans regarder une seule dimension. C'est la porte de sortie de
+    l'invariant : un corps d'inscription portant le `fee_variant_id` du tarif
+    « nouveau » poserait 75 000 F sur une inscription dont le profil n'est pas
+    tranché, alors que le chemin normal refuse ce tarif à cette
+    inscription-là. Le montant serait plus élevé, la contrainte
+    `uq_enrollment_fee_category` interdirait ensuite la bonne ligne, et la
+    famille lirait l'écart sur sa facture.
+
+    **Refus explicite, pas filtrage silencieux.** Le client a nommé ce tarif ;
+    l'ignorer sans rien dire laisserait le guichet croire la ligne posée et
+    l'élève sans frais. Le message dit quoi corriger : compléter la fiche, ou
+    choisir un autre tarif.
+
+    Les dimensions testées sont celles que `variant_applies_to` porte, ni plus
+    ni moins. Ni le niveau ni l'année : ce chemin sert aussi à poser un frais
+    optionnel, une cantine sans niveau, que le chemin obligatoire ne connaît
+    pas.
+    """
+    variant = (
+        await db.execute(select(FeeVariant).where(FeeVariant.id == fee_variant_id))
+    ).scalar_one_or_none()
+    if variant is None:
+        raise NotFoundError("FeeVariant", fee_variant_id)
+
+    class_ = await _load_class(db, enrollment.class_id)
+    if not variant_applies_to(
+        variant,
+        series_id=class_.series_id,
+        assignment_status=enrollment.assignment_status,
+        is_new_student=enrollment.is_new_student,
+    ):
+        raise BusinessValidationError(
+            "Ce tarif ne s'applique pas à cette inscription : il vise un autre "
+            "profil d'élève, une autre série ou un autre statut d'affectation. "
+            "Complétez la fiche de l'élève, ou choisissez un autre tarif."
+        )
+
+    return await repo.create_enrollment_fee(
+        db, enrollment_id=enrollment.id, fee_variant_id=fee_variant_id
+    )
 
 
 async def regenerate_enrollment_fees(
@@ -257,6 +395,7 @@ async def regenerate_enrollment_fees(
         enrollment.class_id,
         enrollment.academic_year_id,
         enrollment.assignment_status,
+        enrollment.is_new_student,
     )
     created_count = await _count_enrollment_fees(db, enrollment_id) - avant_creation
 
@@ -329,6 +468,7 @@ async def get_applicable_fee_variants(
     class_id: int,
     academic_year_id: int | None = None,
     assignment_status: object = None,
+    is_new_student: bool | None = None,
 ) -> list[FeeVariantResponse]:
     """Aperçu des tarifs applicables à une classe.
 
@@ -358,6 +498,7 @@ async def get_applicable_fee_variants(
             FeeVariant.academic_year_id == academic_year_id,
             FeeVariant.series_key.in_(applicable_series_keys(class_.series_id)),
             FeeVariant.scope_key.in_(applicable_scope_keys(assignment_status)),
+            FeeVariant.profile_key.in_(applicable_profile_keys(is_new_student)),
             or_(
                 # Obligatoire : le niveau doit correspondre exactement.
                 and_(FeeCategory.is_mandatory, FeeVariant.level_id == class_.level_id),
