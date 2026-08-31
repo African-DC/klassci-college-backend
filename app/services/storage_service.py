@@ -12,9 +12,6 @@ from app.core.uploads import UPLOAD_ROOT
 
 logger = logging.getLogger(__name__)
 
-# Racine persistante partagee : le fallback local survit au redeploiement.
-LOCAL_UPLOAD_DIR = UPLOAD_ROOT
-
 
 def _get_s3_client():
     """Crée un client boto3 configuré pour DO Spaces."""
@@ -72,8 +69,8 @@ def _upload_to_s3(file_bytes: bytes, key: str, content_type: str) -> str:
 
 
 def _upload_to_local(file_bytes: bytes, key: str) -> str:
-    """Fallback : stockage local sous la racine d'upload."""
-    file_path = LOCAL_UPLOAD_DIR / key
+    """Fallback : stockage local sous la racine persistante servie par `/uploads`."""
+    file_path = UPLOAD_ROOT / key
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(file_bytes)
     logger.info("File stored locally: %s", file_path)

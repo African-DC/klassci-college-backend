@@ -8,8 +8,6 @@ from fastapi import HTTPException, UploadFile
 from app.core.uploads import DOCUMENTS
 from app.utils.photo_upload import EXTENSION_PAR_TYPE, read_capped
 
-#: Conserve : des tests nomment encore le dossier des documents.
-DOCUMENT_UPLOAD_DIR = DOCUMENTS.directory
 # Les types d'image viennent de `photo_upload`, seule table de reference :
 # les deux modules en portaient chacun une copie, et c'est la divergence qui a
 # laisse vivre l'extraction dangereuse d'un cote pendant que l'autre etait
