@@ -92,9 +92,17 @@ async def create_fee_variant(db: AsyncSession, **kwargs: object) -> FeeVariant:
 
 
 async def update_fee_variant(db: AsyncSession, variant: FeeVariant, **kwargs: object) -> FeeVariant:
+    """Écrit les champs reçus, `None` compris.
+
+    Ne filtre PAS les `None` : le service ne transmet que les champs
+    explicitement envoyés (`exclude_unset`) et retire déjà le montant, seul
+    champ que la colonne refuse de vider. Un `None` qui arrive ici est donc
+    un choix de l'utilisateur — « ce tarif s'applique à tout le monde » — et
+    le jeter rendrait une portée ou un profil posés par erreur définitifs :
+    le formulaire accepterait le geste et il ne se passerait rien.
+    """
     for key, value in kwargs.items():
-        if value is not None:
-            setattr(variant, key, value)
+        setattr(variant, key, value)
     await db.flush()
     return variant
 
