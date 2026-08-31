@@ -278,3 +278,16 @@ class BulkValidateFailure(BaseModel):
 class BulkValidateResponse(BaseModel):
     validated: list[int]
     failed: list[BulkValidateFailure]
+
+
+class NewStudentSuggestionResponse(BaseModel):
+    """Ce que l'ecran doit pre-cocher dans la case « nouvel eleve », et pourquoi.
+
+    Trois reponses, jamais deux. `null` n'est pas une panne : c'est
+    l'etablissement qui n'a pas declare ses annees passees exploitables, et la
+    secretaire qui reste seule a savoir. La phrase le lui dit en clair, plutot
+    que de laisser une case vide sans explication.
+    """
+
+    suggested: bool | None
+    reason: str

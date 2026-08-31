@@ -19,10 +19,16 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     FeeVariantResponse,
     InKindDepositResponse,
+    NewStudentSuggestionResponse,
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import archive_service, enrollment_fees, enrollment_service
+from app.services import (
+    archive_service,
+    enrollment_fees,
+    enrollment_history,
+    enrollment_service,
+)
 from app.services.enrollment_archive import ENROLLMENT_KIND
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
@@ -94,6 +100,42 @@ async def re_enroll_student(
 ) -> EnrollmentResponse:
     """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
     return await enrollment_service.re_enroll_student(db, data, created_by=current_user.user_id)
+
+
+@router.get(
+    "/new-student-suggestion",
+    response_model=NewStudentSuggestionResponse,
+    summary="Suggest whether a student is new for a given academic year",
+)
+async def suggest_new_student(
+    student_id: int = Query(..., description="Eleve qu'on s'apprete a inscrire"),
+    academic_year_id: int = Query(
+        ...,
+        description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
+    ),
+    _: None = require_permission("enrollments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NewStudentSuggestionResponse:
+    """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
+
+    Trois réponses possibles, et `null` en est une : tant que l'établissement
+    n'a pas déclaré ses années passées exploitables dans ses réglages, rien ne
+    permet de dire qui est nouveau. La phrase le lui explique, et elle coche
+    elle-même.
+
+    Même droit que la création d'une inscription : cette suggestion ne se lit
+    que pour remplir ce formulaire-là. Elle vit avec les inscriptions et non
+    dans le routeur d'administration : son sujet est l'inscription, et c'est
+    la seule raison qui doit décider où vit un endpoint.
+
+    Le chemin la place AVANT `/{enrollment_id}` : sans cela, FastAPI ferait
+    correspondre `new-student-suggestion` au paramètre d'identifiant et
+    rendrait une erreur de validation.
+    """
+    suggested, reason = await enrollment_history.suggest_new_student(
+        db, student_id, academic_year_id
+    )
+    return NewStudentSuggestionResponse(suggested=suggested, reason=reason)
 
 
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])

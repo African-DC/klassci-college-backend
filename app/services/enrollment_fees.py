@@ -11,11 +11,14 @@ que l'école a saisis pour elle.
 """
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
@@ -141,6 +144,28 @@ def variant_applies_to(
     )
 
 
+def dimensions_atteignables(
+    *,
+    series_id: int | None,
+    assignment_status: object,
+    is_new_student: bool | None,
+) -> list[ColumnElement[bool]]:
+    """Les clauses SQL des trois dimensions qu'une inscription peut recevoir.
+
+    Le pendant SQL de `variant_applies_to`, qui dit la même chose en mémoire.
+    Les deux constructeurs de requête les recopiaient à l'identique : elles
+    dérivaient bien des mêmes fonctions `applicable_*`, donc le risque était
+    faible, mais trois lignes copiées sont trois lignes qu'on peut oublier de
+    suivre quand une quatrième dimension arrivera. Le niveau n'en fait pas
+    partie : les deux appelants le contraignent différemment.
+    """
+    return [
+        FeeVariant.series_key.in_(applicable_series_keys(series_id)),
+        FeeVariant.scope_key.in_(applicable_scope_keys(assignment_status)),
+        FeeVariant.profile_key.in_(applicable_profile_keys(is_new_student)),
+    ]
+
+
 def _specificity(variant: FeeVariant) -> tuple[bool, bool, bool]:
     """Plus le tarif est précis, plus il l'emporte.
 
@@ -220,15 +245,107 @@ async def get_mandatory_fee_variants(
         .where(
             FeeVariant.academic_year_id == academic_year_id,
             FeeVariant.level_id == class_.level_id,
-            FeeVariant.series_key.in_(applicable_series_keys(class_.series_id)),
-            FeeVariant.scope_key.in_(applicable_scope_keys(assignment_status)),
-            FeeVariant.profile_key.in_(applicable_profile_keys(is_new_student)),
+            *dimensions_atteignables(
+                series_id=class_.series_id,
+                assignment_status=assignment_status,
+                is_new_student=is_new_student,
+            ),
             FeeCategory.is_mandatory.is_(True),
         )
         .order_by(FeeVariant.fee_category_id, FeeVariant.id)
     )
     rows = (await db.execute(stmt)).scalars().all()
     return most_specific_variant_per_category(rows)
+
+
+@dataclass(frozen=True, slots=True)
+class MandatoryBasket:
+    """Ce qu'un public donné doit, sur un niveau donné, en frais obligatoires."""
+
+    level_id: int
+    #: `affecte` ou `non_affecte`. La réaffectation est subventionnée comme
+    #: l'affectation, la grille ne lui réserve pas de troisième colonne.
+    assignment_scope: str
+    #: `nouveau`, `ancien`, ou `None` pour « profil non tranché ».
+    enrollment_profile: str | None
+    total: Decimal
+
+
+#: Les publics qu'une simulation peut vouloir chiffrer. Le statut sert à
+#: interroger `applicable_scope_keys`, qui reste seul à savoir qu'un réaffecté
+#: est subventionné comme un affecté.
+_PUBLICS = (
+    (AssignmentStatus.AFFECTE, FeeAssignmentScope.AFFECTE.value),
+    (AssignmentStatus.NON_AFFECTE, FeeAssignmentScope.NON_AFFECTE.value),
+)
+_PROFILS: tuple[tuple[bool | None, str | None], ...] = (
+    (True, FeeEnrollmentProfile.NOUVEAU.value),
+    (False, FeeEnrollmentProfile.ANCIEN.value),
+    (None, None),
+)
+
+
+async def mandatory_totals_by_audience(
+    db: AsyncSession, academic_year_id: int
+) -> list[MandatoryBasket]:
+    """Le socle obligatoire de chaque niveau, pour chaque public, en une fois.
+
+    L'écran des frais simule ce que donnera une grille avant de l'enregistrer,
+    et il le refait à chaque bascule de sélecteur. Il calculait donc lui-même
+    quel tarif l'emporte, en TypeScript, ce qui mettait la règle d'arbitrage
+    dans deux langages : elle a divergé en quelques jours, et la divergence a
+    produit de faux francs sur l'écran que la directrice valide.
+
+    La règle reste ici, seule. On rend toutes les combinaisons d'un coup plutôt
+    qu'une par appel : elles sont peu nombreuses, six par niveau, et un
+    aller-retour à chaque bascule ferait attendre un écran de saisie sur une
+    connexion instable.
+
+    Aucune série n'est désignée : une simulation parle d'un niveau, pas d'une
+    classe. `applicable_series_keys(None)` ne retient donc que le tronc commun,
+    exactement comme pour une classe sans série.
+    """
+    stmt = (
+        select(FeeVariant)
+        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
+        .where(
+            FeeVariant.academic_year_id == academic_year_id,
+            FeeVariant.level_id.is_not(None),
+            FeeCategory.is_mandatory.is_(True),
+        )
+        .order_by(FeeVariant.fee_category_id, FeeVariant.id)
+    )
+    tous = list((await db.execute(stmt)).scalars().all())
+
+    par_niveau: dict[int, list[FeeVariant]] = {}
+    for variant in tous:
+        par_niveau.setdefault(int(variant.level_id), []).append(variant)
+
+    paniers: list[MandatoryBasket] = []
+    for level_id, variants in sorted(par_niveau.items()):
+        for statut, scope in _PUBLICS:
+            for is_new_student, profil in _PROFILS:
+                retenus = most_specific_variant_per_category(
+                    [
+                        v
+                        for v in variants
+                        if variant_applies_to(
+                            v,
+                            series_id=None,
+                            assignment_status=statut,
+                            is_new_student=is_new_student,
+                        )
+                    ]
+                )
+                paniers.append(
+                    MandatoryBasket(
+                        level_id=level_id,
+                        assignment_scope=scope,
+                        enrollment_profile=profil,
+                        total=sum((Decimal(str(v.amount)) for v in retenus), Decimal("0")),
+                    )
+                )
+    return paniers
 
 
 # ---------------------------------------------------------------------------
@@ -496,9 +613,11 @@ async def get_applicable_fee_variants(
         .options(selectinload(FeeVariant.category))
         .where(
             FeeVariant.academic_year_id == academic_year_id,
-            FeeVariant.series_key.in_(applicable_series_keys(class_.series_id)),
-            FeeVariant.scope_key.in_(applicable_scope_keys(assignment_status)),
-            FeeVariant.profile_key.in_(applicable_profile_keys(is_new_student)),
+            *dimensions_atteignables(
+                series_id=class_.series_id,
+                assignment_status=assignment_status,
+                is_new_student=is_new_student,
+            ),
             or_(
                 # Obligatoire : le niveau doit correspondre exactement.
                 and_(FeeCategory.is_mandatory, FeeVariant.level_id == class_.level_id),

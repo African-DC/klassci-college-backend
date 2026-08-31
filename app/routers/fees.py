@@ -16,12 +16,14 @@ from app.schemas.fee import (
     FeeVariantListResponse,
     FeeVariantResponse,
     FeeVariantUpdate,
+    MandatoryBasketLine,
+    MandatoryBasketResponse,
     OptionalFeeOptionCreate,
     OptionalFeeOptionListResponse,
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
-from app.services import fee_propagation, fee_service
+from app.services import enrollment_fees, fee_propagation, fee_service
 
 router = APIRouter(prefix="/admin", tags=["fees"])
 
@@ -164,6 +166,32 @@ async def update_fee_variant(
     return await fee_service.update_fee_variant(
         db, variant_id, data, updated_by=current_user.user_id
     )
+
+
+@router.get(
+    "/fee-variants/mandatory-basket",
+    response_model=MandatoryBasketResponse,
+    summary="Socle obligatoire par niveau et par public, pour la simulation de grille",
+)
+async def mandatory_basket(
+    academic_year_id: int = Query(..., description="Annee dont on chiffre la grille"),
+    _: None = require_permission("fees:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> MandatoryBasketResponse:
+    """Ce que chaque niveau doit, pour chaque public, en frais obligatoires.
+
+    L'ecran de simulation calculait ce total lui-meme, en reimplementant
+    l'arbitrage du tarif le plus specifique. La regle vivait donc dans deux
+    langages, et elle a diverge : la simulation oubliait d'ecarter les tarifs
+    d'une serie etrangere et annoncait des francs que l'eleve ne paierait pas.
+
+    La regle reste dans `enrollment_fees`, seule. On rend toutes les
+    combinaisons d'un coup, six par niveau, plutot qu'un appel par bascule de
+    selecteur : l'ecran redevient une lecture, et il n'attend pas le reseau
+    pendant que la personne reflechit.
+    """
+    paniers = await enrollment_fees.mandatory_totals_by_audience(db, academic_year_id)
+    return MandatoryBasketResponse(items=[MandatoryBasketLine.model_validate(p) for p in paniers])
 
 
 @router.get(
