@@ -57,9 +57,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       # Racine des televersements : photos/, signatures/, logos/. L'application
       # monte cette racine sur /uploads, donc les URL publiques ne bougent pas.
-      # Le defaut applicatif vaut deja /app/uploads ; on l'ecrit quand meme,
-      # pour que le point de montage juste en dessous et le chemin qu'ecrit le
-      # code se lisent au meme endroit et ne puissent plus diverger en silence.
+      # Cette variable est lue par le backend depuis la PR #369, qui sort les
+      # ecritures de /tmp. Les deux doivent partir ensemble : ce compose seul
+      # monterait le volume la ou le code n'ecrit pas encore, et le code seul
+      # ecrirait la ou aucun volume n'est monte.
       UPLOAD_ROOT: /app/uploads
     depends_on:
       mysql:
@@ -192,21 +193,13 @@ services:
       - traefik.http.routers.klassci-college-ip.service=klassci-college
 
 volumes:
-  # `klassci_uploads` est le seul volume que ce fichier CREE lui-meme.
-  #
-  # Les deux autres sont `external` parce qu'ils existent deja sur le serveur
-  # et portent les donnees de la production : les adopter, c'est refuser d'en
-  # fabriquer un second par megarde. Celui-ci n'a pas d'antecedent, il n'y a
-  # rien a adopter. Le declarer `external` exigerait au contraire qu'il existe
-  # DEJA, et le deploiement echouerait sur un serveur neuf tant que personne
-  # n'aurait tape `docker volume create` a la main : une piece d'infrastructure
-  # invisible, qui ne vit que dans la memoire de celui qui l'a creee.
-  #
-  # Docker le nomme donc `<projet>_klassci_uploads`, soit
-  # `klassci-college-prod_klassci_uploads` en production. Une pile jetable
-  # obtient le sien, distinct, sans rien avoir a prefixer.
-  klassci_uploads:
-
+  # `klassci_uploads` existe DEJA sur le serveur de production et porte des
+  # fichiers : au 2026-08-31, `linux_klassci_uploads` contient le logo du
+  # college Rostan. Il est donc `external`, comme les deux autres, pour etre
+  # adopte et non recree a cote. Le declarer autrement fabriquerait un volume
+  # neuf et vide, et le logo cesserait d'exister aux yeux de l'application
+  # sans que rien ne soit efface : le pire des deux mondes, une donnee bien
+  # vivante que plus personne ne sert.
   # Le prefixe est surchargeable, et c'est un garde, pas une commodite.
   #
   # Ces volumes etaient epingles a `linux_klassci_*` en dur. Toute seconde pile
@@ -222,6 +215,9 @@ volumes:
   #
   # Pour une pile jetable : creer les volumes prefixes d'abord, puis
   #   KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest up -d
+  klassci_uploads:
+    external: true
+    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_uploads
   klassci_mysql:
     external: true
     name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_mysql
