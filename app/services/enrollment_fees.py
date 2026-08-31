@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import AssignmentStatus
+from app.models.enrollment import AssignmentStatus, Enrollment
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
@@ -293,6 +293,57 @@ async def create_mandatory_enrollment_fees(
         )
 
     await db.flush()
+
+
+async def create_explicit_enrollment_fee(
+    db: AsyncSession,
+    *,
+    enrollment: Enrollment,
+    fee_variant_id: int,
+) -> EnrollmentFee:
+    """Pose le tarif nommé par le guichet, à condition qu'il vise cette inscription.
+
+    `repo.create_enrollment_fee` écrit une ligne à partir du seul identifiant
+    reçu, sans regarder une seule dimension. C'est la porte de sortie de
+    l'invariant : un corps d'inscription portant le `fee_variant_id` du tarif
+    « nouveau » poserait 75 000 F sur une inscription dont le profil n'est pas
+    tranché, alors que le chemin normal refuse ce tarif à cette
+    inscription-là. Le montant serait plus élevé, la contrainte
+    `uq_enrollment_fee_category` interdirait ensuite la bonne ligne, et la
+    famille lirait l'écart sur sa facture.
+
+    **Refus explicite, pas filtrage silencieux.** Le client a nommé ce tarif ;
+    l'ignorer sans rien dire laisserait le guichet croire la ligne posée et
+    l'élève sans frais. Le message dit quoi corriger : compléter la fiche, ou
+    choisir un autre tarif.
+
+    Les dimensions testées sont celles que `variant_applies_to` porte, ni plus
+    ni moins. Ni le niveau ni l'année : ce chemin sert aussi à poser un frais
+    optionnel, une cantine sans niveau, que le chemin obligatoire ne connaît
+    pas.
+    """
+    variant = (
+        await db.execute(select(FeeVariant).where(FeeVariant.id == fee_variant_id))
+    ).scalar_one_or_none()
+    if variant is None:
+        raise NotFoundError("FeeVariant", fee_variant_id)
+
+    class_ = await _load_class(db, enrollment.class_id)
+    if not variant_applies_to(
+        variant,
+        series_id=class_.series_id,
+        assignment_status=enrollment.assignment_status,
+        is_new_student=enrollment.is_new_student,
+    ):
+        raise BusinessValidationError(
+            "Ce tarif ne s'applique pas à cette inscription : il vise un autre "
+            "profil d'élève, une autre série ou un autre statut d'affectation. "
+            "Complétez la fiche de l'élève, ou choisissez un autre tarif."
+        )
+
+    return await repo.create_enrollment_fee(
+        db, enrollment_id=enrollment.id, fee_variant_id=fee_variant_id
+    )
 
 
 async def regenerate_enrollment_fees(

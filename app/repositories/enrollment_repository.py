@@ -112,7 +112,15 @@ async def create_enrollment_fee(
     enrollment_id: int,
     fee_variant_id: int,
 ) -> EnrollmentFee:
-    """Crée un EnrollmentFee en récupérant le montant depuis FeeVariant."""
+    """Crée un EnrollmentFee en récupérant le montant depuis FeeVariant.
+
+    Ne teste AUCUNE dimension du tarif : ni la série, ni le statut
+    d'affectation, ni le profil d'élève. Un appelant qui reçoit un
+    `fee_variant_id` d'un client passe donc par
+    `enrollment_fees.create_explicit_enrollment_fee`, qui pose le garde avant
+    d'appeler d'ici. Écrire directement ici depuis un corps de requête
+    contournerait l'invariant que tout le reste du code tient.
+    """
     variant_stmt = select(FeeVariant).where(FeeVariant.id == fee_variant_id)
     variant = (await db.execute(variant_stmt)).scalar_one_or_none()
     if variant is None:

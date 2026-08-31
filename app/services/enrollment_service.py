@@ -68,19 +68,29 @@ def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
 
 async def _profil_a_retenir(
     db: AsyncSession,
-    saisi: bool | None,
+    data: EnrollmentCreate | EnrollmentWithStudentCreate,
     student_id: int,
     academic_year_id: int,
 ) -> bool | None:
     """Le profil de l'inscription : celui du formulaire, ou celui qu'on déduit.
 
-    La secrétaire l'emporte toujours : c'est elle qui a le dossier sous les
-    yeux, et la suggestion n'est qu'une aide à la saisie. Quand elle n'a rien
-    coché, on lit l'historique — et si l'établissement n'en a pas, la
-    déduction rend `None` à son tour plutôt que d'inventer un montant.
+    Le corps sait dire trois choses, et il faut les distinguer toutes les
+    trois :
+
+    - `true` / `false` : le guichet a tranché, il l'emporte toujours. C'est
+      lui qui a le dossier sous les yeux, la suggestion n'est qu'une aide.
+    - `is_new_student: null` **envoyé** : le guichet dit explicitement qu'il ne
+      tranche pas. On enregistre ce vide tel quel. Déduire ici démentirait
+      l'écran, qui vient de promettre « non tranché ».
+    - champ **absent** du corps : personne ne s'est prononcé, on lit
+      l'historique. Si l'école ne l'a pas déclaré exploitable, la déduction
+      rend `None` à son tour plutôt que d'inventer un montant.
+
+    D'où la lecture de `model_fields_set` et non un test sur la valeur : `None`
+    est ici une valeur métier, pas une absence.
     """
-    if saisi is not None:
-        return saisi
+    if "is_new_student" in data.model_fields_set:
+        return data.is_new_student
     return await enrollment_history.deduce_new_student(db, student_id, academic_year_id)
 
 
@@ -126,15 +136,18 @@ async def create_enrollment(
             assignment_status=data.assignment_status,
             assignment_decision_number=data.assignment_decision_number,
             is_new_student=await _profil_a_retenir(
-                db, data.is_new_student, data.student_id, data.academic_year_id
+                db, data, data.student_id, data.academic_year_id
             ),
         )
 
-        # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat)
+        # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat).
+        # Le garde vit dans `enrollment_fees` : un tarif nommé par le client
+        # doit viser cette inscription, sans quoi ce chemin poserait un montant
+        # à profil sur une inscription dont le profil n'est pas tranché.
         if data.fee_variant_id is not None:
-            await repo.create_enrollment_fee(
+            await enrollment_fees.create_explicit_enrollment_fee(
                 db,
-                enrollment_id=enrollment.id,
+                enrollment=enrollment,
                 fee_variant_id=data.fee_variant_id,
             )
 
@@ -484,16 +497,16 @@ async def create_enrollment_with_student(
             notes=data.notes,
             assignment_status=data.assignment_status,
             assignment_decision_number=data.assignment_decision_number,
-            is_new_student=await _profil_a_retenir(
-                db, data.is_new_student, student.id, academic_year_id
-            ),
+            is_new_student=await _profil_a_retenir(db, data, student.id, academic_year_id),
         )
 
-        # 4. Create enrollment fee if variant provided (rétrocompat)
+        # 4. Create enrollment fee if variant provided (rétrocompat).
+        # Même garde qu'à l'autre création : le tarif nommé doit viser cette
+        # inscription, profil compris.
         if data.fee_variant_id is not None:
-            await repo.create_enrollment_fee(
+            await enrollment_fees.create_explicit_enrollment_fee(
                 db,
-                enrollment_id=enrollment.id,
+                enrollment=enrollment,
                 fee_variant_id=data.fee_variant_id,
             )
 

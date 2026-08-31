@@ -39,11 +39,20 @@ class EnrollmentCreate(BaseModel):
 
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
-    #: `None` = le client ne tranche pas, et le serveur deduit depuis
-    #: l'historique de l'eleve. Si l'etablissement n'a aucune inscription
-    #: anterieure en base, la deduction rend `None` a son tour : l'inscription
-    #: ne recoit alors aucun tarif porteur d'un profil, plutot que d'en
-    #: recevoir un choisi a la place de l'ecole.
+    #: Trois etats distincts, et le client doit pouvoir les dire tous les
+    #: trois :
+    #:
+    #: - `true` : nouvel eleve ;
+    #: - `false` : deja inscrit dans l'etablissement auparavant ;
+    #: - `null` ENVOYE explicitement : le guichet ne tranche pas. La valeur est
+    #:   enregistree telle quelle, et l'inscription ne recoit alors aucun tarif
+    #:   porteur d'un profil.
+    #:
+    #: Champ ABSENT du corps : personne ne s'est prononce, le serveur deduit
+    #: depuis l'historique. Un client qui voulait dire « non tranche » doit donc
+    #: envoyer `null` explicitement : en JavaScript, `JSON.stringify` supprime
+    #: les cles `undefined`, le champ disparait du corps, et le serveur deduit
+    #: alors que l'ecran promettait le contraire.
     is_new_student: bool | None = None
 
 
@@ -72,9 +81,10 @@ class EnrollmentUpdate(BaseModel):
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
     #: La decision se corrige : c'est pour cela qu'elle vit sur l'inscription.
-    #: Le champ absent laisse la valeur intacte, le champ envoye vide la remet
-    #: a « on n'a pas tranche » — le service distingue les deux, comme pour la
-    #: portee d'un tarif.
+    #: Le champ absent laisse la valeur intacte, le champ envoye a `null` la
+    #: remet a « on n'a pas tranche ». Le service distingue les deux, comme
+    #: pour la portee d'un tarif. Corriger ce champ regenere les frais de
+    #: l'inscription, exactement comme un changement de classe.
     is_new_student: bool | None = None
 
 
@@ -176,8 +186,9 @@ class EnrollmentWithStudentCreate(BaseModel):
     # etre saisi au moment ou l'inscription est creee.
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
-    # Le profil decide lui aussi du tarif applique : meme raison, meme place.
-    # Absent, il est deduit de l'historique de l'eleve.
+    # Le profil decide lui aussi du tarif applique : meme raison, meme place,
+    # memes trois etats que sur `EnrollmentCreate`. Absent, il est deduit de
+    # l'historique ; envoye a `null`, il reste « non tranche ».
     is_new_student: bool | None = None
     fee_variant_id: int | None = None
     notes: str | None = None

@@ -25,8 +25,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import Base
+from app.core.exceptions import BusinessValidationError
 from app.models.academic import Class
-from app.models.enrollment import AssignmentStatus
+from app.models.enrollment import AssignmentStatus, Enrollment
 from app.models.fee import (
     EnrollmentFee,
     FeeAssignmentScope,
@@ -322,6 +323,84 @@ async def test_l_ordre_de_lecture_ne_change_pas_le_tarif_retenu() -> None:
     for ordre in ([general, nouveau], [nouveau, general]):
         retenus = enrollment_fees.most_specific_variant_per_category(ordre)
         assert [v.id for v in retenus] == [nouveau.id]
+
+
+# ---------------------------------------------------------------------------
+# Le tarif nommé au guichet : l'autre chemin d'écriture
+# ---------------------------------------------------------------------------
+
+
+def _inscription(*, profil: bool | None) -> Enrollment:
+    """Une inscription tenue en mémoire : le garde n'en lit que les dimensions."""
+    return Enrollment(id=INSCRIPTION, class_id=CLASSE_6E_A, is_new_student=profil)
+
+
+async def test_un_tarif_a_profil_est_refuse_sur_une_inscription_non_tranchee(
+    db: _AsyncBridge,
+) -> None:
+    """La porte de sortie de l'invariant, celle par laquelle un corps de
+    requête posait un montant que le chemin normal refuse. Le refus est
+    explicite : ignorer le tarif en silence laisserait le guichet croire la
+    ligne posée."""
+    db.add(_tarif(1, CAT_CHEMISE, "3000", profil=FeeEnrollmentProfile.NOUVEAU))
+    await db.flush()
+
+    with pytest.raises(BusinessValidationError):
+        await enrollment_fees.create_explicit_enrollment_fee(
+            db,  # type: ignore[arg-type]
+            enrollment=_inscription(profil=None),
+            fee_variant_id=1,
+        )
+
+    assert _lignes_facturees(db) == []
+
+
+async def test_un_tarif_a_profil_est_refuse_sur_le_profil_oppose(db: _AsyncBridge) -> None:
+    """Un ancien ne se voit pas poser le droit d'entrée des nouveaux, quel que
+    soit le chemin emprunté pour l'écrire."""
+    db.add(_tarif(1, CAT_CHEMISE, "3000", profil=FeeEnrollmentProfile.NOUVEAU))
+    await db.flush()
+
+    with pytest.raises(BusinessValidationError):
+        await enrollment_fees.create_explicit_enrollment_fee(
+            db,  # type: ignore[arg-type]
+            enrollment=_inscription(profil=False),
+            fee_variant_id=1,
+        )
+
+
+async def test_le_tarif_nomme_passe_quand_il_vise_bien_cette_inscription(
+    db: _AsyncBridge,
+) -> None:
+    """Le garde ne doit pas fermer plus que la porte : le geste légitime,
+    celui pour lequel ce chemin existe, continue de passer."""
+    db.add(_tarif(1, CAT_CHEMISE, "3000", profil=FeeEnrollmentProfile.NOUVEAU))
+    await db.flush()
+
+    await enrollment_fees.create_explicit_enrollment_fee(
+        db,  # type: ignore[arg-type]
+        enrollment=_inscription(profil=True),
+        fee_variant_id=1,
+    )
+
+    assert _lignes_facturees(db) == [(CAT_CHEMISE, Decimal("3000"))]
+
+
+async def test_un_tarif_sans_profil_passe_sur_une_inscription_non_tranchee(
+    db: _AsyncBridge,
+) -> None:
+    """La grille générale s'applique à tout le monde : elle n'a jamais eu
+    besoin qu'on tranche."""
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "50000"))
+    await db.flush()
+
+    await enrollment_fees.create_explicit_enrollment_fee(
+        db,  # type: ignore[arg-type]
+        enrollment=_inscription(profil=None),
+        fee_variant_id=1,
+    )
+
+    assert _lignes_facturees(db) == [(CAT_SCOLARITE_T1, Decimal("50000"))]
 
 
 # ---------------------------------------------------------------------------
