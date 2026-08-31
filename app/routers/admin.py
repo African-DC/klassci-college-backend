@@ -9,6 +9,7 @@ from app.core.dependencies import (
     get_current_user,
     get_tenant_db,
     has_permission,
+    require_any_permission,
     require_permission,
 )
 from app.core.uploads import LOGOS, PHOTOS, SIGNATURES
@@ -29,6 +30,7 @@ from app.schemas.admin import (
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
+    NewStudentSuggestionResponse,
     NotificationSettingsUpdate,
     ParentCreate,
     ParentFullResponse,
@@ -80,7 +82,12 @@ from app.schemas.admin import (
     UserAccountCreate,
     UserAccountUpdate,
 )
-from app.services import admin_service, enrollment_fees, matricule_service
+from app.services import (
+    admin_service,
+    enrollment_fees,
+    enrollment_history,
+    matricule_service,
+)
 from app.services.finance_visibility import FinanceView
 from app.utils.photo_upload import save_image_upload
 
@@ -249,6 +256,35 @@ async def get_student_fees(
     return await admin_service.get_student_enrollment_fees(db, student_id)
 
 
+@router.get(
+    "/students/{student_id}/new-student-suggestion",
+    response_model=NewStudentSuggestionResponse,
+    summary="Suggest whether a student is new for a given academic year",
+)
+async def suggest_new_student(
+    student_id: int,
+    academic_year_id: int = Query(
+        ...,
+        description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
+    ),
+    _: None = require_permission("enrollments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NewStudentSuggestionResponse:
+    """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
+
+    Trois réponses possibles, et `null` en est une : quand l'établissement n'a
+    aucune inscription des années précédentes en base, rien ne permet de dire
+    qui est nouveau. La phrase le lui explique, et elle coche elle-même.
+
+    Même droit que la création d'une inscription : cette suggestion ne se lit
+    que pour remplir ce formulaire-là.
+    """
+    suggested, reason = await enrollment_history.suggest_new_student(
+        db, student_id, academic_year_id
+    )
+    return NewStudentSuggestionResponse(suggested=suggested, reason=reason)
+
+
 # ---------------------------------------------------------------------------
 # Enrollment fees — regenerate
 # ---------------------------------------------------------------------------
@@ -258,7 +294,7 @@ async def get_student_fees(
 async def regenerate_enrollment_fees(
     enrollment_id: int,
     current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:students:update"),
+    _: None = require_any_permission("enrollments:update", "admin:students:update"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Régénère les frais obligatoires d'une inscription.
@@ -267,6 +303,11 @@ async def regenerate_enrollment_fees(
     les autres, et recrée les frais obligatoires correspondant à la classe
     actuelle. La réponse porte le décompte des deux et un message à
     afficher tel quel.
+
+    Deux droits l'ouvrent, et détenir l'un suffit : le secrétariat corrige un
+    profil d'inscription depuis le dossier, la comptabilité rejoue une grille
+    depuis la fiche élève. Exiger `admin:students:update` du secrétariat
+    laissait son propre bouton en échec.
     """
     async with db.begin_nested():
         result = await enrollment_fees.regenerate_enrollment_fees(

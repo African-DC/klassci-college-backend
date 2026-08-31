@@ -884,6 +884,19 @@ class StudentEnrollmentFeeListResponse(BaseModel):
     items: list[StudentEnrollmentFeeResponse]
 
 
+class NewStudentSuggestionResponse(BaseModel):
+    """Ce que l'ecran doit pre-cocher dans la case « nouvel eleve », et pourquoi.
+
+    Trois reponses, jamais deux. `null` n'est pas une panne : c'est
+    l'etablissement dont les annees passees ne sont pas reconstituees, et la
+    secretaire qui reste seule a savoir. La phrase le lui dit en clair, plutot
+    que de laisser une case vide sans explication.
+    """
+
+    suggested: bool | None
+    reason: str
+
+
 class SchoolInfoUpdate(BaseModel):
     school_name: str | None = None
     address: str | None = None

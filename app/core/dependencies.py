@@ -192,6 +192,40 @@ async def _resolve_permission(
     return bool(await check_user_permission(db, current_user.user_id, permission_slug))
 
 
+def require_any_permission(*permission_slugs: str) -> Any:
+    """Dépendance qui laisse passer qui détient AU MOINS UN de ces droits.
+
+    Certains gestes appartiennent légitimement à deux métiers. Régénérer les
+    frais d'une inscription en est un : la comptabilité le déclenche depuis la
+    fiche élève, le secrétariat depuis le dossier d'inscription, et n'accepter
+    que le slug de l'autre condamne l'un des deux à réclamer de l'aide pour un
+    bouton de sa propre page.
+
+    Bâtie sur `_resolve_permission`, comme `require_permission` : une seconde
+    lecture de la matrice des droits finirait par répondre autre chose que la
+    première, et plus personne ne saurait laquelle fait foi.
+    """
+    if not permission_slugs:
+        raise ValueError("require_any_permission attend au moins une permission")
+
+    async def _check(
+        current_user: TokenData = Depends(get_current_user),
+        db: AsyncSession = Depends(get_tenant_db),
+    ) -> None:
+        for slug in permission_slugs:
+            if await _resolve_permission(current_user, db, slug):
+                return
+        # Le message nomme TOUTES les permissions acceptées. N'en citer qu'une
+        # enverrait un PAT réclamer un scope qu'on ne lui accordera peut-être
+        # jamais, alors que l'autre lui était ouvert.
+        manquantes = " ou ".join(permission_slugs)
+        if current_user.auth_method == "pat":
+            raise PermissionDeniedError(f"PAT scope missing: {manquantes}")
+        raise PermissionDeniedError(manquantes)
+
+    return Depends(_check)
+
+
 def has_permission(permission_slug: str) -> Any:
     """Dépendance qui répond `True`/`False` au lieu de lever un 403.
 
