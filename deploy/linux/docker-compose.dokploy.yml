@@ -55,6 +55,12 @@ services:
     environment:
       DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/{tenant}
       REDIS_URL: redis://redis:6379/0
+      # Racine des televersements : photos/, signatures/, logos/. L'application
+      # monte cette racine sur /uploads, donc les URL publiques ne bougent pas.
+      # Le defaut applicatif vaut deja /app/uploads ; on l'ecrit quand meme,
+      # pour que le point de montage juste en dessous et le chemin qu'ecrit le
+      # code se lisent au meme endroit et ne puissent plus diverger en silence.
+      UPLOAD_ROOT: /app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -66,10 +72,16 @@ services:
       timeout: 5s
       retries: 10
     volumes:
-      # Les televersements vivaient dans la couche jetable du conteneur : la
-      # premiere photo d eleve aurait disparu au deploiement suivant, et le
-      # logo avec elle, sans que rien ne le signale sur les bulletins.
-      - klassci_uploads:/tmp/klassci-uploads
+      # Les televersements vivaient dans la couche jetable du conteneur, sous
+      # /tmp : la premiere photo d eleve disparaissait au deploiement suivant,
+      # et le logo avec elle, sans que rien ne le signale sur les bulletins.
+      # Constate en production le 2026-08-31.
+      #
+      # Le backend est le service qui recoit les fichiers (photo d eleve,
+      # signature du chef d etablissement, logo) et le seul qui les SERT :
+      # son montage StaticFiles sur /uploads exige que le dossier existe des
+      # le demarrage. Sans volume, il le recree vide a chaque conteneur.
+      - klassci_uploads:/app/uploads
     networks:
       - klassci
       - dokploy-network
@@ -83,19 +95,35 @@ services:
     environment:
       DATABASE_URL: mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/{tenant}
       REDIS_URL: redis://redis:6379/0
+      # Meme racine que le backend, meme valeur, meme volume : un document
+      # produit ici doit etre lisible par celui qui le sert.
+      UPLOAD_ROOT: /app/uploads
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      # Les televersements vivaient dans la couche jetable du conteneur : la
-      # premiere photo d eleve aurait disparu au deploiement suivant, et le
-      # logo avec elle, sans que rien ne le signale sur les bulletins.
-      - klassci_uploads:/tmp/klassci-uploads
+      # Le worker est le service qui execute les taches, donc celui ou la
+      # generation de documents a vocation a tourner. Un document composite va
+      # CHERCHER dans cette racine le logo, la signature du chef et les photos
+      # d eleves a incruster : sans le volume il lirait un dossier vide et
+      # rendrait des bulletins sans logo ni signature, sans erreur ni trace.
+      # C'est l'echec qui ne se voit qu'a l'impression, une fois distribue.
+      #
+      # Au 2026-08-31 ses trois familles de taches (emploi du temps, audit,
+      # caisse) n'ouvrent encore aucun fichier. Le montage est neanmoins pose
+      # des maintenant : il tourne sur la MEME image et le meme code que le
+      # backend, et la premiere tache qui composera un document ne doit pas
+      # dependre de quelqu'un se souvenant d'ajouter un volume ce jour-la.
+      - klassci_uploads:/app/uploads
     networks:
       - klassci
 
+  # `beat` n'a deliberement ni volume ni UPLOAD_ROOT : il ne fait que publier
+  # les declencheurs dans Redis a l'heure dite, il n'execute aucune tache et
+  # n'ouvre donc jamais un fichier. Lui monter le volume laisserait croire le
+  # contraire au prochain lecteur.
   beat:
     image: ${KLASSCI_BACKEND_IMAGE}
     restart: unless-stopped
@@ -164,6 +192,21 @@ services:
       - traefik.http.routers.klassci-college-ip.service=klassci-college
 
 volumes:
+  # `klassci_uploads` est le seul volume que ce fichier CREE lui-meme.
+  #
+  # Les deux autres sont `external` parce qu'ils existent deja sur le serveur
+  # et portent les donnees de la production : les adopter, c'est refuser d'en
+  # fabriquer un second par megarde. Celui-ci n'a pas d'antecedent, il n'y a
+  # rien a adopter. Le declarer `external` exigerait au contraire qu'il existe
+  # DEJA, et le deploiement echouerait sur un serveur neuf tant que personne
+  # n'aurait tape `docker volume create` a la main : une piece d'infrastructure
+  # invisible, qui ne vit que dans la memoire de celui qui l'a creee.
+  #
+  # Docker le nomme donc `<projet>_klassci_uploads`, soit
+  # `klassci-college-prod_klassci_uploads` en production. Une pile jetable
+  # obtient le sien, distinct, sans rien avoir a prefixer.
+  klassci_uploads:
+
   # Le prefixe est surchargeable, et c'est un garde, pas une commodite.
   #
   # Ces volumes etaient epingles a `linux_klassci_*` en dur. Toute seconde pile
@@ -179,9 +222,6 @@ volumes:
   #
   # Pour une pile jetable : creer les volumes prefixes d'abord, puis
   #   KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest up -d
-  klassci_uploads:
-    external: true
-    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_uploads
   klassci_mysql:
     external: true
     name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_mysql
