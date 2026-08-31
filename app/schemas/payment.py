@@ -26,6 +26,25 @@ _ALLOWED_METHODS = set(SELECTABLE_METHODS)
 # ---------------------------------------------------------------------------
 
 
+class PaymentAllocationItem(BaseModel):
+    """Une imputation nommée par le caissier : ce montant, sur ce frais.
+
+    Sert le cas du guichet : « je pose 30 000 sur l'inscription, et le reste va
+    où il doit aller ». Les lignes nommées sont imputées telles quelles, le
+    reliquat éventuel cascade ensuite par priorité comme d'habitude.
+    """
+
+    enrollment_fee_id: int = Field(gt=0)
+    amount: Decimal
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("allocation amount must be positive")
+        return v
+
+
 class EnrollmentPaymentCreate(BaseModel):
     """Body du nouvel endpoint POST /enrollments/{id}/payments (Wave-style)."""
 
@@ -33,6 +52,12 @@ class EnrollmentPaymentCreate(BaseModel):
     method: str
     reference: str | None = None
     notes: str | None = None
+    #: Imputations nommées, facultatives. Absent ou vide : allocation en
+    #: cascade par priorité, le comportement historique, inchangé. Renseigné :
+    #: chaque montant va au frais désigné et le reliquat cascade sur le reste
+    #: dû. Le plafond borne la taille du corps reçu, pas le métier : une
+    #: inscription compte une dizaine de frais, pas cinquante.
+    allocations: list[PaymentAllocationItem] = Field(default_factory=list, max_length=50)
 
     @field_validator("amount")
     @classmethod
@@ -40,6 +65,17 @@ class EnrollmentPaymentCreate(BaseModel):
         if v <= 0:
             raise ValueError("amount must be positive")
         return v
+
+    @field_validator("allocations", mode="before")
+    @classmethod
+    def null_vaut_vide(cls, v: object) -> object:
+        """`"allocations": null` vaut « rien de nommé », pas un refus.
+
+        Un formulaire qui ne coche aucune imputation envoie tantôt le champ
+        absent, tantôt `null` : les deux disent la même chose et doivent
+        cascader, plutôt que rendre une erreur de validation illisible.
+        """
+        return [] if v is None else v
 
     @field_validator("method")
     @classmethod
@@ -221,21 +257,63 @@ class AllocationPreviewLine(BaseModel):
     fee_category_priority: int
     fee_total: Decimal
     fee_paid_before: Decimal
+    #: Reste encaissable avant ce versement. Zero des que la ligne n'est plus
+    #: due en argent (exoneree, deposee en nature) : le client affiche ce
+    #: nombre au lieu de rejouer la regle qui le produit.
+    cash_remaining_before: Decimal
+    #: Ce que le caissier a nomme lui-meme sur ce frais, zero s'il a laisse
+    #: faire la cascade. `allocated - directed` est donc la part cascadee.
+    directed: Decimal = Decimal("0")
     allocated: Decimal
     fee_paid_after: Decimal
     status_after: str
 
 
+class AllocationPreviewProblem(BaseModel):
+    """Ce qui empêche d'enregistrer, et sur quelle ligne le dire.
+
+    `enrollment_fee_id` est `null` quand le problème porte sur la répartition
+    entière : l'écran l'affiche alors au-dessus de la liste et non sous une
+    ligne.
+    """
+
+    enrollment_fee_id: int | None = None
+    message: str
+
+
+class AllocationPreviewRequest(BaseModel):
+    """Corps du preview : le montant, et la répartition que le caissier tape.
+
+    Le preview prend un corps et non des paramètres d'URL parce que la
+    répartition est une liste. Il n'écrit rien.
+    """
+
+    amount: Decimal = Field(gt=0)
+    #: Mêmes règles que l'enregistrement, et pour cause : c'est la même
+    #: fonction qui les vérifie. Absente ou vide, l'aperçu montre la cascade.
+    allocations: list[PaymentAllocationItem] = Field(default_factory=list, max_length=50)
+
+
 class AllocationPreviewResponse(BaseModel):
-    """Réponse du preview /enrollments/{id}/payments/preview?amount=X."""
+    """Réponse du preview POST /enrollments/{id}/payments/preview."""
 
     enrollment_id: int
     amount: Decimal
     total_remaining_before: Decimal
     total_remaining_after: Decimal
+    #: Somme nommée par le caissier, et somme placée par la cascade. Les deux
+    #: viennent du serveur : l'écran n'additionne rien lui-même.
+    directed_total: Decimal = Decimal("0")
+    cascaded_total: Decimal = Decimal("0")
     surplus: Decimal
     can_record: bool
     reject_reason: str | None
+    #: Vide quand la répartition est honorable. Non vide, `can_record` est faux
+    #: et aucune ligne ne porte d'allocation : on ne montre pas une répartition
+    #: que la caisse refuserait. `directed` continue en revanche d'être rendu,
+    #: c'est l'écho de la demande et non une imputation : un écran qui l'effacerait
+    #: nierait ce que le caissier vient de taper.
+    problems: list[AllocationPreviewProblem] = Field(default_factory=list)
     lines: list[AllocationPreviewLine]
 
 
