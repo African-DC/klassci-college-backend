@@ -153,41 +153,29 @@ async def get_enrollment_fee_for_update(
     return result.scalar_one_or_none()
 
 
-async def get_unpaid_fees_ordered_by_priority(
-    db: AsyncSession, enrollment_id: int
-) -> list[EnrollmentFee]:
-    """Frais impayés d'une inscription triés par priorité catégorie ASC.
-
-    Lower priority = paid first. Exclut les WAIVED et PAID. Inclut les
-    PARTIAL (peuvent encore recevoir un complément). Verrouille les rows
-    avec FOR UPDATE pour la transaction de paiement.
-    """
-    from app.models.fee import EnrollmentFeeStatus
-
-    stmt = (
-        select(EnrollmentFee)
-        .join(FeeVariant, EnrollmentFee.fee_variant_id == FeeVariant.id)
-        .join(FeeCategory, FeeVariant.fee_category_id == FeeCategory.id)
-        .where(
-            EnrollmentFee.enrollment_id == enrollment_id,
-            EnrollmentFee.status.in_(
-                [EnrollmentFeeStatus.PENDING.value, EnrollmentFeeStatus.PARTIAL.value]
-            ),
-        )
-        .options(
-            selectinload(EnrollmentFee.fee_variant).selectinload(FeeVariant.category),
-        )
-        .order_by(FeeCategory.priority.asc(), EnrollmentFee.id.asc())
-        .with_for_update(of=EnrollmentFee)
-    )
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
-
-
 async def get_enrollment_fees_ordered_by_priority(
-    db: AsyncSession, enrollment_id: int
+    db: AsyncSession, enrollment_id: int, *, lock: bool
 ) -> list[EnrollmentFee]:
-    """Tous les frais d'une inscription triés par priorité (pour preview UI)."""
+    """Tous les frais d'une inscription, triés par priorité de catégorie ASC.
+
+    Priorité basse d'abord : Inscription, puis Tenue, puis le reste. Rend
+    aussi les frais soldés, exonérés et déposés en nature. C'est ce qui permet
+    de distinguer un frais déjà réglé d'un frais qui n'appartient pas à cette
+    inscription, sans payer une requête de plus pour le dire ; le tri de ce
+    qui peut encore recevoir de l'argent se fait ensuite, en mémoire.
+
+    `lock` n'a pas de valeur par défaut, et c'est délibéré. Cette fonction
+    sert deux chemins aux besoins opposés : l'aperçu, qui lit pendant que le
+    caissier tape et ne doit rien verrouiller, et l'encaissement, qui écrit et
+    doit tenir les lignes jusqu'au commit. Le dépôt a déjà perdu ce verrou une
+    fois, en remplaçant une requête verrouillante par une requête d'aperçu qui
+    lui ressemblait : les deux ne diffèrent plus que par ce mot, et il est
+    obligatoire à l'appel.
+
+    Avec `lock=True`, le `FOR UPDATE` ne porte que sur `EnrollmentFee` : les
+    catégories et les variantes ne sont jointes que pour trier, les verrouiller
+    sérialiserait tous les encaissements de l'établissement entre eux.
+    """
     stmt = (
         select(EnrollmentFee)
         .join(FeeVariant, EnrollmentFee.fee_variant_id == FeeVariant.id)
@@ -198,6 +186,8 @@ async def get_enrollment_fees_ordered_by_priority(
         )
         .order_by(FeeCategory.priority.asc(), EnrollmentFee.id.asc())
     )
+    if lock:
+        stmt = stmt.with_for_update(of=EnrollmentFee)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
