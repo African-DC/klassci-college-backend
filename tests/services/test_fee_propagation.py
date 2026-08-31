@@ -22,11 +22,13 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditLog
 from app.core.database import Base
 from app.core.exceptions import NotFoundError
+from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
     FeeCategory,
+    FeeEnrollmentProfile,
     FeeVariant,
     Payment,
     PaymentAllocation,
@@ -42,9 +44,13 @@ CLASSE_6E_A = 1
 
 CAT_SCOLARITE_T1 = 100
 CAT_TENUE = 101
+CAT_CHEMISE = 102
 
 TARIF_T1 = 1
 TARIF_TENUE = 2
+TARIF_CHEMISE_NOUVEAU = 3
+
+MONTANT_CHEMISE = Decimal("3000.00")
 
 ANCIEN_MONTANT = Decimal("54000.00")
 NOUVEAU_MONTANT = Decimal("45000.00")
@@ -86,6 +92,7 @@ def _sqlite_schema() -> list[Table]:
 
     utiles = []
     for nom in (
+        "classes",
         "fee_categories",
         "fee_variants",
         "enrollments",
@@ -110,8 +117,10 @@ def db() -> Iterator[_AsyncBridge]:
     with Session(engine) as session:
         session.add_all(
             [
+                Class(id=CLASSE_6E_A, name="6eme A", level_id=LEVEL_6E),
                 FeeCategory(id=CAT_SCOLARITE_T1, name="Scolarite T1", is_mandatory=True),
                 FeeCategory(id=CAT_TENUE, name="Tenue", is_mandatory=True),
+                FeeCategory(id=CAT_CHEMISE, name="Chemise cartonnee", is_mandatory=True),
                 # Le tarif porte déjà la correction : c'est l'écran des frais
                 # qui vient de l'enregistrer, les dettes n'ont pas suivi.
                 FeeVariant(
@@ -127,6 +136,16 @@ def db() -> Iterator[_AsyncBridge]:
                     academic_year_id=AY,
                     amount=Decimal("15000.00"),
                     level_id=LEVEL_6E,
+                ),
+                # Le tarif que l'école vient d'ajouter après la rentrée : aucune
+                # inscription ne le porte encore.
+                FeeVariant(
+                    id=TARIF_CHEMISE_NOUVEAU,
+                    fee_category_id=CAT_CHEMISE,
+                    academic_year_id=AY,
+                    amount=MONTANT_CHEMISE,
+                    level_id=LEVEL_6E,
+                    enrollment_profile=FeeEnrollmentProfile.NOUVEAU,
                 ),
             ]
         )
@@ -148,6 +167,7 @@ def _inscrire(
     annee: int = AY,
     statut: EnrollmentStatus = EnrollmentStatus.VALIDE,
     archivee: bool = False,
+    profil: bool | None = None,
 ) -> None:
     db.session.add(
         Enrollment(
@@ -156,6 +176,7 @@ def _inscrire(
             class_id=CLASSE_6E_A,
             academic_year_id=annee,
             status=statut,
+            is_new_student=profil,
             archived_at=datetime.now(UTC) if archivee else None,
         )
     )
@@ -295,10 +316,14 @@ async def test_l_apercu_annonce_exactement_ce_que_la_confirmation_fera(
     assert apercu.debt_delta == resultat.debt_delta  # type: ignore[attr-defined]
 
 
-async def test_les_quatre_paquets_totalisent_les_inscriptions_concernees(
+async def test_les_cinq_paquets_totalisent_les_inscriptions_concernees(
     db: _AsyncBridge,
 ) -> None:
-    """Un total que son propre détail contredit fait douter de tout l'écran."""
+    """Un total que son propre détail contredit fait douter de tout l'écran.
+
+    Les cinq situations mêlées, dont la cinquième : une inscription qui ne
+    porte aucune ligne de cette catégorie et devrait en recevoir une.
+    """
     _inscrire(db, 1)
     _facturer(db, 11, 1)
     _inscrire(db, 2)
@@ -308,16 +333,19 @@ async def test_les_quatre_paquets_totalisent_les_inscriptions_concernees(
     _facturer(db, 13, 3, montant=NOUVEAU_MONTANT)
     _inscrire(db, 4)
     _facturer(db, 14, 4, statut=EnrollmentFeeStatus.WAIVED)
+    _inscrire(db, 5)  # jamais facturée de Scolarité T1
 
     apercu = await _apercu(db)
 
     somme = (
         apercu.fees_to_update  # type: ignore[attr-defined]
+        + apercu.fees_to_create  # type: ignore[attr-defined]
         + apercu.fees_kept_with_payments  # type: ignore[attr-defined]
         + apercu.fees_already_up_to_date  # type: ignore[attr-defined]
         + apercu.fees_waived  # type: ignore[attr-defined]
     )
-    assert somme == apercu.enrollments_concerned == 4  # type: ignore[attr-defined]
+    assert apercu.fees_to_create == 1  # type: ignore[attr-defined]
+    assert somme == apercu.enrollments_concerned == 5  # type: ignore[attr-defined]
 
 
 async def test_refuser_ne_change_rien(db: _AsyncBridge) -> None:
@@ -493,3 +521,156 @@ async def test_un_tarif_inconnu_est_refuse(db: _AsyncBridge) -> None:
         await _apercu(db, 9999)
     with pytest.raises(NotFoundError):
         await _confirmer(db, 9999)
+
+
+# ---------------------------------------------------------------------------
+# Le cinquième paquet : les lignes qui manquent
+# ---------------------------------------------------------------------------
+
+
+def _lignes_de(db: _AsyncBridge, enrollment_id: int, category_id: int) -> list[EnrollmentFee]:
+    return (
+        db.session.query(EnrollmentFee)
+        .filter(
+            EnrollmentFee.enrollment_id == enrollment_id,
+            EnrollmentFee.fee_category_id == category_id,
+        )
+        .all()
+    )
+
+
+async def _apercu_chemise(db: _AsyncBridge) -> object:
+    return await _apercu(db, TARIF_CHEMISE_NOUVEAU)
+
+
+async def test_le_tarif_nouveau_atteint_les_nouveaux_deja_inscrits(db: _AsyncBridge) -> None:
+    """L'école ajoute la chemise cartonnée après la rentrée. Ressaisir six
+    cents dossiers à la main n'est pas une option."""
+    _inscrire(db, 1, profil=True)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    lignes = _lignes_de(db, 1, CAT_CHEMISE)
+    assert len(lignes) == 1
+    assert Decimal(str(lignes[0].amount)) == MONTANT_CHEMISE
+    assert resultat.fees_created == 1  # type: ignore[attr-defined]
+
+
+async def test_un_ancien_ne_recoit_pas_le_tarif_nouveau(db: _AsyncBridge) -> None:
+    """Il a déjà payé sa chemise l'an dernier."""
+    _inscrire(db, 1, profil=False)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert _lignes_de(db, 1, CAT_CHEMISE) == []
+    assert resultat.fees_created == 0  # type: ignore[attr-defined]
+
+
+async def test_une_inscription_sans_profil_ne_recoit_pas_le_tarif_nouveau(
+    db: _AsyncBridge,
+) -> None:
+    """L'invariant tenu jusqu'ici : personne ne tranche à la place de l'école,
+    pas même une répercussion en masse. C'est le chemin par lequel le collège
+    Rostan facturerait la chemise à tous ses anciens élèves d'un seul clic."""
+    _inscrire(db, 1, profil=None)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert _lignes_de(db, 1, CAT_CHEMISE) == []
+    assert resultat.enrollments_concerned == 0  # type: ignore[attr-defined]
+
+
+async def test_une_ligne_deja_portee_n_est_pas_recreee(db: _AsyncBridge) -> None:
+    """Sinon on refabriquerait le doublon que `uq_enrollment_fee_category`
+    existe pour interdire, et la dette de la famille doublerait."""
+    _inscrire(db, 1, profil=True)
+    _facturer(
+        db,
+        21,
+        1,
+        variant_id=TARIF_CHEMISE_NOUVEAU,
+        category_id=CAT_CHEMISE,
+        montant=MONTANT_CHEMISE,
+    )
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert len(_lignes_de(db, 1, CAT_CHEMISE)) == 1
+    assert resultat.fees_created == 0  # type: ignore[attr-defined]
+    assert resultat.fees_already_up_to_date == 1  # type: ignore[attr-defined]
+
+
+async def test_une_inscription_annulee_ne_recoit_pas_de_ligne_neuve(db: _AsyncBridge) -> None:
+    """Son dossier est clos : lui rouvrir un impayé serait un contresens."""
+    _inscrire(db, 1, profil=True, statut=EnrollmentStatus.ANNULE)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert _lignes_de(db, 1, CAT_CHEMISE) == []
+    assert resultat.fees_created == 0  # type: ignore[attr-defined]
+
+
+async def test_une_inscription_archivee_ne_recoit_pas_de_ligne_neuve(db: _AsyncBridge) -> None:
+    """La corbeille garde les fiches telles qu'elles y sont entrées."""
+    _inscrire(db, 1, profil=True, archivee=True)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert resultat.fees_created == 0  # type: ignore[attr-defined]
+
+
+async def test_l_apercu_annonce_les_creations_avant_de_les_faire(db: _AsyncBridge) -> None:
+    """Un aperçu qui annonce autre chose que le geste ne sert qu'à rassurer."""
+    _inscrire(db, 1, profil=True)
+    _inscrire(db, 2, profil=True)
+    _inscrire(db, 3, profil=False)
+
+    apercu = await _apercu_chemise(db)
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert apercu.fees_to_create == resultat.fees_created == 2  # type: ignore[attr-defined]
+    assert "2 lignes à créer" in apercu.message  # type: ignore[attr-defined]
+    assert "2 lignes créées" in resultat.message  # type: ignore[attr-defined]
+
+
+async def test_l_apercu_ne_cree_rien(db: _AsyncBridge) -> None:
+    """Lire l'impact et dire non doit laisser la base exactement comme avant."""
+    _inscrire(db, 1, profil=True)
+
+    await _apercu_chemise(db)
+
+    assert _lignes_de(db, 1, CAT_CHEMISE) == []
+
+
+async def test_la_dette_creee_entre_dans_l_ecart_annonce(db: _AsyncBridge) -> None:
+    """Annoncer « la dette ne bouge pas » en créant deux cents lignes serait
+    exactement le total que son propre détail contredit."""
+    _inscrire(db, 1, profil=True)
+    _inscrire(db, 2, profil=True)
+
+    apercu = await _apercu_chemise(db)
+
+    assert apercu.debt_delta == 2 * MONTANT_CHEMISE  # type: ignore[attr-defined]
+
+
+async def test_repercuter_deux_fois_ne_recree_rien(db: _AsyncBridge) -> None:
+    """Le second passage doit être un geste vide, pas une seconde chemise."""
+    _inscrire(db, 1, profil=True)
+
+    await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+    second = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert len(_lignes_de(db, 1, CAT_CHEMISE)) == 1
+    assert second.fees_created == 0  # type: ignore[attr-defined]
+
+
+async def test_une_inscription_d_une_autre_annee_ne_recoit_pas_de_ligne_neuve(
+    db: _AsyncBridge,
+) -> None:
+    """Sa facture a été émise sous une autre grille, elle reste vraie."""
+    _inscrire(db, 1, profil=True, annee=AY_PRECEDENTE)
+
+    resultat = await _confirmer(db, TARIF_CHEMISE_NOUVEAU)
+
+    assert _lignes_de(db, 1, CAT_CHEMISE) == []
+    assert resultat.fees_created == 0  # type: ignore[attr-defined]

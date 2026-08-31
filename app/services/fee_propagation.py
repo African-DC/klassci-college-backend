@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import NotFoundError
+from app.models.academic import Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
     EnrollmentFee,
@@ -37,6 +38,7 @@ from app.models.fee import (
     is_not_cash_due,
 )
 from app.schemas.fee import FeePropagationPreview, FeePropagationResult
+from app.services import enrollment_fees
 from app.services.deletion import Dependent
 
 #: Une inscription refusée ou annulée ne doit plus rien : sa dette est close,
@@ -48,13 +50,21 @@ _STATUTS_HORS_JEU = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
 class _Repartition:
     """Les lignes concernées, rangées par ce qui va leur arriver.
 
-    Les quatre paquets forment une partition : leur somme est le nombre
+    Les cinq paquets forment une partition : leur somme est le nombre
     d'inscriptions concernées. Sans cela l'aperçu afficherait un total que
     son propre détail contredit, et c'est le genre d'écart qui fait douter
     de tout le reste de l'écran.
+
+    Les quatre premiers rangent des lignes qui portent déjà ce tarif. Le
+    cinquième, `a_creer`, range des inscriptions qui n'en portent aucune :
+    l'école vient d'ajouter un tarif « nouveau » par-dessus sa grille, et les
+    élèves déjà inscrits ne l'ont jamais reçu. Les cinq restent disjoints par
+    construction — une inscription qui porte une ligne de cette catégorie
+    n'entre jamais dans `a_creer`.
     """
 
     a_mettre_a_jour: tuple[EnrollmentFee, ...]
+    a_creer: tuple[Enrollment, ...]
     deja_a_jour: int
     conservees_car_payees: int
     exonerees: int
@@ -64,6 +74,7 @@ class _Repartition:
     def concernees(self) -> int:
         return (
             len(self.a_mettre_a_jour)
+            + len(self.a_creer)
             + self.deja_a_jour
             + self.conservees_car_payees
             + self.exonerees
@@ -112,6 +123,70 @@ async def _fee_ids_with_allocations(db: AsyncSession, fee_ids: list[int]) -> set
     return {int(fee_id) for fee_id in (await db.execute(stmt)).scalars().all()}
 
 
+async def _est_obligatoire(db: AsyncSession, category_id: int) -> bool:
+    """Cette catégorie s'impose-t-elle, ou se souscrit-elle ?
+
+    La cantine se souscrit, elle ne s'impose pas : créer d'office une ligne
+    pour un frais optionnel abonnerait toute une école au transport scolaire
+    parce que quelqu'un a ajusté son prix. `create_mandatory_enrollment_fees`
+    pose déjà ce filtre à l'inscription ; la répercussion, qui écrit les mêmes
+    lignes, le pose pour la même raison.
+    """
+    obligatoire = (
+        await db.execute(select(FeeCategory.is_mandatory).where(FeeCategory.id == category_id))
+    ).scalar_one_or_none()
+    return bool(obligatoire)
+
+
+async def _a_creer(db: AsyncSession, variant: FeeVariant) -> list[Enrollment]:
+    """Les inscriptions que ce tarif atteint et qui ne portent rien de sa catégorie.
+
+    Une école qui ajoute le tarif « nouveau » de l'Inscription après la rentrée
+    ne veut pas ressaisir six cents dossiers à la main. Encore faut-il ne pas
+    facturer au hasard : une inscription n'entre ici que si elle remplit TOUTES
+    les dimensions du tarif, profil compris, et ne porte aucune ligne de cette
+    catégorie — sans quoi on recréerait le doublon que
+    `uq_enrollment_fee_category` existe pour interdire.
+
+    Les statuts hors jeu et le filtre d'archivage s'appliquent comme partout
+    ailleurs dans ce module.
+    """
+    if variant.level_id is None or not await _est_obligatoire(db, variant.fee_category_id):
+        return []
+
+    deja_facturee = (
+        select(EnrollmentFee.id)
+        .where(
+            EnrollmentFee.enrollment_id == Enrollment.id,
+            EnrollmentFee.fee_category_id == variant.fee_category_id,
+        )
+        .correlate(Enrollment)
+        .exists()
+    )
+    stmt = (
+        select(Enrollment, Class)
+        .join(Class, Class.id == Enrollment.class_id)
+        .where(
+            Enrollment.academic_year_id == variant.academic_year_id,
+            Enrollment.status.not_in(_STATUTS_HORS_JEU),
+            Class.level_id == variant.level_id,
+            ~deja_facturee,
+        )
+        .order_by(Enrollment.id)
+    )
+
+    retenues: list[Enrollment] = []
+    for enrollment, class_ in (await db.execute(stmt)).all():
+        if enrollment_fees.variant_applies_to(
+            variant,
+            series_id=class_.series_id,
+            assignment_status=enrollment.assignment_status,
+            is_new_student=enrollment.is_new_student,
+        ):
+            retenues.append(enrollment)
+    return retenues
+
+
 async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
     """Classe les lignes portant ce tarif selon ce qu'il faut leur faire.
 
@@ -149,13 +224,20 @@ async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
     conservees = [f for f in a_examiner if f.id in payees]
     a_mettre_a_jour = [f for f in a_examiner if f.id not in payees]
 
+    a_creer = await _a_creer(db, variant)
+
+    # L'écart annoncé est celui de la dette totale, pas seulement des lignes
+    # réécrites : une ligne créée ajoute son montant entier. Dire « la dette
+    # ne bouge pas » en créant six cents lignes de 5 000 F serait exactement
+    # le total que son propre détail contredit.
     ecart = sum(
         (nouveau_montant - Decimal(str(f.amount)) for f in a_mettre_a_jour),
         Decimal("0"),
-    )
+    ) + nouveau_montant * len(a_creer)
 
     return _Repartition(
         a_mettre_a_jour=tuple(a_mettre_a_jour),
+        a_creer=tuple(a_creer),
         deja_a_jour=len(deja_a_jour),
         conservees_car_payees=len(conservees),
         exonerees=len(exonerees),
@@ -185,8 +267,12 @@ def _message(repartition: _Repartition, *, accompli: bool) -> str:
         if accompli
         else ("ligne à mettre à jour", "lignes à mettre à jour")
     )
+    libelle_creation = (
+        ("ligne créée", "lignes créées") if accompli else ("ligne à créer", "lignes à créer")
+    )
     paquets = [
         Dependent(*libelle_maj, len(repartition.a_mettre_a_jour)),
+        Dependent(*libelle_creation, len(repartition.a_creer)),
         Dependent(
             "ligne conservée car un versement y est imputé",
             "lignes conservées car des versements y sont imputés",
@@ -220,6 +306,7 @@ async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeeP
         amount=Decimal(str(variant.amount)),
         enrollments_concerned=repartition.concernees,
         fees_to_update=len(repartition.a_mettre_a_jour),
+        fees_to_create=len(repartition.a_creer),
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,
@@ -231,10 +318,10 @@ async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeeP
 async def apply_variant_propagation(
     db: AsyncSession, variant_id: int, *, applied_by: int
 ) -> FeePropagationResult:
-    """Écrit le nouveau montant sur les lignes que l'aperçu annonçait.
+    """Écrit ce que l'aperçu annonçait : les montants corrigés, les lignes manquantes.
 
-    Le décompte rendu est celui des lignes réellement réécrites, pas celui
-    qu'on espérait : c'est ce chiffre-là que l'école montrera si on lui
+    Le décompte rendu est celui des lignes réellement réécrites et créées, pas
+    celui qu'on espérait : c'est ce chiffre-là que l'école montrera si on lui
     demande des comptes.
     """
     variant = await _load_variant(db, variant_id)
@@ -243,6 +330,17 @@ async def apply_variant_propagation(
     nouveau_montant = Decimal(str(variant.amount))
     for ligne in repartition.a_mettre_a_jour:
         ligne.amount = nouveau_montant
+    for inscription in repartition.a_creer:
+        db.add(
+            EnrollmentFee(
+                enrollment_id=inscription.id,
+                fee_variant_id=variant.id,
+                # Recopiée du tarif : c'est elle que porte la contrainte
+                # `uq_enrollment_fee_category`, une catégorie par inscription.
+                fee_category_id=variant.fee_category_id,
+                amount=nouveau_montant,
+            )
+        )
     await db.flush()
 
     await audit_log(
@@ -258,6 +356,7 @@ async def apply_variant_propagation(
             "amount": str(nouveau_montant),
             "enrollments_concerned": repartition.concernees,
             "fees_updated": len(repartition.a_mettre_a_jour),
+            "fees_created": len(repartition.a_creer),
             "fees_already_up_to_date": repartition.deja_a_jour,
             "fees_kept_with_payments": repartition.conservees_car_payees,
             "fees_waived": repartition.exonerees,
@@ -273,6 +372,7 @@ async def apply_variant_propagation(
         amount=nouveau_montant,
         enrollments_concerned=repartition.concernees,
         fees_updated=len(repartition.a_mettre_a_jour),
+        fees_created=len(repartition.a_creer),
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,

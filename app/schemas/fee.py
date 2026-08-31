@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.fee import FeeAssignmentScope, FeeEntitlementKind
+from app.models.fee import FeeAssignmentScope, FeeEnrollmentProfile, FeeEntitlementKind
 
 # ---------------------------------------------------------------------------
 # Contrepartie — ce que la famille recoit contre un frais
@@ -142,6 +142,9 @@ class FeeVariantCreate(BaseModel):
     # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
     # pour les affectes ou que pour les non affectes.
     assignment_scope: FeeAssignmentScope | None = None
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que pour
+    # les nouveaux eleves ou que pour les anciens.
+    enrollment_profile: FeeEnrollmentProfile | None = None
 
 
 class FeeVariantUpdate(BaseModel):
@@ -161,6 +164,9 @@ class FeeVariantUpdate(BaseModel):
     # champ absent d'un champ envoye vide, sans quoi une portee posee par
     # erreur ne se retirerait plus jamais depuis l'ecran.
     assignment_scope: FeeAssignmentScope | None = None
+    # Meme regle et meme piege que la portee ci-dessus : remettre ce champ a
+    # `None` doit rendre le tarif applicable a tout le monde.
+    enrollment_profile: FeeEnrollmentProfile | None = None
 
 
 class FeeVariantResponse(BaseModel):
@@ -176,6 +182,7 @@ class FeeVariantResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     assignment_scope: str | None = None
+    enrollment_profile: str | None = None
 
 
 class FeeVariantListResponse(BaseModel):
@@ -204,13 +211,15 @@ class _FeePropagationImpact(BaseModel):
     academic_year_id: int
     #: Le montant du tarif tel qu'il est aujourd'hui : celui qui sera recopie.
     amount: Decimal
-    #: Somme des quatre paquets. Une categorie ne produisant qu'une ligne par
+    #: Somme des cinq paquets. Une categorie ne produisant qu'une ligne par
     #: inscription, ce total est aussi le nombre d'inscriptions touchees.
     enrollments_concerned: int
     fees_already_up_to_date: int
     fees_kept_with_payments: int
     fees_waived: int
-    #: Ecart total de dette en francs, negatif quand le tarif baisse.
+    #: Ecart total de dette en francs, negatif quand le tarif baisse. Une ligne
+    #: creee y compte pour son montant entier : annoncer que la dette ne bouge
+    #: pas en creant six cents lignes serait un total que son detail contredit.
     debt_delta: Decimal
     message: str
 
@@ -219,12 +228,17 @@ class FeePropagationPreview(_FeePropagationImpact):
     """Ce qui se passerait. Rien n'est ecrit."""
 
     fees_to_update: int
+    #: Les inscriptions que ce tarif atteint et qui ne portent aucune ligne de
+    #: sa categorie : l'ecole vient d'ajouter un tarif que les eleves deja
+    #: inscrits n'ont jamais recu.
+    fees_to_create: int
 
 
 class FeePropagationResult(_FeePropagationImpact):
-    """Ce qui a ete ecrit : le compte des lignes reellement reecrites."""
+    """Ce qui a ete ecrit : le compte des lignes reellement reecrites et creees."""
 
     fees_updated: int
+    fees_created: int
 
 
 # ---------------------------------------------------------------------------

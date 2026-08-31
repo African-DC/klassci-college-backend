@@ -9,6 +9,12 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 
+#: « Champ absent », a distinguer d'un `None` envoye exprès. Sur
+#: `is_new_student`, `None` est une valeur metier — « on n'a pas tranche » —
+#: et non une absence : sans cette sentinelle, une decision posee par erreur
+#: ne se retirerait plus jamais depuis l'ecran.
+UNSET: object = object()
+
 
 async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
     """Retourne une inscription par ID avec ses relations chargées."""
@@ -82,6 +88,7 @@ async def create_enrollment(
     notes: str | None,
     assignment_status: str | None = None,
     assignment_decision_number: str | None = None,
+    is_new_student: bool | None = None,
 ) -> Enrollment:
     """Crée une inscription et la flush pour obtenir l'ID."""
     enrollment = Enrollment(
@@ -92,6 +99,7 @@ async def create_enrollment(
         notes=notes,
         assignment_status=assignment_status,
         assignment_decision_number=assignment_decision_number,
+        is_new_student=is_new_student,
     )
     db.add(enrollment)
     await db.flush()
@@ -132,6 +140,7 @@ async def update_enrollment(
     status: str | None = None,
     notes: str | None = None,
     class_id: int | None = None,
+    is_new_student: object = UNSET,
 ) -> Enrollment:
     """Met à jour les champs modifiables d'une inscription."""
     if status is not None:
@@ -140,6 +149,10 @@ async def update_enrollment(
         enrollment.notes = notes
     if class_id is not None:
         enrollment.class_id = class_id
+    # Le seul champ dont `None` est une valeur, pas une absence : c'est ce qui
+    # permet de remettre une inscription à « on n'a pas tranché ».
+    if is_new_student is not UNSET:
+        enrollment.is_new_student = is_new_student
     await db.flush()
     return enrollment
 

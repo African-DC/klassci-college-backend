@@ -26,7 +26,7 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     ReEnrollmentCreate,
 )
-from app.services import enrollment_fees, enrollment_notifications
+from app.services import enrollment_fees, enrollment_history, enrollment_notifications
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,26 @@ def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
         class_name=enrollment.class_.name if enrollment.class_ else None,
         assignment_status=enrollment.assignment_status,
         assignment_decision_number=enrollment.assignment_decision_number,
+        is_new_student=enrollment.is_new_student,
     )
+
+
+async def _profil_a_retenir(
+    db: AsyncSession,
+    saisi: bool | None,
+    student_id: int,
+    academic_year_id: int,
+) -> bool | None:
+    """Le profil de l'inscription : celui du formulaire, ou celui qu'on déduit.
+
+    La secrétaire l'emporte toujours : c'est elle qui a le dossier sous les
+    yeux, et la suggestion n'est qu'une aide à la saisie. Quand elle n'a rien
+    coché, on lit l'historique — et si l'établissement n'en a pas, la
+    déduction rend `None` à son tour plutôt que d'inventer un montant.
+    """
+    if saisi is not None:
+        return saisi
+    return await enrollment_history.deduce_new_student(db, student_id, academic_year_id)
 
 
 async def create_enrollment(
@@ -106,6 +125,9 @@ async def create_enrollment(
             notes=data.notes,
             assignment_status=data.assignment_status,
             assignment_decision_number=data.assignment_decision_number,
+            is_new_student=await _profil_a_retenir(
+                db, data.is_new_student, data.student_id, data.academic_year_id
+            ),
         )
 
         # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat)
@@ -123,6 +145,7 @@ async def create_enrollment(
             data.class_id,
             data.academic_year_id,
             enrollment.assignment_status,
+            enrollment.is_new_student,
         )
         await enrollment_fees.apply_in_kind_deposits(
             db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
@@ -221,8 +244,14 @@ async def update_enrollment(
         "status": enrollment.status,
         "notes": enrollment.notes,
         "class_id": enrollment.class_id,
+        "is_new_student": enrollment.is_new_student,
     }
     class_changed = data.class_id is not None and data.class_id != enrollment.class_id
+    # `None` est une valeur ici, pas une absence : on regarde donc ce que le
+    # client a réellement envoyé. Corriger le profil doit rejouer la grille,
+    # sinon la case change et la facture reste celle de l'autre profil.
+    profil_envoye = "is_new_student" in data.model_fields_set
+    profil_change = profil_envoye and data.is_new_student != enrollment.is_new_student
 
     async with db.begin_nested():
         # Si changement de classe, vérifier existence et capacité
@@ -244,10 +273,11 @@ async def update_enrollment(
             status=data.status,
             notes=data.notes,
             class_id=data.class_id,
+            is_new_student=(data.is_new_student if profil_envoye else repo.UNSET),
         )
 
-        # Régénérer les frais obligatoires si la classe a changé
-        if class_changed:
+        # Régénérer les frais obligatoires si la classe ou le profil a changé
+        if class_changed or profil_change:
             await enrollment_fees.regenerate_enrollment_fees(
                 db, enrollment_id, regenerated_by=updated_by
             )
@@ -454,6 +484,9 @@ async def create_enrollment_with_student(
             notes=data.notes,
             assignment_status=data.assignment_status,
             assignment_decision_number=data.assignment_decision_number,
+            is_new_student=await _profil_a_retenir(
+                db, data.is_new_student, student.id, academic_year_id
+            ),
         )
 
         # 4. Create enrollment fee if variant provided (rétrocompat)
@@ -471,6 +504,7 @@ async def create_enrollment_with_student(
             data.class_id,
             academic_year_id,
             enrollment.assignment_status,
+            enrollment.is_new_student,
         )
         await enrollment_fees.apply_in_kind_deposits(
             db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
