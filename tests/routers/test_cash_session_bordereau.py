@@ -108,9 +108,7 @@ def test_un_parametre_etranger_ne_change_pas_la_caisse(caissiere: TestClient) ->
         new_callable=AsyncMock,
         return_value=b"%PDF-1.7 test",
     ) as export:
-        reponse = caissiere.get(
-            "/cash-sessions/me/daily-cash-book?date=2026-08-30&cashier_id=99"
-        )
+        reponse = caissiere.get("/cash-sessions/me/daily-cash-book?date=2026-08-30&cashier_id=99")
 
     assert reponse.status_code == 200
     assert _kwargs(export)["cashier_user_id"] == CAISSIERE.user_id

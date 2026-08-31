@@ -88,9 +88,7 @@ def is_in_kind(status: EnrollmentFeeStatus | str) -> bool:
     return status == EnrollmentFeeStatus.IN_KIND
 
 
-def cash_remaining(
-    status: EnrollmentFeeStatus | str, amount: Decimal, paid: Decimal
-) -> Decimal:
+def cash_remaining(status: EnrollmentFeeStatus | str, amount: Decimal, paid: Decimal) -> Decimal:
     """Reste encaissable. Zéro dès que la ligne n'est plus due en argent."""
     if is_not_cash_due(status):
         return Decimal("0")
