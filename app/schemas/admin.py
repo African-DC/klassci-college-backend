@@ -817,6 +817,11 @@ class SchoolSettingsResponse(BaseModel):
     website: str | None = None
     motto: str | None = None
     deletion_notice_emails: str | None = None
+    #: L'école a-t-elle déclaré ses inscriptions des années passées
+    #: exploitables ? Tant que c'est `false`, le serveur ne devine jamais si un
+    #: élève est nouveau : l'écran d'inscription doit donc présenter la case
+    #: comme un choix à faire, pas comme une aide déjà remplie.
+    enrollment_history_is_reliable: bool = False
     trimesters: list[TrimesterDTO] = []
     holidays: list[SchoolHolidayDTO] = []
     notify_by_email: bool = False
@@ -888,7 +893,7 @@ class NewStudentSuggestionResponse(BaseModel):
     """Ce que l'ecran doit pre-cocher dans la case « nouvel eleve », et pourquoi.
 
     Trois reponses, jamais deux. `null` n'est pas une panne : c'est
-    l'etablissement dont les annees passees ne sont pas reconstituees, et la
+    l'etablissement qui n'a pas declare ses annees passees exploitables, et la
     secretaire qui reste seule a savoir. La phrase le lui dit en clair, plutot
     que de laisser une case vide sans explication.
     """
@@ -916,6 +921,11 @@ class SchoolInfoUpdate(BaseModel):
     #: suppression définitive, séparés par des virgules. Laisser vide fait
     #: retomber sur l'adresse de l'établissement.
     deletion_notice_emails: str | None = None
+    #: L'école déclare que ses inscriptions des années passées sont
+    #: exploitables. Le champ absent laisse le réglage intact ; `false` est une
+    #: valeur, pas une absence, et c'est celle qui empêche le serveur de
+    #: deviner qui est nouveau au milieu d'une reprise d'historique.
+    enrollment_history_is_reliable: bool | None = None
 
     @field_validator("primary_color", "accent_color")
     @classmethod

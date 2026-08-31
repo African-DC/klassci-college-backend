@@ -272,9 +272,10 @@ async def suggest_new_student(
 ) -> NewStudentSuggestionResponse:
     """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
 
-    Trois réponses possibles, et `null` en est une : quand l'établissement n'a
-    aucune inscription des années précédentes en base, rien ne permet de dire
-    qui est nouveau. La phrase le lui explique, et elle coche elle-même.
+    Trois réponses possibles, et `null` en est une : tant que l'établissement
+    n'a pas déclaré ses années passées exploitables dans ses réglages, rien ne
+    permet de dire qui est nouveau. La phrase le lui explique, et elle coche
+    elle-même.
 
     Même droit que la création d'une inscription : cette suggestion ne se lit
     que pour remplir ce formulaire-là.
