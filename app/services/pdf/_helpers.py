@@ -75,9 +75,6 @@ def enum_value(v: Any) -> Any:
 # Image embedding (logo, signature, etc.)
 # ---------------------------------------------------------------------------
 
-# Meme racine que le montage `/uploads` : une image ecrite par un upload est
-# relue ici telle quelle pour etre embarquee dans le PDF.
-_UPLOAD_ROOT = UPLOAD_ROOT
 _MIME_BY_EXT = {
     "png": "image/png",
     "jpg": "image/jpeg",
@@ -91,9 +88,13 @@ def image_bytes(url_or_path: str | None) -> tuple[bytes, str] | None:
     """Resolve an image URL/path and return its `(content, mime)`.
 
     Accepts:
-    - relative URLs like `/uploads/photos/abc.png` (resolved against `_UPLOAD_ROOT`)
+    - relative URLs like `/uploads/photos/abc.png` (resolved against `UPLOAD_ROOT`)
     - absolute filesystem paths
     Returns None if the file cannot be found or read.
+
+    La résolution refait ce que fait le montage `/uploads` : même racine, même
+    découpe du préfixe. Une image écrite par un téléversement est donc relue ici
+    telle quelle pour être embarquée dans le document.
 
     Partagé par le PDF (qui en fait une data URI) et par l'export Excel (qui
     a besoin des octets bruts pour poser le logo dans la feuille) : une seule
@@ -105,7 +106,7 @@ def image_bytes(url_or_path: str | None) -> tuple[bytes, str] | None:
 
     candidates: list[str] = []
     if url_or_path.startswith("/uploads/"):
-        candidates.append(os.path.join(_UPLOAD_ROOT, url_or_path[len("/uploads/") :]))
+        candidates.append(os.path.join(UPLOAD_ROOT, url_or_path[len("/uploads/") :]))
     else:
         candidates.append(url_or_path)
 
