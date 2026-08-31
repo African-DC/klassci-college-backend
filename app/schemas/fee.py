@@ -211,12 +211,16 @@ class _FeePropagationImpact(BaseModel):
     academic_year_id: int
     #: Le montant du tarif tel qu'il est aujourd'hui : celui qui sera recopie.
     amount: Decimal
-    #: Somme des cinq paquets. Une categorie ne produisant qu'une ligne par
+    #: Somme des six paquets. Une categorie ne produisant qu'une ligne par
     #: inscription, ce total est aussi le nombre d'inscriptions touchees.
     enrollments_concerned: int
     fees_already_up_to_date: int
     fees_kept_with_payments: int
     fees_waived: int
+    #: Lignes reglees par un depot d'article. Comptees a part de `fees_waived`
+    #: parce qu'un depot n'est pas une exoneration DRENA, mais comptees quand
+    #: meme : sans elles la somme des paquets serait inferieure au total.
+    fees_in_kind: int
     #: Ecart de dette en francs, negatif quand le tarif baisse. Il ne chiffre
     #: JAMAIS que ce que l'appel ecrit : sur l'apercu et sur une repercussion
     #: sans creation, les seules reecritures ; avec `create_missing`, les

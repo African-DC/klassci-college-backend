@@ -356,13 +356,18 @@ async def test_l_apercu_annonce_exactement_ce_que_la_confirmation_fera(
     assert apercu.debt_delta == resultat.debt_delta  # type: ignore[attr-defined]
 
 
-async def test_les_cinq_paquets_totalisent_les_inscriptions_concernees(
+async def test_les_six_paquets_totalisent_les_inscriptions_concernees(
     db: _AsyncBridge,
 ) -> None:
     """Un total que son propre détail contredit fait douter de tout l'écran.
 
-    Les cinq situations mêlées, dont la cinquième : une inscription qui ne
-    porte aucune ligne de cette catégorie et devrait en recevoir une.
+    Les six situations mêlées, dont la cinquième, une inscription qui ne porte
+    aucune ligne de cette catégorie et devrait en recevoir une, et la sixième,
+    une ligne réglée par un dépôt d'article. Cette dernière n'appartenait à
+    aucun paquet : elle ne doit rien en argent, donc elle sortait de `dues`,
+    mais elle n'est pas une exonération DRENA, donc elle n'entrait pas non plus
+    dans `fees_waived`. Le total annonçait alors une inscription de moins que
+    ce que la répercussion touchait réellement.
     """
     _inscrire(db, 1)
     _facturer(db, 11, 1)
@@ -374,6 +379,8 @@ async def test_les_cinq_paquets_totalisent_les_inscriptions_concernees(
     _inscrire(db, 4)
     _facturer(db, 14, 4, statut=EnrollmentFeeStatus.WAIVED)
     _inscrire(db, 5)  # jamais facturée de Scolarité T1
+    _inscrire(db, 6)
+    _facturer(db, 16, 6, statut=EnrollmentFeeStatus.IN_KIND)
 
     apercu = await _apercu(db)
 
@@ -383,9 +390,12 @@ async def test_les_cinq_paquets_totalisent_les_inscriptions_concernees(
         + apercu.fees_kept_with_payments  # type: ignore[attr-defined]
         + apercu.fees_already_up_to_date  # type: ignore[attr-defined]
         + apercu.fees_waived  # type: ignore[attr-defined]
+        + apercu.fees_in_kind  # type: ignore[attr-defined]
     )
     assert apercu.fees_to_create == 1  # type: ignore[attr-defined]
-    assert somme == apercu.enrollments_concerned == 5  # type: ignore[attr-defined]
+    assert apercu.fees_in_kind == 1  # type: ignore[attr-defined]
+    assert apercu.fees_waived == 1  # type: ignore[attr-defined]
+    assert somme == apercu.enrollments_concerned == 6  # type: ignore[attr-defined]
 
 
 async def test_refuser_ne_change_rien(db: _AsyncBridge) -> None:

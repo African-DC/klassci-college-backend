@@ -53,6 +53,7 @@ from app.models.fee import (
     FeeCategory,
     FeeVariant,
     PaymentAllocation,
+    is_in_kind,
     is_not_cash_due,
 )
 from app.schemas.fee import FeePropagationPreview, FeePropagationResult
@@ -95,6 +96,13 @@ class _Repartition:
     deja_a_jour: int
     conservees_car_payees: int
     exonerees: int
+    #: Lignes reglees par un depot d'article. Elles ne doivent rien en argent,
+    #: comme les exonerees, mais un depot n'est pas une exoneration DRENA et ne
+    #: doit donc pas gonfler `fees_waived`. Elles ont pourtant leur place dans
+    #: la partition : sans ce paquet elles n'appartenaient a aucun des cinq, et
+    #: le total annonce etait inferieur au nombre reel d'inscriptions touchees,
+    #: exactement le total que son propre detail contredit.
+    deposees_en_nature: int
     #: Ce que les seules réécritures déplacent, négatif quand le tarif baisse.
     ecart_des_reecritures: Decimal
     #: Ce que les lignes manquantes ajouteraient, si on les crée.
@@ -108,6 +116,7 @@ class _Repartition:
             + self.deja_a_jour
             + self.conservees_car_payees
             + self.exonerees
+            + self.deposees_en_nature
         )
 
 
@@ -295,8 +304,11 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
 
     nouveau_montant = Decimal(str(variant.amount))
     exonerees = [f for f in lignes if f.status == EnrollmentFeeStatus.WAIVED]
-    # Un dépôt en nature n'est pas une exonération DRENA : on l'ignore ici,
-    # il ne gonfle ni fees_waived ni la dette à répercuter.
+    # Un dépôt en nature n'est pas une exonération DRENA : il ne gonfle ni
+    # `fees_waived` ni la dette à répercuter. Il est compté à part, parce
+    # qu'il reste une ligne touchée par ce tarif et que la partition doit
+    # sommer juste.
+    deposees = [f for f in lignes if is_in_kind(f.status)]
     dues = [f for f in lignes if not is_not_cash_due(f.status)]
     deja_a_jour = [f for f in dues if Decimal(str(f.amount)) == nouveau_montant]
 
@@ -313,6 +325,7 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
         deja_a_jour=len(deja_a_jour),
         conservees_car_payees=len(conservees),
         exonerees=len(exonerees),
+        deposees_en_nature=len(deposees),
         ecart_des_reecritures=sum(
             (nouveau_montant - Decimal(str(f.amount)) for f in a_mettre_a_jour),
             Decimal("0"),
@@ -383,6 +396,11 @@ def _message(repartition: _Repartition, *, accompli: bool, ecart: Decimal) -> st
             repartition.deja_a_jour,
         ),
         Dependent("ligne exonérée", "lignes exonérées", repartition.exonerees),
+        Dependent(
+            "ligne réglée par un dépôt",
+            "lignes réglées par un dépôt",
+            repartition.deposees_en_nature,
+        ),
     ]
     detail = ", ".join(p.phrase() for p in paquets if p.count)
     suite = "" if accompli else _phrase_creations(repartition)
@@ -417,6 +435,7 @@ async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeeP
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,
+        fees_in_kind=repartition.deposees_en_nature,
         debt_delta=repartition.ecart_des_reecritures,
         message=_message(repartition, accompli=False, ecart=repartition.ecart_des_reecritures),
     )
@@ -479,6 +498,7 @@ async def apply_variant_propagation(
             "fees_already_up_to_date": repartition.deja_a_jour,
             "fees_kept_with_payments": repartition.conservees_car_payees,
             "fees_waived": repartition.exonerees,
+            "fees_in_kind": repartition.deposees_en_nature,
             "debt_delta": str(ecart),
         },
     )
@@ -495,6 +515,7 @@ async def apply_variant_propagation(
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,
+        fees_in_kind=repartition.deposees_en_nature,
         debt_delta=ecart,
         message=_message(repartition, accompli=True, ecart=ecart),
     )
