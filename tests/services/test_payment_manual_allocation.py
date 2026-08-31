@@ -74,6 +74,10 @@ class Caisse:
         ]
         self.verse_avant: dict[int, Decimal] = {}
         self.ecrites: list[tuple[int, Decimal]] = []
+        #: Le `lock=` de chaque lecture des frais. Le chemin d'ecriture doit
+        #: toujours demander True : c'est ce verrou qui empeche une annulation
+        #: concurrente de recalculer ces memes lignes pendant qu'on decide.
+        self.verrous: list[bool] = []
         self.audit: dict[str, Any] = {}
         self._brancher(monkeypatch)
 
@@ -107,7 +111,8 @@ class Caisse:
         async def _inscription(_db: object, _id: int) -> object:
             return MagicMock(id=INSCRIPTION)
 
-        async def _tous(_db: object, _id: int) -> list[EnrollmentFee]:
+        async def _tous(_db: object, _id: int, *, lock: bool) -> list[EnrollmentFee]:
+            self.verrous.append(lock)
             return self.tous
 
         async def _deja_verse(_db: object, _id: int) -> dict[int, Decimal]:
@@ -176,6 +181,22 @@ async def test_sans_repartition_la_cascade_reste_le_defaut(caisse: Caisse) -> No
     ]
     assert caisse.audit["allocation_mode"] == "cascade"
     assert "directed_allocations" not in caisse.audit
+
+
+async def test_le_chemin_dencaissement_verrouille_les_frais(caisse: Caisse) -> None:
+    """Écrire de l'argent tient les lignes jusqu'au commit, dans les deux modes.
+
+    Ce test existe parce que le verrou a déjà disparu une fois : la lecture des
+    frais est passée d'une requête verrouillante à une requête d'aperçu qui lui
+    ressemblait, et aucun test ne l'a vu. L'annulation d'un versement
+    verrouille les frais sans verrouiller l'inscription ; si l'encaissement ne
+    verrouille que l'inscription, les deux ne partagent plus rien et décident
+    chacun sur un état périmé.
+    """
+    await caisse.verser("60000")
+    await caisse.verser("30000", allocations=[(FRAIS_TENUE, "30000")])
+
+    assert caisse.verrous == [True, True], "chaque encaissement doit poser un FOR UPDATE"
 
 
 # ---------------------------------------------------------------------------
