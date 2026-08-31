@@ -162,7 +162,7 @@ jobs:
             --cov-fail-under=40
 
       - name: Upload coverage report
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         if: always()
         with:
           file: coverage.xml
