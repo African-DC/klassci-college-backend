@@ -40,10 +40,13 @@ _COMPOSITE_MESSAGES = {
     "uq_cash_session_cashier_date": (
         "Une journée de caisse est déjà ouverte pour cette personne à cette date."
     ),
+    # Les six dimensions de l'index, énumérées en entier. En oublier une
+    # envoie l'école chercher son doublon là où il n'est pas : elle relit cinq
+    # colonnes identiques, conclut qu'il n'y a pas de doublon, et recommence.
     "uq_fee_variant_dimensions": (
         "Un montant est déjà défini pour cette catégorie, ce niveau, cette série, "
-        "cette année et ce statut d'affectation. Modifiez celui qui existe au lieu "
-        "d'en créer un second."
+        "cette année, ce statut d'affectation et ce profil d'élève (nouveau ou "
+        "ancien). Modifiez celui qui existe au lieu d'en créer un second."
     ),
 }
 
