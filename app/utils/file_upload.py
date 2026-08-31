@@ -5,15 +5,16 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
-from app.utils.photo_upload import EXTENSION_PAR_TYPE
+from app.core.uploads import DOCUMENTS
+from app.utils.photo_upload import EXTENSION_PAR_TYPE, read_capped
 
-DOCUMENT_UPLOAD_DIR = "/tmp/klassci-uploads/documents"
+#: Conserve : des tests nomment encore le dossier des documents.
+DOCUMENT_UPLOAD_DIR = DOCUMENTS.directory
 # Les types d'image viennent de `photo_upload`, seule table de reference :
 # les deux modules en portaient chacun une copie, et c'est la divergence qui a
 # laisse vivre l'extraction dangereuse d'un cote pendant que l'autre etait
 # correcte. Un document accepte en plus le PDF.
 _ALLOWED_TYPES = {**EXTENSION_PAR_TYPE, "application/pdf": "pdf"}
-_MAX_BYTES = 10 * 1024 * 1024
 
 
 async def save_document_upload(file: UploadFile, *, prefix: str) -> tuple[str, str]:
@@ -24,15 +25,11 @@ async def save_document_upload(file: UploadFile, *, prefix: str) -> tuple[str, s
             status_code=400, detail="Format invalide. Accepte : PDF, JPEG, PNG, WebP"
         )
 
-    os.makedirs(DOCUMENT_UPLOAD_DIR, exist_ok=True)
+    contenu = await read_capped(file, DOCUMENTS.max_bytes)
+
+    os.makedirs(DOCUMENTS.directory, exist_ok=True)
     ext = _ALLOWED_TYPES[mime]
     filename = f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}"
+    DOCUMENTS.path_for(filename).write_bytes(contenu)
 
-    content = await file.read()
-    if len(content) > _MAX_BYTES:
-        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 10 Mo)")
-
-    with open(os.path.join(DOCUMENT_UPLOAD_DIR, filename), "wb") as f:
-        f.write(content)
-
-    return f"/uploads/documents/{filename}", mime
+    return DOCUMENTS.public_url(filename), mime

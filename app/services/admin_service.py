@@ -2295,6 +2295,26 @@ async def clear_school_signature(db: AsyncSession, *, updated_by: int) -> School
     return await get_school_settings(db)
 
 
+async def clear_school_logo(db: AsyncSession, *, updated_by: int) -> SchoolSettings:
+    """Clear the school logo URL (DELETE flow)."""
+    school = await get_school_settings(db)
+    if school.logo_url is None:
+        return school
+    async with db.begin_nested():
+        school.logo_url = None
+        await db.flush()
+        await audit_log(
+            db,
+            entity_type="school_settings",
+            action=AuditAction.UPDATE,
+            user_id=updated_by,
+            entity_id=school.id,
+            new_values={"logo_url": None},
+        )
+    await db.commit()
+    return await get_school_settings(db)
+
+
 async def update_enrollment_pattern(
     db: AsyncSession, data: EnrollmentPatternUpdate, *, updated_by: int
 ) -> dict:

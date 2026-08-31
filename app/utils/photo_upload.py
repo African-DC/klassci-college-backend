@@ -1,12 +1,16 @@
-"""Stockage des photos de profil (disque local, servi via /uploads)."""
+"""Ecriture des images televersees (disque local, servi via /uploads)."""
 
 import os
 import uuid
 
 from fastapi import HTTPException, UploadFile
 
-PHOTO_UPLOAD_DIR = "/tmp/klassci-uploads/photos"
-_MAX_BYTES = 5 * 1024 * 1024
+from app.core.uploads import PHOTOS, UploadKind
+
+#: Conserve : plusieurs tests et modules nomment encore le dossier des photos.
+PHOTO_UPLOAD_DIR = PHOTOS.directory
+
+_TAILLE_LECTURE = 64 * 1024
 
 # L'extension vient du type validé, jamais du nom envoyé par le client.
 #
@@ -31,18 +35,38 @@ def extension_pour(content_type: str | None) -> str:
     return extension
 
 
-async def save_photo_upload(file: UploadFile, *, prefix: str) -> str:
-    """Valide et sauvegarde une photo, retourne son URL publique `/uploads/photos/...`."""
+async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Lit le fichier et s'arrête dès que la limite est franchie.
+
+    Lire d'abord puis mesurer chargeait l'intégralité du corps en mémoire avant
+    de le refuser : un envoi de 500 Mo était intégralement mis en RAM pour finir
+    en 400. On lit donc par tranches et on abandonne au premier octet de trop.
+    """
+    morceaux: list[bytes] = []
+    total = 0
+    while morceau := await file.read(_TAILLE_LECTURE):
+        total += len(morceau)
+        if total > max_bytes:
+            mo = max_bytes // (1024 * 1024)
+            raise HTTPException(status_code=400, detail=f"Fichier trop volumineux (max {mo} Mo)")
+        morceaux.append(morceau)
+    return b"".join(morceaux)
+
+
+async def save_image_upload(file: UploadFile, *, kind: UploadKind, prefix: str) -> str:
+    """Valide et enregistre une image, retourne son URL publique.
+
+    Seule porte d'entrée pour écrire une image : photo d'élève, d'enseignant, de
+    membre du personnel, tampon de signature ou logo. Les cinq endpoints qui
+    refaisaient ces sept gestes à la main portaient chacun sa propre limite de
+    taille et construisait sa propre URL, et rien ne garantissait que le dossier
+    écrit et l'URL rendue désignent le même endroit.
+    """
     ext = extension_pour(file.content_type)
+    contenu = await read_capped(file, kind.max_bytes)
 
-    os.makedirs(PHOTO_UPLOAD_DIR, exist_ok=True)
+    os.makedirs(kind.directory, exist_ok=True)
     filename = f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}"
+    kind.path_for(filename).write_bytes(contenu)
 
-    content = await file.read()
-    if len(content) > _MAX_BYTES:
-        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 5 Mo)")
-
-    with open(os.path.join(PHOTO_UPLOAD_DIR, filename), "wb") as f:
-        f.write(content)
-
-    return f"/uploads/photos/{filename}"
+    return kind.public_url(filename)
