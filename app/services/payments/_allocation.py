@@ -29,7 +29,7 @@ from app.models.fee import (
 from app.services import fees_paid
 
 
-def plan_allocation(
+def _cascade_by_priority(
     amount: Decimal,
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
 ) -> tuple[list[tuple[EnrollmentFee, Decimal]], Decimal]:
@@ -67,10 +67,10 @@ def _merge_directed_lines(items: Iterable[tuple[int, Decimal]]) -> dict[int, Dec
     return merged
 
 
-def can_receive_cash(fee: EnrollmentFee, paid: Decimal) -> bool:
+def _can_receive_cash(fee: EnrollmentFee, paid: Decimal) -> bool:
     """Ce frais peut-il encore recevoir de l'argent ?
 
-    Seule définition dans le code. `cash_remaining` ne suffit pas : elle ignore
+    Seule définition dans le code, et on la demande par `plannable_fees`. `cash_remaining` ne suffit pas : elle ignore
     le statut « soldé », et un frais payé dont les versements ne seraient pas
     encore relus paraîtrait redevable. La cascade, la répartition nommée et le
     contrôle des imputations doivent voir exactement la même liste, sinon
@@ -84,7 +84,7 @@ def plannable_fees(
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
 ) -> list[tuple[EnrollmentFee, Decimal]]:
     """Les frais qu'un versement peut servir, dans l'ordre reçu."""
-    return [(fee, paid) for fee, paid in fees_with_paid if can_receive_cash(fee, paid)]
+    return [(fee, paid) for fee, paid in fees_with_paid if _can_receive_cash(fee, paid)]
 
 
 @dataclass(frozen=True)
@@ -146,7 +146,7 @@ def _check_directed_allocations(
             )
             continue
         fee, paid = connu
-        if not can_receive_cash(fee, paid):
+        if not _can_receive_cash(fee, paid):
             problems.append(AllocationProblem(fee_id, _pourquoi_rien_a_recevoir(fee_id, fee)))
             continue
         reste = cash_remaining(fee.status, fee.amount, paid)
@@ -185,7 +185,7 @@ def _plan_split(
 ) -> tuple[list[tuple[EnrollmentFee, Decimal]], Decimal]:
     """Impute les montants nommés, puis cascade le reliquat. Pure.
 
-    Sans montant nommé, c'est exactement `plan_allocation` : le reliquat vaut
+    Sans montant nommé, c'est exactement `_cascade_by_priority` : le reliquat vaut
     alors le versement entier et cascade sur tout. Il n'y a donc pas deux
     façons de répartir, il y en a une, dont la cascade seule est le cas
     particulier. Les appelants n'ont pas à choisir, et ne peuvent pas se
@@ -198,7 +198,7 @@ def _plan_split(
     avait nommé, c'est-à-dire réinterpréterait son instruction sans le dire.
     L'invariant est vérifié plutôt que rattrapé.
 
-    Le retour a la même forme que `plan_allocation` : (splits, surplus), un
+    Le retour a la même forme que `_cascade_by_priority` : (splits, surplus), un
     seul split par frais, pour que l'écriture des allocations, le recalcul des
     statuts et l'audit ne connaissent qu'un seul chemin quel que soit le mode.
 
@@ -217,7 +217,7 @@ def _plan_split(
     apres_nommees = [
         (fee, paid + nommees.get(fee.id, Decimal("0"))) for fee, paid in fees_with_paid
     ]
-    cascade, surplus = plan_allocation(reliquat, apres_nommees)
+    cascade, surplus = _cascade_by_priority(reliquat, apres_nommees)
     en_cascade = {fee.id: montant for fee, montant in cascade}
 
     splits: list[tuple[EnrollmentFee, Decimal]] = []
