@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from decimal import Decimal
 from typing import Any
 
+from app.core.uploads import UPLOAD_ROOT
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,7 +75,9 @@ def enum_value(v: Any) -> Any:
 # Image embedding (logo, signature, etc.)
 # ---------------------------------------------------------------------------
 
-_UPLOAD_ROOT = "/tmp/klassci-uploads"
+# Meme racine que le montage `/uploads` : une image ecrite par un upload est
+# relue ici telle quelle pour etre embarquee dans le PDF.
+_UPLOAD_ROOT = UPLOAD_ROOT
 _MIME_BY_EXT = {
     "png": "image/png",
     "jpg": "image/jpeg",

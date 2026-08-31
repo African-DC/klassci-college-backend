@@ -5,7 +5,10 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
-PHOTO_UPLOAD_DIR = "/tmp/klassci-uploads/photos"
+from app.core.uploads import PHOTOS_DIR
+
+# Racine partagee, servie sous `/uploads` : voir `app.core.uploads`.
+PHOTO_UPLOAD_DIR = PHOTOS_DIR
 _MAX_BYTES = 5 * 1024 * 1024
 
 # L'extension vient du type validé, jamais du nom envoyé par le client.

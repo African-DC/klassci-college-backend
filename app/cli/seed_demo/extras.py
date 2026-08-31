@@ -13,11 +13,11 @@ sur le disque fasse échouer une base de six cents élèves.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from sqlalchemy import func, select
 
 from app.cli.seed_demo.context import SeedContext, logger
+from app.core.uploads import UPLOAD_ROOT as _UPLOAD_ROOT
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import Payment
 from app.models.grade import Grade
@@ -41,7 +41,7 @@ ARCHIVE_COUNT = 4
 
 #: Répertoire servi par l'application sous `/uploads`. Écrire les pièces
 #: jointes ailleurs donnerait des liens morts dans la fiche élève.
-UPLOAD_ROOT = Path("/tmp/klassci-uploads/justificatifs")
+UPLOAD_ROOT = _UPLOAD_ROOT / "justificatifs"
 
 _LEAVES: tuple[tuple[str, int, str], ...] = (
     (LeaveType.SICK.value, 3, "Arrêt maladie, certificat médical transmis au secrétariat"),

@@ -5,9 +5,11 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
+from app.core.uploads import DOCUMENTS_DIR
 from app.utils.photo_upload import EXTENSION_PAR_TYPE
 
-DOCUMENT_UPLOAD_DIR = "/tmp/klassci-uploads/documents"
+# Racine partagee, servie sous `/uploads` : voir `app.core.uploads`.
+DOCUMENT_UPLOAD_DIR = DOCUMENTS_DIR
 # Les types d'image viennent de `photo_upload`, seule table de reference :
 # les deux modules en portaient chacun une copie, et c'est la divergence qui a
 # laisse vivre l'extraction dangereuse d'un cote pendant que l'autre etait
