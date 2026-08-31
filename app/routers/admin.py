@@ -14,6 +14,7 @@ from app.core.dependencies import (
     has_permission,
     require_permission,
 )
+from app.core.uploads import LOGOS_DIR, PHOTOS_DIR, SIGNATURES_DIR
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -88,8 +89,12 @@ from app.utils.photo_upload import extension_pour
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-UPLOAD_DIR = "/tmp/klassci-uploads/photos"
-SIGNATURE_UPLOAD_DIR = "/tmp/klassci-uploads/signatures"
+# Sous-dossiers de la racine d'upload partagee (voir `app.core.uploads`) :
+# le montage `/uploads` pointe sur la meme racine, donc les URL publiques
+# `/uploads/photos/...` restent servies telles quelles.
+UPLOAD_DIR = PHOTOS_DIR
+SIGNATURE_UPLOAD_DIR = SIGNATURES_DIR
+LOGO_UPLOAD_DIR = LOGOS_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -958,6 +963,50 @@ async def delete_school_signature(
 ) -> None:
     """Retire la signature officielle de l'etablissement."""
     await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
+
+
+@router.post("/settings/logo")
+async def upload_school_logo(
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload le logo de l'etablissement, affiche a l'ecran et sur les documents.
+
+    Meme contrat que la signature juste au-dessus : whitelist MIME partagee,
+    5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
+    """
+    ext = extension_pour(file.content_type)
+
+    os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+    filename = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(LOGO_UPLOAD_DIR, filename)
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    logo_url = f"/uploads/logos/{filename}"
+    school = await admin_service.update_school_info(
+        db,
+        SchoolInfoUpdate(logo_url=logo_url),
+        updated_by=current_user.user_id,
+    )
+    return {"logo_url": school.logo_url}
+
+
+@router.delete("/settings/logo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_school_logo(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Retire le logo de l'etablissement."""
+    await admin_service.clear_school_logo(db, updated_by=current_user.user_id)
 
 
 # ---------------------------------------------------------------------------
