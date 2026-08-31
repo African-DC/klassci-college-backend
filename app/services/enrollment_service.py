@@ -302,7 +302,16 @@ async def update_enrollment(
             user_id=updated_by,
             entity_id=enrollment_id,
             old_values=old_values,
-            new_values=data.model_dump(exclude_none=True),
+            # Ce que le client a REELLEMENT envoye, nuls compris. `exclude_none`
+            # ecartait les champs remis a null, or c'est precisement le geste
+            # qui remet le profil a « non tranche » et qui, quelques lignes plus
+            # haut, regenere toute la grille de frais de l'inscription. Le
+            # journal ne gardait donc aucune trace de la seule action qui
+            # explique pourquoi la dette d'une famille a change.
+            #
+            # `mode="json"` parce que la colonne d'audit est du JSON : un enum
+            # ou une date rendus en objets Python y lèvent une erreur illisible.
+            new_values=data.model_dump(include=data.model_fields_set, mode="json"),
         )
 
     await db.commit()

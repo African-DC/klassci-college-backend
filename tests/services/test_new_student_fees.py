@@ -464,3 +464,30 @@ def test_la_contrainte_porte_bien_les_six_dimensions() -> None:
         "scope_key",
         "profile_key",
     ) in contraintes
+
+
+# ---------------------------------------------------------------------------
+# Ce que le journal d'audit retient d'une correction de profil
+# ---------------------------------------------------------------------------
+
+
+def test_l_audit_retient_le_profil_remis_a_non_tranche() -> None:
+    """Remettre le profil à « non tranché » doit laisser une trace.
+
+    C'est le geste qui régénère toute la grille de frais de l'inscription :
+    sans lui dans le journal, plus rien n'explique pourquoi la dette d'une
+    famille a changé ce jour-là. `exclude_none` écartait précisément ce
+    champ-là, parce que sa valeur EST `null`.
+
+    Le champ absent, lui, doit rester absent : le journal dit ce que le
+    guichet a envoyé, pas ce que le schéma pourrait porter.
+    """
+    from app.schemas.enrollment import EnrollmentUpdate
+
+    remise_a_zero = EnrollmentUpdate.model_validate({"is_new_student": None})
+    trace = remise_a_zero.model_dump(include=remise_a_zero.model_fields_set, mode="json")
+    assert trace == {"is_new_student": None}
+
+    autre_champ = EnrollmentUpdate.model_validate({"notes": "Dossier complété"})
+    trace = autre_champ.model_dump(include=autre_champ.model_fields_set, mode="json")
+    assert "is_new_student" not in trace
