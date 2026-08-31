@@ -1,9 +1,6 @@
 """Router admin — CRUD endpoints pour les entités de base."""
 
-import os
-import uuid
-
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_read import audit_read
@@ -14,7 +11,7 @@ from app.core.dependencies import (
     has_permission,
     require_permission,
 )
-from app.core.uploads import LOGOS_DIR, PHOTOS_DIR, SIGNATURES_DIR
+from app.core.uploads import LOGOS, PHOTOS, SIGNATURES, delete_public_file
 from app.models.academic import SchoolSettings
 from app.schemas.admin import (
     AcademicYearCreate,
@@ -85,16 +82,9 @@ from app.schemas.admin import (
 )
 from app.services import admin_service, enrollment_fees, matricule_service
 from app.services.finance_visibility import FinanceView
-from app.utils.photo_upload import extension_pour
+from app.utils.photo_upload import save_image_upload
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-# Sous-dossiers de la racine d'upload partagee (voir `app.core.uploads`) :
-# le montage `/uploads` pointe sur la meme racine, donc les URL publiques
-# `/uploads/photos/...` restent servies telles quelles.
-UPLOAD_DIR = PHOTOS_DIR
-SIGNATURE_UPLOAD_DIR = SIGNATURES_DIR
-LOGO_UPLOAD_DIR = LOGOS_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -208,20 +198,7 @@ async def upload_student_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un eleve."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"{student_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"{student_id}")
     student = await admin_service.update_student_photo(
         db, student_id, photo_url, updated_by=current_user.user_id
     )
@@ -387,20 +364,7 @@ async def upload_teacher_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un enseignant."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"teacher_{teacher_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"teacher_{teacher_id}")
     teacher = await admin_service.update_teacher_photo(
         db, teacher_id, photo_url, updated_by=current_user.user_id
     )
@@ -488,20 +452,7 @@ async def upload_staff_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un membre du personnel."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"staff_{staff_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"staff_{staff_id}")
     staff = await admin_service.update_staff_photo(
         db, staff_id, photo_url, updated_by=current_user.user_id
     )
@@ -933,20 +884,9 @@ async def upload_school_signature(
     Reutilise le pattern d'upload des photos eleves : MIME whitelist,
     5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
     """
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(SIGNATURE_UPLOAD_DIR, exist_ok=True)
-    filename = f"signature_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(SIGNATURE_UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    signature_url = f"/uploads/signatures/{filename}"
+    ancienne = (await admin_service.get_school_settings(db)).signature_image_url
+    signature_url = await save_image_upload(file, kind=SIGNATURES, prefix="signature")
+    delete_public_file(ancienne)
     school = await admin_service.update_school_info(
         db,
         SchoolInfoUpdate(signature_image_url=signature_url),
@@ -962,7 +902,9 @@ async def delete_school_signature(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Retire la signature officielle de l'etablissement."""
+    ancienne = (await admin_service.get_school_settings(db)).signature_image_url
     await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
+    delete_public_file(ancienne)
 
 
 @router.post("/settings/logo")
@@ -977,20 +919,9 @@ async def upload_school_logo(
     Meme contrat que la signature juste au-dessus : whitelist MIME partagee,
     5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
     """
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
-    filename = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(LOGO_UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    logo_url = f"/uploads/logos/{filename}"
+    ancien = (await admin_service.get_school_settings(db)).logo_url
+    logo_url = await save_image_upload(file, kind=LOGOS, prefix="logo")
+    delete_public_file(ancien)
     school = await admin_service.update_school_info(
         db,
         SchoolInfoUpdate(logo_url=logo_url),
@@ -1006,7 +937,9 @@ async def delete_school_logo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Retire le logo de l'etablissement."""
+    ancien = (await admin_service.get_school_settings(db)).logo_url
     await admin_service.clear_school_logo(db, updated_by=current_user.user_id)
+    delete_public_file(ancien)
 
 
 # ---------------------------------------------------------------------------
