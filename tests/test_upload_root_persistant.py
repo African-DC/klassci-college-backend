@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
 
 from app.core import uploads
 from app.core.config import Settings
@@ -30,8 +31,41 @@ from app.core.uploads import (
     UPLOAD_ROOT,
 )
 from app.main import app
-from app.utils.file_upload import DOCUMENT_UPLOAD_DIR
-from app.utils.photo_upload import PHOTO_UPLOAD_DIR, read_capped
+from app.utils.file_upload import save_document_upload
+from app.utils.photo_upload import read_capped, save_image_upload
+
+#: En-tetes reels suivis de remplissage : seul le type declare est controle,
+#: le contenu n'est jamais decode.
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+PDF = b"%PDF-1.4\n" + b"0" * 32
+
+MONTAGE = "/uploads/"
+
+
+def _resolu_par_le_montage(url: str) -> Path:
+    """Le fichier que le montage `/uploads` servira pour cette URL.
+
+    On refait ici la seule chose que fait `StaticFiles` : retirer le prefixe du
+    montage, puis joindre le reste a la racine servie. Comparer directement
+    l'URL au chemin reviendrait a verifier qu'une expression est elle-meme ; en
+    passant par la regle du montage, une URL qui ne designe pas le fichier
+    reellement ecrit se voit, parce que la lecture echoue.
+    """
+    assert url.startswith(MONTAGE), url
+    return uploads.UPLOAD_ROOT / url[len(MONTAGE) :]
+
+
+def _envoi(contenu: bytes, type_mime: str | None = None) -> UploadFile:
+    """Un envoi tel que FastAPI le construit : des octets et un type declare.
+
+    Le nom `envoi.bin` est volontairement faux : c'est le type MIME, et lui
+    seul, qui decide de l'extension retenue.
+    """
+    return UploadFile(
+        file=io.BytesIO(contenu),
+        filename="envoi.bin",
+        headers=Headers({"content-type": type_mime} if type_mime else {}),
+    )
 
 
 def test_racine_par_defaut_est_persistante() -> None:
@@ -49,24 +83,27 @@ def test_sous_dossiers_derivent_tous_de_la_racine() -> None:
     assert DOCUMENTS.directory == UPLOAD_ROOT / "documents"
 
 
-def test_les_modules_d_ecriture_partagent_la_meme_racine() -> None:
-    """Les alias historiques des helpers pointent sur les dossiers partages."""
-    assert Path(PHOTO_UPLOAD_DIR) == PHOTOS.directory
-    assert Path(DOCUMENT_UPLOAD_DIR) == DOCUMENTS.directory
+def test_la_forme_des_url_publiques_ne_bouge_pas() -> None:
+    """Des photos et des documents sont deja enregistres en base avec ces URL.
+
+    Le refactor a le droit de changer qui construit l'URL, pas la chaine
+    obtenue : la deplacer rendrait muettes toutes les images deja stockees.
+    """
+    assert PHOTOS.public_url("42_abcd1234.jpg") == "/uploads/photos/42_abcd1234.jpg"
+    assert SIGNATURES.public_url("s_abcd1234.png") == "/uploads/signatures/s_abcd1234.png"
+    assert LOGOS.public_url("logo_abcd1234.png") == "/uploads/logos/logo_abcd1234.png"
+    assert DOCUMENTS.public_url("s42_abcd1234.pdf") == "/uploads/documents/s42_abcd1234.pdf"
 
 
 @pytest.mark.parametrize("kind", KINDS, ids=lambda k: k.name)
-def test_l_url_publique_et_le_dossier_ne_peuvent_pas_diverger(kind: uploads.UploadKind) -> None:
-    """Le dossier ecrit et l'URL rendue designent le meme endroit, par construction.
+def test_l_url_rendue_designe_le_fichier_ecrit(kind: uploads.UploadKind) -> None:
+    """Le montage resout l'URL publique vers le chemin exact ou la sorte ecrit.
 
-    C'est la raison d'etre d'`UploadKind` : tenus separement, les deux finissaient
-    par diverger, et un document sortait sans son image.
+    C'est la raison d'etre d'`UploadKind` : tenus separement, dossier et URL
+    finissaient par diverger, et un document sortait sans son image.
     """
     url = kind.public_url("f_abcd1234.png")
-    chemin = kind.path_for("f_abcd1234.png")
-    assert url == f"/uploads/{kind.directory.name}/f_abcd1234.png"
-    assert chemin.parent == kind.directory
-    assert url.endswith(chemin.name)
+    assert _resolu_par_le_montage(url) == kind.path_for("f_abcd1234.png")
 
 
 def test_deplacer_la_racine_deplace_tous_les_dossiers(
@@ -87,6 +124,42 @@ def test_le_montage_uploads_sert_la_racine() -> None:
     fichiers = montage.app
     assert isinstance(fichiers, StaticFiles)
     assert Path(fichiers.directory) == UPLOAD_ROOT
+
+
+# ---------------------------------------------------------------------------
+# Ecriture reelle : l'octet ecrit est celui que l'URL rendue va servir
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", [PHOTOS, SIGNATURES, LOGOS], ids=lambda k: k.name)
+async def test_l_image_ecrite_est_relue_a_l_url_rendue(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, kind: uploads.UploadKind
+) -> None:
+    """Photo d'eleve, photo du personnel, tampon et logo passent par le meme helper.
+
+    On relit les octets par le chemin que le montage deduit de l'URL rendue :
+    ecrire dans `signatures/` en annoncant `/uploads/photos/...` ferait echouer
+    la lecture, ce qu'aucune comparaison de chaines n'attrapait.
+    """
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
+
+    url = await save_image_upload(_envoi(PNG, "image/png"), kind=kind, prefix="42")
+
+    assert url.startswith(f"{kind.url_prefix}/")
+    assert _resolu_par_le_montage(url).read_bytes() == PNG
+
+
+async def test_le_document_ecrit_est_relu_a_l_url_rendue(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Les pieces jointes ont leur propre helper : il doit tenir la meme promesse."""
+    monkeypatch.setattr(uploads, "UPLOAD_ROOT", tmp_path)
+
+    url, mime = await save_document_upload(_envoi(PDF, "application/pdf"), prefix="s42")
+
+    assert mime == "application/pdf"
+    assert url.startswith(f"{DOCUMENTS.url_prefix}/")
+    assert _resolu_par_le_montage(url).read_bytes() == PDF
 
 
 # ---------------------------------------------------------------------------
@@ -248,24 +321,20 @@ def test_une_url_qui_remonte_n_efface_rien(
 # ---------------------------------------------------------------------------
 
 
-def _envoi(taille: int) -> UploadFile:
-    return UploadFile(file=io.BytesIO(b"0" * taille), filename="f.png")
-
-
 async def test_un_envoi_sous_la_limite_est_lu_entierement() -> None:
-    contenu = await read_capped(_envoi(1024), 5 * 1024)
+    contenu = await read_capped(_envoi(b"0" * 1024), 5 * 1024)
     assert contenu == b"0" * 1024
 
 
 async def test_un_envoi_a_la_limite_exacte_passe() -> None:
     """Le plafond est inclusif : refuser pile 5 Mo serait un refus arbitraire."""
-    contenu = await read_capped(_envoi(4096), 4096)
+    contenu = await read_capped(_envoi(b"0" * 4096), 4096)
     assert len(contenu) == 4096
 
 
 async def test_un_envoi_au_dessus_de_la_limite_est_refuse() -> None:
     with pytest.raises(HTTPException) as erreur:
-        await read_capped(_envoi(4097), 4096)
+        await read_capped(_envoi(b"0" * 4097), 4096)
     assert erreur.value.status_code == 400
     assert "trop volumineux" in erreur.value.detail
 
@@ -273,5 +342,5 @@ async def test_un_envoi_au_dessus_de_la_limite_est_refuse() -> None:
 async def test_le_plafond_est_annonce_en_mega_octets() -> None:
     """Le message dit la limite dans l'unite ou l'utilisateur l'a lue."""
     with pytest.raises(HTTPException) as erreur:
-        await read_capped(_envoi(5 * 1024 * 1024 + 1), 5 * 1024 * 1024)
+        await read_capped(_envoi(b"0" * (5 * 1024 * 1024 + 1)), 5 * 1024 * 1024)
     assert "max 5 Mo" in erreur.value.detail
