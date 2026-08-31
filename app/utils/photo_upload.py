@@ -5,10 +5,7 @@ import uuid
 
 from fastapi import HTTPException, UploadFile
 
-from app.core.uploads import PHOTOS, UploadKind
-
-#: Conserve : plusieurs tests et modules nomment encore le dossier des photos.
-PHOTO_UPLOAD_DIR = PHOTOS.directory
+from app.core.uploads import UploadKind
 
 _TAILLE_LECTURE = 64 * 1024
 

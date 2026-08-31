@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 
 from app.cli.seed_demo.context import SeedContext, logger
-from app.core.uploads import UPLOAD_ROOT as _UPLOAD_ROOT
+from app.core.uploads import UPLOAD_ROOT
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import Payment
 from app.models.grade import Grade
@@ -39,9 +39,12 @@ NOTIFICATION_COUNT = 30
 DOCUMENT_STUDENTS = 40
 ARCHIVE_COUNT = 4
 
-#: Répertoire servi par l'application sous `/uploads`. Écrire les pièces
-#: jointes ailleurs donnerait des liens morts dans la fiche élève.
-UPLOAD_ROOT = _UPLOAD_ROOT / "justificatifs"
+#: Sous-dossier des justificatifs, servi par l'application sous `/uploads`.
+#: Écrire les pièces jointes ailleurs donnerait des liens morts dans la fiche
+#: élève. Le nom sert au dossier écrit ET à l'URL rendue : les tenir séparés
+#: laisserait l'un bouger sans l'autre.
+JUSTIFICATIFS = "justificatifs"
+JUSTIFICATIFS_DIR = UPLOAD_ROOT / JUSTIFICATIFS
 
 _LEAVES: tuple[tuple[str, int, str], ...] = (
     (LeaveType.SICK.value, 3, "Arrêt maladie, certificat médical transmis au secrétariat"),
@@ -243,9 +246,9 @@ async def ensure_student_documents(ctx: SeedContext) -> None:
     rien de plus au visiteur.
     """
     try:
-        UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+        JUSTIFICATIFS_DIR.mkdir(parents=True, exist_ok=True)
         for label in _DOCUMENT_TYPES[:3]:
-            target = UPLOAD_ROOT / f"{label.split()[0].lower()}.pdf"
+            target = JUSTIFICATIFS_DIR / f"{label.split()[0].lower()}.pdf"
             if not target.exists():
                 target.write_bytes(_minimal_pdf(label))
     except OSError as error:
@@ -256,7 +259,7 @@ async def ensure_student_documents(ctx: SeedContext) -> None:
     stmt = stmt.where(Enrollment.academic_year_id == ctx.academic_year_id).order_by(Student.id)
     students = list((await ctx.db.execute(stmt.limit(DOCUMENT_STUDENTS))).scalars().all())
     uploader = ctx.staff_user_by_role.get("staff") or ctx.actor_id
-    files = sorted(path.name for path in UPLOAD_ROOT.glob("*.pdf"))
+    files = sorted(path.name for path in JUSTIFICATIFS_DIR.glob("*.pdf"))
 
     for index, student_id in enumerate(students):
         documents = await attachment_service.list_student_documents(ctx.db, student_id)
@@ -271,7 +274,7 @@ async def ensure_student_documents(ctx: SeedContext) -> None:
                     ctx.db,
                     student_id,
                     document_type=label,
-                    file_url=f"/uploads/justificatifs/{name}",
+                    file_url=f"/uploads/{JUSTIFICATIFS}/{name}",
                     file_name=f"{label}.pdf",
                     mime_type="application/pdf",
                     uploaded_by=uploader,

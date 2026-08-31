@@ -63,11 +63,12 @@ def test_un_nom_forge_ne_touche_plus_le_chemin(nom_forge: str) -> None:
     """
     import os
 
-    from app.utils.photo_upload import PHOTO_UPLOAD_DIR
+    from app.core.uploads import PHOTOS
 
+    dossier = PHOTOS.directory
     extension = extension_pour("image/jpeg")
-    chemin = os.path.join(PHOTO_UPLOAD_DIR, f"42_abcd1234.{extension}")
-    assert os.path.normpath(chemin).startswith(os.path.normpath(PHOTO_UPLOAD_DIR))
+    chemin = os.path.join(dossier, f"42_abcd1234.{extension}")
+    assert os.path.normpath(chemin).startswith(os.path.normpath(dossier))
     assert nom_forge not in chemin
 
 
@@ -90,8 +91,9 @@ def test_l_ancien_calcul_ouvrait_un_sous_chemin_pas_une_evasion() -> None:
     """
     import os
 
-    from app.utils.photo_upload import PHOTO_UPLOAD_DIR
+    from app.core.uploads import PHOTOS
 
+    dossier = PHOTOS.directory
     hostiles = [
         "photo.png/../../../../app/main",
         "x." + "../" * 20 + "root",
@@ -102,7 +104,7 @@ def test_l_ancien_calcul_ouvrait_un_sous_chemin_pas_une_evasion() -> None:
         # La propriété qui rendait l'évasion impossible : pas de point, donc
         # pas de `..`.
         assert "." not in ancienne
-        cible = os.path.join(PHOTO_UPLOAD_DIR, f"42_abcd1234.{ancienne}")
-        assert os.path.normpath(cible).startswith(os.path.normpath(PHOTO_UPLOAD_DIR))
+        cible = os.path.join(dossier, f"42_abcd1234.{ancienne}")
+        assert os.path.normpath(cible).startswith(os.path.normpath(dossier))
         # En revanche le chemin s'enfonçait dans des dossiers absents.
-        assert os.sep in os.path.normpath(cible)[len(os.path.normpath(PHOTO_UPLOAD_DIR)) :]
+        assert os.sep in os.path.normpath(cible)[len(os.path.normpath(dossier)) :]
