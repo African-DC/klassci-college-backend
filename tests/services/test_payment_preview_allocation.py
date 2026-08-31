@@ -51,10 +51,16 @@ TOUS = [
 
 
 @pytest.fixture
-def guichet(monkeypatch: pytest.MonkeyPatch) -> object:
-    """L'inscription en mémoire : ses frais, et ce qui y est déjà versé."""
+def guichet(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
+    """L'inscription en mémoire : ses frais, et ce qui y est déjà versé.
 
-    async def _tous(_db: object, _id: int) -> list[EnrollmentFee]:
+    Rend la liste des `lock=` demandés à chaque lecture des frais : l'aperçu se
+    rejoue à chaque frappe du caissier et ne doit jamais verrouiller.
+    """
+    verrous: list[bool] = []
+
+    async def _tous(_db: object, _id: int, *, lock: bool) -> list[EnrollmentFee]:
+        verrous.append(lock)
         return TOUS
 
     async def _deja_verse(_db: object, _id: int) -> dict[int, Decimal]:
@@ -62,7 +68,7 @@ def guichet(monkeypatch: pytest.MonkeyPatch) -> object:
 
     monkeypatch.setattr(preview.repo, "get_enrollment_fees_ordered_by_priority", _tous)
     monkeypatch.setattr(preview.fees_paid, "paid_by_enrollment", _deja_verse)
-    return object()
+    return verrous
 
 
 async def _apercu(montant: str, directed: dict[int, str] | None = None):
@@ -213,3 +219,15 @@ async def test_le_surplus_reste_un_refus(guichet: object) -> None:
     assert apercu.surplus == Decimal("20000")
     assert apercu.reject_reason is not None
     assert "supérieur à la dette restante" in apercu.reject_reason
+
+
+async def test_l_apercu_ne_verrouille_jamais_les_frais(guichet: list[bool]) -> None:
+    """Lire pour montrer ne bloque pas : le caissier tape, la caisse encaisse.
+
+    L'aperçu part à chaque frappe. S'il posait un `FOR UPDATE`, un écran de
+    saisie resté ouvert tiendrait les frais et ferait attendre l'encaissement
+    d'à côté.
+    """
+    await _apercu("10000")
+
+    assert guichet == [False], "l'aperçu doit lire les frais sans FOR UPDATE"

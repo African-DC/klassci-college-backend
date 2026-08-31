@@ -68,6 +68,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent *(caissier, comptable)* (#379)
 - Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*
 - La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis *(devops)*
 - Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur *(technique)*

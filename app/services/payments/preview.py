@@ -71,7 +71,9 @@ async def preview_allocation(
     if amount <= 0:
         raise BusinessValidationError("amount must be positive")
 
-    fees = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
+    # `lock=False` : l'apercu se rejoue a chaque frappe du caissier. Poser un
+    # FOR UPDATE ici ferait attendre la caisse derriere un ecran de saisie.
+    fees = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id, lock=False)
     if not fees:
         return AllocationPreviewResponse(
             enrollment_id=enrollment_id,

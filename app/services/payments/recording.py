@@ -124,7 +124,15 @@ async def record_enrollment_payment(
         # Tous les frais, pas seulement ceux qui restent dus : c'est ce qui
         # permet de distinguer un frais deja solde d'un frais qui n'appartient
         # pas a cette inscription, sans payer une requete de plus pour le dire.
-        tous_les_frais = await repo.get_enrollment_fees_ordered_by_priority(db, enrollment_id)
+        #
+        # `lock=True` tient ces lignes jusqu'au commit. Sans lui, l'annulation
+        # d'un versement anterieur, qui verrouille les frais mais pas
+        # l'inscription (`lifecycle.py`), recalculerait le reste du de ces
+        # memes lignes pendant qu'on les lit : les deux transactions
+        # decideraient sur un etat perime et ecriraient chacune le sien.
+        tous_les_frais = await repo.get_enrollment_fees_ordered_by_priority(
+            db, enrollment_id, lock=True
+        )
 
         # Une requete groupee pour toute l'inscription, pas une par frais :
         # encaisser sur une inscription a six frais coutait six allers-retours
