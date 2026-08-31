@@ -18,7 +18,6 @@ from app.schemas.payment import (
     PaymentResponse,
 )
 from app.services import enrollment_form_service, fee_statement_service, payment_service
-from app.services.payments._allocation import merge_manual_allocations
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments", "payments"])
 
@@ -92,12 +91,7 @@ async def preview_enrollment_payment(
     corps. Rien n'est écrit, la permission reste `payments:read`.
     """
     return await payment_service.preview_allocation(
-        db,
-        enrollment_id,
-        data.amount,
-        directed=merge_manual_allocations(
-            (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
-        ),
+        db, enrollment_id, data.amount, allocations=data.allocations
     )
 
 

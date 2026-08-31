@@ -5,6 +5,7 @@ combien, surplus éventuel, raison de rejet). Read-only — pas de
 verrouillage row, pas de commit.
 """
 
+from collections.abc import Iterable
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,13 +18,14 @@ from app.schemas.payment import (
     AllocationPreviewLine,
     AllocationPreviewProblem,
     AllocationPreviewResponse,
+    PaymentAllocationItem,
 )
 from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
 from app.services.payments._allocation import (
     check_directed_allocations,
-    plan_allocation,
-    plan_manual_allocation,
+    merge_manual_allocations,
+    plan_split,
     plannable_fees,
 )
 
@@ -54,16 +56,16 @@ async def preview_allocation(
     enrollment_id: int,
     amount: Decimal,
     *,
-    directed: dict[int, Decimal] | None = None,
+    allocations: Iterable[PaymentAllocationItem] = (),
 ) -> AllocationPreviewResponse:
     """Montre comment `amount` serait alloué sans rien écrire.
 
     Inclut le surplus et la raison de rejet (décision Marcel #2 : reject
     par défaut en P0).
 
-    `directed` porte la répartition que le caissier a nommée. Absente, l'aperçu
+    `allocations` porte la répartition que le caissier a nommée. Absente, l'aperçu
     montre la cascade par priorité, comme il l'a toujours fait. Présente, c'est
-    `plan_manual_allocation` qui répond, la même fonction que l'enregistrement
+    `plan_split` qui répond, la même fonction que l'enregistrement
     appellera : l'écran ne rejoue plus le calcul de son côté, il affiche celui
     du serveur.
 
@@ -102,19 +104,22 @@ async def preview_allocation(
 
     plannable = plannable_fees(fees_with_paid)
 
-    nommees = directed or {}
+    # Deux lignes sur un meme frais sont une seule imputation de leur somme :
+    # le regroupement est celui de l'enregistrement, pas une variante.
+    nommees = merge_manual_allocations(
+        (ligne.enrollment_fee_id, ligne.amount) for ligne in allocations
+    )
     # La meme fonction que l'enregistrement, sur les memes donnees : ce que
     # l'apercu annonce est ce que la caisse acceptera.
     problems = check_directed_allocations(nommees, fees_with_paid, amount)
 
     if problems:
         # Aucune allocation n'est montree : afficher une repartition que la
-        # caisse refuserait ferait croire qu'il suffit de valider.
-        splits, surplus = [], amount
-    elif nommees:
-        splits, surplus = plan_manual_allocation(amount, plannable, nommees)
+        # caisse refuserait ferait croire qu'il suffit de valider. Et aucun
+        # surplus non plus : rien n'a ete reparti, rien n'a donc deborde.
+        splits, surplus = [], Decimal("0")
     else:
-        splits, surplus = plan_allocation(amount, plannable)
+        splits, surplus = plan_split(amount, plannable, nommees)
     split_map = {fee.id: allocated for fee, allocated in splits}
 
     lines: list[AllocationPreviewLine] = []
@@ -155,7 +160,7 @@ async def preview_allocation(
         amount=amount,
         total_remaining_before=total_remaining_before,
         total_remaining_after=max(total_remaining_before - amount, Decimal("0")),
-        directed_total=directed_total if not problems else Decimal("0"),
+        directed_total=directed_total,
         cascaded_total=max(allocated_total - directed_total, Decimal("0")),
         surplus=max(surplus, Decimal("0")),
         can_record=can_record,

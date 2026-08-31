@@ -17,6 +17,7 @@ from decimal import Decimal
 import pytest
 
 from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
+from app.schemas.payment import PaymentAllocationItem
 from app.services.payments import preview
 
 INSCRIPTION = 500
@@ -69,7 +70,10 @@ async def _apercu(montant: str, directed: dict[int, str] | None = None):
         None,  # type: ignore[arg-type]
         INSCRIPTION,
         Decimal(montant),
-        directed={fee_id: Decimal(v) for fee_id, v in (directed or {}).items()},
+        allocations=[
+            PaymentAllocationItem(enrollment_fee_id=fee_id, amount=Decimal(v))
+            for fee_id, v in (directed or {}).items()
+        ],
     )
 
 
@@ -193,8 +197,12 @@ async def test_une_repartition_refusee_n_affiche_aucune_allocation(guichet: obje
     apercu = await _apercu("60000", {FRAIS_TENUE: "60000"})
 
     assert all(ligne.allocated == Decimal("0") for ligne in apercu.lines)
-    assert apercu.directed_total == Decimal("0")
     assert apercu.cascaded_total == Decimal("0")
+    # Pas de surplus annonce : rien n'a ete reparti, rien n'a donc deborde.
+    assert apercu.surplus == Decimal("0")
+    # La demande, elle, reste affichee : l'ecran ne nie pas ce qui vient d'etre tape.
+    assert apercu.directed_total == Decimal("60000")
+    assert _ligne(apercu, FRAIS_TENUE).directed == Decimal("60000")
 
 
 async def test_le_surplus_reste_un_refus(guichet: object) -> None:

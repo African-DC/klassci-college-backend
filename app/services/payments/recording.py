@@ -31,8 +31,7 @@ from app.services.payments._allocation import (
     check_directed_allocations,
     merge_manual_allocations,
     paid_for_fees,
-    plan_allocation,
-    plan_manual_allocation,
+    plan_split,
     plannable_fees,
     recompute_fee_status,
 )
@@ -61,33 +60,6 @@ async def _guard_method_and_drawer(
     await payment_methods.ensure_method_allowed(db, actor, method)
     if method in DRAWER_METHODS:
         await cash_session_service.ensure_open_session(db, actor.user_id, when)
-
-
-def _choisir_repartition(
-    amount: Decimal,
-    plannable: list[tuple[EnrollmentFee, Decimal]],
-    fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
-    demandees: dict[int, Decimal],
-) -> list[tuple[EnrollmentFee, Decimal]]:
-    """Décide où va l'argent, et refuse avant d'écrire ce qui ne tient pas.
-
-    Sans répartition nommée, rien ne change : la cascade par priorité reste le
-    défaut, et c'est elle qui a été éprouvée au guichet.
-
-    La vérification est celle de l'aperçu, à la lettre : `check_directed_allocations`
-    est appelée par les deux. L'écran ne peut donc pas promettre une imputation
-    que la caisse refusera, ni l'inverse.
-    """
-    if not demandees:
-        splits, _surplus = plan_allocation(amount, plannable)
-        return splits
-
-    problemes = check_directed_allocations(demandees, fees_with_paid, amount)
-    if problemes:
-        raise BusinessValidationError(problemes[0].message)
-
-    splits, _surplus = plan_manual_allocation(amount, plannable, demandees)
-    return splits
 
 
 def _journal_versement(
@@ -187,7 +159,13 @@ async def record_enrollment_payment(
         demandees = merge_manual_allocations(
             (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
         )
-        splits = _choisir_repartition(data.amount, plannable, fees_with_paid, demandees)
+        # La meme verification que l'apercu affiche pendant la frappe : l'ecran
+        # ne peut donc pas promettre une imputation refusee ici. Sans montant
+        # nomme, elle ne trouve rien a redire et la cascade s'applique seule.
+        problemes = check_directed_allocations(demandees, fees_with_paid, data.amount)
+        if problemes:
+            raise BusinessValidationError(problemes[0].message)
+        splits, _surplus = plan_split(data.amount, plannable, demandees)
 
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son

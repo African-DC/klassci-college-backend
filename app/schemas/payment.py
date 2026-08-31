@@ -310,7 +310,9 @@ class AllocationPreviewResponse(BaseModel):
     reject_reason: str | None
     #: Vide quand la répartition est honorable. Non vide, `can_record` est faux
     #: et aucune ligne ne porte d'allocation : on ne montre pas une répartition
-    #: que la caisse refuserait.
+    #: que la caisse refuserait. `directed` continue en revanche d'être rendu,
+    #: c'est l'écho de la demande et non une imputation : un écran qui l'effacerait
+    #: nierait ce que le caissier vient de taper.
     problems: list[AllocationPreviewProblem] = Field(default_factory=list)
     lines: list[AllocationPreviewLine]
 

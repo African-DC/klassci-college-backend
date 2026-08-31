@@ -171,12 +171,18 @@ def _pourquoi_rien_a_recevoir(fee_id: int, fee: EnrollmentFee) -> str:
     )
 
 
-def plan_manual_allocation(
+def plan_split(
     amount: Decimal,
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
-    requested: dict[int, Decimal],
+    requested: dict[int, Decimal] | None = None,
 ) -> tuple[list[tuple[EnrollmentFee, Decimal]], Decimal]:
     """Impute les montants nommés, puis cascade le reliquat. Pure.
+
+    Sans montant nommé, c'est exactement `plan_allocation` : le reliquat vaut
+    alors le versement entier et cascade sur tout. Il n'y a donc pas deux
+    façons de répartir, il y en a une, dont la cascade seule est le cas
+    particulier. Les appelants n'ont pas à choisir, et ne peuvent pas se
+    tromper de fonction.
 
     `requested` a déjà été passé à `check_directed_allocations`, qui garantit
     que chaque identifiant désigne un frais de cette liste, encore dû en argent
@@ -193,7 +199,7 @@ def plan_manual_allocation(
     sans ce report, la cascade re-remplirait un frais déjà servi à la main et
     le versement dépasserait la dette.
     """
-    nommees = dict(requested)
+    nommees = dict(requested or {})
     connus = {fee.id for fee, _ in fees_with_paid}
     inconnus = nommees.keys() - connus
     if inconnus:
