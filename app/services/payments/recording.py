@@ -28,12 +28,10 @@ from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentR
 from app.services import cash_session_service, enrollment_notifications, fees_paid
 from app.services.payments import methods as payment_methods
 from app.services.payments._allocation import (
-    check_directed_allocations,
-    merge_manual_allocations,
     paid_for_fees,
-    plan_split,
     plannable_fees,
     recompute_fee_status,
+    resolve_allocation,
 )
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
@@ -156,16 +154,17 @@ async def record_enrollment_payment(
                 f"inscription pour l'année suivante."
             )
 
-        demandees = merge_manual_allocations(
-            (ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations
+        # La meme porte que l'apercu affiche pendant la frappe : l'ecran ne peut
+        # donc pas promettre une imputation refusee ici. Sans montant nomme,
+        # elle ne trouve rien a redire et la cascade s'applique seule.
+        issue = resolve_allocation(
+            data.amount,
+            fees_with_paid,
+            ((ligne.enrollment_fee_id, ligne.amount) for ligne in data.allocations),
         )
-        # La meme verification que l'apercu affiche pendant la frappe : l'ecran
-        # ne peut donc pas promettre une imputation refusee ici. Sans montant
-        # nomme, elle ne trouve rien a redire et la cascade s'applique seule.
-        problemes = check_directed_allocations(demandees, fees_with_paid, data.amount)
-        if problemes:
-            raise BusinessValidationError(problemes[0].message)
-        splits, _surplus = plan_split(data.amount, plannable, demandees)
+        if issue.problems:
+            raise BusinessValidationError(issue.problems[0].message)
+        demandees, splits = issue.directed, issue.splits
 
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son

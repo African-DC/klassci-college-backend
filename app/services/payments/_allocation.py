@@ -1,9 +1,16 @@
-"""Allocation planner & fee status recompute — pures functions, testables.
+"""Où va l'argent d'un versement. Fonctions pures, testables sans base.
 
-Le `plan_allocation` est volontairement pur (pas de session DB, pas d'I/O)
-pour pouvoir être testé unitaire sans fixtures DB. La règle de
-recalcul fee.status est centralisée ici pour être appelée par
-`recording.py` (à la création) ET par `lifecycle.py` (cancel/validate).
+Ce module porte les trois questions, et il est seul à les porter : quels frais
+peuvent encore recevoir de l'argent, ce qui interdirait d'honorer la
+répartition demandée, et comment le montant se distribue.
+
+`resolve_allocation` est la porte d'entrée. L'aperçu et l'enregistrement
+l'appellent tous les deux sur les mêmes données : l'un affiche la réponse au
+caissier pendant qu'il tape, l'autre l'écrit. C'est ce qui garantit que l'écran
+ne promet jamais une imputation que la caisse refusera.
+
+Le recalcul de `fee.status` vit ici aussi, appelé par `recording.py` à la
+création et par `lifecycle.py` à l'annulation comme à la validation.
 """
 
 from collections.abc import Iterable
@@ -46,7 +53,7 @@ def plan_allocation(
     return splits, remaining
 
 
-def merge_manual_allocations(items: Iterable[tuple[int, Decimal]]) -> dict[int, Decimal]:
+def _merge_directed_lines(items: Iterable[tuple[int, Decimal]]) -> dict[int, Decimal]:
     """Regroupe les lignes qui visent le même frais. Pure.
 
     Deux lignes sur un même frais sont une seule imputation de leur somme, et
@@ -92,7 +99,7 @@ class AllocationProblem:
     message: str
 
 
-def check_directed_allocations(
+def _check_directed_allocations(
     requested: dict[int, Decimal],
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
     amount: Decimal,
@@ -171,7 +178,7 @@ def _pourquoi_rien_a_recevoir(fee_id: int, fee: EnrollmentFee) -> str:
     )
 
 
-def plan_split(
+def _plan_split(
     amount: Decimal,
     fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
     requested: dict[int, Decimal] | None = None,
@@ -184,7 +191,7 @@ def plan_split(
     particulier. Les appelants n'ont pas à choisir, et ne peuvent pas se
     tromper de fonction.
 
-    `requested` a déjà été passé à `check_directed_allocations`, qui garantit
+    `requested` a déjà été passé à `_check_directed_allocations`, qui garantit
     que chaque identifiant désigne un frais de cette liste, encore dû en argent
     et pour un montant tenable. On ne refiltre donc pas ici : écarter en
     silence un identifiant inconnu ferait cascader l'argent que le caissier
@@ -219,6 +226,49 @@ def plan_split(
         if total > 0:
             splits.append((fee, total))
     return splits, surplus
+
+
+@dataclass(frozen=True)
+class AllocationOutcome:
+    """Ce qu'il advient d'un versement : ce qui est demandé, refusé, réparti."""
+
+    #: Les montants nommés par le caissier, une entrée par frais après
+    #: regroupement des lignes en double.
+    directed: dict[int, Decimal]
+    #: Vide si la répartition est honorable. Non vide, `splits` est vide.
+    problems: list[AllocationProblem]
+    splits: list[tuple[EnrollmentFee, Decimal]]
+    surplus: Decimal
+
+
+def resolve_allocation(
+    amount: Decimal,
+    fees_with_paid: list[tuple[EnrollmentFee, Decimal]],
+    allocations: Iterable[tuple[int, Decimal]] = (),
+) -> AllocationOutcome:
+    """Décide où va ce versement. Seule porte, pour l'aperçu comme pour la caisse.
+
+    Les trois gestes vont ensemble et dans cet ordre : regrouper les lignes qui
+    visent le même frais, vérifier ce qui en découle, puis seulement répartir.
+    Ils sont privés pour cette raison : appelés séparément, un jour l'un des
+    appelants vérifierait avant de regrouper, et opposerait alors le plafond
+    d'un frais à la moitié de ce qui lui est demandé.
+
+    Quand la répartition est refusée, rien n'est réparti et rien ne déborde :
+    ni `splits`, ni `surplus`. Montrer une ventilation que la caisse refuserait
+    ferait croire qu'il suffit de valider.
+
+    `fees_with_paid` porte **tous** les frais de l'inscription : c'est ce qui
+    permet de distinguer un frais déjà soldé d'un frais qui n'appartient pas à
+    cette inscription. Ceux qui peuvent réellement recevoir sont dérivés ici.
+    """
+    directed = _merge_directed_lines(allocations)
+    problems = _check_directed_allocations(directed, fees_with_paid, amount)
+    if problems:
+        return AllocationOutcome(directed, problems, [], Decimal("0"))
+
+    splits, surplus = _plan_split(amount, plannable_fees(fees_with_paid), directed)
+    return AllocationOutcome(directed, [], splits, surplus)
 
 
 async def paid_for_fees(db: AsyncSession, fees: Iterable[EnrollmentFee]) -> dict[int, Decimal]:

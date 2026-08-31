@@ -22,12 +22,7 @@ from app.schemas.payment import (
 )
 from app.services import fee_entitlements as entitlements
 from app.services import fees_paid
-from app.services.payments._allocation import (
-    check_directed_allocations,
-    merge_manual_allocations,
-    plan_split,
-    plannable_fees,
-)
+from app.services.payments._allocation import resolve_allocation
 
 
 def _resolve_category(fee: EnrollmentFee) -> tuple[str, int, list[FeeEntitlement]]:
@@ -65,7 +60,7 @@ async def preview_allocation(
 
     `allocations` porte la répartition que le caissier a nommée. Absente, l'aperçu
     montre la cascade par priorité, comme il l'a toujours fait. Présente, c'est
-    `plan_split` qui répond, la même fonction que l'enregistrement
+    `resolve_allocation` qui répond, la même fonction que l'enregistrement
     appellera : l'écran ne rejoue plus le calcul de son côté, il affiche celui
     du serveur.
 
@@ -102,25 +97,15 @@ async def preview_allocation(
         Decimal("0"),
     )
 
-    plannable = plannable_fees(fees_with_paid)
-
-    # Deux lignes sur un meme frais sont une seule imputation de leur somme :
-    # le regroupement est celui de l'enregistrement, pas une variante.
-    nommees = merge_manual_allocations(
-        (ligne.enrollment_fee_id, ligne.amount) for ligne in allocations
+    # La meme porte que l'enregistrement, sur les memes donnees : ce que
+    # l'apercu annonce est exactement ce que la caisse acceptera.
+    issue = resolve_allocation(
+        amount,
+        fees_with_paid,
+        ((ligne.enrollment_fee_id, ligne.amount) for ligne in allocations),
     )
-    # La meme fonction que l'enregistrement, sur les memes donnees : ce que
-    # l'apercu annonce est ce que la caisse acceptera.
-    problems = check_directed_allocations(nommees, fees_with_paid, amount)
-
-    if problems:
-        # Aucune allocation n'est montree : afficher une repartition que la
-        # caisse refuserait ferait croire qu'il suffit de valider. Et aucun
-        # surplus non plus : rien n'a ete reparti, rien n'a donc deborde.
-        splits, surplus = [], Decimal("0")
-    else:
-        splits, surplus = plan_split(amount, plannable, nommees)
-    split_map = {fee.id: allocated for fee, allocated in splits}
+    nommees, problems, surplus = issue.directed, issue.problems, issue.surplus
+    split_map = {fee.id: allocated for fee, allocated in issue.splits}
 
     lines: list[AllocationPreviewLine] = []
     for fee, paid in fees_with_paid:

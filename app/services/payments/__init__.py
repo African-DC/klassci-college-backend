@@ -2,7 +2,7 @@
 
 | Sub-module | Responsabilité |
 |------------|----------------|
-| `_allocation` | `plan_split` / `check_directed_allocations` (purs) + `recompute_fee_status` |
+| `_allocation` | `resolve_allocation` (porte unique, pure) + `recompute_fee_status` |
 | `_response`   | builders Pydantic (Payment, PaymentAllocation) |
 | `_notification` | dispatcher notif paiement (best-effort) |
 | `_state`      | VALID_TRANSITIONS + logger commun |
@@ -16,7 +16,11 @@ Les call sites historiques importent via `from app.services import payment_servi
 — le module `payment_service.py` reste comme facade qui ré-exporte tout.
 """
 
-from app.services.payments._allocation import plan_allocation, plan_split, recompute_fee_status
+from app.services.payments._allocation import (
+    plan_allocation,
+    recompute_fee_status,
+    resolve_allocation,
+)
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import allocation_to_response, payment_to_response
 from app.services.payments._state import VALID_TRANSITIONS
@@ -44,7 +48,7 @@ __all__ = [
     "list_payments",
     "payment_to_response",
     "plan_allocation",
-    "plan_split",
+    "resolve_allocation",
     "preview_allocation",
     "recompute_fee_status",
     "record_enrollment_payment",
