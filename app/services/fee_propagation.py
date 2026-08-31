@@ -1,15 +1,33 @@
-"""Répercuter un tarif modifié sur les inscriptions qui le portent déjà.
+"""Répercuter un tarif sur les inscriptions de son année : deux gestes distincts.
 
 Changer le montant d'un tarif ne touchait pas les élèves déjà inscrits. Leur
 dette gardait l'ancien montant, sans que rien ne le dise : une école qui
 corrigeait une erreur de saisie voyait sa grille afficher 45 000 et ses
 familles continuer de devoir 54 000.
 
-Ce module fait le geste manquant, et rien de plus. Il ne régénère pas la
-grille d'une inscription : il met à jour **les lignes qui portent ce
-tarif-là**, pour l'année de ce tarif. Régénérer toute la grille parce qu'on a
-ajusté le prix de la tenue reviendrait à rejouer six décisions pour en
-corriger une.
+**Le geste par défaut : réécrire, et seulement réécrire.** Le module met à
+jour **les lignes qui portent ce tarif-là**, pour l'année de ce tarif. Il ne
+régénère pas la grille d'une inscription et il ne crée aucune ligne :
+corriger une faute de frappe sur le prix de la tenue ne doit ajouter de dette
+à personne. C'est le comportement qu'on obtient sans rien demander de plus,
+et il est resté exactement celui d'avant.
+
+**Le second geste, demandé explicitement : créer les lignes manquantes.** Une
+école qui ajoute le tarif d'entrée des nouveaux après la rentrée ne veut pas
+ressaisir six cents dossiers à la main. `create_missing`, dans le corps du
+POST, ouvre cette création, et rien d'autre ne l'ouvre. L'aperçu, lui, compte
+toujours ces lignes manquantes : l'école doit VOIR l'occasion, même le jour
+où elle ne la saisit pas.
+
+**Une ligne créée vaut ce que l'inscription aurait payé.** La création
+n'applique pas le tarif répercuté parce qu'il « peut » atteindre
+l'inscription : elle ne l'applique que s'il est le plus spécifique de sa
+catégorie pour cette inscription-là, exactement comme
+`most_specific_variant_per_category` en décide au guichet. Sans cet arbitrage,
+répercuter un tarif général à 50 000 sur un élève que la grille destine au
+tarif « nouveau » à 75 000 poserait la mauvaise somme, et
+`uq_enrollment_fee_category` interdirait ensuite la bonne : l'erreur serait
+définitive.
 
 La règle d'or du projet tient : **on ne touche jamais une ligne de frais sur
 laquelle de l'argent est imputé.** Ici on ne détruit rien, on réécrit un
@@ -57,10 +75,19 @@ class _Repartition:
 
     Les quatre premiers rangent des lignes qui portent déjà ce tarif. Le
     cinquième, `a_creer`, range des inscriptions qui n'en portent aucune :
-    l'école vient d'ajouter un tarif « nouveau » par-dessus sa grille, et les
+    l'école vient d'ajouter un tarif d'entrée par-dessus sa grille, et les
     élèves déjà inscrits ne l'ont jamais reçu. Les cinq restent disjoints par
-    construction — une inscription qui porte une ligne de cette catégorie
+    construction : une inscription qui porte une ligne de cette catégorie
     n'entre jamais dans `a_creer`.
+
+    `a_creer` reste vide quand la création n'est pas demandée. Le total, le
+    détail et l'écart de dette décrivent alors le seul geste qui va avoir
+    lieu, et personne ne lit un chiffre qui ne se produira pas.
+
+    Les deux écarts de dette sont tenus séparés parce qu'ils ne se décident
+    pas ensemble : réécrire est le geste par défaut, créer se demande. Les
+    additionner d'office ferait annoncer, sur un aperçu, une dette que le
+    bouton ne créera pas.
     """
 
     a_mettre_a_jour: tuple[EnrollmentFee, ...]
@@ -68,7 +95,10 @@ class _Repartition:
     deja_a_jour: int
     conservees_car_payees: int
     exonerees: int
-    ecart_de_dette: Decimal
+    #: Ce que les seules réécritures déplacent, négatif quand le tarif baisse.
+    ecart_des_reecritures: Decimal
+    #: Ce que les lignes manquantes ajouteraient, si on les crée.
+    ecart_des_creations: Decimal
 
     @property
     def concernees(self) -> int:
@@ -138,21 +168,60 @@ async def _est_obligatoire(db: AsyncSession, category_id: int) -> bool:
     return bool(obligatoire)
 
 
+async def _tarifs_concurrents(db: AsyncSession, variant: FeeVariant) -> list[FeeVariant]:
+    """Les tarifs qui peuvent disputer une inscription à celui qu'on répercute.
+
+    Même catégorie, même année, même niveau : ce sont exactement ceux que
+    `get_mandatory_fee_variants` mettrait en concurrence au guichet, puisque
+    toutes les inscriptions candidates sont de ce niveau-là et qu'un frais
+    obligatoire exige le niveau à l'identique.
+
+    Chargés une fois pour toute la cohorte, puis arbitrés en mémoire : poser
+    la question par élève ferait six cents requêtes derrière un seul bouton.
+    """
+    stmt = (
+        select(FeeVariant)
+        .where(
+            FeeVariant.fee_category_id == variant.fee_category_id,
+            FeeVariant.academic_year_id == variant.academic_year_id,
+            FeeVariant.level_id == variant.level_id,
+        )
+        .order_by(FeeVariant.id)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
 async def _a_creer(db: AsyncSession, variant: FeeVariant) -> list[Enrollment]:
-    """Les inscriptions que ce tarif atteint et qui ne portent rien de sa catégorie.
+    """Les inscriptions auxquelles ce tarif, et pas un autre, doit sa ligne manquante.
 
-    Une école qui ajoute le tarif « nouveau » de l'Inscription après la rentrée
-    ne veut pas ressaisir six cents dossiers à la main. Encore faut-il ne pas
-    facturer au hasard : une inscription n'entre ici que si elle remplit TOUTES
-    les dimensions du tarif, profil compris, et ne porte aucune ligne de cette
-    catégorie — sans quoi on recréerait le doublon que
-    `uq_enrollment_fee_category` existe pour interdire.
+    Une école qui ajoute le tarif d'entrée des nouveaux après la rentrée ne
+    veut pas ressaisir six cents dossiers à la main. Encore faut-il écrire le
+    montant que le guichet aurait écrit.
 
-    Les statuts hors jeu et le filtre d'archivage s'appliquent comme partout
-    ailleurs dans ce module.
+    Il ne suffit donc PAS que le tarif puisse atteindre l'inscription :
+    `variant_applies_to` reproduit le WHERE de `get_mandatory_fee_variants`,
+    mais pas l'arbitrage de spécificité que le chemin d'inscription applique
+    juste après. Une catégorie Inscription portant un tarif général à 50 000 et
+    un tarif « nouveau » à 75 000 atteint les deux fois une inscription
+    déclarée nouvelle : répercuter le général y poserait 50 000 alors que le
+    guichet y pose 75 000, et `uq_enrollment_fee_category` interdirait ensuite
+    la bonne ligne. L'erreur serait définitive, et c'est une facture.
+
+    On rejoue donc l'arbitrage complet, inscription par inscription, avec la
+    fonction même dont dépendent les autres chemins d'écriture : une ligne
+    n'est créée que si le tarif répercuté est le plus spécifique de sa
+    catégorie pour cette inscription-là.
+
+    Restent les gardes qui valaient déjà : la catégorie doit s'imposer,
+    l'inscription ne doit porter aucune ligne de cette catégorie (sans quoi on
+    recréerait le doublon que `uq_enrollment_fee_category` existe pour
+    interdire), et les statuts hors jeu comme le filtre d'archivage
+    s'appliquent comme partout ailleurs dans ce module.
     """
     if variant.level_id is None or not await _est_obligatoire(db, variant.fee_category_id):
         return []
+
+    concurrents = await _tarifs_concurrents(db, variant)
 
     deja_facturee = (
         select(EnrollmentFee.id)
@@ -177,23 +246,35 @@ async def _a_creer(db: AsyncSession, variant: FeeVariant) -> list[Enrollment]:
 
     retenues: list[Enrollment] = []
     for enrollment, class_ in (await db.execute(stmt)).all():
-        if enrollment_fees.variant_applies_to(
-            variant,
-            series_id=class_.series_id,
-            assignment_status=enrollment.assignment_status,
-            is_new_student=enrollment.is_new_student,
-        ):
+        applicables = [
+            concurrent
+            for concurrent in concurrents
+            if enrollment_fees.variant_applies_to(
+                concurrent,
+                series_id=class_.series_id,
+                assignment_status=enrollment.assignment_status,
+                is_new_student=enrollment.is_new_student,
+            )
+        ]
+        retenus = enrollment_fees.most_specific_variant_per_category(applicables)
+        if any(retenu.id == variant.id for retenu in retenus):
             retenues.append(enrollment)
     return retenues
 
 
-async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
+async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -> _Repartition:
     """Classe les lignes portant ce tarif selon ce qu'il faut leur faire.
 
     Le périmètre est volontairement étroit : les lignes rattachées à CE
     tarif, sur des inscriptions vivantes de l'année de CE tarif. Une
     inscription d'une autre année garde son montant, parce que sa facture a
     été émise sous une autre grille.
+
+    `creations` dit si les lignes manquantes entrent dans la répartition.
+    L'aperçu les demande toujours, pour montrer l'occasion à l'école ; la
+    répercussion ne les demande que si on lui a réclamé de les créer. Ce qui
+    n'est pas demandé n'est pas cherché : le geste par défaut reste, à la
+    requête près, celui d'avant cette dimension.
 
     Les inscriptions archivées sont écartées sans qu'on l'écrive ici :
     `app.core.archive_filter` pose la règle une fois pour toutes les sessions.
@@ -224,16 +305,7 @@ async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
     conservees = [f for f in a_examiner if f.id in payees]
     a_mettre_a_jour = [f for f in a_examiner if f.id not in payees]
 
-    a_creer = await _a_creer(db, variant)
-
-    # L'écart annoncé est celui de la dette totale, pas seulement des lignes
-    # réécrites : une ligne créée ajoute son montant entier. Dire « la dette
-    # ne bouge pas » en créant six cents lignes de 5 000 F serait exactement
-    # le total que son propre détail contredit.
-    ecart = sum(
-        (nouveau_montant - Decimal(str(f.amount)) for f in a_mettre_a_jour),
-        Decimal("0"),
-    ) + nouveau_montant * len(a_creer)
+    a_creer = await _a_creer(db, variant) if creations else []
 
     return _Repartition(
         a_mettre_a_jour=tuple(a_mettre_a_jour),
@@ -241,23 +313,47 @@ async def _repartir(db: AsyncSession, variant: FeeVariant) -> _Repartition:
         deja_a_jour=len(deja_a_jour),
         conservees_car_payees=len(conservees),
         exonerees=len(exonerees),
-        ecart_de_dette=ecart,
+        ecart_des_reecritures=sum(
+            (nouveau_montant - Decimal(str(f.amount)) for f in a_mettre_a_jour),
+            Decimal("0"),
+        ),
+        # Une ligne créée ajoute son montant entier : elle n'existait pas.
+        ecart_des_creations=nouveau_montant * len(a_creer),
     )
+
+
+def _francs(montant: Decimal) -> str:
+    """Un montant lisible par une comptable : espaces, pas de virgules."""
+    return f"{abs(montant):,.0f}".replace(",", " ")
 
 
 def _phrase_ecart(ecart: Decimal, *, accompli: bool) -> str:
     """L'écart de dette, dit en francs et dans le bon sens."""
     if ecart == 0:
         return ""
-    montant = f"{abs(ecart):,.0f}".replace(",", " ")
     if accompli:
         verbe = "a augmenté" if ecart > 0 else "a baissé"
     else:
         verbe = "augmenterait" if ecart > 0 else "baisserait"
-    return f" La dette totale {verbe} de {montant} F."
+    return f" La dette totale {verbe} de {_francs(ecart)} F."
 
 
-def _message(repartition: _Repartition, *, accompli: bool) -> str:
+def _phrase_creations(repartition: _Repartition) -> str:
+    """Ce que créer les lignes manquantes coûterait, annoncé à part.
+
+    À part, parce que ce n'est pas le même geste. L'écart annoncé juste avant
+    est celui de la répercussion seule, celle que la confirmation fait par
+    défaut ; créer les lignes manquantes se demande. Fondre les deux dans un
+    seul chiffre ferait annoncer une dette que le geste par défaut ne créera
+    pas, et l'école chercherait longtemps ce montant dans ses comptes.
+    """
+    if not repartition.a_creer:
+        return ""
+    montant = _francs(repartition.ecart_des_creations)
+    return f" Créer les lignes manquantes ajouterait {montant} F."
+
+
+def _message(repartition: _Repartition, *, accompli: bool, ecart: Decimal) -> str:
     """Ce que l'école lit : des lignes comptées, jamais un « c'est fait »."""
     if repartition.concernees == 0:
         return "Aucune inscription ne porte ce tarif pour cette année. Il n'y a rien à répercuter."
@@ -267,8 +363,11 @@ def _message(repartition: _Repartition, *, accompli: bool) -> str:
         if accompli
         else ("ligne à mettre à jour", "lignes à mettre à jour")
     )
+    # « manquante » et non « à créer » tant que rien n'est fait : la
+    # confirmation ne les crée que si on le lui demande, et annoncer « à
+    # créer » promettrait un geste que le bouton ne fait pas tout seul.
     libelle_creation = (
-        ("ligne créée", "lignes créées") if accompli else ("ligne à créer", "lignes à créer")
+        ("ligne créée", "lignes créées") if accompli else ("ligne manquante", "lignes manquantes")
     )
     paquets = [
         Dependent(*libelle_maj, len(repartition.a_mettre_a_jour)),
@@ -286,17 +385,25 @@ def _message(repartition: _Repartition, *, accompli: bool) -> str:
         Dependent("ligne exonérée", "lignes exonérées", repartition.exonerees),
     ]
     detail = ", ".join(p.phrase() for p in paquets if p.count)
-    return f"{detail}.{_phrase_ecart(repartition.ecart_de_dette, accompli=accompli)}"
+    suite = "" if accompli else _phrase_creations(repartition)
+    return f"{detail}.{_phrase_ecart(ecart, accompli=accompli)}{suite}"
 
 
 async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeePropagationPreview:
     """L'impact chiffré de la répercussion, sans rien écrire.
 
     Se lit avant de décider, et annonce exactement ce que la confirmation
-    fera : les deux passent par la même répartition.
+    fera : `debt_delta` est celui des seules réécritures, le geste que la
+    confirmation fait par défaut.
+
+    Les lignes manquantes sont comptées dans tous les cas, création demandée
+    ou non : l'école doit voir que son tarif n'a jamais atteint ces élèves-là,
+    même le jour où elle ne veut corriger qu'un montant. Ce qu'elles
+    coûteraient est dit à part, dans le message, pour qu'aucun des deux
+    chiffres ne se fasse passer pour l'autre.
     """
     variant = await _load_variant(db, variant_id)
-    repartition = await _repartir(db, variant)
+    repartition = await _repartir(db, variant, creations=True)
 
     return FeePropagationPreview(
         variant_id=variant.id,
@@ -310,22 +417,31 @@ async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeeP
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,
-        debt_delta=repartition.ecart_de_dette,
-        message=_message(repartition, accompli=False),
+        debt_delta=repartition.ecart_des_reecritures,
+        message=_message(repartition, accompli=False, ecart=repartition.ecart_des_reecritures),
     )
 
 
 async def apply_variant_propagation(
-    db: AsyncSession, variant_id: int, *, applied_by: int
+    db: AsyncSession, variant_id: int, *, applied_by: int, create_missing: bool = False
 ) -> FeePropagationResult:
-    """Écrit ce que l'aperçu annonçait : les montants corrigés, les lignes manquantes.
+    """Écrit les montants corrigés, et les lignes manquantes si on l'a demandé.
+
+    `create_missing` reste faux par défaut, et ce défaut est le geste d'avant
+    cette dimension : aucune ligne créée, aucune dette ajoutée à personne.
+    Corriger une faute de frappe sur le prix de la tenue ne doit endetter
+    aucune famille de plus.
 
     Le décompte rendu est celui des lignes réellement réécrites et créées, pas
     celui qu'on espérait : c'est ce chiffre-là que l'école montrera si on lui
-    demande des comptes.
+    demande des comptes. `debt_delta` suit la même règle et ne chiffre que ce
+    que cet appel a écrit.
     """
     variant = await _load_variant(db, variant_id)
-    repartition = await _repartir(db, variant)
+    repartition = await _repartir(db, variant, creations=create_missing)
+    # Sans création demandée, `a_creer` est vide et son écart nul : la somme
+    # décrit alors les seules réécritures, comme avant.
+    ecart = repartition.ecart_des_reecritures + repartition.ecart_des_creations
 
     nouveau_montant = Decimal(str(variant.amount))
     for ligne in repartition.a_mettre_a_jour:
@@ -354,13 +470,16 @@ async def apply_variant_propagation(
             "fee_category_id": variant.fee_category_id,
             "academic_year_id": variant.academic_year_id,
             "amount": str(nouveau_montant),
+            # Deux gestes derrière un même bouton : la trace doit dire lequel
+            # a été demandé, sinon on ne saura plus qui a créé ces dettes.
+            "create_missing": create_missing,
             "enrollments_concerned": repartition.concernees,
             "fees_updated": len(repartition.a_mettre_a_jour),
             "fees_created": len(repartition.a_creer),
             "fees_already_up_to_date": repartition.deja_a_jour,
             "fees_kept_with_payments": repartition.conservees_car_payees,
             "fees_waived": repartition.exonerees,
-            "debt_delta": str(repartition.ecart_de_dette),
+            "debt_delta": str(ecart),
         },
     )
 
@@ -376,6 +495,6 @@ async def apply_variant_propagation(
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
         fees_waived=repartition.exonerees,
-        debt_delta=repartition.ecart_de_dette,
-        message=_message(repartition, accompli=True),
+        debt_delta=ecart,
+        message=_message(repartition, accompli=True, ecart=ecart),
     )

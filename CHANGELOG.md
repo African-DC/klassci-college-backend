@@ -9,7 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
-- Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; la case se pré-remplit depuis l'historique de l'école quand il existe *(admin, comptable, secrétariat)*
+- Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*
+- Répercuter un tarif peut aussi créer les lignes manquantes chez les élèves déjà inscrits, sur demande explicite *(admin, comptable)*
 - Le logo de l'établissement s'installe et se retire depuis les paramètres, et apparaît sur les documents officiels *(admin)*
 - La console SQL avertit quand une requête renomme un élève sans mettre à jour sa clé de recherche, ce qui le rendrait introuvable *(super-admin)*
 - L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*

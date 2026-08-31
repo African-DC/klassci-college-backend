@@ -217,20 +217,39 @@ class _FeePropagationImpact(BaseModel):
     fees_already_up_to_date: int
     fees_kept_with_payments: int
     fees_waived: int
-    #: Ecart total de dette en francs, negatif quand le tarif baisse. Une ligne
-    #: creee y compte pour son montant entier : annoncer que la dette ne bouge
-    #: pas en creant six cents lignes serait un total que son detail contredit.
+    #: Ecart de dette en francs, negatif quand le tarif baisse. Il ne chiffre
+    #: JAMAIS que ce que l'appel ecrit : sur l'apercu et sur une repercussion
+    #: sans creation, les seules reecritures ; avec `create_missing`, les
+    #: reecritures plus le montant entier de chaque ligne creee. Ce que les
+    #: lignes manquantes couteraient, quand on ne les cree pas, est annonce a
+    #: part dans `message` : les fondre ici ferait lire un chiffre que la
+    #: comptabilite ne retrouverait jamais.
     debt_delta: Decimal
     message: str
+
+
+class FeePropagationRequest(BaseModel):
+    """Ce que l'ecole demande en confirmant la repercussion.
+
+    Deux gestes distincts derriere un meme bouton, et le second se demande.
+    """
+
+    #: `false`, le defaut : on ne fait que reecrire les lignes qui portent deja
+    #: ce tarif. Corriger le prix de la tenue ne cree alors aucune dette.
+    #: `true` : les inscriptions que ce tarif doit atteindre et qui ne portent
+    #: aucune ligne de sa categorie en recoivent une.
+    create_missing: bool = False
 
 
 class FeePropagationPreview(_FeePropagationImpact):
     """Ce qui se passerait. Rien n'est ecrit."""
 
     fees_to_update: int
-    #: Les inscriptions que ce tarif atteint et qui ne portent aucune ligne de
-    #: sa categorie : l'ecole vient d'ajouter un tarif que les eleves deja
-    #: inscrits n'ont jamais recu.
+    #: Les inscriptions auxquelles ce tarif doit une ligne et qui n'en portent
+    #: aucune de sa categorie : l'ecole vient d'ajouter un tarif que les eleves
+    #: deja inscrits n'ont jamais recu. Compte dans TOUS les cas, creation
+    #: demandee ou non : l'ecole doit voir l'occasion meme si elle ne la saisit
+    #: pas ce jour-la.
     fees_to_create: int
 
 
@@ -238,6 +257,8 @@ class FeePropagationResult(_FeePropagationImpact):
     """Ce qui a ete ecrit : le compte des lignes reellement reecrites et creees."""
 
     fees_updated: int
+    #: Zero quand `create_missing` valait `false` : rien n'a ete cree, et le
+    #: total `enrollments_concerned` ne compte alors pas ces inscriptions-la.
     fees_created: int
 
 
