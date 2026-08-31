@@ -8,12 +8,27 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.fee import FeeEntitlement
 
 
+class InKindDeposit(BaseModel):
+    """À l'inscription : le secrétariat coche ce qui a été déposé."""
+
+    fee_category_id: int
+    deposited: bool = False
+
+    @field_validator("fee_category_id")
+    @classmethod
+    def _positive_category(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("must be a positive integer")
+        return v
+
+
 class EnrollmentCreate(BaseModel):
     student_id: int
     class_id: int
     academic_year_id: int
     fee_variant_id: int | None = None
     notes: str | None = None
+    in_kind_deposits: list[InKindDeposit] = Field(default_factory=list)
 
     @field_validator("academic_year_id", "student_id", "class_id")
     @classmethod
@@ -149,6 +164,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     assignment_decision_number: str | None = None
     fee_variant_id: int | None = None
     notes: str | None = None
+    in_kind_deposits: list[InKindDeposit] = Field(default_factory=list)
 
     @field_validator("genre")
     @classmethod
@@ -173,6 +189,7 @@ class ReEnrollmentCreate(BaseModel):
     academic_year_id: int | None = None  # if None, use current year
     fee_variant_id: int | None = None
     notes: str | None = None
+    in_kind_deposits: list[InKindDeposit] = Field(default_factory=list)
 
     @field_validator("student_id", "class_id")
     @classmethod
@@ -197,11 +214,19 @@ class FeeVariantResponse(BaseModel):
     #: l'ecran affiche un montant sans jamais dire ce qu'il achete.
     entitlements: list[FeeEntitlement] = Field(default_factory=list)
     is_mandatory: bool = True
+    accepts_in_kind: bool = False
     level_id: int | None
     series_id: int | None
     academic_year_id: int
     amount: Decimal
     description: str | None
+
+
+class InKindDepositResponse(BaseModel):
+    id: int
+    status: str
+    deposited_at: datetime | None
+    deposited_by_user_id: int | None
 
 
 class BulkValidateRequest(BaseModel):

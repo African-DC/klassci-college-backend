@@ -17,7 +17,7 @@ from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
 from app.models.enrollment import EnrollmentStatus
-from app.models.fee import EnrollmentFee, EnrollmentFeeStatus, PaymentStatus
+from app.models.fee import EnrollmentFee, PaymentStatus, cash_remaining
 from app.repositories import payment_repository as repo
 from app.schemas.payment import EnrollmentPaymentCreate, PaymentCreate, PaymentResponse
 from app.services import cash_session_service, enrollment_notifications, fees_paid
@@ -91,7 +91,10 @@ async def record_enrollment_payment(
         fees_with_paid: list[tuple[EnrollmentFee, Decimal]] = [
             (fee, deja_verse.get(fee.id, Decimal("0"))) for fee in unpaid_fees
         ]
-        total_remaining = sum((fee.amount - paid for fee, paid in fees_with_paid), Decimal("0"))
+        total_remaining = sum(
+            (cash_remaining(fee.status, fee.amount, paid) for fee, paid in fees_with_paid),
+            Decimal("0"),
+        )
 
         if data.amount > total_remaining:
             raise BusinessValidationError(
@@ -210,17 +213,13 @@ async def create_payment(
         if enrollment_fee is None:
             raise NotFoundError("EnrollmentFee", data.enrollment_fee_id)
 
-        if enrollment_fee.status in (
-            EnrollmentFeeStatus.WAIVED.value,
-            EnrollmentFeeStatus.PAID.value,
-        ):
+        deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_fee.enrollment_id)
+        total_paid = deja_verse.get(data.enrollment_fee_id, Decimal("0"))
+        remaining = cash_remaining(enrollment_fee.status, enrollment_fee.amount, total_paid)
+        if remaining <= 0:
             raise BusinessValidationError(
                 f"Cannot add payment: enrollment fee status is '{enrollment_fee.status}'"
             )
-
-        deja_verse = await fees_paid.paid_by_enrollment(db, enrollment_fee.enrollment_id)
-        total_paid = deja_verse.get(data.enrollment_fee_id, Decimal("0"))
-        remaining = enrollment_fee.amount - total_paid
         if data.amount > remaining:
             raise BusinessValidationError(
                 f"Payment amount {data.amount} exceeds remaining balance {remaining}"

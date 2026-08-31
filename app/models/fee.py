@@ -68,6 +68,31 @@ class EnrollmentFeeStatus(str, enum.Enum):
     PARTIAL = "partial"
     PAID = "paid"
     WAIVED = "waived"
+    #: L'article a été déposé : plus rien n'est dû en argent. Distinct de
+    #: WAIVED (bourse / exonération DRENA) : un dépôt n'est pas une exonération.
+    IN_KIND = "in_kind"
+
+
+#: Statuts qui ne laissent rien dû en argent. Un str Enum : `"in_kind"` et
+#: `EnrollmentFeeStatus.IN_KIND` se comparent égaux, SQLAlchemy compris.
+NOT_CASH_DUE = (EnrollmentFeeStatus.WAIVED, EnrollmentFeeStatus.IN_KIND)
+
+
+def is_not_cash_due(status: EnrollmentFeeStatus | str) -> bool:
+    """True si ce frais n'est plus dû en argent (exonéré ou déposé en nature)."""
+    return status in NOT_CASH_DUE
+
+
+def is_in_kind(status: EnrollmentFeeStatus | str) -> bool:
+    """True si l'article a été déposé : ce n'est pas de l'argent, même reçu."""
+    return status == EnrollmentFeeStatus.IN_KIND
+
+
+def cash_remaining(status: EnrollmentFeeStatus | str, amount: Decimal, paid: Decimal) -> Decimal:
+    """Reste encaissable. Zéro dès que la ligne n'est plus due en argent."""
+    if is_not_cash_due(status):
+        return Decimal("0")
+    return max(amount - paid, Decimal("0"))
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +150,12 @@ class FeeCategory(Base, TimestampMixin):
     #: d'occasions d'oublier un `selectinload`.
     entitlements: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    #: Le parent peut déposer l'article (ramette, chemise) à la place de payer.
+    #: Inverse des `entitlements` : ici c'est la famille qui apporte, pas
+    #: l'école qui remet. Coché par le comptable sur la catégorie.
+    accepts_in_kind: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     # Ordre d'allocation des paiements automatiques. Lower = paid first.
     # Convention : 10 Inscription, 20/30/40 T1/T2/T3, 50 COGES, 60 Tenue, 100 reste.
     priority: Mapped[int] = mapped_column(
@@ -279,8 +310,15 @@ class EnrollmentFee(Base, TimestampMixin):
         default=EnrollmentFeeStatus.PENDING,
         index=True,
     )
+    deposited_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    deposited_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     enrollment: Mapped[Enrollment] = relationship(back_populates="enrollment_fees")
+    deposited_by_user: Mapped[User | None] = relationship(
+        "User", foreign_keys=[deposited_by_user_id], lazy="raise", viewonly=True
+    )
     fee_variant: Mapped[FeeVariant] = relationship(back_populates="enrollment_fees")
     payments: Mapped[list[Payment]] = relationship(back_populates="enrollment_fee")
 

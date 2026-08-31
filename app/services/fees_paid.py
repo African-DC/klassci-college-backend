@@ -91,8 +91,8 @@ def _allocations_sur_frais_dus():
     différents finit toujours par en contredire un autre à l'écran.
     """
     from app.models.fee import (
+        NOT_CASH_DUE,
         EnrollmentFee,
-        EnrollmentFeeStatus,
         FeeCategory,
         FeeVariant,
         Payment,
@@ -109,7 +109,7 @@ def _allocations_sur_frais_dus():
         .where(
             Payment.status == PaymentStatus.COMPLETED.value,
             FeeCategory.is_mandatory.is_(True),
-            EnrollmentFee.status != EnrollmentFeeStatus.WAIVED,
+            EnrollmentFee.status.notin_(NOT_CASH_DUE),
         )
     )
 
