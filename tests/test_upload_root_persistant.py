@@ -91,6 +91,48 @@ def test_le_montage_uploads_sert_la_racine() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ensure_upload_dirs : bruyant la ou le volume compte, silencieux ailleurs
+# ---------------------------------------------------------------------------
+
+
+def _makedirs_refuse(*args: object, **kwargs: object) -> None:
+    """Simule une racine absente ou en lecture seule, sur n'importe quel systeme."""
+    raise OSError(13, "Permission denied")
+
+
+@pytest.mark.parametrize("environnement", ["development", "test", "staging"])
+def test_une_racine_non_creable_ne_bloque_pas_hors_production(
+    monkeypatch: pytest.MonkeyPatch, environnement: str
+) -> None:
+    """Hors production, l'echec est un avertissement.
+
+    Refuser de demarrer ici rendrait la suite de tests entierement rouge : le
+    runner d'integration continue tourne en `test` et n'a pas de `/app`.
+    """
+    monkeypatch.setattr(uploads.settings, "APP_ENV", environnement)
+    monkeypatch.setattr(uploads.os, "makedirs", _makedirs_refuse)
+
+    uploads.ensure_upload_dirs()
+
+
+@pytest.mark.parametrize("environnement", ["production", "prod", "PRODUCTION"])
+def test_une_racine_non_creable_empeche_de_demarrer_en_production(
+    monkeypatch: pytest.MonkeyPatch, environnement: str
+) -> None:
+    """En production, cela signifie un volume mal monte : mieux vaut ne pas demarrer.
+
+    Un service qui demarre vert sert alors 404 sur chaque image et ne casse
+    qu'au premier televersement, des jours plus tard, a l'impression d'un
+    bulletin.
+    """
+    monkeypatch.setattr(uploads.settings, "APP_ENV", environnement)
+    monkeypatch.setattr(uploads.os, "makedirs", _makedirs_refuse)
+
+    with pytest.raises(OSError):
+        uploads.ensure_upload_dirs()
+
+
+# ---------------------------------------------------------------------------
 # delete_public_file : le remplacement ne laisse pas de dechet dans le volume
 # ---------------------------------------------------------------------------
 

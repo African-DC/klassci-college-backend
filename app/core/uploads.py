@@ -65,6 +65,16 @@ DOCUMENTS = UploadKind("documents", 10 * _MO)
 KINDS: tuple[UploadKind, ...] = (PHOTOS, SIGNATURES, LOGOS, DOCUMENTS)
 
 
+def _en_production() -> bool:
+    """La convention du projet, deja portee par `migrate_all` et les sceaux.
+
+    Le test doit designer la production seule, et non « tout sauf un poste de
+    developpement » : une integration continue tourne en `test`, et lui refuser
+    le demarrage rendrait la suite de tests entierement rouge.
+    """
+    return settings.APP_ENV.lower() in {"production", "prod"}
+
+
 def ensure_upload_dirs() -> None:
     """Cree la racine et ses sous-dossiers, et refuse de demarrer si c'est impossible.
 
@@ -74,15 +84,15 @@ def ensure_upload_dirs() -> None:
     a l'impression d'un bulletin. On prefere l'echec au demarrage, qui se voit.
 
     Hors production, l'echec reste un avertissement : la racine par defaut n'est
-    pas creable sur un poste de developpement ni en integration continue, et
-    refuser de demarrer y empecherait de lancer l'API entiere pour une fonction
-    annexe.
+    creable ni sur un poste de developpement ni sur un runner d'integration
+    continue, et refuser de demarrer y empecherait de lancer l'API entiere, et
+    de jouer la suite de tests, pour une fonction annexe.
     """
     for directory in (UPLOAD_ROOT, *(kind.directory for kind in KINDS)):
         try:
             os.makedirs(directory, exist_ok=True)
         except OSError:
-            if settings.APP_ENV != "development":
+            if _en_production():
                 raise
             logger.warning("Dossier d'upload non creable : %s", directory, exc_info=True)
 
