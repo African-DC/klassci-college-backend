@@ -46,7 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import NotFoundError
 from app.models.academic import Class
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import CLOSED_STATUSES, Enrollment
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
@@ -59,10 +59,6 @@ from app.models.fee import (
 from app.schemas.fee import FeePropagationPreview, FeePropagationResult
 from app.services import enrollment_fees
 from app.services.deletion import Dependent
-
-#: Une inscription refusée ou annulée ne doit plus rien : sa dette est close,
-#: la relancer à la hausse ferait réapparaître un impayé sur un dossier clos.
-_STATUTS_HORS_JEU = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +242,7 @@ async def _a_creer(db: AsyncSession, variant: FeeVariant) -> list[Enrollment]:
         .join(Class, Class.id == Enrollment.class_id)
         .where(
             Enrollment.academic_year_id == variant.academic_year_id,
-            Enrollment.status.not_in(_STATUTS_HORS_JEU),
+            Enrollment.status.not_in(CLOSED_STATUSES),
             Class.level_id == variant.level_id,
             ~deja_facturee,
         )
@@ -296,7 +292,7 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
         .where(
             EnrollmentFee.fee_variant_id == variant.id,
             Enrollment.academic_year_id == variant.academic_year_id,
-            Enrollment.status.not_in(_STATUTS_HORS_JEU),
+            Enrollment.status.not_in(CLOSED_STATUSES),
         )
         .order_by(EnrollmentFee.id)
     )

@@ -34,6 +34,26 @@ class EnrollmentStatus(str, enum.Enum):
     ANNULE = "annule"
 
 
+#: Statuts d'une inscription qui n'est plus un dossier vivant.
+#:
+#: Un refus et une annulation ferment le dossier pour deux raisons qui se
+#: rejoignent : la dette est close, donc la relancer ferait reapparaitre un
+#: impaye sur un dossier clos ; et l'eleve n'est pas la, donc le faire figurer
+#: dans une liste de saisie fait perdre du temps a qui la remplit.
+#:
+#: Ce couple etait ecrit a huit endroits, en trois syntaxes differentes. Le
+#: jour ou un statut de fermeture s'ajoute, une seule des huit bougera. Meme
+#: motif que `NOT_CASH_DUE` cote frais, et meme remede : on le nomme une fois,
+#: la ou l'enum est defini.
+CLOSED_STATUSES = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
+
+
+def is_closed(status: EnrollmentStatus | str) -> bool:
+    """True si ce dossier est refuse ou annule : il ne doit plus rien, et il
+    n'a plus a etre renseigne."""
+    return status in CLOSED_STATUSES
+
+
 class AssignmentStatus(str, enum.Enum):
     """Statut d'affectation d'un eleve par l'Etat.
 

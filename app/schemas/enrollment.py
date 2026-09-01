@@ -291,3 +291,40 @@ class NewStudentSuggestionResponse(BaseModel):
 
     suggested: bool | None
     reason: str
+
+
+class DepositableFeeResponse(BaseModel):
+    """Un article que cette inscription peut recevoir en depot."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    fee_id: int
+    fee_category_id: int
+    category_name: str
+    #: `pending` reste a deposer, `in_kind` deja depose. Les autres statuts ne
+    #: remontent pas : une ligne payee ou exoneree ne se depose plus.
+    status: str
+
+
+class InKindRosterRowResponse(BaseModel):
+    """Une ligne de la liste de saisie : un eleve, son profil, ses articles."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    enrollment_id: int
+    student_id: int
+    first_name: str
+    last_name: str
+    #: `null` = profil non tranche. L'ecran n'a rien a pre-cocher.
+    is_new_student: bool | None
+    fees: list[DepositableFeeResponse]
+
+
+class InKindRosterResponse(BaseModel):
+    """La classe entiere, en un appel.
+
+    L'educateur travaille classe par classe, debout, sur un telephone. Lui
+    faire ouvrir soixante-dix-huit fiches revient a ne pas faire le travail.
+    """
+
+    items: list[InKindRosterRowResponse]

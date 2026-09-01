@@ -361,3 +361,102 @@ async def test_entitlements_polo_inchanges_par_un_depot(db: _AsyncBridge) -> Non
     assert polo_cat is not None and polo_frais is not None
     assert polo_cat.entitlements == avant
     assert polo_frais.status == EnrollmentFeeStatus.PENDING
+
+
+# ---------------------------------------------------------------------------
+# Annuler un dépôt : le geste qui manquait, et sans lequel la saisie en lot
+# multiplierait par quarante une erreur qu'on corrigeait à la main en base
+# ---------------------------------------------------------------------------
+
+
+async def test_annuler_un_depot_rend_la_ligne_due(db: _AsyncBridge) -> None:
+    """Le dépôt était une erreur : la ligne redevient exactement ce qu'elle était.
+
+    Avant ce geste, un article coché par erreur sortait du dû sans aucun moyen
+    d'y revenir depuis l'application. La correction se faisait à la main dans
+    la base.
+    """
+    with patch("app.services.enrollment_fees.audit_log", new=AsyncMock()):
+        await enrollment_fees.mark_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            deposited_by=7,
+        )
+        fee = await enrollment_fees.cancel_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            cancelled_by=9,
+        )
+
+    assert fee.status == EnrollmentFeeStatus.PENDING
+    assert fee.deposited_at is None
+    assert fee.deposited_by_user_id is None
+
+
+async def test_annuler_un_depot_remet_le_montant_dans_le_du(db: _AsyncBridge) -> None:
+    """Ce que la famille doit revient à ce qu'elle devait : c'est le seul test
+    qui dit que l'annulation défait vraiment quelque chose."""
+    avant = await installment_repository.mandatory_total(db, INSCRIPTION)  # type: ignore[arg-type]
+
+    with patch("app.services.enrollment_fees.audit_log", new=AsyncMock()):
+        await enrollment_fees.mark_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            deposited_by=7,
+        )
+        pendant = await installment_repository.mandatory_total(db, INSCRIPTION)  # type: ignore[arg-type]
+        await enrollment_fees.cancel_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            cancelled_by=9,
+        )
+
+    apres = await installment_repository.mandatory_total(db, INSCRIPTION)  # type: ignore[arg-type]
+    assert pendant < avant
+    assert apres == avant
+
+
+async def test_annuler_une_ligne_non_deposee_est_refuse(db: _AsyncBridge) -> None:
+    """Il n'y a rien à défaire, et prétendre le contraire remettrait une ligne
+    payée ou exonérée dans le dû."""
+    with (
+        patch("app.services.enrollment_fees.audit_log", new=AsyncMock()),
+        pytest.raises(ConflictError, match="pas marquée déposée"),
+    ):
+        await enrollment_fees.cancel_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            cancelled_by=1,
+        )
+
+    assert db._session.get(EnrollmentFee, FRAIS_RAMETTE).status == EnrollmentFeeStatus.PENDING
+
+
+async def test_annuler_un_depot_portant_un_versement_est_refuse(db: _AsyncBridge) -> None:
+    """Un frais déposé ne devrait jamais porter de versement, `plannable_fees`
+    l'écarte de toute imputation. Le contrôle est refait quand même : rendre
+    « due » une ligne sur laquelle de l'argent a atterri par un chemin qu'on
+    n'a pas prévu ferait réapparaître une dette déjà payée."""
+    ramette = db._session.get(EnrollmentFee, FRAIS_RAMETTE)
+    assert ramette is not None
+    ramette.status = EnrollmentFeeStatus.IN_KIND
+    db._session.flush()
+    _verse(db, "2500", sur=FRAIS_RAMETTE)
+
+    with (
+        patch("app.services.enrollment_fees.audit_log", new=AsyncMock()),
+        pytest.raises(ConflictError, match="versement"),
+    ):
+        await enrollment_fees.cancel_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            cancelled_by=1,
+        )
+
+    assert db._session.get(EnrollmentFee, FRAIS_RAMETTE).status == EnrollmentFeeStatus.IN_KIND
