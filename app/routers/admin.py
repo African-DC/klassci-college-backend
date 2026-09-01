@@ -30,7 +30,6 @@ from app.schemas.admin import (
     LevelListResponse,
     LevelResponse,
     LevelUpdate,
-    NewStudentSuggestionResponse,
     NotificationSettingsUpdate,
     ParentCreate,
     ParentFullResponse,
@@ -85,7 +84,6 @@ from app.schemas.admin import (
 from app.services import (
     admin_service,
     enrollment_fees,
-    enrollment_history,
     matricule_service,
 )
 from app.services.finance_visibility import FinanceView
@@ -254,36 +252,6 @@ async def get_student_fees(
     de les lire. Une liste de frais aux sommes vidées ne voudrait rien dire.
     """
     return await admin_service.get_student_enrollment_fees(db, student_id)
-
-
-@router.get(
-    "/students/{student_id}/new-student-suggestion",
-    response_model=NewStudentSuggestionResponse,
-    summary="Suggest whether a student is new for a given academic year",
-)
-async def suggest_new_student(
-    student_id: int,
-    academic_year_id: int = Query(
-        ...,
-        description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
-    ),
-    _: None = require_permission("enrollments:create"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> NewStudentSuggestionResponse:
-    """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
-
-    Trois réponses possibles, et `null` en est une : tant que l'établissement
-    n'a pas déclaré ses années passées exploitables dans ses réglages, rien ne
-    permet de dire qui est nouveau. La phrase le lui explique, et elle coche
-    elle-même.
-
-    Même droit que la création d'une inscription : cette suggestion ne se lit
-    que pour remplir ce formulaire-là.
-    """
-    suggested, reason = await enrollment_history.suggest_new_student(
-        db, student_id, academic_year_id
-    )
-    return NewStudentSuggestionResponse(suggested=suggested, reason=reason)
 
 
 # ---------------------------------------------------------------------------
