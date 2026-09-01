@@ -71,6 +71,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes *(admin, secrétariat)* (#394)
 - Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu *(admin, technique)* (#387)
 - Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent *(caissier, comptable)* (#379)
 - Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*

@@ -14,6 +14,7 @@ from app.core.dependencies import (
 )
 from app.core.uploads import LOGOS, PHOTOS, SIGNATURES
 from app.models.academic import SchoolSettings
+from app.repositories import admin_repository as admin_repo
 from app.schemas.admin import (
     AcademicYearCreate,
     AcademicYearListResponse,
@@ -23,6 +24,7 @@ from app.schemas.admin import (
     ClassListResponse,
     ClassResponse,
     ClassUpdate,
+    EnrollmentHistoryCoverageResponse,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
     HolidaysUpdateRequest,
@@ -84,6 +86,7 @@ from app.schemas.admin import (
 from app.services import (
     admin_service,
     enrollment_fees,
+    enrollment_history,
     matricule_service,
 )
 from app.services.finance_visibility import FinanceView
@@ -823,6 +826,61 @@ async def get_settings(
     """Retourne les parametres de l'etablissement + trimestres."""
     school = await admin_service.get_school_settings(db)
     return await _build_settings_response(db, school)
+
+
+@router.get(
+    "/settings/enrollment-history-coverage",
+    response_model=EnrollmentHistoryCoverageResponse,
+    summary="Ce que declarer son historique exploitable impliquerait, en chiffres",
+)
+async def enrollment_history_coverage(
+    _: None = require_permission("admin:academic-years:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentHistoryCoverageResponse:
+    """Combien d'eleves de l'annee en cours sont rattaches a un antecedent.
+
+    A afficher a cote de la case « historique exploitable », parce que c'est
+    la seule chose qui manquait. Le calcul de la facture etait deja juste :
+    une inscription non tranchee ne recoit aucun tarif a profil. Ce qui
+    manquait, c'est qu'au moment de cocher, rien ne disait a l'ecole que zero
+    de ses soixante-dix-huit eleves n'est rattache au passe enregistre, et
+    qu'ils seraient donc tous traites comme des arrivants.
+
+    Sans annee courante declaree, il n'y a pas de cohorte a mesurer : on rend
+    une couverture vide plutot qu'une erreur, l'ecran des reglages doit rester
+    lisible sur un etablissement qui vient d'etre provisionne.
+    """
+    academic_year_id = await admin_repo.get_current_academic_year_id(db)
+    if academic_year_id is None:
+        return EnrollmentHistoryCoverageResponse(
+            enrolled_this_year=0,
+            with_anterior=0,
+            ratio=0.0,
+            threshold=enrollment_history.COUVERTURE_MINIMALE,
+            is_sufficient=False,
+            warning=(
+                "Aucune annee scolaire courante n'est definie : le logiciel ne "
+                "peut mesurer aucun rattachement."
+            ),
+        )
+
+    couverture = await enrollment_history.history_coverage(db, academic_year_id)
+    warning = None
+    if not couverture.is_sufficient:
+        warning = (
+            f"{couverture.with_anterior} de vos {couverture.enrolled_this_year} eleves "
+            "inscrits cette annee ont une inscription enregistree sur une annee "
+            "anterieure. Si vous activez ce reglage, le logiciel les traitera tous "
+            "comme de nouveaux eleves."
+        )
+    return EnrollmentHistoryCoverageResponse(
+        enrolled_this_year=couverture.enrolled_this_year,
+        with_anterior=couverture.with_anterior,
+        ratio=couverture.ratio,
+        threshold=enrollment_history.COUVERTURE_MINIMALE,
+        is_sufficient=couverture.is_sufficient,
+        warning=warning,
+    )
 
 
 @router.put("/settings/school-info", response_model=SchoolSettingsResponse)
