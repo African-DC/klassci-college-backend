@@ -491,3 +491,81 @@ def test_l_audit_retient_le_profil_remis_a_non_tranche() -> None:
     autre_champ = EnrollmentUpdate.model_validate({"notes": "Dossier complété"})
     trace = autre_champ.model_dump(include=autre_champ.model_fields_set, mode="json")
     assert "is_new_student" not in trace
+
+
+# ---------------------------------------------------------------------------
+# Le socle que la simulation de grille affiche
+# ---------------------------------------------------------------------------
+
+
+def _panier(paniers: list, *, scope: str, profil: str | None) -> Decimal:
+    """Le total d'un public dans le tableau rendu, pour le niveau de test."""
+    return next(
+        p.total
+        for p in paniers
+        if p.level_id == LEVEL_6E and p.assignment_scope == scope and p.enrollment_profile == profil
+    )
+
+
+async def test_le_socle_est_calcule_par_le_serveur_pour_chaque_public(
+    db: _AsyncBridge,
+) -> None:
+    """L'écran de simulation lit ce tableau au lieu de refaire l'arbitrage.
+
+    Il le refaisait en TypeScript, et la règle vivait donc dans deux langages.
+    Elle a divergé en quelques jours : la version de l'écran oubliait d'écarter
+    les tarifs d'une série étrangère et annonçait des francs que l'élève ne
+    paierait jamais, sur la simulation que la directrice valide.
+    """
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "30000"))
+    db.add(_tarif(2, CAT_CHEMISE, "3000", profil=FeeEnrollmentProfile.NOUVEAU))
+    await db.flush()
+
+    paniers = await enrollment_fees.mandatory_totals_by_audience(db, AY)
+
+    # Le nouvel élève paie la chemise en plus du socle, l'ancien non, et le
+    # profil non tranché ne reçoit aucun tarif à profil : les trois réponses
+    # que le serveur donne déjà au guichet, rendues telles quelles à l'écran.
+    assert _panier(paniers, scope="non_affecte", profil="nouveau") == Decimal("33000")
+    assert _panier(paniers, scope="non_affecte", profil="ancien") == Decimal("30000")
+    assert _panier(paniers, scope="non_affecte", profil=None) == Decimal("30000")
+
+
+async def test_le_socle_ecarte_les_tarifs_d_une_serie(db: _AsyncBridge) -> None:
+    """Une simulation parle d'un niveau, pas d'une classe : elle ne désigne
+    aucune série, elle ne reçoit donc que le tronc commun.
+
+    C'est exactement la divergence que l'écran avait introduite : un tarif de
+    série portant un profil l'emportait chez lui sur le tarif du niveau.
+    """
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "30000"))
+    db.add(_tarif(2, CAT_SCOLARITE_T1, "45000", series_id=3, profil=FeeEnrollmentProfile.NOUVEAU))
+    await db.flush()
+
+    paniers = await enrollment_fees.mandatory_totals_by_audience(db, AY)
+
+    assert _panier(paniers, scope="non_affecte", profil="nouveau") == Decimal("30000")
+
+
+async def test_le_socle_rend_les_six_publics_de_chaque_niveau(db: _AsyncBridge) -> None:
+    """Six lignes par niveau : deux affectations fois trois profils.
+
+    L'écran bascule entre ces publics pendant que la personne réfléchit. Lui
+    rendre le tableau entier lui évite un aller-retour par bascule, sur une
+    connexion que le persona du dépôt suppose instable.
+    """
+    db.add(_tarif(1, CAT_SCOLARITE_T1, "30000"))
+    await db.flush()
+
+    paniers = await enrollment_fees.mandatory_totals_by_audience(db, AY)
+
+    du_niveau = [p for p in paniers if p.level_id == LEVEL_6E]
+    assert len(du_niveau) == 6
+    assert {(p.assignment_scope, p.enrollment_profile) for p in du_niveau} == {
+        ("affecte", "nouveau"),
+        ("affecte", "ancien"),
+        ("affecte", None),
+        ("non_affecte", "nouveau"),
+        ("non_affecte", "ancien"),
+        ("non_affecte", None),
+    }

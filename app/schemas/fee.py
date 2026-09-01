@@ -266,6 +266,30 @@ class FeePropagationResult(_FeePropagationImpact):
     fees_created: int
 
 
+class MandatoryBasketLine(BaseModel):
+    """Le socle obligatoire d'un niveau pour un public donné."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    level_id: int
+    #: `affecte` ou `non_affecte`.
+    assignment_scope: str
+    #: `nouveau`, `ancien`, ou `null` pour « profil non tranché ».
+    enrollment_profile: str | None
+    total: Decimal
+
+
+class MandatoryBasketResponse(BaseModel):
+    """Toutes les combinaisons d'un coup, six par niveau.
+
+    L'ecran de simulation bascule entre publics pendant que la personne
+    reflechit : lui rendre le tableau entier lui evite un aller-retour par
+    bascule, et lui evite surtout de recalculer l'arbitrage lui-meme.
+    """
+
+    items: list[MandatoryBasketLine]
+
+
 # ---------------------------------------------------------------------------
 # OptionalFeeOption
 # ---------------------------------------------------------------------------
