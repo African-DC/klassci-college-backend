@@ -140,6 +140,21 @@ def _declarer_historique_exploitable(db: _AsyncBridge) -> None:
     db.session.flush()
 
 
+def _cohorte_rattachee(db: _AsyncBridge, combien: int = 5) -> None:
+    """Une année en cours dont les élèves sont bien rattachés au passé.
+
+    Le garde-fou ne mesure plus « existe-t-il une inscription antérieure » mais
+    « quelle part de la cohorte en cours y est rattachée ». Sans cette
+    cohorte-là, la couverture est nulle et la suggestion répond `None` avant
+    même de regarder l'élève : les tests qui portent sur le prédicat par élève
+    ont besoin qu'on ait d'abord franchi la mesure.
+    """
+    for rang in range(combien):
+        eleve = 900 + rang
+        _inscrire(db, 900 + rang * 2, eleve, annee=AY_PRECEDENTE)
+        _inscrire(db, 901 + rang * 2, eleve, annee=AY_COURANTE)
+
+
 async def _suggestion(db: _AsyncBridge, student_id: int) -> tuple[bool | None, str]:
     return await enrollment_history.suggest_new_student(
         db,  # type: ignore[arg-type]
@@ -249,6 +264,7 @@ async def test_une_inscription_de_l_annee_courante_ne_fait_pas_un_historique(
 
 async def test_un_eleve_deja_inscrit_l_an_dernier_n_est_pas_nouveau(db: _AsyncBridge) -> None:
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE)
 
     suggested, reason = await _suggestion(db, FIDELE)
@@ -263,6 +279,7 @@ async def test_un_eleve_inconnu_est_nouveau_des_lors_que_l_ecole_a_un_passe(
     """L'historique est déclaré, d'autres élèves y figurent, et celui-ci n'y
     est pas : la suggestion devient légitime."""
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE)
 
     suggested, _reason = await _suggestion(db, ARRIVANT)
@@ -273,6 +290,7 @@ async def test_un_eleve_inconnu_est_nouveau_des_lors_que_l_ecole_a_un_passe(
 async def test_un_redoublant_reste_un_ancien(db: _AsyncBridge) -> None:
     """Il refait sa 6ème : le niveau ne change rien à son ancienneté."""
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE, classe=CLASSE_6E_A)
 
     suggested, _reason = await _suggestion(db, FIDELE)
@@ -291,6 +309,7 @@ async def test_une_inscription_rejetee_ne_compte_pas_comme_un_passage(
     """Un dossier refusé n'a jamais occupé de place : le compter ferait passer
     pour ancien un élève qui n'a jamais mis les pieds dans l'école."""
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE, statut=EnrollmentStatus.REJETE)
     _inscrire(db, 2, ARRIVANT)
 
@@ -305,6 +324,7 @@ async def test_une_inscription_en_validation_compte_comme_un_passage(
     """C'est le périmètre déjà retenu par les statistiques DREN : on ne le
     change pas d'un usage à l'autre."""
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE, statut=EnrollmentStatus.EN_VALIDATION)
 
     suggested, _reason = await _suggestion(db, FIDELE)
@@ -373,6 +393,7 @@ async def test_la_deduction_reprend_des_que_l_ecole_a_declare(db: _AsyncBridge) 
     """Le réglage n'éteint pas la fonctionnalité, il la conditionne : une fois
     la reprise terminée et déclarée, l'aide à la saisie revient telle quelle."""
     _declarer_historique_exploitable(db)
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE)
 
     assert (
@@ -396,6 +417,7 @@ async def test_la_deduction_reprend_des_que_l_ecole_a_declare(db: _AsyncBridge) 
 async def test_le_reglage_se_relit_a_chaque_suggestion(db: _AsyncBridge) -> None:
     """L'école lève son réglage au milieu d'une journée de guichet : la
     suggestion suivante doit en tenir compte, sans redémarrage."""
+    _cohorte_rattachee(db)
     _inscrire(db, 1, FIDELE)
 
     avant, _ = await _suggestion(db, ARRIVANT)
@@ -414,3 +436,90 @@ async def test_une_annee_inconnue_est_refusee(db: _AsyncBridge) -> None:
             ARRIVANT,
             9999,
         )
+
+
+# ---------------------------------------------------------------------------
+# La couverture : deux cohortes disjointes ne font pas un historique
+# ---------------------------------------------------------------------------
+
+
+async def test_deux_cohortes_disjointes_ne_deduisent_rien(db: _AsyncBridge) -> None:
+    """LE test de ce garde-fou, et le scénario mesuré sur la prod de Rostan.
+
+    Quarante-cinq inscriptions existent sur l'année antérieure, toutes valides,
+    et aucun des élèves de l'année en cours n'y figure. L'ancien garde-fou
+    concluait sur l'existence d'UNE ligne : il en trouvait quarante-cinq, il
+    passait, et tous les anciens élèves étaient déduits « nouveaux » puis
+    facturés du dossier d'entrée.
+
+    Assez d'historique pour que le garde-fou s'efface, pas assez pour qu'il
+    dise vrai. C'est exactement cette configuration qui doit rendre `None`.
+    """
+    _declarer_historique_exploitable(db)
+    # L'année passée, une cohorte entière.
+    for rang in range(9):
+        _inscrire(db, 100 + rang, 100 + rang, annee=AY_PRECEDENTE)
+    # Cette année, une cohorte qui ne la recoupe pas du tout.
+    for rang in range(9):
+        _inscrire(db, 200 + rang, 200 + rang, annee=AY_COURANTE)
+
+    suggested, reason = await _suggestion(db, 200)
+
+    assert suggested is None
+    assert "0 des 9" in reason
+
+
+async def test_la_couverture_compte_les_eleves_pas_les_inscriptions(
+    db: _AsyncBridge,
+) -> None:
+    """La mesure porte sur des élèves distincts, des deux côtés."""
+    _inscrire(db, 1, FIDELE, annee=AY_PRECEDENTE)
+    _inscrire(db, 2, FIDELE, annee=AY_COURANTE)
+    _inscrire(db, 3, ARRIVANT, annee=AY_COURANTE)
+
+    couverture = await enrollment_history.history_coverage(
+        db,  # type: ignore[arg-type]
+        AY_COURANTE,
+    )
+
+    assert couverture.enrolled_this_year == 2
+    assert couverture.with_anterior == 1
+    assert couverture.ratio == 0.5
+    assert couverture.is_sufficient is True
+
+
+async def test_une_annee_courante_vide_n_est_pas_une_couverture_totale(
+    db: _AsyncBridge,
+) -> None:
+    """Zéro sur zéro ne vaut pas cent pour cent : il n'y a rien à rapprocher."""
+    _inscrire(db, 1, FIDELE, annee=AY_PRECEDENTE)
+
+    couverture = await enrollment_history.history_coverage(
+        db,  # type: ignore[arg-type]
+        AY_COURANTE,
+    )
+
+    assert couverture.enrolled_this_year == 0
+    assert couverture.is_sufficient is False
+
+
+async def test_la_couverture_ignore_les_dossiers_refuses(db: _AsyncBridge) -> None:
+    """Les statuts comptés viennent de `anterior_enrollments`, pas d'un second
+    filtre écrit ici : un dossier rejeté ne rattache personne."""
+    _inscrire(db, 1, FIDELE, annee=AY_PRECEDENTE, statut=EnrollmentStatus.REJETE)
+    _inscrire(db, 2, FIDELE, annee=AY_COURANTE)
+
+    couverture = await enrollment_history.history_coverage(
+        db,  # type: ignore[arg-type]
+        AY_COURANTE,
+    )
+
+    assert couverture.enrolled_this_year == 1
+    assert couverture.with_anterior == 0
+    assert couverture.is_sufficient is False
+
+
+def test_le_seuil_est_bas_a_dessein() -> None:
+    """Il ne juge pas la proportion d'arrivants, qui est une variable légitime :
+    il détecte deux jeux de données qui ne se recouvrent pas."""
+    assert 0 < enrollment_history.COUVERTURE_MINIMALE <= 0.5

@@ -30,9 +30,10 @@ ne l'a pas fait, ce module répond « je ne sais pas », quoi que contienne la
 base.
 """
 
+from dataclasses import dataclass
 from datetime import date
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
@@ -83,21 +84,100 @@ async def levels_attended_before(
     return {(row[0], row[1]) for row in rows}, bool(rows)
 
 
-async def establishment_has_history(db: AsyncSession, reference_start_date: date) -> bool:
-    """L'établissement a-t-il la moindre inscription antérieure en base ?
+#: Sous cette proportion d'élèves rattachés à un antécédent, on refuse de
+#: déduire, réglage activé ou non.
+#:
+#: Le seuil ne mesure PAS combien d'élèves sont réellement nouveaux : c'est une
+#: variable légitime, un collège dont la 6e est entièrement neuve renouvelle
+#: une grande part de son effectif chaque rentrée. Il détecte autre chose, et
+#: une seule chose : deux jeux de données **disjoints**.
+#:
+#: Une année antérieure réellement reconstituée partage forcément des élèves
+#: avec l'année en cours, puisque les niveaux supérieurs se remplissent de ceux
+#: qui étaient déjà là. Une couverture quasi nulle ALORS QUE des inscriptions
+#: antérieures existent ne décrit donc pas une école qui a renouvelé tout son
+#: effectif : elle décrit deux populations qui ne se recouvrent pas, c'est-à-dire
+#: une reprise d'historique partielle ou une saisie qui ne rattache pas les
+#: élèves à leur dossier existant.
+#:
+#: Un cinquième est bas à dessein. Le but n'est pas de juger la qualité de
+#: l'historique, c'est de refuser de facturer sur un rapprochement qui n'a
+#: manifestement pas eu lieu.
+COUVERTURE_MINIMALE = 0.2
 
-    Volontairement plus exigeant que « existe-t-il une année antérieure » :
-    une année créée mais jamais remplie ne dit rien de qui était là. C'est
-    déjà la lecture que fait le rapport approfondi.
 
-    **Ce n'est plus l'interrupteur de la déduction.** Ce rôle appartient au
-    réglage déclaré par l'école, `history_is_declared_reliable` : une seule
-    ligne d'historique reconstituée ne doit pas suffire à faire basculer la
-    facturation au milieu d'une reprise. Reste un indice honnête, à afficher
-    dans les réglages pour dire à l'école qu'elle peut activer le sien.
+@dataclass(frozen=True, slots=True)
+class HistoryCoverage:
+    """Combien d'élèves de l'année en cours sont rattachés à un antécédent.
+
+    C'est le chiffre qu'il faut montrer à l'école AU MOMENT où elle coche le
+    réglage. La faille n'a jamais été dans le calcul de la facture : elle est
+    dans la décision, prise sans que rien n'affiche ce qu'elle implique.
     """
-    stmt = anterior_enrollments(reference_start_date).limit(1)
-    return (await db.execute(stmt)).first() is not None
+
+    #: Élèves distincts inscrits cette année, statuts comptés.
+    enrolled_this_year: int
+    #: Ceux d'entre eux qui portent une inscription sur une année antérieure.
+    with_anterior: int
+
+    @property
+    def ratio(self) -> float:
+        """Proportion couverte. Zéro quand il n'y a personne à mesurer."""
+        if self.enrolled_this_year == 0:
+            return 0.0
+        return self.with_anterior / self.enrolled_this_year
+
+    @property
+    def is_sufficient(self) -> bool:
+        """L'historique permet-il de conclure sur un élève qu'on n'y trouve pas ?
+
+        Une année sans aucun élève inscrit ne permet rien non plus : il n'y a
+        alors rien à rapprocher, et zéro sur zéro n'est pas une couverture
+        totale.
+        """
+        return self.enrolled_this_year > 0 and self.ratio >= COUVERTURE_MINIMALE
+
+
+async def history_coverage(db: AsyncSession, academic_year_id: int) -> HistoryCoverage:
+    """Mesure le rapprochement entre l'année en cours et le passé enregistré.
+
+    Remplace le « existe-t-il au moins une inscription antérieure » qui servait
+    d'interrupteur. Cette question-là concluait sur UNE ligne, alors que ce qui
+    est en jeu est la complétude d'une cohorte : quarante-cinq inscriptions
+    d'une année antérieure suffisaient à faire passer le garde-fou, sans qu'une
+    seule d'entre elles concerne un élève de l'année en cours. Tous les anciens
+    élèves étaient alors déduits « nouveaux », et facturés du dossier d'entrée.
+
+    L'antériorité et les statuts comptés viennent de `anterior_enrollments`, et
+    d'elle seule : ce module existe pour que ces règles n'aient qu'une
+    définition, la recopier ici en SQL les remettrait à deux.
+    """
+    return await _coverage_for_year(db, await _load_academic_year(db, academic_year_id))
+
+
+async def _coverage_for_year(db: AsyncSession, year: AcademicYear) -> HistoryCoverage:
+    """Le calcul, sur une année déjà chargée : la suggestion la tient déjà."""
+    anterieurs = anterior_enrollments(year.start_date).subquery()
+    cohorte = (
+        select(Enrollment.student_id)
+        .where(
+            Enrollment.academic_year_id == year.id,
+            Enrollment.status.in_(COUNTED_STATUSES),
+        )
+        .distinct()
+        .subquery()
+    )
+
+    inscrits = (await db.execute(select(func.count()).select_from(cohorte))).scalar_one()
+    couverts = (
+        await db.execute(
+            select(func.count())
+            .select_from(cohorte)
+            .where(cohorte.c.student_id.in_(select(anterieurs.c.student_id)))
+        )
+    ).scalar_one()
+
+    return HistoryCoverage(enrolled_this_year=int(inscrits), with_anterior=int(couverts))
 
 
 async def student_enrolled_before(
@@ -162,10 +242,13 @@ async def suggest_new_student(
             "arrive pour la première fois. À vous de cocher, dossier en main."
         )
 
-    if not await establishment_has_history(db, year.start_date):
+    couverture = await _coverage_for_year(db, year)
+    if not couverture.is_sufficient:
         return None, (
-            "Aucune inscription des années précédentes n'est enregistrée : "
-            "impossible de dire si cet élève est nouveau. À vous de cocher."
+            f"Seuls {couverture.with_anterior} des {couverture.enrolled_this_year} élèves "
+            "inscrits cette année sont rattachés à une inscription des années "
+            "précédentes : le logiciel ne peut pas dire si celui-ci arrive pour la "
+            "première fois. À vous de cocher, dossier en main."
         )
 
     if await student_enrolled_before(db, student_id, year.start_date):

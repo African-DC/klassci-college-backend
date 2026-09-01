@@ -889,6 +889,28 @@ class StudentEnrollmentFeeListResponse(BaseModel):
     items: list[StudentEnrollmentFeeResponse]
 
 
+class EnrollmentHistoryCoverageResponse(BaseModel):
+    """Ce que l'ecole doit lire AVANT de declarer son historique exploitable.
+
+    La faille n'a jamais ete dans le calcul de la facture : elle est dans la
+    decision, prise sans que rien n'affiche ce qu'elle implique. Ce payload
+    existe pour la poser sous les yeux de qui coche.
+    """
+
+    #: Eleves distincts inscrits sur l'annee courante, statuts comptes.
+    enrolled_this_year: int
+    #: Ceux d'entre eux rattaches a une inscription d'une annee anterieure.
+    with_anterior: int
+    #: Proportion couverte, entre 0 et 1.
+    ratio: float
+    #: En dessous, le logiciel refuse de deduire meme reglage active.
+    threshold: float
+    #: Vrai si la deduction pourra reellement s'appliquer.
+    is_sufficient: bool
+    #: La phrase a afficher telle quelle a cote de la case.
+    warning: str | None
+
+
 class SchoolInfoUpdate(BaseModel):
     school_name: str | None = None
     address: str | None = None
