@@ -23,7 +23,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import AssignmentStatus, Enrollment
+from app.models.enrollment import AssignmentStatus, Enrollment, EnrollmentStatus
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
@@ -34,6 +34,7 @@ from app.models.fee import (
     PaymentAllocation,
     is_not_cash_due,
 )
+from app.models.user import Student
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import FeeVariantResponse, InKindDeposit
 from app.services import fee_entitlements as entitlements
@@ -742,6 +743,187 @@ async def mark_in_kind_deposit(
             "enrollment_id": enrollment_id,
             "fee_category_id": fee.fee_category_id,
             "status": EnrollmentFeeStatus.IN_KIND.value,
+        },
+    )
+    return fee
+
+
+#: Une inscription refusée ou annulée n'est plus un dossier à renseigner :
+#: la faire apparaître dans la liste de saisie ferait perdre du temps sur des
+#: élèves qui ne sont pas là.
+_HORS_SAISIE = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
+
+
+@dataclass(frozen=True, slots=True)
+class DepositableFee:
+    """Un article que cette inscription-là peut recevoir en dépôt."""
+
+    fee_id: int
+    fee_category_id: int
+    category_name: str
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class InKindRosterRow:
+    """Une ligne de la liste de saisie : un élève, son profil, ses articles."""
+
+    enrollment_id: int
+    student_id: int
+    first_name: str
+    last_name: str
+    is_new_student: bool | None
+    fees: list[DepositableFee]
+
+
+async def in_kind_roster(
+    db: AsyncSession, *, class_id: int, academic_year_id: int
+) -> list[InKindRosterRow]:
+    """La classe entière, avec ce qui reste à renseigner sur chaque élève.
+
+    Un éducateur repasse derrière soixante-dix-huit inscriptions pour dire qui
+    est nouveau et qui a déposé son paquet de rames. Fiche par fiche, en
+    changeant d'onglet, le travail ne se fait pas jusqu'au bout. Il lui faut la
+    classe d'un coup, et cette liste est ce qu'un seul appel lui rend.
+
+    **Seuls les articles réellement portés par l'inscription** remontent : la
+    case n'existe que si le frais figure sur ce dossier-là et que sa catégorie
+    accepte le dépôt. Afficher une case « chemise cartonnée » sur un élève qui
+    ne la doit pas, c'est inviter à cocher une ligne qui n'existe pas.
+
+    Le profil est rendu tel quel, `None` compris. L'écran n'a rien à
+    pré-cocher : une inscription non tranchée le reste tant que l'éducateur ne
+    se prononce pas, et c'est le même refus de deviner que partout ailleurs.
+    """
+    stmt = (
+        select(Enrollment)
+        .join(Student, Student.id == Enrollment.student_id)
+        .where(
+            Enrollment.class_id == class_id,
+            Enrollment.academic_year_id == academic_year_id,
+            Enrollment.status.not_in(_HORS_SAISIE),
+        )
+        .options(
+            selectinload(Enrollment.student),
+            selectinload(Enrollment.enrollment_fees),
+        )
+        .order_by(Student.last_name, Student.first_name, Enrollment.id)
+    )
+    inscriptions = list((await db.execute(stmt)).scalars().all())
+
+    # Les categories en une requete pour toute la classe. `EnrollmentFee` ne
+    # porte pas de relation vers sa categorie, seulement son identifiant : les
+    # lire une par frais couterait une requete par eleve et par article, sur un
+    # ecran que l'educateur ouvre debout dans une cour.
+    categories: dict[int, FeeCategory] = {}
+    ids = {f.fee_category_id for i in inscriptions for f in i.enrollment_fees}
+    if ids:
+        categories = {
+            c.id: c
+            for c in (
+                await db.execute(select(FeeCategory).where(FeeCategory.id.in_(ids)))
+            ).scalars()
+        }
+
+    lignes: list[InKindRosterRow] = []
+    for inscription in inscriptions:
+        eleve = inscription.student
+        articles = []
+        for frais in inscription.enrollment_fees:
+            categorie = categories.get(frais.fee_category_id)
+            if categorie is None or not categorie.accepts_in_kind:
+                continue
+            articles.append(
+                DepositableFee(
+                    fee_id=frais.id,
+                    fee_category_id=frais.fee_category_id,
+                    category_name=categorie.name,
+                    status=str(getattr(frais.status, "value", frais.status)),
+                )
+            )
+        lignes.append(
+            InKindRosterRow(
+                enrollment_id=inscription.id,
+                student_id=eleve.id,
+                first_name=eleve.first_name,
+                last_name=eleve.last_name,
+                is_new_student=inscription.is_new_student,
+                fees=sorted(articles, key=lambda a: a.category_name),
+            )
+        )
+    return lignes
+
+
+async def cancel_in_kind_deposit(
+    db: AsyncSession,
+    *,
+    enrollment_id: int,
+    fee_id: int,
+    cancelled_by: int,
+) -> EnrollmentFee:
+    """Le dépôt était une erreur : la ligne redevient due. Sinon 409.
+
+    Marquer un article déposé retire la ligne du dû, et l'application n'offrait
+    aucun moyen d'y revenir : un dépôt posé par erreur a déjà dû être corrigé à
+    la main dans la base. Ce n'était pas tenable avec une saisie fiche par
+    fiche ; ça ne l'est pas du tout avec une saisie en lot, où l'éducateur
+    coche quarante cases d'affilée.
+
+    Symétrique de `mark_in_kind_deposit`, et volontairement aussi étroite :
+    on ne revient que sur une ligne réellement déposée, et on la remet
+    exactement dans l'état d'où elle vient, `pending`, sans toucher au montant.
+    Le geste n'invente rien, il défait.
+
+    Le contrôle des versements est refait ici alors qu'un frais déposé ne
+    devrait jamais en porter — `plannable_fees` l'écarte de toute imputation.
+    Le refaire coûte une requête et ferme la question : rendre « due » une
+    ligne sur laquelle de l'argent aurait atterri par un chemin qu'on n'a pas
+    prévu ferait réapparaître une dette déjà payée.
+    """
+    fee = (
+        await db.execute(
+            select(EnrollmentFee).where(
+                EnrollmentFee.id == fee_id,
+                EnrollmentFee.enrollment_id == enrollment_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if fee is None:
+        raise NotFoundError("EnrollmentFee", fee_id)
+
+    if fee.status != EnrollmentFeeStatus.IN_KIND:
+        raise ConflictError(
+            "Cette ligne n'est pas marquée déposée : il n'y a pas de dépôt à annuler."
+        )
+
+    has_alloc = (
+        await db.execute(
+            select(PaymentAllocation.id)
+            .where(PaymentAllocation.enrollment_fee_id == fee.id)
+            .limit(1)
+        )
+    ).first()
+    if has_alloc is not None:
+        raise ConflictError(
+            "Impossible d'annuler ce dépôt : un versement est imputé sur cette ligne."
+        )
+
+    fee.status = EnrollmentFeeStatus.PENDING
+    fee.deposited_at = None
+    fee.deposited_by_user_id = None
+    await db.flush()
+
+    await audit_log(
+        db,
+        entity_type="enrollment_fee",
+        action=AuditAction.UPDATE,
+        user_id=cancelled_by,
+        entity_id=fee.id,
+        new_values={
+            "action": "in_kind_deposit_cancelled",
+            "enrollment_id": enrollment_id,
+            "fee_category_id": fee.fee_category_id,
+            "status": EnrollmentFeeStatus.PENDING.value,
         },
     )
     return fee

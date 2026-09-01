@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Un dépôt en nature posé par erreur s'annule depuis l'application, au lieu d'une correction à la main en base *(admin, comptable)* (#399)
 - Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*
 - Répercuter un tarif peut aussi créer les lignes manquantes chez les élèves déjà inscrits, sur demande explicite *(admin, comptable)*
 - Le logo de l'établissement s'installe et se retire depuis les paramètres, et apparaît sur les documents officiels *(admin)*
