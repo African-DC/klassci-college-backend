@@ -52,6 +52,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
 - L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*
 - Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3 *(technique)*
