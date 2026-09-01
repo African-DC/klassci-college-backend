@@ -10,17 +10,20 @@ from app.schemas.fee import (
     FeeCategoryResponse,
     FeeCategoryUpdate,
     FeePropagationPreview,
+    FeePropagationRequest,
     FeePropagationResult,
     FeeVariantCreate,
     FeeVariantListResponse,
     FeeVariantResponse,
     FeeVariantUpdate,
+    MandatoryBasketLine,
+    MandatoryBasketResponse,
     OptionalFeeOptionCreate,
     OptionalFeeOptionListResponse,
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
-from app.services import fee_propagation, fee_service
+from app.services import enrollment_fees, fee_propagation, fee_service
 
 router = APIRouter(prefix="/admin", tags=["fees"])
 
@@ -166,6 +169,32 @@ async def update_fee_variant(
 
 
 @router.get(
+    "/fee-variants/mandatory-basket",
+    response_model=MandatoryBasketResponse,
+    summary="Socle obligatoire par niveau et par public, pour la simulation de grille",
+)
+async def mandatory_basket(
+    academic_year_id: int = Query(..., description="Annee dont on chiffre la grille"),
+    _: None = require_permission("fees:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> MandatoryBasketResponse:
+    """Ce que chaque niveau doit, pour chaque public, en frais obligatoires.
+
+    L'ecran de simulation calculait ce total lui-meme, en reimplementant
+    l'arbitrage du tarif le plus specifique. La regle vivait donc dans deux
+    langages, et elle a diverge : la simulation oubliait d'ecarter les tarifs
+    d'une serie etrangere et annoncait des francs que l'eleve ne paierait pas.
+
+    La regle reste dans `enrollment_fees`, seule. On rend toutes les
+    combinaisons d'un coup, six par niveau, plutot qu'un appel par bascule de
+    selecteur : l'ecran redevient une lecture, et il n'attend pas le reseau
+    pendant que la personne reflechit.
+    """
+    paniers = await enrollment_fees.mandatory_totals_by_audience(db, academic_year_id)
+    return MandatoryBasketResponse(items=[MandatoryBasketLine.model_validate(p) for p in paniers])
+
+
+@router.get(
     "/fee-variants/{variant_id}/propagation-preview",
     response_model=FeePropagationPreview,
 )
@@ -180,6 +209,11 @@ async def preview_fee_variant_propagation(
     portent ce tarif, combien de lignes seraient reecrites, combien seraient
     conservees parce qu'un versement y est impute, et de combien la dette
     totale bougerait.
+
+    `fees_to_create` compte les inscriptions auxquelles ce tarif doit une
+    ligne et qui n'en portent aucune de sa categorie. Il est rendu dans tous
+    les cas : la confirmation ne les cree que si on le lui demande, mais
+    l'ecole doit d'abord savoir qu'elles existent.
     """
     return await fee_propagation.preview_variant_propagation(db, variant_id)
 
@@ -187,6 +221,7 @@ async def preview_fee_variant_propagation(
 @router.post("/fee-variants/{variant_id}/propagate", response_model=FeePropagationResult)
 async def propagate_fee_variant(
     variant_id: int,
+    data: FeePropagationRequest | None = None,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("admin:fee-variants:update"),
     db: AsyncSession = Depends(get_tenant_db),
@@ -197,13 +232,22 @@ async def propagate_fee_variant(
     lignes qui portent deja un versement ne sont pas touchees : le recu remis
     a la famille resterait vrai, et le reste du ne peut pas devenir negatif.
 
+    Le corps est facultatif, et son absence vaut `create_missing: false` :
+    repercuter ne fait alors que reecrire des montants, sans creer une seule
+    ligne. Corriger une faute de frappe sur le prix de la tenue ne doit
+    endetter personne de plus. La creation des lignes manquantes se demande,
+    apres avoir lu l'apercu qui les compte.
+
     Meme droit que la modification du tarif : repercuter est la suite du meme
     geste, et un slug supplementaire laisserait sans bouton les ecoles
     provisionnees avant sa migration.
     """
     async with db.begin_nested():
         result = await fee_propagation.apply_variant_propagation(
-            db, variant_id, applied_by=current_user.user_id
+            db,
+            variant_id,
+            applied_by=current_user.user_id,
+            create_missing=data.create_missing if data else False,
         )
     await db.commit()
     return result

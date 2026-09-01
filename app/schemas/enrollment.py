@@ -39,6 +39,21 @@ class EnrollmentCreate(BaseModel):
 
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
+    #: Trois etats distincts, et le client doit pouvoir les dire tous les
+    #: trois :
+    #:
+    #: - `true` : nouvel eleve ;
+    #: - `false` : deja inscrit dans l'etablissement auparavant ;
+    #: - `null` ENVOYE explicitement : le guichet ne tranche pas. La valeur est
+    #:   enregistree telle quelle, et l'inscription ne recoit alors aucun tarif
+    #:   porteur d'un profil.
+    #:
+    #: Champ ABSENT du corps : personne ne s'est prononce, le serveur deduit
+    #: depuis l'historique. Un client qui voulait dire « non tranche » doit donc
+    #: envoyer `null` explicitement : en JavaScript, `JSON.stringify` supprime
+    #: les cles `undefined`, le champ disparait du corps, et le serveur deduit
+    #: alors que l'ecran promettait le contraire.
+    is_new_student: bool | None = None
 
 
 class EnrollmentUpdate(BaseModel):
@@ -65,6 +80,12 @@ class EnrollmentUpdate(BaseModel):
 
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
+    #: La decision se corrige : c'est pour cela qu'elle vit sur l'inscription.
+    #: Le champ absent laisse la valeur intacte, le champ envoye a `null` la
+    #: remet a « on n'a pas tranche ». Le service distingue les deux, comme
+    #: pour la portee d'un tarif. Corriger ce champ regenere les frais de
+    #: l'inscription, exactement comme un changement de classe.
+    is_new_student: bool | None = None
 
 
 class SubscribeOptionRequest(BaseModel):
@@ -97,6 +118,9 @@ class EnrollmentResponse(BaseModel):
     class_name: str | None = None
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
+    #: `None` = on n'a pas tranche. L'ecran doit l'afficher comme tel, pas
+    #: comme « ancien » : c'est une case a cocher, pas une case decochee.
+    is_new_student: bool | None = None
 
 
 class EnrollmentListResponse(BaseModel):
@@ -162,6 +186,10 @@ class EnrollmentWithStudentCreate(BaseModel):
     # etre saisi au moment ou l'inscription est creee.
     assignment_status: str | None = None
     assignment_decision_number: str | None = None
+    # Le profil decide lui aussi du tarif applique : meme raison, meme place,
+    # memes trois etats que sur `EnrollmentCreate`. Absent, il est deduit de
+    # l'historique ; envoye a `null`, il reste « non tranche ».
+    is_new_student: bool | None = None
     fee_variant_id: int | None = None
     notes: str | None = None
     in_kind_deposits: list[InKindDeposit] = Field(default_factory=list)
@@ -250,3 +278,16 @@ class BulkValidateFailure(BaseModel):
 class BulkValidateResponse(BaseModel):
     validated: list[int]
     failed: list[BulkValidateFailure]
+
+
+class NewStudentSuggestionResponse(BaseModel):
+    """Ce que l'ecran doit pre-cocher dans la case « nouvel eleve », et pourquoi.
+
+    Trois reponses, jamais deux. `null` n'est pas une panne : c'est
+    l'etablissement qui n'a pas declare ses annees passees exploitables, et la
+    secretaire qui reste seule a savoir. La phrase le lui dit en clair, plutot
+    que de laisser une case vide sans explication.
+    """
+
+    suggested: bool | None
+    reason: str

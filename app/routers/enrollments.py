@@ -19,10 +19,16 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     FeeVariantResponse,
     InKindDepositResponse,
+    NewStudentSuggestionResponse,
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import archive_service, enrollment_fees, enrollment_service
+from app.services import (
+    archive_service,
+    enrollment_fees,
+    enrollment_history,
+    enrollment_service,
+)
 from app.services.enrollment_archive import ENROLLMENT_KIND
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
@@ -96,6 +102,42 @@ async def re_enroll_student(
     return await enrollment_service.re_enroll_student(db, data, created_by=current_user.user_id)
 
 
+@router.get(
+    "/new-student-suggestion",
+    response_model=NewStudentSuggestionResponse,
+    summary="Suggest whether a student is new for a given academic year",
+)
+async def suggest_new_student(
+    student_id: int = Query(..., description="Eleve qu'on s'apprete a inscrire"),
+    academic_year_id: int = Query(
+        ...,
+        description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
+    ),
+    _: None = require_permission("enrollments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NewStudentSuggestionResponse:
+    """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
+
+    Trois réponses possibles, et `null` en est une : tant que l'établissement
+    n'a pas déclaré ses années passées exploitables dans ses réglages, rien ne
+    permet de dire qui est nouveau. La phrase le lui explique, et elle coche
+    elle-même.
+
+    Même droit que la création d'une inscription : cette suggestion ne se lit
+    que pour remplir ce formulaire-là. Elle vit avec les inscriptions et non
+    dans le routeur d'administration : son sujet est l'inscription, et c'est
+    la seule raison qui doit décider où vit un endpoint.
+
+    Le chemin la place AVANT `/{enrollment_id}` : sans cela, FastAPI ferait
+    correspondre `new-student-suggestion` au paramètre d'identifiant et
+    rendrait une erreur de validation.
+    """
+    suggested, reason = await enrollment_history.suggest_new_student(
+        db, student_id, academic_year_id
+    )
+    return NewStudentSuggestionResponse(suggested=suggested, reason=reason)
+
+
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])
 async def get_applicable_fee_variants(
     class_id: int = Query(..., description="ID de la classe pour la resolution des frais"),
@@ -106,11 +148,36 @@ async def get_applicable_fee_variants(
             "Class étant universel (refactor #97), l'AY n'est plus inférée depuis la classe."
         ),
     ),
+    assignment_status: str | None = Query(
+        None,
+        description="Statut d'affectation de l'inscription, pour resoudre les tarifs qui en dependent.",
+    ),
+    is_new_student: bool | None = Query(
+        None,
+        description=(
+            "Profil de l'inscription. Omis, l'apercu ne montre que les tarifs "
+            "sans profil, comme une inscription non tranchee."
+        ),
+    ),
     _: None = require_permission("enrollments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_fees.get_applicable_fee_variants(db, class_id, academic_year_id)
+    """Retourne les fee variants applicables pour une classe donnee.
+
+    Les deux dimensions sont passees au service, et c'est le point de cet
+    endpoint : sans elles il resout les tarifs comme une inscription dont on
+    ne sait rien, donc en ecartant tout tarif porteur d'une portee ou d'un
+    profil. Le guichet lisait alors une facture ou la chemise cartonnee
+    n'apparaissait jamais, alors que l'inscription creee juste apres la
+    portait. L'apercu et la generation reelle doivent annoncer la meme chose.
+    """
+    return await enrollment_fees.get_applicable_fee_variants(
+        db,
+        class_id,
+        academic_year_id,
+        assignment_status=assignment_status,
+        is_new_student=is_new_student,
+    )
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)

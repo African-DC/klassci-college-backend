@@ -130,6 +130,24 @@ class FeeAssignmentScope(str, enum.Enum):
     NON_AFFECTE = "non_affecte"
 
 
+class FeeEnrollmentProfile(str, enum.Enum):
+    """A qui s'applique un tarif selon l'anciennete de l'eleve dans l'ecole.
+
+    Calque exact de `FeeAssignmentScope`, pour une raison voisine : ce qu'un
+    nouvel arrivant paie a son entree — le dossier cartonne, le badge, la
+    premiere dotation de tenue — un ancien ne le repaie pas. Deux valeurs
+    suffisent : l'ecole ne facture pas differemment un eleve present depuis
+    deux ans et un autre depuis six.
+
+    `None` sur un tarif signifie « s'applique a tout le monde » : c'est ce
+    qui permet aux grilles deja configurees de continuer a fonctionner sans
+    qu'on y touche.
+    """
+
+    NOUVEAU = "nouveau"
+    ANCIEN = "ancien"
+
+
 class FeeCategory(Base, TimestampMixin):
     """Catégorie de frais (ex : Inscription, Scolarité T1, Cantine, Transport).
 
@@ -192,15 +210,16 @@ class FeeVariant(Base, TimestampMixin):
             "level_key",
             "series_key",
             "scope_key",
+            "profile_key",
             name="uq_fee_variant_dimensions",
         ),
     )
 
     # Colonnes generees par la base : `NULL` n'etant jamais egal a `NULL`,
     # une contrainte posee directement sur `level_id` / `series_id` /
-    # `assignment_scope` ne se declenche jamais des que l'un d'eux est vide.
-    # C'est ce qui laissait creer des tarifs en double sur tous les niveaux de
-    # college, ou la serie est toujours vide.
+    # `assignment_scope` / `enrollment_profile` ne se declenche jamais des que
+    # l'un d'eux est vide. C'est ce qui laissait creer des tarifs en double sur
+    # tous les niveaux de college, ou la serie est toujours vide.
     level_key: Mapped[int] = mapped_column(
         BigInteger, Computed("COALESCE(level_id, 0)", persisted=True), nullable=False
     )
@@ -209,6 +228,9 @@ class FeeVariant(Base, TimestampMixin):
     )
     scope_key: Mapped[str] = mapped_column(
         String(20), Computed("COALESCE(assignment_scope, '')", persisted=True), nullable=False
+    )
+    profile_key: Mapped[str] = mapped_column(
+        String(20), Computed("COALESCE(enrollment_profile, '')", persisted=True), nullable=False
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -225,6 +247,12 @@ class FeeVariant(Base, TimestampMixin):
     )
     assignment_scope: Mapped[str | None] = mapped_column(
         ValueEnum(FeeAssignmentScope, name="fee_assignment_scope"),
+        nullable=True,
+        index=True,
+    )
+    #: `None` = ce tarif s'applique a tout le monde, nouveaux comme anciens.
+    enrollment_profile: Mapped[str | None] = mapped_column(
+        ValueEnum(FeeEnrollmentProfile, name="fee_enrollment_profile"),
         nullable=True,
         index=True,
     )

@@ -817,6 +817,11 @@ class SchoolSettingsResponse(BaseModel):
     website: str | None = None
     motto: str | None = None
     deletion_notice_emails: str | None = None
+    #: L'école a-t-elle déclaré ses inscriptions des années passées
+    #: exploitables ? Tant que c'est `false`, le serveur ne devine jamais si un
+    #: élève est nouveau : l'écran d'inscription doit donc présenter la case
+    #: comme un choix à faire, pas comme une aide déjà remplie.
+    enrollment_history_is_reliable: bool = False
     trimesters: list[TrimesterDTO] = []
     holidays: list[SchoolHolidayDTO] = []
     notify_by_email: bool = False
@@ -884,6 +889,28 @@ class StudentEnrollmentFeeListResponse(BaseModel):
     items: list[StudentEnrollmentFeeResponse]
 
 
+class EnrollmentHistoryCoverageResponse(BaseModel):
+    """Ce que l'ecole doit lire AVANT de declarer son historique exploitable.
+
+    La faille n'a jamais ete dans le calcul de la facture : elle est dans la
+    decision, prise sans que rien n'affiche ce qu'elle implique. Ce payload
+    existe pour la poser sous les yeux de qui coche.
+    """
+
+    #: Eleves distincts inscrits sur l'annee courante, statuts comptes.
+    enrolled_this_year: int
+    #: Ceux d'entre eux rattaches a une inscription d'une annee anterieure.
+    with_anterior: int
+    #: Proportion couverte, entre 0 et 1.
+    ratio: float
+    #: En dessous, le logiciel refuse de deduire meme reglage active.
+    threshold: float
+    #: Vrai si la deduction pourra reellement s'appliquer.
+    is_sufficient: bool
+    #: La phrase a afficher telle quelle a cote de la case.
+    warning: str | None
+
+
 class SchoolInfoUpdate(BaseModel):
     school_name: str | None = None
     address: str | None = None
@@ -903,6 +930,11 @@ class SchoolInfoUpdate(BaseModel):
     #: suppression définitive, séparés par des virgules. Laisser vide fait
     #: retomber sur l'adresse de l'établissement.
     deletion_notice_emails: str | None = None
+    #: L'école déclare que ses inscriptions des années passées sont
+    #: exploitables. Le champ absent laisse le réglage intact ; `false` est une
+    #: valeur, pas une absence, et c'est celle qui empêche le serveur de
+    #: deviner qui est nouveau au milieu d'une reprise d'historique.
+    enrollment_history_is_reliable: bool | None = None
 
     @field_validator("primary_color", "accent_color")
     @classmethod

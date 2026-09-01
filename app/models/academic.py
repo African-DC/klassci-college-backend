@@ -350,3 +350,17 @@ class SchoolSettings(Base, TimestampMixin):
     # Un courriel sort du logiciel : si quelqu'un efface une trace, il n'efface
     # pas une boîte de réception. Vide, on retombe sur l'adresse de l'école.
     deletion_notice_emails: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # L'école déclare elle-même que ses inscriptions des années passées sont
+    # exploitables. Tant que c'est faux, le serveur ne déduit JAMAIS si un
+    # élève est nouveau : dans une base qui ne contient que l'année en cours,
+    # l'absence d'inscription antérieure ne distingue pas un arrivant d'un
+    # ancien pas encore ressaisi, et la déduction facturerait le droit
+    # d'entrée à toute l'école.
+    #
+    # Le défaut est donc `false`, y compris pour un établissement qui vient de
+    # saisir ses premières lignes d'historique : c'est ce qui empêche le
+    # garde-fou de basculer tout seul au milieu d'une reprise. Seul un geste
+    # dans les réglages le lève.
+    enrollment_history_is_reliable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )

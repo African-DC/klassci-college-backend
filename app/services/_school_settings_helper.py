@@ -27,6 +27,10 @@ _PDF_EXCLUDE = {
     "day_end_hour",
     "created_at",
     "updated_at",
+    # Réglage de saisie, pas une identité d'établissement : il dit au
+    # formulaire d'inscription s'il peut deviner le profil d'un élève. Aucun
+    # document officiel n'a de raison de l'imprimer.
+    "enrollment_history_is_reliable",
     # MailPulse — config technique et secrets, jamais dans un PDF.
     "mailpulse_enabled",
     "mailpulse_base_url",

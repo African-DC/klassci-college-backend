@@ -5,7 +5,15 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -76,6 +84,14 @@ class Enrollment(Base, TimestampMixin, ArchivableMixin):
     )
     # Numero de la decision d'affectation, reclame par le rapport DEEP.
     assignment_decision_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # `None` = on n'a pas tranche, et ce n'est pas un oubli. Un etablissement
+    # dont les annees passees ne sont pas reconstituees n'a aucun moyen de
+    # savoir qui est nouveau : deduire « aucune inscription anterieure donc
+    # nouveau » facturerait les frais d'entree a tous ses anciens eleves.
+    # Une inscription restee a `None` ne recoit donc aucun tarif porteur d'un
+    # profil — voir `enrollment_fees.applicable_profile_keys`, meme regle et
+    # meme raison que `applicable_scope_keys` quand l'affectation manque.
+    is_new_student: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     status: Mapped[str] = mapped_column(
         ValueEnum(EnrollmentStatus, name="enrollment_status"),
         nullable=False,

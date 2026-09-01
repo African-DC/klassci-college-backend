@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*
+- Répercuter un tarif peut aussi créer les lignes manquantes chez les élèves déjà inscrits, sur demande explicite *(admin, comptable)*
 - Le logo de l'établissement s'installe et se retire depuis les paramètres, et apparaît sur les documents officiels *(admin)*
 - La console SQL avertit quand une requête renomme un élève sans mettre à jour sa clé de recherche, ce qui le rendrait introuvable *(super-admin)*
 - L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*
@@ -50,6 +52,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
 - L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*
 - Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3 *(technique)*
@@ -68,6 +71,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point *(technique)*
+- Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes *(admin, secrétariat)* (#394)
+- Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu *(admin, technique)* (#387)
 - Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent *(caissier, comptable)* (#379)
 - Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*
 - La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis *(devops)*
