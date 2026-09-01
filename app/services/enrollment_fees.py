@@ -23,7 +23,11 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import AssignmentStatus, Enrollment, EnrollmentStatus
+from app.models.enrollment import (
+    CLOSED_STATUSES,
+    AssignmentStatus,
+    Enrollment,
+)
 from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
@@ -748,12 +752,6 @@ async def mark_in_kind_deposit(
     return fee
 
 
-#: Une inscription refusée ou annulée n'est plus un dossier à renseigner :
-#: la faire apparaître dans la liste de saisie ferait perdre du temps sur des
-#: élèves qui ne sont pas là.
-_HORS_SAISIE = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
-
-
 @dataclass(frozen=True, slots=True)
 class DepositableFee:
     """Un article que cette inscription-là peut recevoir en dépôt."""
@@ -801,7 +799,7 @@ async def in_kind_roster(
         .where(
             Enrollment.class_id == class_id,
             Enrollment.academic_year_id == academic_year_id,
-            Enrollment.status.not_in(_HORS_SAISIE),
+            Enrollment.status.not_in(CLOSED_STATUSES),
         )
         .options(
             selectinload(Enrollment.student),
