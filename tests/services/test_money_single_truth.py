@@ -370,3 +370,67 @@ async def test_sans_annee_precisee_le_resume_couvre_tout(db: _AsyncBridge) -> No
     resume = await get_payments_summary(db)  # type: ignore[arg-type]
     assert resume.total_expected == 50000.0
     assert resume.total_paid == 25000.0
+
+
+# ---------------------------------------------------------------------------
+# Un versement annule ne compte plus, et personne n'a a passer derriere
+# ---------------------------------------------------------------------------
+
+#: Les lectures qui repondent « combien a ete verse ». Chacune joint `Payment`
+#: et filtre `status == 'completed'`, parce qu'annuler un versement ne supprime
+#: pas ses allocations : elles restent comme historique de la famille, et c'est
+#: ce filtre, et lui seul, qui les empeche de ressusciter dans un solde.
+#:
+#: **Toute nouvelle lecture d'allocations doit entrer dans cette liste**, ou
+#: etre exclue en conscience comme `fee_ids_with_allocations` ci-dessous. C'est
+#: le seul endroit qui rende l'oubli visible : sans elle, un consommateur ecrit
+#: sans le filtre rend un solde faux sans qu'aucun test ne tombe.
+LECTURES_D_ARGENT = (
+    ("paid_by_enrollment", lambda db: fees_paid.paid_by_enrollment(db, INSCRIPTION)),
+    ("paid_on_mandatory", lambda db: fees_paid.paid_on_mandatory(db, INSCRIPTION)),
+)
+
+
+def _somme(resultat: object) -> Decimal:
+    """Le total, que la lecture rende un montant ou un releve par frais."""
+    if isinstance(resultat, dict):
+        return sum(resultat.values(), Decimal("0"))
+    return Decimal(str(resultat))
+
+
+@pytest.mark.parametrize(
+    ("nom", "lecture"), LECTURES_D_ARGENT, ids=[n for n, _ in LECTURES_D_ARGENT]
+)
+async def test_une_lecture_d_argent_ignore_un_versement_annule(
+    db: _AsyncBridge, nom: str, lecture: object
+) -> None:
+    """L'argent annule ne doit apparaitre dans aucun solde.
+
+    Le scenario qui casse : la caissiere saisit 25 000 en trop, annule, et la
+    famille voit sa dette baisser quand meme. Le billet n'a jamais existe, le
+    solde ment, et c'est la reimpression du recu qui le revele, des semaines
+    plus tard.
+    """
+    _verse(db, "25000", sur=FRAIS_INSCRIPTION, statut=PaymentStatus.CANCELLED)
+
+    assert _somme(await lecture(db)) == Decimal("0"), (  # type: ignore[operator]
+        f"{nom} compte l'argent d'un versement annule : il lui manque "
+        "le filtre Payment.status == 'completed'"
+    )
+
+
+async def test_un_versement_annule_garde_son_allocation(db: _AsyncBridge) -> None:
+    """La contre-partie survit a l'annulation, et c'est voulu.
+
+    `fee_ids_with_allocations` est la seule lecture qui ne filtre PAS sur
+    `completed`, parce qu'elle ne demande pas « combien a ete verse » mais
+    « ce frais porte-t-il une ecriture ». Detruire un frais sous une allocation
+    violerait la cle etrangere et ferait perdre sa contrepartie a un
+    encaissement deja enregistre. Ce test fige cette exception pour qu'on ne
+    l'aligne pas par reflexe sur les autres.
+    """
+    _verse(db, "25000", sur=FRAIS_INSCRIPTION, statut=PaymentStatus.CANCELLED)
+
+    proteges = await fees_paid.fee_ids_with_allocations(db, INSCRIPTION)  # type: ignore[arg-type]
+
+    assert FRAIS_INSCRIPTION in proteges
