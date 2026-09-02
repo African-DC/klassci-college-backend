@@ -250,7 +250,7 @@ async def update_enrollment(
     data: EnrollmentUpdate,
     updated_by: int,
 ) -> EnrollmentResponse:
-    """Met à jour une inscription (patch partiel). Si class_id change, régénère les frais."""
+    """Met à jour une inscription (patch partiel). Classe, profil ou affectation : régénère les frais."""
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
@@ -260,6 +260,8 @@ async def update_enrollment(
         "notes": enrollment.notes,
         "class_id": enrollment.class_id,
         "is_new_student": enrollment.is_new_student,
+        "assignment_status": enrollment.assignment_status,
+        "assignment_decision_number": enrollment.assignment_decision_number,
     }
     class_changed = data.class_id is not None and data.class_id != enrollment.class_id
     # `None` est une valeur ici, pas une absence : on regarde donc ce que le
@@ -267,6 +269,11 @@ async def update_enrollment(
     # sinon la case change et la facture reste celle de l'autre profil.
     profil_envoye = "is_new_student" in data.model_fields_set
     profil_change = profil_envoye and data.is_new_student != enrollment.is_new_student
+    affectation_envoyee = "assignment_status" in data.model_fields_set
+    decision_envoyee = "assignment_decision_number" in data.model_fields_set
+    affectation_change = (
+        affectation_envoyee and data.assignment_status != enrollment.assignment_status
+    )
 
     async with db.begin_nested():
         # Si changement de classe, vérifier existence et capacité
@@ -289,10 +296,15 @@ async def update_enrollment(
             notes=data.notes,
             class_id=data.class_id,
             is_new_student=(data.is_new_student if profil_envoye else repo.UNSET),
+            assignment_status=(data.assignment_status if affectation_envoyee else repo.UNSET),
+            assignment_decision_number=(
+                data.assignment_decision_number if decision_envoyee else repo.UNSET
+            ),
         )
 
-        # Régénérer les frais obligatoires si la classe ou le profil a changé
-        if class_changed or profil_change:
+        # Régénérer les frais obligatoires si la classe, le profil ou
+        # l'affectation a changé : chacun décide du tarif appliqué.
+        if class_changed or profil_change or affectation_change:
             await enrollment_fees.regenerate_enrollment_fees(
                 db, enrollment_id, regenerated_by=updated_by
             )

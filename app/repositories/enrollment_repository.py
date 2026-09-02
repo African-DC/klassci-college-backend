@@ -155,6 +155,8 @@ async def update_enrollment(
     notes: str | None = None,
     class_id: int | None = None,
     is_new_student: object = UNSET,
+    assignment_status: object = UNSET,
+    assignment_decision_number: object = UNSET,
 ) -> Enrollment:
     """Met à jour les champs modifiables d'une inscription."""
     if status is not None:
@@ -167,6 +169,12 @@ async def update_enrollment(
     # permet de remettre une inscription à « on n'a pas tranché ».
     if is_new_student is not UNSET:
         enrollment.is_new_student = is_new_student
+    # Même sentinelle : `None` veut dire « non renseigné », pas « laisser tel
+    # quel ». Sans ça, corriger l'affectation depuis la fiche n'écrivait rien.
+    if assignment_status is not UNSET:
+        enrollment.assignment_status = assignment_status
+    if assignment_decision_number is not UNSET:
+        enrollment.assignment_decision_number = assignment_decision_number
     await db.flush()
     return enrollment
 
