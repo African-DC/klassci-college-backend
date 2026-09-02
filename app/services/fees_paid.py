@@ -32,16 +32,24 @@ def _par_frais(rows: object) -> dict[int, Decimal]:
     return {int(fee_id): Decimal(str(total or 0)) for fee_id, total in rows.all()}  # type: ignore[attr-defined]
 
 
-async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, Decimal]:
-    """Montant encaissé sur chaque frais de l'élève, indexé par frais.
+def _verse_par_frais(*conditions: object):
+    """Le socle commun : les allocations encaissées, groupées par frais.
 
-    Une seule requête groupée : sommer en Python sur des relations chargées
-    coûterait une requête par frais.
+    Trois lectures s'en servent — un élève, une inscription, une classe — et
+    elles ne diffèrent que par leur clause de restriction. Écrite trois fois,
+    la même chaîne de jointures aurait fini par diverger sur un détail : le
+    filtre d'état d'un versement, par exemple. Ce module existe précisément
+    pour qu'un montant versé ne vaille pas trois sommes selon l'écran.
+
+    La jointure sur l'inscription est posée pour tout le monde, y compris pour
+    la lecture qui filtre sur `EnrollmentFee.enrollment_id` et pourrait s'en
+    passer : `enrollment_id` est une clé étrangère non nulle, la jointure ne
+    retire donc aucune ligne. Le coût est nul, la vérité est unique.
     """
     from app.models.enrollment import Enrollment
     from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
 
-    stmt = (
+    return (
         select(
             PaymentAllocation.enrollment_fee_id,
             func.coalesce(func.sum(PaymentAllocation.amount), 0),
@@ -49,13 +57,20 @@ async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int,
         .join(Payment, Payment.id == PaymentAllocation.payment_id)
         .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
         .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(
-            Enrollment.student_id == student_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
+        .where(Payment.status == PaymentStatus.COMPLETED.value, *conditions)
         .group_by(PaymentAllocation.enrollment_fee_id)
     )
-    return _par_frais(await db.execute(stmt))
+
+
+async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, Decimal]:
+    """Montant encaissé sur chaque frais de l'élève, indexé par frais.
+
+    Une seule requête groupée : sommer en Python sur des relations chargées
+    coûterait une requête par frais.
+    """
+    from app.models.enrollment import Enrollment
+
+    return _par_frais(await db.execute(_verse_par_frais(Enrollment.student_id == student_id)))
 
 
 async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, Decimal]:
@@ -65,22 +80,11 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     redoublé a deux inscriptions, et mélanger leurs versements ferait
     apparaître comme soldée une année qui ne l'est pas.
     """
-    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+    from app.models.fee import EnrollmentFee
 
-    stmt = (
-        select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
-        .where(
-            EnrollmentFee.enrollment_id == enrollment_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-        .group_by(PaymentAllocation.enrollment_fee_id)
+    return _par_frais(
+        await db.execute(_verse_par_frais(EnrollmentFee.enrollment_id == enrollment_id))
     )
-    return _par_frais(await db.execute(stmt))
 
 
 async def paid_by_class(
@@ -94,24 +98,15 @@ async def paid_by_class(
     coûterait une requête par élève sur un écran qui les montre tous.
     """
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
 
-    stmt = (
-        select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+    return _par_frais(
+        await db.execute(
+            _verse_par_frais(
+                Enrollment.class_id == class_id,
+                Enrollment.academic_year_id == academic_year_id,
+            )
         )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
-        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(
-            Enrollment.class_id == class_id,
-            Enrollment.academic_year_id == academic_year_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-        .group_by(PaymentAllocation.enrollment_fee_id)
     )
-    return _par_frais(await db.execute(stmt))
 
 
 def _allocations_sur_frais_dus():

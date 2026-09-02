@@ -1,4 +1,4 @@
-"""Qui a soldé quelle catégorie de frais, une classe à la fois.
+"""Qui a soldé quelle catégorie de frais : les formes, et leur composition.
 
 L'état des frais existe déjà par élève : la fiche d'inscription montre chaque
 catégorie avec son statut, lignes déposées en nature comprises. Il n'existait
@@ -20,9 +20,11 @@ de son intérêt :
 - **dû** et **partiel** se distinguent parce qu'on ne relance pas avec les
   mêmes mots une famille qui a déjà versé la moitié.
 
-La composition est une fonction pure, la lecture de la base une autre : le
-tableau se teste sans base, comme le journal des versements dont ce module
-reprend la découpe.
+**Ce fichier ne touche ni la base ni les documents.** Il porte les formes et la
+composition, rien d'autre : `fee_settlement_service` les charge, la fabrique de
+classeur les rend. C'est la découpe du journal des versements, pour la même
+raison — la composition se teste alors sans base, et la fabrique peut importer
+les formes sans refermer un cycle sur le service.
 """
 
 from __future__ import annotations
@@ -32,20 +34,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-from app.models.enrollment import CLOSED_STATUSES, Enrollment
 from app.models.fee import FeeCategory, cash_remaining, is_in_kind, is_not_cash_due
-from app.models.user import Student
-from app.schemas.payment import (
-    SettlementCellResponse,
-    SettlementColumnResponse,
-    SettlementMatrixResponse,
-    SettlementRowResponse,
-)
-from app.services import fees_paid
 
 #: Rang des catégories qui n'en portent pas, comme dans l'état des frais.
 _PRIORITE_PAR_DEFAUT = 100
@@ -286,138 +275,3 @@ def build_matrix(
         class_name=class_name,
         academic_year_name=academic_year_name,
     )
-
-
-async def load_settlement(
-    db: AsyncSession, *, class_id: int, academic_year_id: int
-) -> SettlementMatrix:
-    """Charge la classe et compose son tableau.
-
-    Trois requêtes, quel que soit l'effectif : les inscriptions avec leurs
-    frais, les catégories vues, et le versé par frais. `EnrollmentFee` ne porte
-    pas de relation vers sa catégorie, seulement son identifiant — les lire une
-    par frais coûterait une requête par élève et par ligne.
-
-    Les dossiers rejetés et annulés sont écartés, comme sur la liste de saisie
-    en lot : compter un élève qui n'est plus là parmi les non soldés ferait
-    courir après quelqu'un qui ne doit rien.
-    """
-    stmt = (
-        select(Enrollment)
-        .join(Student, Student.id == Enrollment.student_id)
-        .where(
-            Enrollment.class_id == class_id,
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.status.not_in(CLOSED_STATUSES),
-        )
-        .options(
-            selectinload(Enrollment.student),
-            selectinload(Enrollment.enrollment_fees),
-            selectinload(Enrollment.class_),
-            selectinload(Enrollment.academic_year),
-        )
-        .order_by(Student.last_name, Student.first_name, Enrollment.id)
-    )
-    inscriptions = list((await db.execute(stmt)).scalars().all())
-
-    ids = {frais.fee_category_id for i in inscriptions for frais in i.enrollment_fees}
-    categories: dict[int, FeeCategory] = {}
-    if ids:
-        categories = {
-            c.id: c
-            for c in (
-                await db.execute(select(FeeCategory).where(FeeCategory.id.in_(ids)))
-            ).scalars()
-        }
-
-    paid_by_fee = await fees_paid.paid_by_class(
-        db, class_id=class_id, academic_year_id=academic_year_id
-    )
-
-    premiere = inscriptions[0] if inscriptions else None
-    return build_matrix(
-        (
-            RowInput(
-                enrollment_id=inscription.id,
-                student_id=inscription.student.id,
-                first_name=inscription.student.first_name,
-                last_name=inscription.student.last_name,
-                # Le matricule vit sous `enrollment_number`, comme partout
-                # ailleurs : `matricule` n'existe pas sur le modèle, et un
-                # `getattr` sur ce nom-là aurait rendu `None` en silence.
-                student_matricule=getattr(inscription.student, "enrollment_number", None),
-                fees=tuple(
-                    FeeLineInput(
-                        fee_id=frais.id,
-                        category_id=frais.fee_category_id,
-                        status=str(getattr(frais.status, "value", frais.status)),
-                        amount=Decimal(str(frais.amount or 0)),
-                    )
-                    for frais in inscription.enrollment_fees
-                ),
-            )
-            for inscription in inscriptions
-        ),
-        categories=categories,
-        paid_by_fee=paid_by_fee,
-        class_name=getattr(getattr(premiere, "class_", None), "name", "") or "",
-        academic_year_name=getattr(getattr(premiere, "academic_year", None), "name", "") or "",
-    )
-
-
-def to_response(matrix: SettlementMatrix) -> SettlementMatrixResponse:
-    """Le tableau tel que l'API le rend.
-
-    Les montants voyagent avec l'état plutôt que d'être recalculés par
-    l'écran : une case « partiel » sans le reste dû obligerait le frontend à
-    refaire la soustraction, et deux calculs du même chiffre finissent
-    toujours par en contredire un.
-    """
-    return SettlementMatrixResponse(
-        class_name=matrix.class_name,
-        academic_year_name=matrix.academic_year_name,
-        columns=[
-            SettlementColumnResponse(
-                category_id=col.category_id, name=col.name, priority=col.priority
-            )
-            for col in matrix.columns
-        ],
-        rows=[
-            SettlementRowResponse(
-                enrollment_id=row.enrollment_id,
-                student_id=row.student_id,
-                first_name=row.first_name,
-                last_name=row.last_name,
-                student_matricule=row.student_matricule,
-                cells=[
-                    SettlementCellResponse(
-                        category_id=cell.category_id,
-                        state=cell.state.value,
-                        due=cell.due,
-                        paid=cell.paid,
-                        remaining=cell.remaining,
-                    )
-                    for cell in row.cells
-                ],
-                settled=row.settled,
-            )
-            for row in matrix.rows
-        ],
-        settled_count=matrix.settled_count,
-        total_count=matrix.total_count,
-    )
-
-
-async def get_settlement_xlsx(db: AsyncSession, *, class_id: int, academic_year_id: int) -> bytes:
-    """Le tableau de la classe, au gabarit officiel de l'établissement."""
-    # Import local, et seulement ici : la fabrique de classeur importe les
-    # formes définies plus haut, et l'importer au chargement du module fermerait
-    # le cycle. Le journal des versements sépare ses formes de son service pour
-    # la même raison ; ce tableau n'a qu'un fichier, et paie la même dette d'une
-    # ligne plutôt que d'un module.
-    from app.services._school_settings_helper import load_school_settings_for_pdf
-    from app.services.exports.fee_settlement_xlsx import generate_fee_settlement_xlsx
-
-    matrix = await load_settlement(db, class_id=class_id, academic_year_id=academic_year_id)
-    school = await load_school_settings_for_pdf(db)
-    return generate_fee_settlement_xlsx(matrix, school)

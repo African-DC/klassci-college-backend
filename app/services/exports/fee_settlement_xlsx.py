@@ -27,6 +27,7 @@ from app.services.fee_settlement import (
     SettlementMatrix,
     SettlementState,
 )
+from app.services.pdf._helpers import format_xof
 
 _MONEY_FORMAT = '#,##0" F"'
 #: Largeur des deux colonnes d'identité, puis de chaque colonne de catégorie.
@@ -79,7 +80,7 @@ def _write_matrix(ws: Worksheet, matrix: SettlementMatrix, school: dict[str, Any
             # combien réclamer.
             label = STATE_LABEL.get(cell.state, cell.state.value)
             if cell.state == SettlementState.PARTIAL:
-                label = f"{label} — reste {cell.remaining:,.0f} F".replace(",", " ")
+                label = f"{label} — reste {format_xof(cell.remaining)} F"
             ws.cell(row=row, column=offset, value=label)
         reste = ws.cell(
             row=row,

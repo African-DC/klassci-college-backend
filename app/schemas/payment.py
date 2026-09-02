@@ -347,6 +347,8 @@ class PaymentMethodListResponse(BaseModel):
 class SettlementColumnResponse(BaseModel):
     """Une colonne du tableau : la categorie, telle qu'elle est facturee."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     category_id: int
     name: str
     priority: int
@@ -360,6 +362,8 @@ class SettlementCellResponse(BaseModel):
     refaire la soustraction, et deux calculs finissent par diverger.
     """
 
+    model_config = ConfigDict(from_attributes=True)
+
     category_id: int
     state: str
     due: Decimal
@@ -369,6 +373,8 @@ class SettlementCellResponse(BaseModel):
 
 class SettlementRowResponse(BaseModel):
     """Une ligne : un eleve, son etat sur chaque colonne."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     enrollment_id: int
     student_id: int
@@ -381,6 +387,8 @@ class SettlementRowResponse(BaseModel):
 
 class SettlementMatrixResponse(BaseModel):
     """Le tableau complet, plus le decompte que l'en-tete affiche."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     class_name: str
     academic_year_name: str

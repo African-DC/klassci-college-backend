@@ -30,7 +30,7 @@ from app.schemas.payment import (
 )
 from app.services import (
     daily_cash_book_service,
-    fee_settlement,
+    fee_settlement_service,
     payment_service,
     payments_journal_service,
 )
@@ -288,10 +288,10 @@ async def fee_settlement_matrix(
     versements, pas des eleves, et celui qui n'a jamais rien verse n'y figure
     pas du tout — alors que c'est precisement celui qu'on cherche.
     """
-    matrix = await fee_settlement.load_settlement(
+    matrix = await fee_settlement_service.load_settlement(
         db, class_id=class_id, academic_year_id=academic_year_id
     )
-    return fee_settlement.to_response(matrix)
+    return SettlementMatrixResponse.model_validate(matrix)
 
 
 # NOTE: /settlement/export MUST be defined BEFORE /{payment_id}
@@ -307,7 +307,7 @@ async def export_fee_settlement(
 ) -> Response:
     """Le meme tableau, relu hors ligne sur la classe entiere."""
     return await binary_response(
-        lambda: fee_settlement.get_settlement_xlsx(
+        lambda: fee_settlement_service.get_settlement_xlsx(
             db, class_id=class_id, academic_year_id=academic_year_id
         ),
         filename=f"soldes-frais-{date.today().isoformat()}.xlsx",
