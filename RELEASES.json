@@ -1,7 +1,6 @@
 {
-  "product": "backend",
-  "source": "CHANGELOG.md",
-  "generated_at": "2026-09-02T21:16:56Z",
+  "product": "klassci-college-backend",
+  "generated_at": "2026-09-02T21:32:38Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -2816,5 +2815,6 @@
         ]
       }
     }
-  ]
+  ],
+  "source": "CHANGELOG.md"
 }

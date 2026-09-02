@@ -30,4 +30,30 @@ if ! printf '%s' "$branche" | grep -qE '^((feature|fix|hotfix|refactor|test)/[0-
     "Le numero est celui d'une issue GitHub : ouvrez-la d'abord."
 fi
 
+# --- 3. La revue de qualite a-t-elle eu lieu ? --------------------------------
+# Une revue porte sur une branche, pas sur un commit : c'est donc ici, au
+# moment de la pousser, qu'on peut la reclamer.
+#
+# Le marqueur est une declaration, pas une preuve : rien ici ne peut verifier
+# qu'une revue a reellement eu lieu. Sa valeur est ailleurs, et elle est
+# reelle : il transforme « j'ai oublie » en « j'ai decide de sauter », et cette
+# difference se lit ensuite dans l'historique. C'est exactement le manque qui a
+# laisse passer, le meme jour, un cloisonnement de caisse absent d'un nouvel
+# endpoint et un ecran qui affirmait « aucun frais » a qui n'avait pas le droit
+# de les lire.
+base=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+if [ -n "$base" ]; then
+  # Ni documentation ni changelog : seul le code appelle une revue.
+  code=$(git diff --name-only "$base"..HEAD | grep -vE '\.(md|json|ya?ml)$|^docs/|^\.githooks/' || true)
+  if [ -n "$code" ] && ! git log "$base"..HEAD --format='%B' | grep -qiE '^Review:'; then
+    refus "aucun commit de cette branche ne declare de revue de qualite." \
+      "Lancez /thermo-nuclear-code-quality-review sur le diff, puis declarez-la :" \
+      "" \
+      "  git commit --allow-empty -m 'chore(review): thermo-nuclear pass' -m 'Review: thermo-nuclear'" \
+      "" \
+      "Ou ajoutez la ligne « Review: thermo-nuclear » au dernier commit." \
+      "Le marqueur ne prouve rien ; il rend le saut delibere, et visible."
+  fi
+fi
+
 exit 0

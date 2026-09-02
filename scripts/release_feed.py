@@ -127,16 +127,31 @@ def analyser(markdown: str) -> list[Version]:
     return versions
 
 
-def construire(produit: str) -> dict[str, object]:
+@dataclass
+class Feed:
+    """Le flux entier. Typé, pour que son contenu se lise sans cast.
+
+    Le decrire par un `dict[str, object]` obligeait chaque lecture a se faire
+    pardonner par un `type: ignore` — c'est-a-dire a desactiver la seule chose
+    qui aurait signale une faute de frappe sur un nom de champ.
+    """
+
+    product: str
+    generated_at: str
+    current_version: str | None
+    versions: list[Version]
+    source: str = "CHANGELOG.md"
+
+
+def construire(produit: str) -> Feed:
     versions = analyser(CHANGELOG.read_text(encoding="utf-8"))
     livrees = [v for v in versions if v.released]
-    return {
-        "product": produit,
-        "source": "CHANGELOG.md",
-        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "current_version": livrees[0].version if livrees else None,
-        "versions": [asdict(v) for v in versions],
-    }
+    return Feed(
+        product=produit,
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        current_version=livrees[0].version if livrees else None,
+        versions=versions,
+    )
 
 
 def main() -> int:
@@ -150,7 +165,7 @@ def main() -> int:
     args = parser.parse_args()
 
     flux = construire(args.product)
-    rendu = json.dumps(flux, ensure_ascii=False, indent=2) + "\n"
+    rendu = json.dumps(asdict(flux), ensure_ascii=False, indent=2) + "\n"
 
     if args.check:
         if not SORTIE.exists():
@@ -171,8 +186,8 @@ def main() -> int:
         return 0
 
     SORTIE.write_text(rendu, encoding="utf-8")
-    entrees = sum(len(s) for v in flux["versions"] for s in v["sections"].values())  # type: ignore[index,union-attr]
-    print(f"{SORTIE.name} : {len(flux['versions'])} versions, {entrees} entrees.")  # type: ignore[arg-type]
+    entrees = sum(len(lignes) for v in flux.versions for lignes in v.sections.values())
+    print(f"{SORTIE.name} : {len(flux.versions)} versions, {entrees} entrees.")
     return 0
 
 
