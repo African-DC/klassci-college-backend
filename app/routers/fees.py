@@ -3,7 +3,13 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    require_any_permission,
+    require_permission,
+)
 from app.schemas.fee import (
     FeeCategoryCreate,
     FeeCategoryListResponse,
@@ -37,7 +43,10 @@ router = APIRouter(prefix="/admin", tags=["fees"])
 async def list_fee_categories(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    _: None = require_permission("admin:fee-categories:read"),
+    # Le journal des versements filtre par catégorie. Qui lit les paiements
+    # doit pouvoir les nommer, sans ouvrir la grille tarifaire : créer,
+    # modifier ou supprimer une catégorie reste `admin:fee-categories:*`.
+    _: None = require_any_permission("admin:fee-categories:read", "payments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> FeeCategoryListResponse:
     """Liste paginee des categories de frais."""
