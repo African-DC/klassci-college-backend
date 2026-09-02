@@ -123,9 +123,7 @@ async def test_sans_annee_le_journal_additionne_encore_les_exercices(db: Session
     L'écran des paiements envoie désormais l'année courante, et c'est ce
     filet qui empêche d'oublier de la poser d'un côté et pas de l'autre.
     """
-    _lignes, total = await repo.list_payments(
-        _Pont(db), filters=PaymentFilters(), page=1, size=20
-    )
+    _lignes, total = await repo.list_payments(_Pont(db), filters=PaymentFilters(), page=1, size=20)
     assert total == 3
 
 

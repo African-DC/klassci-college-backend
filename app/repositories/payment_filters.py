@@ -154,9 +154,7 @@ async def belongs_to_year(db: AsyncSession, academic_year_id: int):
     )
 
 
-async def apply_payment_scope[S: Select](
-    db: AsyncSession, stmt: S, filters: PaymentFilters
-) -> S:
+async def apply_payment_scope[S: Select](db: AsyncSession, stmt: S, filters: PaymentFilters) -> S:
     """Les critères d'écran, plus l'année quand elle est posée.
 
     L'année n'est pas un filtre comme les autres : sans elle, le journal

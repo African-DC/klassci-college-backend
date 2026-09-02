@@ -113,9 +113,7 @@ async def get_payments_summary(
     total_expected: float | None = None
     completion_rate: float | None = None
     if not cloisonne:
-        total_expected = float(
-            await installment_repository.mandatory_total_for_year(db, annee)
-        )
+        total_expected = float(await installment_repository.mandatory_total_for_year(db, annee))
         total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, annee))
     else:
         encaisse_stmt = select(

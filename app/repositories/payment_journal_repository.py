@@ -59,8 +59,10 @@ async def list_for_journal(db: AsyncSession, filters: PaymentFilters) -> list[Pa
     journée dans le sens où elle s'est déroulée, pas en commençant par la fin.
     """
     stmt = (
-        await apply_payment_scope(db, select(Payment).options(*_journal_options()), filters)
-    ).order_by(Payment.created_at.asc(), Payment.id.asc()).limit(JOURNAL_MAX_ROWS)
+        (await apply_payment_scope(db, select(Payment).options(*_journal_options()), filters))
+        .order_by(Payment.created_at.asc(), Payment.id.asc())
+        .limit(JOURNAL_MAX_ROWS)
+    )
     return list((await db.execute(stmt)).scalars().all())
 
 
