@@ -22,12 +22,26 @@ from app.services.exports._workbook_branding import (
     style_table_header,
     write_header,
 )
-from app.services.fee_settlement import (
-    STATE_LABEL,
-    SettlementMatrix,
-    SettlementState,
-)
+from app.services.fee_settlement import SettlementMatrix, SettlementState
 from app.services.pdf._helpers import format_xof
+
+#: Ce que chaque état s'appelle dans ce document, et nulle part ailleurs.
+#:
+#: Les mots vivent ici, avec leur seul lecteur, et non dans le module qui
+#: calcule les états : celui-ci ne parle aucune langue, et n'a pas à savoir
+#: qu'un classeur français dit « Soldé » là où l'écran dit autre chose.
+#:
+#: `tests/test_fee_settlement_labels.py` verifie qu'aucun état n'y manque —
+#: Python n'a pas d'exhaustivité sur un dictionnaire, et un état ajouté sans
+#: son mot sortirait dans un document signé sous son nom technique.
+STATE_LABEL: dict[SettlementState, str] = {
+    SettlementState.PAID: "Soldé",
+    SettlementState.PARTIAL: "Partiel",
+    SettlementState.PENDING: "Dû",
+    SettlementState.IN_KIND: "En nature",
+    SettlementState.WAIVED: "Exonéré",
+    SettlementState.ABSENT: "—",
+}
 
 _MONEY_FORMAT = '#,##0" F"'
 #: Largeur des deux colonnes d'identité, puis de chaque colonne de catégorie.
