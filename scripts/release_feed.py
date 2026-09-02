@@ -39,6 +39,14 @@ RACINE = Path(__file__).resolve().parent.parent
 CHANGELOG = RACINE / "CHANGELOG.md"
 SORTIE = RACINE / "RELEASES.json"
 
+#: Le nom du produit, ecrit ici et nulle part ailleurs.
+#:
+#: Il venait du nom du dossier : « backend » sur un poste, « klassci-college-backend »
+#: dans la CI, donc deux fichiers differents pour un meme changelog et une
+#: verification qui echoue sans que rien ne soit faux. Un produit ne se deduit
+#: pas de l'endroit ou son depot est clone.
+PRODUIT = "klassci-college-backend"
+
 #: `## [0.1.0] - 2026-09-02` ou `## [Unreleased]`
 _VERSION = re.compile(r"^##\s+\[([^\]]+)\]\s*(?:-\s*(\d{4}-\d{2}-\d{2}))?\s*$")
 #: `### Added`
@@ -161,10 +169,9 @@ def main() -> int:
         action="store_true",
         help="N'ecrit rien ; echoue si RELEASES.json ne correspond plus au changelog.",
     )
-    parser.add_argument("--product", default=RACINE.name)
     args = parser.parse_args()
 
-    flux = construire(args.product)
+    flux = construire(PRODUIT)
     rendu = json.dumps(asdict(flux), ensure_ascii=False, indent=2) + "\n"
 
     if args.check:

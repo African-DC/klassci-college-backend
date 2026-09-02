@@ -22,4 +22,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Le flux correspond-il au changelog ?
-        run: python scripts/release_feed.py --check --product klassci-college-backend
+        run: python scripts/release_feed.py --check
