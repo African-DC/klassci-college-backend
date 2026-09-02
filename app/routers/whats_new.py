@@ -31,14 +31,46 @@ router = APIRouter(tags=["whats-new"])
 #: copié par le Dockerfile ; en développement il est produit par le script.
 _FLUX = Path(__file__).resolve().parent.parent.parent / "RELEASES.json"
 
+#: Combien d'entrees par section. Le meme nombre que la tranche du portail :
+#: les deux moities de la fenetre doivent peser pareil, sinon l'une noie
+#: l'autre.
+PAR_SECTION = 6
+
 #: Ce qu'on rend quand le fichier manque. Une liste vide, pas une erreur : le
 #: portail affiche alors « rien de neuf », ce qui est faux mais inoffensif,
-#: là où un 500 sur une cloche de nouveautés ferait croire à une panne.
+#: la ou un 500 sur une cloche de nouveautes ferait croire a une panne.
 _VIDE: dict[str, Any] = {
     "product": "klassci-college-backend",
-    "current_version": None,
-    "versions": [],
+    "generated_at": "",
+    "version": None,
+    "released": False,
+    "total": 0,
+    "sections": {},
 }
+
+
+def _tranche(flux: dict[str, Any]) -> dict[str, Any]:
+    """La version la plus recente, bornee a ce qui se lit.
+
+    La decoupe se fait ici, et non a l'ecran. Le flux entier pese cent trente
+    kilo-octets : les envoyer pour que le portable en jette quatre-vingt-quinze
+    pour cent serait payer une 3G pour rien. C'est aussi la seule facon que la
+    regle — combien d'entrees, dans quel ordre — n'existe qu'a un endroit par
+    cote du fil.
+    """
+    versions = flux.get("versions") or []
+    recente = versions[0] if versions else {}
+    toutes = recente.get("sections") or {}
+    return {
+        "product": flux.get("product", ""),
+        "generated_at": flux.get("generated_at", ""),
+        "version": recente.get("version"),
+        "released": recente.get("released", False),
+        # Ce qu'on laisse de cote, pour que l'ecran puisse le dire au lieu de
+        # laisser croire qu'il montre tout.
+        "total": sum(len(lignes) for lignes in toutes.values()),
+        "sections": {nom: lignes[:PAR_SECTION] for nom, lignes in toutes.items() if lignes},
+    }
 
 
 @router.get("/whats-new", summary="Les nouveautes du serveur, telles que le changelog les dit")
@@ -48,9 +80,12 @@ async def whats_new(_: TokenData = Depends(get_current_user)) -> dict[str, Any]:
     Authentifie mais sans droit particulier : chaque role lit ensuite ce qui le
     concerne, et le filtrage par persona se fait a l'ecran. Rien ici n'est
     sensible — ce sont les phrases publiques du changelog.
+
+    Rend la meme forme que `public/whats-new.json` du portail, pour que la
+    fenetre assemble deux moities identiques sans rien recalculer.
     """
     try:
-        return json.loads(_FLUX.read_text(encoding="utf-8"))
+        return _tranche(json.loads(_FLUX.read_text(encoding="utf-8")))
     except FileNotFoundError:
         logger.warning("RELEASES.json absent : le modal des nouveautes sera vide.")
         return _VIDE

@@ -35,16 +35,73 @@ async def test_un_fichier_corrompu_ne_fait_pas_une_panne(
     assert (await whats_new.whats_new())["versions"] == []
 
 
-@pytest.mark.asyncio
-async def test_le_flux_est_rendu_tel_quel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """L'ecran filtre par persona ; le serveur ne retire rien."""
-    contenu = {
-        "product": "klassci-college-backend",
-        "current_version": "0.2.0",
-        "versions": [{"version": "0.2.0", "sections": {"Fixed": [{"text": "un defaut"}]}}],
-    }
+def _pose(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contenu: dict) -> None:
     fichier = tmp_path / "RELEASES.json"
     fichier.write_text(json.dumps(contenu), encoding="utf-8")
     monkeypatch.setattr(whats_new, "_FLUX", fichier)
 
-    assert await whats_new.whats_new() == contenu
+
+@pytest.mark.asyncio
+async def test_seule_la_version_la_plus_recente_est_rendue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """« Nouveautes » repond a « depuis ma derniere visite », pas a « raconte-moi tout »."""
+    _pose(
+        tmp_path,
+        monkeypatch,
+        {
+            "product": "klassci-college-backend",
+            "generated_at": "2026-09-02T00:00:00Z",
+            "versions": [
+                {"version": "0.2.0", "released": True, "sections": {"Fixed": [{"text": "recent"}]}},
+                {"version": "0.1.0", "released": True, "sections": {"Fixed": [{"text": "vieux"}]}},
+            ],
+        },
+    )
+
+    flux = await whats_new.whats_new()
+
+    assert flux["version"] == "0.2.0"
+    assert [e["text"] for e in flux["sections"]["Fixed"]] == ["recent"]
+
+
+@pytest.mark.asyncio
+async def test_la_tranche_est_bornee_et_dit_ce_qu_elle_omet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Envoyer cent trente kilo-octets pour en afficher six serait payer une 3G pour rien."""
+    lignes = [{"text": f"entree {i}"} for i in range(20)]
+    _pose(
+        tmp_path,
+        monkeypatch,
+        {
+            "product": "klassci-college-backend",
+            "versions": [{"version": "Unreleased", "sections": {"Added": lignes}}],
+        },
+    )
+
+    flux = await whats_new.whats_new()
+
+    assert len(flux["sections"]["Added"]) == whats_new.PAR_SECTION
+    # L'ecran doit pouvoir dire « et 14 autres » plutot que laisser croire
+    # qu'il montre tout.
+    assert flux["total"] == 20
+
+
+@pytest.mark.asyncio
+async def test_une_section_vide_ne_sort_pas(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un titre sans ligne dessous est un rendez-vous manque."""
+    _pose(
+        tmp_path,
+        monkeypatch,
+        {
+            "product": "x",
+            "versions": [
+                {"version": "Unreleased", "sections": {"Added": [], "Fixed": [{"text": "a"}]}}
+            ],
+        },
+    )
+
+    assert list((await whats_new.whats_new())["sections"]) == ["Fixed"]
