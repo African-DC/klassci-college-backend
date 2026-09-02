@@ -272,6 +272,55 @@ async def export_payments(
     )
 
 
+# NOTE: /settlement/category/export MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/category/export",
+    summary="Le point d'une categorie au format classeur",
+)
+async def export_fee_category_point(
+    category_id: int = Query(...),
+    academic_year_id: int = Query(...),
+    class_id: int | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    received_by: int | None = Query(None),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Le document que le comptable tire, ou la caissiere pour sa seule caisse.
+
+    Meme cloisonnement que l'ecran, et pour la meme raison : un export garde
+    moins fermement que la vue qu'il reproduit est une porte derobee, et c'est
+    le genre de fuite qu'on ne voit jamais en regardant l'interface.
+
+    Le classeur porte en en-tete, en toutes lettres, le fait qu'il ne couvre
+    qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
+    se lirait comme le compte de l'ecole entiere.
+    """
+    return await binary_response(
+        lambda: fee_category_ledger.get_category_ledger_xlsx(
+            db,
+            category_id=category_id,
+            academic_year_id=academic_year_id,
+            class_id=class_id,
+            date_from=date_from,
+            date_to=date_to,
+            received_by=cashier_scope(
+                requested_received_by=received_by,
+                can_read_all=can_read_all,
+                current_user_id=current_user.user_id,
+            ),
+            consolide=can_read_all,
+        ),
+        filename=f"point-categorie-{date.today().isoformat()}.xlsx",
+        media_type=_XLSX_MEDIA_TYPE,
+        error_context="point sur une categorie de frais",
+        disposition="attachment",
+    )
+
+
 # NOTE: /settlement/category MUST be defined BEFORE /{payment_id}
 @router.get(
     "/settlement/category",

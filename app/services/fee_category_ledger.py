@@ -308,3 +308,43 @@ async def _verse_sur_la_periode(
         .group_by(PaymentAllocation.enrollment_fee_id)
     )
     return {int(fee_id): Decimal(str(total or 0)) for fee_id, total in (await db.execute(stmt))}
+
+
+async def get_category_ledger_xlsx(
+    db: AsyncSession,
+    *,
+    category_id: int,
+    academic_year_id: int,
+    class_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+    consolide: bool = True,
+) -> bytes:
+    """Le même document, au gabarit officiel de l'établissement.
+
+    La signature est recopiée plutôt que passée en `**kwargs` : un classeur qui
+    perdrait `consolide` en chemin sortirait sans son avertissement, et c'est
+    la ligne qui empêche de prendre un document de guichet pour le compte de
+    l'école entière.
+
+    Import local, comme ailleurs : la fabrique de classeur importe les formes
+    définies plus haut, et l'importer au chargement fermerait le cycle.
+    """
+    from app.services._school_settings_helper import load_school_settings_for_pdf
+    from app.services.exports.fee_category_ledger_xlsx import (
+        generate_fee_category_ledger_xlsx,
+    )
+
+    ledger = await load_category_ledger(
+        db,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=received_by,
+        consolide=consolide,
+    )
+    school = await load_school_settings_for_pdf(db)
+    return generate_fee_category_ledger_xlsx(ledger, school)
