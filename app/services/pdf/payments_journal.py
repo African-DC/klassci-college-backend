@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.services.payments.journal_data import PaymentsJournal
+from app.services.payments.journal_labels import fee_cell
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import format_xof
 from app.services.pdf.theme import PDFTheme, method_label, status_label
@@ -49,7 +50,7 @@ def _detail_rows(journal: PaymentsJournal) -> list[list[Any]]:
                 f"#{line.id}",
                 {"value": line.created_at.strftime("%d/%m %H:%M"), "type": "muted"},
                 eleve,
-                {"value": line.fee_label, "type": "muted"},
+                {"value": fee_cell(line.fee_shares), "type": "muted-lines"},
                 method_label(line.method),
                 {"value": line.reference or "—", "type": "muted"},
                 line.cashier,

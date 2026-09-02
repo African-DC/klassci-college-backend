@@ -30,7 +30,8 @@ def premium_table(
         {"label": str, "align": "left|right|center"}.
     `rows` : list de list de cellules. Chaque cellule peut être :
       - string / number → rendue telle quelle (escaped)
-      - dict {"value": str, "type": "num|pill|muted|emphasis|html"} → rendu typé
+      - dict {"value": str, "type": "num|pill|muted|muted-lines|emphasis|html"}
+        → rendu typé. `muted-lines` coupe la valeur sur ses retours à la ligne.
     `total_row` : ligne récap (mise en valeur orange/primary). Optionnelle.
     `col_widths` : largeurs fixes des colonnes (ex: ["34%", "11%", ...]) rendues
         via un `<colgroup>` pour caler l'alignement (table-layout est fixe).
@@ -93,6 +94,14 @@ def _render_cell(cell: Any) -> str:
             return f'<td class="num">{esc(value)}</td>'
         if cell_type == "muted":
             return f'<td class="muted">{esc(value)}</td>'
+        if cell_type == "muted-lines":
+            # Plusieurs lignes dans une cellule, échappées puis coupées ici.
+            # Le document appelant pourrait composer le HTML lui-même avec le
+            # type « html », mais il porterait alors seul la responsabilité
+            # d'échapper un nom venu de la base : la faire ici, une fois, est
+            # la seule façon qu'aucun document ne l'oublie.
+            lignes = "<br>".join(esc(part) for part in str(value).split("\n"))
+            return f'<td class="muted">{lignes}</td>'
         if cell_type == "emphasis":
             return f'<td class="emphasis">{esc(value)}</td>'
         if cell_type == "pill":

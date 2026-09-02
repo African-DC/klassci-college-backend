@@ -485,3 +485,50 @@ def test_le_comptable_voit_tous_les_encaisseurs(comptable: TestClient) -> None:
 
     assert reponse.status_code == 200
     assert [option["name"] for option in reponse.json()] == ["Sophie Yao", "Mariam Diallo"]
+
+
+# ---------------------------------------------------------------------------
+# Le tableau des soldes : ce qu'on ne peut pas cloisonner, on ne le rend pas
+# ---------------------------------------------------------------------------
+
+
+def test_le_tableau_des_soldes_est_refuse_a_une_caisse_cloisonnee(
+    caissiere: TestClient,
+) -> None:
+    """Ce tableau dit ce qu'une famille doit, pas ce qu'un guichet a encaissé.
+
+    Le reste dû se calcule sur tout l'argent reçu, quelle que soit la caisse.
+    Le cloisonner reviendrait à n'y compter que les versements d'un guichet :
+    une famille qui a payé à la caisse d'à côté s'y afficherait « Dû », et on
+    irait la relancer. Un faux signal sur de l'argent est pire que pas de
+    signal du tout — on refuse donc la lecture plutôt que de la dégrader.
+    """
+    reponse = caissiere.get("/payments/settlement?class_id=1&academic_year_id=1")
+
+    assert reponse.status_code == 403
+
+
+def test_l_export_des_soldes_n_est_pas_une_porte_derobee(caissiere: TestClient) -> None:
+    """Un export gardé moins fermement que son écran est une fuite invisible."""
+    reponse = caissiere.get("/payments/settlement/export?class_id=1&academic_year_id=1")
+
+    assert reponse.status_code == 403
+
+
+def test_le_comptable_lit_le_tableau_des_soldes(comptable: TestClient) -> None:
+    """Qui consolide déjà toutes les caisses peut lire ce que les familles doivent."""
+    from app.services.fee_settlement import SettlementMatrix
+
+    vide = SettlementMatrix(columns=(), rows=(), class_name="6e A", academic_year_name="2026-2027")
+    with patch(
+        "app.routers.payments.fee_settlement_service.load_settlement",
+        new_callable=AsyncMock,
+        return_value=vide,
+    ):
+        reponse = comptable.get("/payments/settlement?class_id=1&academic_year_id=1")
+
+    assert reponse.status_code == 200
+    corps = reponse.json()
+    assert corps["settled_count"] == 0
+    assert corps["total_count"] == 0
+    assert corps["class_name"] == "6e A"
