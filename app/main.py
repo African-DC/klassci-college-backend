@@ -58,6 +58,7 @@ from app.routers.teacher_attendance import teacher_router as teacher_attendance_
 from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
+from app.routers.whats_new import router as whats_new_router
 
 # Sentry must be initialized BEFORE FastAPI() so its middleware attaches.
 # No-op if SENTRY_DSN is empty.
@@ -122,6 +123,7 @@ app.include_router(mailpulse_router)
 app.include_router(mailpulse_public_router)
 app.include_router(notifications_router)
 app.include_router(payments_router)
+app.include_router(whats_new_router)
 app.include_router(payment_method_settings_router)
 app.include_router(promotions_router)
 app.include_router(public_verify_router)
