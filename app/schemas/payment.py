@@ -381,6 +381,8 @@ class SettlementRowResponse(BaseModel):
     first_name: str
     last_name: str
     student_matricule: str | None = None
+    #: Situe l'eleve quand le tableau couvre toute l'ecole.
+    class_name: str = ""
     cells: list[SettlementCellResponse]
     settled: bool
 
@@ -397,3 +399,53 @@ class SettlementMatrixResponse(BaseModel):
     #: Combien d'eleves ne doivent plus rien, depots en nature compris.
     settled_count: int
     total_count: int
+
+
+# ---------------------------------------------------------------------------
+# Le point sur une categorie de frais
+# ---------------------------------------------------------------------------
+
+
+class CategoryLedgerRowResponse(BaseModel):
+    """Un eleve, et ou il en est sur cette categorie."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    enrollment_id: int
+    student_id: int
+    first_name: str
+    last_name: str
+    student_matricule: str | None = None
+    class_name: str = ""
+    status: str
+    due: Decimal
+    #: Entre en argent sur la periode demandee.
+    paid: Decimal
+    #: `null` quand l'appelant ne lit pas toutes les caisses : ce qui reste du
+    #: ne se calcule pas sur une seule, et l'absence vaut mieux qu'un faux.
+    remaining: Decimal | None = None
+    deposited_at: datetime | None = None
+
+
+class CategoryLedgerResponse(BaseModel):
+    """Le document : ce qui est entre, ce qui manque, et par qui."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: int
+    category_name: str
+    #: Faux, le bloc « en nature » n'a pas lieu d'etre affiche.
+    accepts_in_kind: bool
+    class_name: str
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    #: Faux, le document ne porte que la caisse de l'appelant et tait les impayes.
+    consolide: bool
+
+    eleves_en_argent: int
+    total_en_argent: Decimal
+    depots_en_nature: int
+    eleves_restant_du: int | None = None
+    total_restant_du: Decimal | None = None
+
+    lignes: list[CategoryLedgerRowResponse]

@@ -94,26 +94,30 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     )
 
 
-async def paid_by_class(
-    db: AsyncSession, *, class_id: int, academic_year_id: int
+async def paid_for_scope(
+    db: AsyncSession, *, academic_year_id: int, class_id: int | None = None
 ) -> dict[int, Decimal]:
-    """Même calcul, pour toute une classe d'un coup.
+    """Le verse par frais sur une annee, et sur une classe si l'on en nomme une.
 
-    La lecture par classe existe parce qu'on la regarde par classe : savoir
-    qui a soldé sa scolarité et qui n'a pas remis sa tenue se demande sur
-    quarante élèves à la fois. Appeler `paid_by_enrollment` en boucle
-    coûterait une requête par élève sur un écran qui les montre tous.
+    La lecture par annee entiere est celle qu'on demande d'abord : « ou en est
+    l'ecole sur ce frais ». La classe ne fait que reduire. En faire un parametre
+    obligatoire forcait a parcourir les classes une par une, ce que cet ecran
+    existe precisement pour eviter.
+
+    Appeler `paid_by_enrollment` en boucle couterait une requete par eleve sur
+    un ecran qui les montre tous.
     """
     from app.models.enrollment import Enrollment
     from app.models.fee import EnrollmentFee
 
+    conditions = [Enrollment.academic_year_id == academic_year_id]
+    if class_id is not None:
+        conditions.append(Enrollment.class_id == class_id)
+
     stmt = (
         _verse_par_frais()
         .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(
-            Enrollment.class_id == class_id,
-            Enrollment.academic_year_id == academic_year_id,
-        )
+        .where(*conditions)
     )
     return _par_frais(await db.execute(stmt))
 

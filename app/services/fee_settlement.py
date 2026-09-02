@@ -100,6 +100,8 @@ class SettlementRow:
     first_name: str
     last_name: str
     student_matricule: str | None
+    #: Situe l'élève quand le tableau couvre toute l'école.
+    class_name: str
     cells: tuple[SettlementCell, ...]
 
     @property
@@ -145,6 +147,7 @@ class RowInput:
     first_name: str
     last_name: str
     student_matricule: str | None
+    class_name: str
     fees: tuple[FeeLineInput, ...]
 
 
@@ -248,6 +251,7 @@ def build_matrix(
                 first_name=row.first_name,
                 last_name=row.last_name,
                 student_matricule=row.student_matricule,
+                class_name=row.class_name,
                 cells=tuple(
                     resolve_cell(
                         col.category_id, par_categorie.get(col.category_id, []), paid_by_fee
