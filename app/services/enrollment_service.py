@@ -32,6 +32,8 @@ from app.services.matricule_service import generate_enrollment_number
 logger = logging.getLogger(__name__)
 
 _VALID_STATUSES = {s.value for s in EnrollmentStatus}
+#: Filtre d'écran « À valider » : prospect + en_validation, la queue du jour.
+_FILTRE_STATUTS = _VALID_STATUSES | {"a_valider"}
 
 
 def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
@@ -213,8 +215,8 @@ async def list_enrollments(
 ) -> EnrollmentListResponse:
     """Retourne une page d'inscriptions."""
     # Valider le filtre status
-    if status is not None and status not in _VALID_STATUSES:
-        raise BusinessValidationError(f"Invalid status '{status}'. Valid: {_VALID_STATUSES}")
+    if status is not None and status not in _FILTRE_STATUTS:
+        raise BusinessValidationError(f"Invalid status '{status}'. Valid: {_FILTRE_STATUTS}")
 
     enrollments, total = await repo.list_enrollments(
         db,

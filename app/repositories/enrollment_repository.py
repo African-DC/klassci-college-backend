@@ -57,7 +57,13 @@ async def list_enrollments(
         base = base.where(Enrollment.class_id == class_id)
     if student_id is not None:
         base = base.where(Enrollment.student_id == student_id)
-    if status is not None:
+    if status == "a_valider":
+        base = base.where(
+            Enrollment.status.in_(
+                (EnrollmentStatus.PROSPECT.value, EnrollmentStatus.EN_VALIDATION.value)
+            )
+        )
+    elif status is not None:
         base = base.where(Enrollment.status == status)
     if academic_year_id is not None:
         base = base.where(Enrollment.academic_year_id == academic_year_id)

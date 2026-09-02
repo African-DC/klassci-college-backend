@@ -72,6 +72,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Liste, bandeau et exports de versements se bornent à l'année demandée : un encaissement d'un autre exercice n'y figure plus *(admin, comptable, caissier)*
+- La liste des inscriptions se filtre vraiment par année, classe et « à valider », au lieu de ne retrancher que la page déjà chargée *(admin, secrétariat)*
 - Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point *(technique)*
 - Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes *(admin, secrétariat)* (#394)
 - Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu *(admin, technique)* (#387)

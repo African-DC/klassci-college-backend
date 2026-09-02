@@ -52,6 +52,10 @@ async def list_payments(
     fee_category_id: int | None = Query(
         None, description="Ne garder que les versements imputes sur cette categorie."
     ),
+    academic_year_id: int | None = Query(
+        None,
+        description="Ne garder que les versements d'inscriptions de cette annee scolaire.",
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     current_user: TokenData = Depends(get_current_user),
@@ -75,6 +79,7 @@ async def list_payments(
             date_to=date_to,
             search=search,
             fee_category_id=fee_category_id,
+            academic_year_id=academic_year_id,
             received_by=cashier_scope(
                 requested_received_by=received_by,
                 can_read_all=can_read_all,
@@ -173,6 +178,7 @@ async def get_payments_summary(
             date_to=date_to,
             search=search,
             fee_category_id=fee_category_id,
+            academic_year_id=academic_year_id,
         ),
         received_by=cashier_scope(
             requested_received_by=received_by,
@@ -212,6 +218,7 @@ async def export_payments(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
     received_by: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
     export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
@@ -230,6 +237,7 @@ async def export_payments(
         method=method,
         date_from=date_from,
         date_to=date_to,
+        academic_year_id=academic_year_id,
         received_by=cashier_scope(
             requested_received_by=received_by,
             can_read_all=can_read_all,
