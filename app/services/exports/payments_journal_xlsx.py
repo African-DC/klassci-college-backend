@@ -12,7 +12,7 @@ import io
 from typing import Any
 
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.worksheet.worksheet import Worksheet
 
 from app.services.exports._workbook_branding import (
@@ -23,6 +23,7 @@ from app.services.exports._workbook_branding import (
     write_header,
 )
 from app.services.payments.journal_data import PaymentsJournal
+from app.services.payments.journal_labels import fee_cell
 from app.services.pdf.theme import method_label, status_label
 
 # Le séparateur de milliers est rendu par le tableur selon la locale du
@@ -43,7 +44,7 @@ _DETAIL_HEADERS = [
     "État",
     "Montant (XOF)",
 ]
-_DETAIL_WIDTHS = [8, 12, 8, 28, 16, 22, 20, 18, 24, 14, 16]
+_DETAIL_WIDTHS = [8, 12, 8, 28, 16, 30, 20, 18, 24, 14, 16]
 
 
 def _meta_lines(journal: PaymentsJournal) -> list[str]:
@@ -82,7 +83,11 @@ def _write_detail(ws: Worksheet, journal: PaymentsJournal, school: dict[str, Any
         ws.cell(row=row, column=3, value=line.created_at.strftime("%H:%M"))
         ws.cell(row=row, column=4, value=line.student_name)
         ws.cell(row=row, column=5, value=line.student_matricule or "—")
-        ws.cell(row=row, column=6, value=line.fee_label)
+        frais = ws.cell(row=row, column=6, value=fee_cell(line.fee_shares))
+        # Sans le renvoi à la ligne, les trois catégories d'un versement
+        # réparti tiennent sur une seule ligne écrasée : le tableur ne coupe
+        # pas de lui-même sur un retour à la ligne.
+        frais.alignment = Alignment(wrap_text=True, vertical="top")
         ws.cell(row=row, column=7, value=method_label(line.method))
         ws.cell(row=row, column=8, value=line.reference or "—")
         ws.cell(row=row, column=9, value=line.cashier)
