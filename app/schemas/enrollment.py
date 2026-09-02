@@ -87,6 +87,16 @@ class EnrollmentUpdate(BaseModel):
     #: l'inscription, exactement comme un changement de classe.
     is_new_student: bool | None = None
 
+    @field_validator("assignment_status")
+    @classmethod
+    def valid_assignment_status(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = {"affecte", "reaffecte", "non_affecte"}
+        if v not in allowed:
+            raise ValueError(f"assignment_status must be one of {sorted(allowed)}")
+        return v
+
 
 class SubscribeOptionRequest(BaseModel):
     optional_fee_option_id: int

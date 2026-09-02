@@ -72,6 +72,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Corriger l'affectation d'un élève sur sa fiche l'enregistre vraiment, et rejoue aussitôt ses frais : l'affectation décide du tarif subventionné *(admin, secrétariat, comptable)*
+- Le journal des versements se filtre par catégorie de frais sans exiger la gestion de la grille tarifaire *(caissier, comptable)*
 - Liste, bandeau et exports de versements se bornent à l'année demandée : un encaissement d'un autre exercice n'y figure plus *(admin, comptable, caissier)*
 - La liste des inscriptions se filtre vraiment par année, classe et « à valider », au lieu de ne retrancher que la page déjà chargée *(admin, secrétariat)*
 - Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point *(technique)*
