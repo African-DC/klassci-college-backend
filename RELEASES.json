@@ -1,6 +1,6 @@
 {
-  "product": "klassci-college-backend",
-  "generated_at": "2026-09-02T21:32:38Z",
+  "product": "backend",
+  "generated_at": "2026-09-02T21:49:22Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,13 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Les évolutions du produit sont publiées dans un flux lisible par la vitrine, avec le public concerné par chaque ligne",
             "audience": [
