@@ -1,0 +1,25 @@
+name: Release feed
+
+# Le flux est une projection du changelog. Sans ce garde-fou, il derive au
+# premier changelog modifie sans regeneration, et la page vitrine annonce alors
+# une version de retard sans que rien ne le signale.
+on:
+  pull_request:
+    paths:
+      - "CHANGELOG.md"
+      - "RELEASES.json"
+      - "scripts/release_feed.py"
+  push:
+    branches: [main]
+
+jobs:
+  verifier:
+    name: RELEASES.json suit le changelog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Le flux correspond-il au changelog ?
+        run: python scripts/release_feed.py --check --product klassci-college-backend

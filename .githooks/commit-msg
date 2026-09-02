@@ -1,0 +1,74 @@
+#!/bin/sh
+# Verifie le message de commit avant qu'il ne soit ecrit.
+#
+# Ce hook existe parce que trois regles du depot se sont fait oublier, chacune
+# plusieurs fois, y compris par un agent : la signature automatique interdite,
+# le format conventionnel, et l'entree de changelog. Les rappeler ici les rend
+# visibles au moment ou on se trompe, et non trois jours plus tard en revue.
+#
+# Il ne remplace pas la CI : un hook local s'installe volontairement et se
+# contourne avec --no-verify. La CI reste le garde-fou qui compte.
+
+set -e
+message_file="$1"
+message=$(cat "$message_file")
+# La premiere ligne non commentee : git y met parfois des commentaires en tete.
+sujet=$(printf '%s\n' "$message" | grep -v '^#' | sed '/^[[:space:]]*$/d' | head -1)
+
+refus() {
+  printf '\n\033[31mCommit refuse\033[0m — %s\n\n' "$1" >&2
+  shift
+  for ligne in "$@"; do printf '  %s\n' "$ligne" >&2; done
+  printf '\n  Regle : .claude/rules/git.md\n' >&2
+  printf '  Passer outre (a eviter) : git commit --no-verify\n\n' >&2
+  exit 1
+}
+
+# --- 1. Aucune signature automatique -----------------------------------------
+# `git.md` l'interdit noir sur blanc. Ces mentions se glissent seules dans les
+# messages produits par un assistant, et polluent l'historique du depot.
+if printf '%s' "$message" | grep -qiE 'co-authored-by|generated with|claude-session|🤖'; then
+  refus "le message porte une signature automatique." \
+    "Retirez les lignes « Co-Authored-By », « Generated with », « Claude-Session »." \
+    "L'historique nomme l'auteur du travail, pas l'outil qui l'a tape."
+fi
+
+# --- 2. Format conventionnel --------------------------------------------------
+TYPES='feat|fix|refactor|test|docs|chore|perf|style|ci|build|revert'
+if ! printf '%s' "$sujet" | grep -qE "^($TYPES)(\([a-z0-9:-]+\))?!?: .+"; then
+  refus "le sujet ne suit pas le format conventionnel." \
+    "Attendu : <type>(<scope>): description a l'imperatif anglais" \
+    "Types   : $(printf '%s' "$TYPES" | tr '|' ' ')" \
+    "Exemple : fix(payments): scope the journal to one academic year" \
+    "Recu    : $sujet"
+fi
+
+# --- 3. Un sujet qui tient sur une ligne de terminal ---------------------------
+longueur=$(printf '%s' "$sujet" | wc -c)
+if [ "$longueur" -gt 72 ]; then
+  refus "le sujet fait $longueur caracteres, la limite est 72." \
+    "Le corps du message accueille tout ce qui deborde." \
+    "Recu : $sujet"
+fi
+
+# --- 4. Pas de WIP ------------------------------------------------------------
+if printf '%s' "$sujet" | grep -qiE '^(wip|tmp|temp|fixup)'; then
+  refus "un commit de travail en cours n'a pas sa place ici." \
+    "Terminez-le, ou gardez-le sur une branche personnelle non poussee."
+fi
+
+# --- 5. Le changelog suit le type ---------------------------------------------
+# Meme regle que `.github/workflows/changelog-check.yml`, appliquee plus tot.
+# La CI reste seule juge : elle voit la PR entiere, ce hook ne voit qu'un commit.
+type_commit=$(printf '%s' "$sujet" | sed -E 's/^([a-z]+).*/\1/')
+case "$type_commit" in
+  feat|fix|perf)
+    if ! git diff --cached --name-only | grep -q '^CHANGELOG.md$'; then
+      printf '\n\033[33mAvertissement\033[0m — commit « %s » sans CHANGELOG.md.\n' "$type_commit" >&2
+      printf '  La CI refusera la PR, sauf label skip-changelog.\n' >&2
+      printf '  Une ligne sous [Unreleased], du point de vue de l utilisateur final.\n\n' >&2
+    fi
+    ;;
+esac
+
+exit 0
