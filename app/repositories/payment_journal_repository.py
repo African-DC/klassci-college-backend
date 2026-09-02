@@ -17,7 +17,7 @@ from sqlalchemy.orm import selectinload
 from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant, Payment, PaymentAllocation
 from app.models.user import User
-from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
+from app.repositories.payment_filters import PaymentFilters, apply_payment_scope
 
 # Au-delà, le document cesse de rendre service : personne ne relit trente
 # mille lignes, et la génération se met à peser sur le serveur pendant les
@@ -47,7 +47,7 @@ def _journal_options():
 
 async def count_for_journal(db: AsyncSession, filters: PaymentFilters) -> int:
     """Nombre de versements que l'export retiendrait, avant de le produire."""
-    base = apply_payment_filters(select(Payment.id), filters)
+    base = await apply_payment_scope(db, select(Payment.id), filters)
     stmt = select(func.count()).select_from(base.subquery())
     return int((await db.execute(stmt)).scalar() or 0)
 
@@ -59,10 +59,8 @@ async def list_for_journal(db: AsyncSession, filters: PaymentFilters) -> list[Pa
     journée dans le sens où elle s'est déroulée, pas en commençant par la fin.
     """
     stmt = (
-        apply_payment_filters(select(Payment).options(*_journal_options()), filters)
-        .order_by(Payment.created_at.asc(), Payment.id.asc())
-        .limit(JOURNAL_MAX_ROWS)
-    )
+        await apply_payment_scope(db, select(Payment).options(*_journal_options()), filters)
+    ).order_by(Payment.created_at.asc(), Payment.id.asc()).limit(JOURNAL_MAX_ROWS)
     return list((await db.execute(stmt)).scalars().all())
 
 

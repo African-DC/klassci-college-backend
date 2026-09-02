@@ -23,7 +23,7 @@ from app.models.fee import (
     Payment,
     PaymentAllocation,
 )
-from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
+from app.repositories.payment_filters import PaymentFilters, apply_payment_scope
 
 # ---------------------------------------------------------------------------
 # Loaders communs (selectinload exhaustif — voir preload-relations-after-commit)
@@ -105,7 +105,8 @@ async def list_payments(
     laisserait le total et la pagination compter les versements des collègues,
     et le caissier verrait « 128 versements » en n'en lisant que les siens.
     """
-    base = apply_payment_filters(
+    base = await apply_payment_scope(
+        db,
         select(Payment).options(*_payment_full_options()),
         filters,
     )
