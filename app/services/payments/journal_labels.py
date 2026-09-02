@@ -1,9 +1,13 @@
-"""Les phrases que porte l'en-tête d'un journal des versements.
+"""Les phrases d'un journal des versements : son en-tête, et ses cellules.
 
 Un document exporté sans dire ce qu'il contient est un piège : deux tirages du
 même écran, à deux filtres différents, sont indiscernables une fois imprimés.
 L'en-tête doit donc nommer la période, les filtres et le périmètre — et ne
 nommer que ce qui a réellement été appliqué à la requête.
+
+`fee_cell` y a rejoint l'en-tête pour la même raison qui les rassemble tous
+ici : le PDF et le classeur doivent écrire les mêmes mots. Deux rendus séparés
+du même versement, c'est deux vérités selon le fichier qu'on ouvre.
 
 Fonctions pures, sans base de données : elles se lisent et se testent seules.
 """
