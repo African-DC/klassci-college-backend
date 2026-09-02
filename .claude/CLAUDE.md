@@ -75,6 +75,16 @@ ruff format app/
 mypy app/
 ```
 
+## Avant le premier commit
+
+```bash
+sh scripts/install-hooks.sh
+```
+
+Les hooks versionnés rappellent trois règles qui se sont fait oublier
+plusieurs fois : pas de signature automatique dans un message, format de commit
+et de branche conventionnels, changelog à jour. Détail dans `rules/git.md`.
+
 ## Multi-tenant
 - Le tenant est résolu depuis le sous-domaine de la requête
 - Injecté dans le contexte via `TenantMiddleware`

@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*
+- Les évolutions du produit sont publiées dans un flux lisible par la vitrine, avec le public concerné par chaque ligne *(devops)*
 - Un tableau par classe dit qui a soldé quelle catégorie de frais, en distinguant l'argent du dépôt en nature, et s'exporte en classeur. Réservé à qui consolide toutes les caisses *(comptable)*
 - Un dépôt en nature posé par erreur s'annule depuis l'application, au lieu d'une correction à la main en base *(admin, comptable)* (#399)
 - Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*

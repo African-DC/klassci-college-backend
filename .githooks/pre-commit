@@ -1,0 +1,61 @@
+#!/bin/sh
+# Ce qui ne doit jamais partir dans un commit.
+set -e
+
+refus() {
+  printf '\n\033[31mCommit refuse\033[0m — %s\n\n' "$1" >&2
+  shift
+  for ligne in "$@"; do printf '  %s\n' "$ligne" >&2; done
+  printf '\n  Passer outre (a eviter) : git commit --no-verify\n\n' >&2
+  exit 1
+}
+
+branche=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+indexes=$(git diff --cached --name-only)
+
+# --- 1. Jamais de commit direct sur une branche protegee ----------------------
+case "$branche" in
+  main|staging)
+    refus "on ne commite pas directement sur « $branche »." \
+      "Branchez depuis develop : git checkout -b fix/<numero-issue>-description"
+    ;;
+  develop)
+    printf '\n\033[33mAvertissement\033[0m — commit direct sur develop.\n' >&2
+    printf '  La regle demande une branche et une PR, meme pour trois lignes.\n\n' >&2
+    ;;
+esac
+
+# --- 2. Jamais de secret ------------------------------------------------------
+secrets=$(printf '%s\n' "$indexes" | grep -E '(^|/)\.env($|\.)|\.pem$|\.p12$|id_rsa|id_ed25519$|\.secrets|credentials\.json$' || true)
+if [ -n "$secrets" ]; then
+  refus "des fichiers de secrets sont indexes." "$secrets" \
+    "Les valeurs vivent dans l'environnement, jamais dans le depot."
+fi
+
+# --- 3. Le linter sur ce qui est indexe ---------------------------------------
+# Absent du poste, on n'echoue pas : la CI le fera. Present, il evite un
+# aller-retour de dix minutes pour une virgule.
+py=$(printf '%s\n' "$indexes" | grep -E '\.py$' || true)
+if [ -n "$py" ] && python -c "import ruff" 2>/dev/null; then
+  if ! printf '%s\n' "$py" | xargs python -m ruff check 2>&1; then
+    refus "ruff refuse un fichier indexe." "Corrigez, ou : python -m ruff check --fix"
+  fi
+  if ! printf '%s\n' "$py" | xargs python -m ruff format --check 2>&1; then
+    refus "le formatage n'est pas celui de ruff." "python -m ruff format <fichiers>"
+  fi
+fi
+
+# --- 4. Le flux de versions suit le changelog ---------------------------------
+# Regenere et indexe, plutot que refuse : le fichier est une projection, pas un
+# travail. Se plaindre obligerait a relancer une commande qu'on oublie ; le
+# faire ici rend l'oubli impossible, et la CI n'a plus qu'a le confirmer.
+if git diff --cached --name-only | grep -q '^CHANGELOG.md$'; then
+  if [ -f scripts/release_feed.py ] && command -v python >/dev/null 2>&1; then
+    if python scripts/release_feed.py >/dev/null 2>&1; then
+      git add RELEASES.json
+      echo 'RELEASES.json regenere depuis le changelog, et indexe.'
+    fi
+  fi
+fi
+
+exit 0
