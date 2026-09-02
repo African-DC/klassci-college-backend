@@ -337,3 +337,55 @@ class PaymentMethodListResponse(BaseModel):
     """
 
     items: list[PaymentMethodOption]
+
+
+# ---------------------------------------------------------------------------
+# Qui a solde quelle categorie, une classe a la fois
+# ---------------------------------------------------------------------------
+
+
+class SettlementColumnResponse(BaseModel):
+    """Une colonne du tableau : la categorie, telle qu'elle est facturee."""
+
+    category_id: int
+    name: str
+    priority: int
+
+
+class SettlementCellResponse(BaseModel):
+    """Une case : l'etat, et les montants qui l'expliquent.
+
+    Les montants accompagnent l'etat au lieu d'etre recalcules par l'ecran :
+    une case « partiel » sans le reste du a afficher obligerait le frontend a
+    refaire la soustraction, et deux calculs finissent par diverger.
+    """
+
+    category_id: int
+    state: str
+    due: Decimal
+    paid: Decimal
+    remaining: Decimal
+
+
+class SettlementRowResponse(BaseModel):
+    """Une ligne : un eleve, son etat sur chaque colonne."""
+
+    enrollment_id: int
+    student_id: int
+    first_name: str
+    last_name: str
+    student_matricule: str | None = None
+    cells: list[SettlementCellResponse]
+    settled: bool
+
+
+class SettlementMatrixResponse(BaseModel):
+    """Le tableau complet, plus le decompte que l'en-tete affiche."""
+
+    class_name: str
+    academic_year_name: str
+    columns: list[SettlementColumnResponse]
+    rows: list[SettlementRowResponse]
+    #: Combien d'eleves ne doivent plus rien, depots en nature compris.
+    settled_count: int
+    total_count: int

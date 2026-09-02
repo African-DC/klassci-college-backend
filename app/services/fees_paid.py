@@ -83,6 +83,37 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     return _par_frais(await db.execute(stmt))
 
 
+async def paid_by_class(
+    db: AsyncSession, *, class_id: int, academic_year_id: int
+) -> dict[int, Decimal]:
+    """Même calcul, pour toute une classe d'un coup.
+
+    La lecture par classe existe parce qu'on la regarde par classe : savoir
+    qui a soldé sa scolarité et qui n'a pas remis sa tenue se demande sur
+    quarante élèves à la fois. Appeler `paid_by_enrollment` en boucle
+    coûterait une requête par élève sur un écran qui les montre tous.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+
+    stmt = (
+        select(
+            PaymentAllocation.enrollment_fee_id,
+            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+        )
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(
+            Enrollment.class_id == class_id,
+            Enrollment.academic_year_id == academic_year_id,
+            Payment.status == PaymentStatus.COMPLETED.value,
+        )
+        .group_by(PaymentAllocation.enrollment_fee_id)
+    )
+    return _par_frais(await db.execute(stmt))
+
+
 def _allocations_sur_frais_dus():
     """Le socle du calcul : les allocations posées sur ce qui reste dû.
 

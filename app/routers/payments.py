@@ -26,8 +26,14 @@ from app.schemas.payment import (
     PaymentMethodOption,
     PaymentResponse,
     PaymentSummaryResponse,
+    SettlementMatrixResponse,
 )
-from app.services import daily_cash_book_service, payment_service, payments_journal_service
+from app.services import (
+    daily_cash_book_service,
+    fee_settlement,
+    payment_service,
+    payments_journal_service,
+)
 from app.services.payments import methods as payment_methods
 from app.services.payments.scope import cashier_scope
 
@@ -261,6 +267,53 @@ async def export_payments(
         ),
         filename=f"journal-versements-{jour}.pdf",
         error_context="journal des versements",
+    )
+
+
+# NOTE: /settlement MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement",
+    response_model=SettlementMatrixResponse,
+    summary="Qui a solde quelle categorie de frais, pour une classe",
+)
+async def fee_settlement_matrix(
+    class_id: int = Query(..., description="Classe lue, une seule a la fois."),
+    academic_year_id: int = Query(..., description="Annee de la classe."),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SettlementMatrixResponse:
+    """Une ligne par eleve, une colonne par categorie reellement facturee.
+
+    Le journal des versements ne repond pas a cette question : il liste des
+    versements, pas des eleves, et celui qui n'a jamais rien verse n'y figure
+    pas du tout — alors que c'est precisement celui qu'on cherche.
+    """
+    matrix = await fee_settlement.load_settlement(
+        db, class_id=class_id, academic_year_id=academic_year_id
+    )
+    return fee_settlement.to_response(matrix)
+
+
+# NOTE: /settlement/export MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/export",
+    summary="Le tableau des soldes au format classeur",
+)
+async def export_fee_settlement(
+    class_id: int = Query(...),
+    academic_year_id: int = Query(...),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Le meme tableau, relu hors ligne sur la classe entiere."""
+    return await binary_response(
+        lambda: fee_settlement.get_settlement_xlsx(
+            db, class_id=class_id, academic_year_id=academic_year_id
+        ),
+        filename=f"soldes-frais-{date.today().isoformat()}.xlsx",
+        media_type=_XLSX_MEDIA_TYPE,
+        error_context="tableau des soldes",
+        disposition="attachment",
     )
 
 
