@@ -20,8 +20,9 @@ async def test_un_fichier_absent_ne_fait_pas_une_panne(monkeypatch: pytest.Monke
 
     flux = await whats_new.whats_new()
 
-    assert flux["versions"] == []
-    assert flux["current_version"] is None
+    assert flux["sections"] == {}
+    assert flux["version"] is None
+    assert flux["total"] == 0
 
 
 @pytest.mark.asyncio
@@ -32,7 +33,7 @@ async def test_un_fichier_corrompu_ne_fait_pas_une_panne(
     abime.write_text("{ ceci n'est pas du JSON", encoding="utf-8")
     monkeypatch.setattr(whats_new, "_FLUX", abime)
 
-    assert (await whats_new.whats_new())["versions"] == []
+    assert (await whats_new.whats_new())["sections"] == {}
 
 
 def _pose(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contenu: dict) -> None:
