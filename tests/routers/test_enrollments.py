@@ -102,6 +102,24 @@ def test_list_enrollments_with_filters() -> None:
     assert call_kwargs["size"] == 10
 
 
+def test_list_enrollments_accepte_le_filtre_a_valider() -> None:
+    """La queue du jour n'est pas un statut unique : l'écran l'envoie telle quelle."""
+    _override_deps()
+    try:
+        with patch(
+            "app.routers.enrollments.enrollment_service.list_enrollments",
+            new_callable=AsyncMock,
+            return_value=SAMPLE_LIST,
+        ) as mock_list:
+            with TestClient(app) as client:
+                resp = client.get("/enrollments?status=a_valider")
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 200
+    assert mock_list.call_args.kwargs["status"] == "a_valider"
+
+
 def test_list_enrollments_unauthenticated() -> None:
     """GET /enrollments sans token → 401."""
     with TestClient(app) as client:
