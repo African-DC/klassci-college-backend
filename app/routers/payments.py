@@ -279,7 +279,7 @@ async def export_payments(
 async def fee_settlement_matrix(
     class_id: int = Query(..., description="Classe lue, une seule a la fois."),
     academic_year_id: int = Query(..., description="Annee de la classe."),
-    _: None = require_permission("payments:read"),
+    _: None = require_permission("payments:read:all"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SettlementMatrixResponse:
     """Une ligne par eleve, une colonne par categorie reellement facturee.
@@ -287,6 +287,17 @@ async def fee_settlement_matrix(
     Le journal des versements ne repond pas a cette question : il liste des
     versements, pas des eleves, et celui qui n'a jamais rien verse n'y figure
     pas du tout — alors que c'est precisement celui qu'on cherche.
+
+    **`payments:read:all`, et non `payments:read` cloisonne.** Ce tableau dit
+    ce qu'une famille doit encore, ce qui se calcule sur tout l'argent recu,
+    quelle que soit la caisse qui l'a encaisse. Le cloisonner reviendrait a
+    n'y compter que les versements d'un guichet : une famille qui a paye a la
+    caisse d'a cote s'y afficherait « Du », et on irait la relancer. Un faux
+    signal sur de l'argent est pire que pas de signal du tout.
+
+    On ne peut donc pas rendre ce tableau a une caissiere cloisonnee sans lui
+    mentir. Il est reserve a qui lit deja toutes les caisses — le meme droit
+    que la consolidation, pour la meme raison.
     """
     matrix = await fee_settlement_service.load_settlement(
         db, class_id=class_id, academic_year_id=academic_year_id
@@ -302,10 +313,15 @@ async def fee_settlement_matrix(
 async def export_fee_settlement(
     class_id: int = Query(...),
     academic_year_id: int = Query(...),
-    _: None = require_permission("payments:read"),
+    _: None = require_permission("payments:read:all"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
-    """Le meme tableau, relu hors ligne sur la classe entiere."""
+    """Le meme tableau, relu hors ligne sur la classe entiere.
+
+    Meme droit que l'ecran, et pour la meme raison : un export gardé moins
+    fermement que la vue qu'il reproduit est une porte derobee, et c'est le
+    genre de fuite qu'on ne voit jamais en regardant l'interface.
+    """
     return await binary_response(
         lambda: fee_settlement_service.get_settlement_xlsx(
             db, class_id=class_id, academic_year_id=academic_year_id
