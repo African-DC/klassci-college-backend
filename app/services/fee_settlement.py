@@ -57,18 +57,6 @@ class SettlementState(str, enum.Enum):
     ABSENT = "absent"
 
 
-#: Ce que chaque état s'appelle dans un document. L'export est la seule sortie
-#: qui compose ces mots côté serveur — l'écran a les siens — mais il les compose
-#: à partir de l'énumération, pour qu'un état ajouté demain n'y sorte pas vide.
-STATE_LABEL: dict[SettlementState, str] = {
-    SettlementState.PAID: "Soldé",
-    SettlementState.PARTIAL: "Partiel",
-    SettlementState.PENDING: "Dû",
-    SettlementState.IN_KIND: "En nature",
-    SettlementState.WAIVED: "Exonéré",
-    SettlementState.ABSENT: "—",
-}
-
 #: Les états qui ne doivent plus rien. `ABSENT` en fait partie : un élève ne
 #: peut pas être en retard sur un frais qu'on ne lui a jamais facturé.
 SETTLED_STATES = frozenset(
