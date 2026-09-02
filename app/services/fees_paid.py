@@ -35,18 +35,20 @@ def _par_frais(rows: object) -> dict[int, Decimal]:
 def _verse_par_frais(*conditions: object):
     """Le socle commun : les allocations encaissées, groupées par frais.
 
-    Trois lectures s'en servent — un élève, une inscription, une classe — et
-    elles ne diffèrent que par leur clause de restriction. Écrite trois fois,
-    la même chaîne de jointures aurait fini par diverger sur un détail : le
-    filtre d'état d'un versement, par exemple. Ce module existe précisément
-    pour qu'un montant versé ne vaille pas trois sommes selon l'écran.
+    Trois lectures s'en servent — un élève, une inscription, une classe. Ce
+    qu'elles partagent vraiment, et qui ne doit exister qu'une fois, c'est le
+    filtre `completed` : la réversibilité d'une annulation ne tient que parce
+    que tout total joint `Payment` et écarte ce qui n'est pas encaissé, et il
+    suffirait d'une requête écrite sans ce filtre pour ressusciter de l'argent
+    rendu. `tests/services/test_payment_cancel_reversal.py` existe pour ça.
 
-    La jointure sur l'inscription est posée pour tout le monde, y compris pour
-    la lecture qui filtre sur `EnrollmentFee.enrollment_id` et pourrait s'en
-    passer : `enrollment_id` est une clé étrangère non nulle, la jointure ne
-    retire donc aucune ligne. Le coût est nul, la vérité est unique.
+    **La jointure sur l'inscription n'est pas ici**, et c'est délibéré. Lire
+    les versements d'une inscription se fait par `EnrollmentFee.enrollment_id`,
+    sans jamais toucher la table des inscriptions ; la poser pour tout le monde
+    donnerait à cette lecture une dépendance qu'elle n'a pas. Les deux lectures
+    qui ont besoin de l'inscription l'ajoutent elles-mêmes, en une ligne
+    visible.
     """
-    from app.models.enrollment import Enrollment
     from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
 
     return (
@@ -56,7 +58,6 @@ def _verse_par_frais(*conditions: object):
         )
         .join(Payment, Payment.id == PaymentAllocation.payment_id)
         .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
-        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
         .where(Payment.status == PaymentStatus.COMPLETED.value, *conditions)
         .group_by(PaymentAllocation.enrollment_fee_id)
     )
@@ -69,8 +70,14 @@ async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int,
     coûterait une requête par frais.
     """
     from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee
 
-    return _par_frais(await db.execute(_verse_par_frais(Enrollment.student_id == student_id)))
+    stmt = (
+        _verse_par_frais()
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(Enrollment.student_id == student_id)
+    )
+    return _par_frais(await db.execute(stmt))
 
 
 async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, Decimal]:
@@ -98,15 +105,17 @@ async def paid_by_class(
     coûterait une requête par élève sur un écran qui les montre tous.
     """
     from app.models.enrollment import Enrollment
+    from app.models.fee import EnrollmentFee
 
-    return _par_frais(
-        await db.execute(
-            _verse_par_frais(
-                Enrollment.class_id == class_id,
-                Enrollment.academic_year_id == academic_year_id,
-            )
+    stmt = (
+        _verse_par_frais()
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(
+            Enrollment.class_id == class_id,
+            Enrollment.academic_year_id == academic_year_id,
         )
     )
+    return _par_frais(await db.execute(stmt))
 
 
 def _allocations_sur_frais_dus():
