@@ -51,13 +51,17 @@ def _frais(fee_id: int, categorie: int, statut: str, montant: str) -> FeeLineInp
     )
 
 
-def _eleve(nom: str, frais: list[FeeLineInput], *, eid: int = 1) -> RowInput:
+def _eleve(nom: str, frais: list[FeeLineInput], *, eid: int = 1, classe: str = "6e A") -> RowInput:
     return RowInput(
         enrollment_id=eid,
         student_id=eid,
         first_name="Aminata",
         last_name=nom,
         student_matricule=f"M{eid:03d}",
+        # La classe situe l'eleve quand le tableau couvre toute l'ecole : deux
+        # homonymes de niveaux differents seraient sinon impossibles a
+        # departager sur une liste de quatre-vingt-dix-neuf lignes.
+        class_name=classe,
         fees=tuple(frais),
     )
 

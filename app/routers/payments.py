@@ -19,6 +19,7 @@ from app.repositories.payment_filters import PaymentFilters
 from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
     CashierOption,
+    CategoryLedgerResponse,
     PaymentCancel,
     PaymentCreate,
     PaymentListResponse,
@@ -30,6 +31,7 @@ from app.schemas.payment import (
 )
 from app.services import (
     daily_cash_book_service,
+    fee_category_ledger,
     fee_settlement_service,
     payment_service,
     payments_journal_service,
@@ -270,6 +272,108 @@ async def export_payments(
     )
 
 
+# NOTE: /settlement/category/export MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/category/export",
+    summary="Le point d'une categorie au format classeur",
+)
+async def export_fee_category_point(
+    category_id: int = Query(...),
+    academic_year_id: int = Query(...),
+    class_id: int | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    received_by: int | None = Query(None),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Le document que le comptable tire, ou la caissiere pour sa seule caisse.
+
+    Meme cloisonnement que l'ecran, et pour la meme raison : un export garde
+    moins fermement que la vue qu'il reproduit est une porte derobee, et c'est
+    le genre de fuite qu'on ne voit jamais en regardant l'interface.
+
+    Le classeur porte en en-tete, en toutes lettres, le fait qu'il ne couvre
+    qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
+    se lirait comme le compte de l'ecole entiere.
+    """
+    return await binary_response(
+        lambda: fee_category_ledger.get_category_ledger_xlsx(
+            db,
+            category_id=category_id,
+            academic_year_id=academic_year_id,
+            class_id=class_id,
+            date_from=date_from,
+            date_to=date_to,
+            received_by=cashier_scope(
+                requested_received_by=received_by,
+                can_read_all=can_read_all,
+                current_user_id=current_user.user_id,
+            ),
+            consolide=can_read_all,
+        ),
+        filename=f"point-categorie-{date.today().isoformat()}.xlsx",
+        media_type=_XLSX_MEDIA_TYPE,
+        error_context="point sur une categorie de frais",
+        disposition="attachment",
+    )
+
+
+# NOTE: /settlement/category MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/category",
+    response_model=CategoryLedgerResponse,
+    summary="Le point sur une categorie de frais : entre en argent, en nature, et du",
+)
+async def fee_category_point(
+    category_id: int = Query(..., description="La categorie de frais regardee."),
+    academic_year_id: int = Query(..., description="Annee lue."),
+    class_id: int | None = Query(None, description="Reduire a une classe."),
+    date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
+    date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
+    received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> CategoryLedgerResponse:
+    """Une vue detaillee sur un frais : qui a paye, qui a depose, qui doit encore.
+
+    **Ce qui est entre se cloisonne ; ce qui reste du ne se cloisonne pas.**
+
+    Une caissiere lit ce qu'elle a encaisse sur cette categorie : c'est un fait
+    sur sa caisse, et le lui refuser l'empecherait de faire son point. Le
+    filtre de caisse est celui de la liste et des exports, decide par
+    `cashier_scope` — un filtre demande n'a jamais servi de passe-droit.
+
+    Ce qu'une famille doit encore, en revanche, se calcule sur tout l'argent
+    recu : filtre sur un guichet, il annoncerait une dette chez une famille qui
+    a paye a cote. Sans `payments:read:all`, il n'est donc pas calcule du tout,
+    et la reponse le dit par `consolide: false` plutot que de rendre un zero
+    qu'on prendrait pour un solde.
+
+    La periode borne les evenements — versements et depots. Elle ne borne pas
+    le reste du, qui est un etat et vaut a l'instant ou on le lit.
+    """
+    ledger = await fee_category_ledger.load_category_ledger(
+        db,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        consolide=can_read_all,
+    )
+    return CategoryLedgerResponse.model_validate(ledger)
+
+
 # NOTE: /settlement MUST be defined BEFORE /{payment_id}
 @router.get(
     "/settlement",
@@ -277,12 +381,19 @@ async def export_payments(
     summary="Qui a solde quelle categorie de frais, pour une classe",
 )
 async def fee_settlement_matrix(
-    class_id: int = Query(..., description="Classe lue, une seule a la fois."),
-    academic_year_id: int = Query(..., description="Annee de la classe."),
+    academic_year_id: int = Query(..., description="Annee lue."),
+    class_id: int | None = Query(
+        None, description="Reduire a une classe. Sans elle, toute l'ecole."
+    ),
     _: None = require_permission("payments:read:all"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SettlementMatrixResponse:
     """Une ligne par eleve, une colonne par categorie reellement facturee.
+
+    **La classe est facultative.** La question est « ou en est chaque famille
+    sur ce frais », a l'echelle de l'ecole ; la classe ne fait que reduire.
+    L'exiger forcait a parcourir les classes une par une, ce que cet ecran
+    existe pour eviter.
 
     Le journal des versements ne repond pas a cette question : il liste des
     versements, pas des eleves, et celui qui n'a jamais rien verse n'y figure
@@ -300,7 +411,7 @@ async def fee_settlement_matrix(
     que la consolidation, pour la meme raison.
     """
     matrix = await fee_settlement_service.load_settlement(
-        db, class_id=class_id, academic_year_id=academic_year_id
+        db, academic_year_id=academic_year_id, class_id=class_id
     )
     return SettlementMatrixResponse.model_validate(matrix)
 
@@ -311,8 +422,8 @@ async def fee_settlement_matrix(
     summary="Le tableau des soldes au format classeur",
 )
 async def export_fee_settlement(
-    class_id: int = Query(...),
     academic_year_id: int = Query(...),
+    class_id: int | None = Query(None),
     _: None = require_permission("payments:read:all"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -324,7 +435,7 @@ async def export_fee_settlement(
     """
     return await binary_response(
         lambda: fee_settlement_service.get_settlement_xlsx(
-            db, class_id=class_id, academic_year_id=academic_year_id
+            db, academic_year_id=academic_year_id, class_id=class_id
         ),
         filename=f"soldes-frais-{date.today().isoformat()}.xlsx",
         media_type=_XLSX_MEDIA_TYPE,

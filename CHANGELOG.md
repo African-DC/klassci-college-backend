@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie *(comptable, caissier)*
 - Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*
 - Les évolutions du produit sont publiées dans un flux lisible par la vitrine, avec le public concerné par chaque ligne *(devops)*
 - Un tableau par classe dit qui a soldé quelle catégorie de frais, en distinguant l'argent du dépôt en nature, et s'exporte en classeur. Réservé à qui consolide toutes les caisses *(comptable)*
