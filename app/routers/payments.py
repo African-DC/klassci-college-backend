@@ -27,12 +27,10 @@ from app.schemas.payment import (
     PaymentMethodOption,
     PaymentResponse,
     PaymentSummaryResponse,
-    SettlementMatrixResponse,
 )
 from app.services import (
     daily_cash_book_service,
     fee_category_ledger,
-    fee_settlement_service,
     payment_service,
     payments_journal_service,
 )
@@ -387,76 +385,6 @@ async def fee_category_point(
         consolide=can_read_all,
     )
     return CategoryLedgerResponse.model_validate(ledger)
-
-
-# NOTE: /settlement MUST be defined BEFORE /{payment_id}
-@router.get(
-    "/settlement",
-    response_model=SettlementMatrixResponse,
-    summary="Qui a solde quelle categorie de frais, pour une classe",
-)
-async def fee_settlement_matrix(
-    academic_year_id: int = Query(..., description="Annee lue."),
-    class_id: int | None = Query(
-        None, description="Reduire a une classe. Sans elle, toute l'ecole."
-    ),
-    _: None = require_permission("payments:read:all"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> SettlementMatrixResponse:
-    """Une ligne par eleve, une colonne par categorie reellement facturee.
-
-    **La classe est facultative.** La question est « ou en est chaque famille
-    sur ce frais », a l'echelle de l'ecole ; la classe ne fait que reduire.
-    L'exiger forcait a parcourir les classes une par une, ce que cet ecran
-    existe pour eviter.
-
-    Le journal des versements ne repond pas a cette question : il liste des
-    versements, pas des eleves, et celui qui n'a jamais rien verse n'y figure
-    pas du tout — alors que c'est precisement celui qu'on cherche.
-
-    **`payments:read:all`, et non `payments:read` cloisonne.** Ce tableau dit
-    ce qu'une famille doit encore, ce qui se calcule sur tout l'argent recu,
-    quelle que soit la caisse qui l'a encaisse. Le cloisonner reviendrait a
-    n'y compter que les versements d'un guichet : une famille qui a paye a la
-    caisse d'a cote s'y afficherait « Du », et on irait la relancer. Un faux
-    signal sur de l'argent est pire que pas de signal du tout.
-
-    On ne peut donc pas rendre ce tableau a une caissiere cloisonnee sans lui
-    mentir. Il est reserve a qui lit deja toutes les caisses — le meme droit
-    que la consolidation, pour la meme raison.
-    """
-    matrix = await fee_settlement_service.load_settlement(
-        db, academic_year_id=academic_year_id, class_id=class_id
-    )
-    return SettlementMatrixResponse.model_validate(matrix)
-
-
-# NOTE: /settlement/export MUST be defined BEFORE /{payment_id}
-@router.get(
-    "/settlement/export",
-    summary="Le tableau des soldes au format classeur",
-)
-async def export_fee_settlement(
-    academic_year_id: int = Query(...),
-    class_id: int | None = Query(None),
-    _: None = require_permission("payments:read:all"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> Response:
-    """Le meme tableau, relu hors ligne sur la classe entiere.
-
-    Meme droit que l'ecran, et pour la meme raison : un export gardé moins
-    fermement que la vue qu'il reproduit est une porte derobee, et c'est le
-    genre de fuite qu'on ne voit jamais en regardant l'interface.
-    """
-    return await binary_response(
-        lambda: fee_settlement_service.get_settlement_xlsx(
-            db, academic_year_id=academic_year_id, class_id=class_id
-        ),
-        filename=f"soldes-frais-{date.today().isoformat()}.xlsx",
-        media_type=_XLSX_MEDIA_TYPE,
-        error_context="tableau des soldes",
-        disposition="attachment",
-    )
 
 
 # NOTE: /daily-cash-book MUST be defined BEFORE /{payment_id}
