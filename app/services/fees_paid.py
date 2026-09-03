@@ -35,8 +35,8 @@ def _par_frais(rows: object) -> dict[int, Decimal]:
 def _verse_par_frais(*conditions: object):
     """Le socle commun : les allocations encaissées, groupées par frais.
 
-    Trois lectures s'en servent — un élève, une inscription, une classe. Ce
-    qu'elles partagent vraiment, et qui ne doit exister qu'une fois, c'est le
+    Deux lectures s'en servent — un élève, une inscription. Ce qu'elles
+    partagent vraiment, et qui ne doit exister qu'une fois, c'est le
     filtre `completed` : la réversibilité d'une annulation ne tient que parce
     que tout total joint `Payment` et écarte ce qui n'est pas encaissé, et il
     suffirait d'une requête écrite sans ce filtre pour ressusciter de l'argent
@@ -45,9 +45,8 @@ def _verse_par_frais(*conditions: object):
     **La jointure sur l'inscription n'est pas ici**, et c'est délibéré. Lire
     les versements d'une inscription se fait par `EnrollmentFee.enrollment_id`,
     sans jamais toucher la table des inscriptions ; la poser pour tout le monde
-    donnerait à cette lecture une dépendance qu'elle n'a pas. Les deux lectures
-    qui ont besoin de l'inscription l'ajoutent elles-mêmes, en une ligne
-    visible.
+    donnerait à cette lecture une dépendance qu'elle n'a pas. La lecture qui a
+    besoin de l'inscription l'ajoute elle-même, en une ligne visible.
     """
     from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
 
@@ -92,34 +91,6 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     return _par_frais(
         await db.execute(_verse_par_frais(EnrollmentFee.enrollment_id == enrollment_id))
     )
-
-
-async def paid_for_scope(
-    db: AsyncSession, *, academic_year_id: int, class_id: int | None = None
-) -> dict[int, Decimal]:
-    """Le verse par frais sur une annee, et sur une classe si l'on en nomme une.
-
-    La lecture par annee entiere est celle qu'on demande d'abord : « ou en est
-    l'ecole sur ce frais ». La classe ne fait que reduire. En faire un parametre
-    obligatoire forcait a parcourir les classes une par une, ce que cet ecran
-    existe precisement pour eviter.
-
-    Appeler `paid_by_enrollment` en boucle couterait une requete par eleve sur
-    un ecran qui les montre tous.
-    """
-    from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee
-
-    conditions = [Enrollment.academic_year_id == academic_year_id]
-    if class_id is not None:
-        conditions.append(Enrollment.class_id == class_id)
-
-    stmt = (
-        _verse_par_frais()
-        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(*conditions)
-    )
-    return _par_frais(await db.execute(stmt))
 
 
 def _allocations_sur_frais_dus():
