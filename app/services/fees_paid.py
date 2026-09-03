@@ -10,6 +10,8 @@ Le calcul vit ici, à un seul endroit, parce qu'un montant dû ne peut pas
 valoir trois sommes différentes selon l'écran qui l'affiche.
 """
 
+from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -91,6 +93,56 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     return _par_frais(
         await db.execute(_verse_par_frais(EnrollmentFee.enrollment_id == enrollment_id))
     )
+
+
+async def paid_by_fee_ids(
+    db: AsyncSession,
+    *,
+    fee_ids: Sequence[int],
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné à des frais nommés, et éventuellement à une caisse.
+
+    C'est la lecture dont a besoin un document qui regarde une catégorie de
+    frais sur toute une école : il connaît déjà ses lignes, il veut leur versé
+    en une requête plutôt qu'une par élève.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT.**
+    Un versement a une date et se borne : « combien est rentré en octobre »
+    est une question sur des événements. Ce qu'une famille doit encore vaut à
+    l'instant où on le lit, et le borner n'aurait aucun sens — c'est le même
+    appel, sans `date_from`, sans `date_to` et sans `received_by`.
+
+    `received_by` restreint à une caisse. Il n'a de sens que sur l'événement :
+    ce qui reste dû se calcule sur tout l'argent reçu, quel que soit le
+    guichet, sans quoi on annoncerait une dette chez une famille qui a payé au
+    guichet d'à côté.
+
+    Le filtre `completed` n'est pas retapé ici : il vit dans
+    `_verse_par_frais`, avec tous les autres totaux de ce module. Ce calcul a
+    déjà existé en double, recopié dans le service qui compose le point par
+    catégorie, et c'est exactement ainsi qu'un montant finit par valoir deux
+    sommes différentes selon l'écran qui l'affiche.
+
+    Aucun frais demandé, aucune requête : un `IN ()` vide part en base pour
+    rien, et certains moteurs le refusent.
+    """
+    from app.models.fee import Payment, PaymentAllocation
+
+    if not fee_ids:
+        return {}
+
+    conditions: list[object] = [PaymentAllocation.enrollment_fee_id.in_(list(fee_ids))]
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    return _par_frais(await db.execute(_verse_par_frais(*conditions)))
 
 
 def _allocations_sur_frais_dus():

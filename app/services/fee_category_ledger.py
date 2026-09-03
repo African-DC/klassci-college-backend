@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -62,12 +62,10 @@ from app.models.fee import (
     EnrollmentFee,
     EnrollmentFeeStatus,
     FeeCategory,
-    Payment,
-    PaymentAllocation,
-    PaymentStatus,
     cash_remaining,
 )
 from app.models.user import Student
+from app.services import fees_paid
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +79,13 @@ class LigneEleve:
     student_matricule: str | None
     class_name: str
     #: `paid`, `partial`, `pending`, `in_kind`, `waived`.
+    #:
+    #: Recopié de `EnrollmentFee.status`, qui est recalculé sur **tout**
+    #: l'argent reçu (`payments._allocation.recompute_fee_status`). Ne pas le
+    #: dériver de `paid` : ce montant-là est celui d'une seule caisse quand
+    #: l'appelant est cloisonné, et une ligne qu'une collègue a soldée
+    #: ressortirait « partiel ». C'est la dette fantôme que ce module refuse
+    #: déjà pour `remaining`, et elle rentrerait par la porte du badge.
     status: str
     due: Decimal
     #: Ce qui est entré en argent sur la période demandée.
@@ -118,16 +123,6 @@ class CategoryLedger:
     lignes: tuple[LigneEleve, ...]
 
 
-def _fenetre(colonne, date_from: datetime | None, date_to: datetime | None):
-    """Les conditions de période, ou rien du tout."""
-    bornes = []
-    if date_from is not None:
-        bornes.append(colonne >= date_from)
-    if date_to is not None:
-        bornes.append(colonne < date_to)
-    return bornes
-
-
 async def load_category_ledger(
     db: AsyncSession,
     *,
@@ -154,6 +149,10 @@ async def load_category_ledger(
     `consolide` dit si l'appelant a le droit de lire toutes les caisses. Sans
     lui, le reste dû n'est pas calculé du tout — pas mis à zéro, pas approché :
     absent.
+
+    Le versé ne se calcule pas ici : `fees_paid.paid_by_fee_ids` le fait, une
+    fois avec la fenêtre et la caisse (l'événement), une fois sans (l'état).
+    Ce module en portait sa propre copie, filtre `completed` compris.
     """
     categorie = (
         await db.execute(select(FeeCategory).where(FeeCategory.id == category_id))
@@ -181,18 +180,23 @@ async def load_category_ledger(
     frais = list((await db.execute(stmt)).scalars().all())
 
     fee_ids = [f.id for f in frais]
-    verse = await _verse_sur_la_periode(
+    # L'EVENEMENT : ce qui est entre dans la fenetre, sur cette caisse. Le
+    # calcul lui-meme vit dans `fees_paid`, seul detenteur declare de la regle
+    # de l'argent — il a deja ete recopie ici, et deux exemplaires d'une meme
+    # somme finissent toujours par diverger.
+    verse = await fees_paid.paid_by_fee_ids(
         db,
         fee_ids=fee_ids,
         date_from=date_from,
         date_to=date_to,
         received_by=received_by,
     )
-    # Le reste du se calcule sur tout l'argent recu : une seconde lecture, sans
-    # fenetre ni caisse. Groupee, comme la premiere — la demander ligne par
-    # ligne couterait une requete par eleve sur un ecran qui les montre tous,
-    # ce que ce document existe precisement pour eviter.
-    verse_total = await _verse_sur_la_periode(db, fee_ids=fee_ids) if consolide else {}
+    # L'ETAT : le meme appel sans bornes ni caisse. Le reste du se calcule sur
+    # tout l'argent recu — une famille qui a paye le mois dernier ne doit rien
+    # ce mois-ci, et une famille qui a paye au guichet d'a cote ne doit rien
+    # non plus. Groupee, comme la premiere : la demander ligne par ligne
+    # couterait une requete par eleve sur un ecran qui les montre tous.
+    verse_total = await fees_paid.paid_by_fee_ids(db, fee_ids=fee_ids) if consolide else {}
 
     lignes: list[LigneEleve] = []
     eleves_en_argent = 0
@@ -282,43 +286,6 @@ def _dans_la_fenetre(
     if date_to is not None and quand >= date_to:
         return False
     return True
-
-
-async def _verse_sur_la_periode(
-    db: AsyncSession,
-    *,
-    fee_ids: list[int],
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    received_by: int | None = None,
-) -> dict[int, Decimal]:
-    """Ce qui est entré en argent sur ces lignes, dans la fenêtre, sur cette caisse.
-
-    Sans fenêtre ni caisse, elle rend le versé total : c'est la même question
-    posée sans bornes, et lui donner sa propre fonction aurait fait deux
-    écritures d'une seule chaîne de jointures.
-    """
-    if not fee_ids:
-        return {}
-
-    conditions = [
-        PaymentAllocation.enrollment_fee_id.in_(fee_ids),
-        Payment.status == PaymentStatus.COMPLETED.value,
-        *_fenetre(Payment.created_at, date_from, date_to),
-    ]
-    if received_by is not None:
-        conditions.append(Payment.received_by == received_by)
-
-    stmt = (
-        select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .where(*conditions)
-        .group_by(PaymentAllocation.enrollment_fee_id)
-    )
-    return {int(fee_id): Decimal(str(total or 0)) for fee_id, total in (await db.execute(stmt))}
 
 
 async def get_category_ledger_xlsx(
