@@ -23,8 +23,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from weasyprint import HTML
-
 from app.services.fee_category_ledger import CategoryLedger
 from app.services.pdf import components as ui
 from app.services.pdf._helpers import format_xof
@@ -96,7 +94,16 @@ def _lignes(ledger: CategoryLedger) -> list[list[Any]]:
                 eleve,
                 {"value": ligne.student_matricule or "—", "type": "muted"},
                 {"value": ligne.class_name or "—", "type": "muted"},
-                {"value": _ETAT.get(ligne.status, ligne.status), "type": "pill"},
+                # La cle en valeur, le mot en `label` : `status_pill` fabrique sa
+                # classe CSS a partir de la valeur, et un libelle francais y
+                # produisait une classe inexistante — toute la colonne sortait
+                # sans couleur. Le mot reste celui du document : sur un frais on
+                # dit « Solde », pas « Paye ».
+                {
+                    "value": ligne.status,
+                    "label": _ETAT.get(ligne.status, ligne.status),
+                    "type": "pill",
+                },
                 {"value": format_xof(ligne.due), "type": "num"},
                 {"value": format_xof(ligne.paid) if ligne.paid else "—", "type": "num-emphasis"},
                 # Un tiret, pas un zéro : sur une seule caisse on ne sait pas,
@@ -216,5 +223,13 @@ def _maintenant() -> str:
 def generate_fee_category_ledger_pdf(
     ledger: CategoryLedger, school_settings: dict[str, Any]
 ) -> bytes:
-    """Rend le document en PDF."""
+    """Rend le document en PDF.
+
+    Import differe : WeasyPrint tire des bibliotheques natives absentes des
+    postes de developpement Windows. En tete de module, il rendait fausse la
+    promesse de `render_fee_category_ledger_html` — dont tout l'interet est de
+    se verifier sans elles — et celle de son fichier de test.
+    """
+    from weasyprint import HTML
+
     return HTML(string=render_fee_category_ledger_html(ledger, school_settings)).write_pdf()

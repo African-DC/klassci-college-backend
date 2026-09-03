@@ -77,6 +77,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse *(comptable, caissier)*
+- Les états du point par catégorie retrouvent leurs couleurs sur le document PDF *(comptable, caissier)*
 - Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune *(comptable, caissier)*
 - Corriger l'affectation d'un élève sur sa fiche l'enregistre vraiment, et rejoue aussitôt ses frais : l'affectation décide du tarif subventionné *(admin, secrétariat, comptable)*
 - Le journal des versements se filtre par catégorie de frais sans exiger la gestion de la grille tarifaire *(caissier, comptable)*
