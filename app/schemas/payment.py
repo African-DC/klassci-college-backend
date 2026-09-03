@@ -380,6 +380,15 @@ class CategoryLedgerResponse(BaseModel):
     #: Faux, le document ne porte que la caisse de l'appelant et tait les impayes.
     consolide: bool
 
+    #: Inscriptions ouvertes du perimetre. Ce n'est pas de l'argent : ce
+    #: chiffre ne se cloisonne pas, et il est rendu meme sans le droit de lire
+    #: toutes les caisses.
+    effectif_perimetre: int
+    #: Ceux qu'aucune ligne de frais de cette categorie ne couvre. Ils sont
+    #: absents de `lignes`, et les ignorer faisait retrecir le denominateur
+    #: du document sans que rien ne le dise.
+    eleves_sans_ligne: int
+
     eleves_en_argent: int
     total_en_argent: Decimal
     depots_en_nature: int

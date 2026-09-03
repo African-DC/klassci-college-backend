@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-03T21:24:11Z",
+  "generated_at": "2026-09-03T23:59:45Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -936,6 +936,14 @@
           }
         ],
         "Changed": [
+          {
+            "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient du document en silence",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture",
             "audience": [

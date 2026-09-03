@@ -38,6 +38,8 @@ def _vide(*, consolide: bool) -> CategoryLedger:
         date_from=None,
         date_to=None,
         consolide=consolide,
+        effectif_perimetre=0,
+        eleves_sans_ligne=0,
         eleves_en_argent=0,
         total_en_argent=0,
         depots_en_nature=0,

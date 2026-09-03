@@ -11,14 +11,17 @@ depuis la migration 0028 : le versement n'existe QUE par son allocation,
 `Payment.enrollment_fee_id` reste vide. Un calcul qui relirait l'ancienne
 relation rendrait zéro partout, et chacun de ces tests le dirait.
 
-Deux propriétés y sont tenues, et ce sont deux de celles que le document promet :
+Trois propriétés y sont tenues, et ce sont les trois que le document promet :
 
 - **la période borne un événement, jamais un état** — ce qui est entré se
   filtre sur la fenêtre, ce qui reste dû se lit sur tout l'argent reçu ;
 - **ce qui est entré se cloisonne, ce qui reste dû ne se cloisonne pas** — une
   caissière voit son encaissement à elle, et le reste dû se calcule quand même
   sur l'argent de toutes les caisses, sans quoi on relancerait une famille qui
-  a payé au guichet d'à côté.
+  a payé au guichet d'à côté ;
+- **l'effectif du périmètre est un dénominateur, pas une longueur de liste** —
+  un élève qu'aucune ligne de frais ne couvre est compté, au lieu de
+  disparaître du document et de le faire paraître complet.
 """
 
 from collections.abc import Iterator
@@ -382,3 +385,87 @@ async def test_le_verse_borne_se_lit_par_la_fonction_canonique(db: Session) -> N
         _Pont(db), fee_ids=[FRAIS_AYA, FRAIS_BAKARY], date_from=DEBUT_NOVEMBRE
     )
     assert en_novembre == {FRAIS_BAKARY: Decimal("1000")}
+
+
+# ---------------------------------------------------------------------------
+# L'effectif du périmètre, et ceux qu'aucune ligne ne couvre
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_un_eleve_sans_ligne_de_frais_est_compte_et_non_perdu(db: Session) -> None:
+    """Cyrille est inscrit et n'a jamais été facturé sur cette catégorie.
+
+    Il n'apparaît dans aucune ligne : sans ce compte, le document se lisait
+    comme si tout le monde était couvert, et son dénominateur rétrécissait
+    sans que rien ne le dise.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.effectif_perimetre == 4
+    assert len(document.lignes) == 3
+    assert document.eleves_sans_ligne == 1
+
+
+@pytest.mark.asyncio
+async def test_l_effectif_suit_le_perimetre_demande(db: Session) -> None:
+    """Réduire à une classe réduit le dénominateur, pas seulement la liste."""
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, class_id=CLASSE_A
+    )
+
+    assert document.effectif_perimetre == 3
+    assert len(document.lignes) == 2
+    assert document.eleves_sans_ligne == 1
+
+
+@pytest.mark.asyncio
+async def test_une_inscription_close_ne_pese_dans_aucun_effectif(db: Session) -> None:
+    """Un dossier annulé ne doit rien et n'a pas à gonfler un dénominateur.
+
+    Emeraude est annulée : la compter ferait apparaître un élève non facturé
+    de plus, et donc un trou de facturation qui n'existe pas.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, class_id=CLASSE_A
+    )
+
+    assert document.effectif_perimetre == 3
+
+
+@pytest.mark.asyncio
+async def test_l_effectif_ne_se_cloisonne_pas(db: Session) -> None:
+    """Ce sont des inscriptions, pas de l'argent.
+
+    Une caissière a le droit de savoir combien d'élèves son document aurait dû
+    couvrir : le lui refuser ne protégerait rien et l'empêcherait de voir
+    qu'une classe entière manque à l'appel.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db),
+        category_id=CATEGORIE,
+        academic_year_id=ANNEE,
+        received_by=CAISSE_SOPHIE,
+        consolide=False,
+    )
+
+    assert document.effectif_perimetre == 4
+    assert document.eleves_sans_ligne == 1
+
+
+@pytest.mark.asyncio
+async def test_le_compte_des_sans_ligne_ne_vient_pas_de_la_liste_rendue(db: Session) -> None:
+    """L'addition doit retomber sur ses pieds, quoi qu'il arrive à la liste.
+
+    Le compte est un agrégat sur le périmètre entier, pas une soustraction
+    faite sur `lignes`. Le jour où la liste sera paginée — et le plan le
+    prévoit — un chiffre tiré de la page baisserait à chaque page tournée.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    couverts = document.effectif_perimetre - document.eleves_sans_ligne
+    assert couverts == len(document.lignes)

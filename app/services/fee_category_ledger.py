@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -109,6 +109,18 @@ class CategoryLedger:
     #: Vrai quand le lecteur voit toutes les caisses. Faux, le document ne
     #: porte que ce qu'il a lui-même encaissé, et ne dit rien des impayés.
     consolide: bool
+
+    #: Combien d'inscriptions ouvertes tient le périmètre demandé — l'année,
+    #: et la classe s'il y en a une. Ce n'est pas de l'argent : ce chiffre ne
+    #: se cloisonne pas, et il est le dénominateur de tout ce qui se rapporte
+    #: à un effectif.
+    effectif_perimetre: int
+    #: Ceux qu'aucune ligne de frais de cette catégorie ne couvre. Ils
+    #: n'apparaissent nulle part dans `lignes` — l'application ne leur a
+    #: jamais posé le frais — et sans ce compte le document rétrécissait son
+    #: propre dénominateur en silence : « tout le monde a payé » se lisait sur
+    #: une liste où les élèves non facturés manquaient.
+    eleves_sans_ligne: int
 
     #: Ce qui est entré en argent sur la période — ce qu'on envoie au prestataire.
     eleves_en_argent: int
@@ -198,6 +210,37 @@ async def load_category_ledger(
     # couterait une requete par eleve sur un ecran qui les montre tous.
     verse_total = await fees_paid.paid_by_fee_ids(db, fee_ids=fee_ids) if consolide else {}
 
+    # L'effectif du perimetre et les eleves qu'aucune ligne ne couvre. Deux
+    # agregats, jamais `len(lignes)` : le jour ou la liste sera paginee, un
+    # denominateur tire de la page baisserait a chaque page tournee.
+    #
+    # Ce sont des inscriptions, pas de l'argent : ils ne se cloisonnent donc
+    # pas. Une caissiere a le droit de savoir combien d'eleves son document
+    # aurait du couvrir.
+    effectif = int(
+        (
+            await db.execute(
+                select(func.count()).select_from(Enrollment).where(*inscriptions_conditions)
+            )
+        ).scalar_one()
+        or 0
+    )
+    # `uq_enrollment_fee_category` garantit une ligne par inscription et par
+    # categorie : compter les lignes du perimetre, c'est compter les eleves
+    # qu'elles couvrent.
+    lignes_du_perimetre = int(
+        (
+            await db.execute(
+                select(func.count())
+                .select_from(EnrollmentFee)
+                .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+                .where(EnrollmentFee.fee_category_id == category_id, *inscriptions_conditions)
+            )
+        ).scalar_one()
+        or 0
+    )
+    sans_ligne = max(effectif - lignes_du_perimetre, 0)
+
     lignes: list[LigneEleve] = []
     eleves_en_argent = 0
     total_en_argent = Decimal("0")
@@ -258,6 +301,8 @@ async def load_category_ledger(
         date_from=date_from,
         date_to=date_to,
         consolide=consolide,
+        effectif_perimetre=effectif,
+        eleves_sans_ligne=sans_ligne,
         eleves_en_argent=eleves_en_argent,
         total_en_argent=total_en_argent,
         depots_en_nature=depots,

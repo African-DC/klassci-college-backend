@@ -57,6 +57,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient du document en silence *(comptable, caissier)*
 - Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture *(comptable, caissier)*
 - La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
 - L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
