@@ -9,10 +9,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé *(comptable, caissier)*
 - Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie *(comptable, caissier)*
 - Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*
 - Les évolutions du produit sont publiées dans un flux lisible par la vitrine, avec le public concerné par chaque ligne *(devops)*
-- Un tableau par classe dit qui a soldé quelle catégorie de frais, en distinguant l'argent du dépôt en nature, et s'exporte en classeur. Réservé à qui consolide toutes les caisses *(comptable)*
 - Un dépôt en nature posé par erreur s'annule depuis l'application, au lieu d'une correction à la main en base *(admin, comptable)* (#399)
 - Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*
 - Répercuter un tarif peut aussi créer les lignes manquantes chez les élèves déjà inscrits, sur demande explicite *(admin, comptable)*
@@ -57,6 +57,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture *(comptable, caissier)*
 - La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
 - L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*

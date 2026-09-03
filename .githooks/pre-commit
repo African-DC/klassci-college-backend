@@ -11,7 +11,10 @@ refus() {
 }
 
 branche=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-indexes=$(git diff --cached --name-only)
+# --diff-filter=ACMR : ce qui existe encore sur le disque. Sans ce filtre, une
+# suppression est transmise a ruff, qui refuse un fichier qu'il ne trouve pas
+# — et le hook bloquait alors tout commit qui retire du code.
+indexes=$(git diff --cached --name-only --diff-filter=ACMR)
 
 # --- 1. Jamais de commit direct sur une branche protegee ----------------------
 case "$branche" in
