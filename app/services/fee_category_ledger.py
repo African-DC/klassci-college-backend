@@ -141,9 +141,15 @@ async def load_category_ledger(
 ) -> CategoryLedger:
     """Compose le point d'une catégorie.
 
-    `received_by` restreint l'argent à une caisse — c'est `cashier_scope` qui
-    le décide en amont, et non ce module : la règle du cloisonnement vit à un
-    seul endroit, et la redécider ici finirait par en donner deux versions.
+    `received_by` restreint à une caisse **tout ce qui est entré** : l'argent
+    versé et les dépôts en nature. C'est `cashier_scope` qui le décide en
+    amont, et non ce module : la règle du cloisonnement vit à un seul
+    endroit, et la redécider ici finirait par en donner deux versions.
+
+    Le compte des dépôts ne l'a pas toujours respecté, et le document
+    rendait alors le total de l'école entière à une caissière — sous une
+    phrase affirmant qu'il ne couvrait que sa caisse. Un document qui se
+    contredit sur son propre périmètre vaut moins que pas de document.
 
     `consolide` dit si l'appelant a le droit de lire toutes les caisses. Sans
     lui, le reste dû n'est pas calculé du tout — pas mis à zéro, pas approché :
@@ -206,8 +212,13 @@ async def load_category_ledger(
             eleves_en_argent += 1
             total_en_argent += paye
 
+        # Un depot est quelque chose qui est ENTRE : il se cloisonne donc comme
+        # l'argent. `received_by` ne filtrait que les versements, et ce compte
+        # rendait a une caissiere le total de toute l'ecole sous un document
+        # qui affirme en toutes lettres ne couvrir que sa caisse.
         depose = statut == EnrollmentFeeStatus.IN_KIND.value
-        if depose and _dans_la_fenetre(ligne.deposited_at, date_from, date_to):
+        de_ma_main = received_by is None or ligne.deposited_by_user_id == received_by
+        if depose and de_ma_main and _dans_la_fenetre(ligne.deposited_at, date_from, date_to):
             depots += 1
 
         reste: Decimal | None = None

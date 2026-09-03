@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-03T01:28:51Z",
+  "generated_at": "2026-09-03T21:24:11Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1435,6 +1435,22 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les états du point par catégorie retrouvent leurs couleurs sur le document PDF",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune",
             "audience": [
