@@ -131,3 +131,95 @@ def test_sans_droit_de_lecture_des_paiements_la_porte_est_fermee() -> None:
     for client in _client(CAISSIERE, permissions=set()):
         assert client.get(ROUTE).status_code == 403
         break
+
+
+# ---------------------------------------------------------------------------
+# L'export : meme cloisonnement que l'ecran, sans quoi c'est une porte derobee
+# ---------------------------------------------------------------------------
+
+EXPORT = "/payments/settlement/category/export?category_id=1&academic_year_id=1"
+
+
+def _sans_generer(quoi: str):
+    """Neutralise la generation du document : on teste le raccord, pas WeasyPrint.
+
+    Le rendu est deja couvert par `test_fee_category_ledger_pdf.py`. Ce qui
+    manque, et que seul le routeur peut perdre, c'est ce qu'il transmet.
+    """
+    return patch(
+        f"app.routers.payments.fee_category_ledger.get_category_ledger_{quoi}",
+        new_callable=AsyncMock,
+        return_value=b"%PDF-1.7 " if quoi == "pdf" else b"PK\x03\x04",
+    )
+
+
+def test_l_export_de_la_caissiere_reste_sur_sa_caisse(caissiere: TestClient) -> None:
+    """Un export garde moins fermement que son ecran serait une porte derobee."""
+    with _sans_generer("pdf") as genere:
+        reponse = caissiere.get(EXPORT)
+
+    assert reponse.status_code == 200
+    assert genere.await_args.kwargs["received_by"] == CAISSIERE.user_id
+
+
+def test_l_export_ne_perd_pas_le_cloisonnement_en_chemin(caissiere: TestClient) -> None:
+    """`consolide` perdu ici sortirait un document sans son avertissement.
+
+    C'est la seule ligne qui empeche un etat de guichet de se lire comme le
+    compte de l'ecole entiere. Elle depend d'un booleen que le routeur doit
+    transmettre, et qu'aucun test ne surveillait.
+    """
+    with _sans_generer("pdf") as genere:
+        caissiere.get(EXPORT)
+
+    assert genere.await_args.kwargs["consolide"] is False
+
+
+def test_l_export_du_comptable_consolide_les_caisses(comptable: TestClient) -> None:
+    with _sans_generer("pdf") as genere:
+        comptable.get(EXPORT)
+
+    assert genere.await_args.kwargs["received_by"] is None
+    assert genere.await_args.kwargs["consolide"] is True
+
+
+def test_demander_la_caisse_d_une_collegue_a_l_export_ne_l_ouvre_pas(
+    caissiere: TestClient,
+) -> None:
+    with _sans_generer("pdf") as genere:
+        caissiere.get(f"{EXPORT}&received_by=99")
+
+    assert genere.await_args.kwargs["received_by"] == CAISSIERE.user_id
+
+
+def test_le_format_demande_est_celui_qui_sort(comptable: TestClient) -> None:
+    """Choisir « classeur » et recevoir un PDF ferait echouer un import comptable."""
+    with _sans_generer("xlsx"):
+        classeur = comptable.get(f"{EXPORT}&format=xlsx")
+    with _sans_generer("pdf"):
+        document = comptable.get(f"{EXPORT}&format=pdf")
+
+    assert "spreadsheetml" in classeur.headers["content-type"]
+    assert document.headers["content-type"].startswith("application/pdf")
+
+
+def test_l_apercu_s_affiche_et_l_export_se_telecharge(comptable: TestClient) -> None:
+    """L'apercu existe pour eviter six fichiers dans le dossier de telechargements."""
+    with _sans_generer("pdf"):
+        apercu = comptable.get(f"{EXPORT}&inline=true")
+    with _sans_generer("pdf"):
+        telecharge = comptable.get(EXPORT)
+
+    assert apercu.headers["content-disposition"].startswith("inline")
+    assert telecharge.headers["content-disposition"].startswith("attachment")
+
+
+def test_un_format_invente_est_refuse(comptable: TestClient) -> None:
+    """Sans le motif, un format inconnu retomberait silencieusement sur le PDF."""
+    assert comptable.get(f"{EXPORT}&format=csv").status_code == 422
+
+
+def test_sans_droit_de_lecture_l_export_est_ferme() -> None:
+    for client in _client(CAISSIERE, permissions=set()):
+        assert client.get(EXPORT).status_code == 403
+        break
