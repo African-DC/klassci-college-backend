@@ -29,9 +29,14 @@ from app.services.fee_settlement import (
 
 
 async def load_settlement(
-    db: AsyncSession, *, class_id: int, academic_year_id: int
+    db: AsyncSession, *, academic_year_id: int, class_id: int | None = None
 ) -> SettlementMatrix:
-    """Charge la classe et compose son tableau.
+    """Charge les inscriptions de l'annee, et compose leur tableau.
+
+    **La classe est facultative.** La question posee est « ou en est chaque
+    famille sur ce frais », a l'echelle de l'ecole ; la classe ne fait que
+    reduire quand on veut regarder de plus pres. L'exiger forcait a parcourir
+    les classes une par une, ce que cet ecran existe pour eviter.
 
     Trois requêtes, quel que soit l'effectif : les inscriptions avec leurs
     frais, les catégories vues, et le versé par frais. `EnrollmentFee` ne porte
@@ -42,14 +47,17 @@ async def load_settlement(
     en lot : compter un élève qui n'est plus là parmi les non soldés ferait
     courir après quelqu'un qui ne doit rien.
     """
+    conditions = [
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.status.not_in(CLOSED_STATUSES),
+    ]
+    if class_id is not None:
+        conditions.append(Enrollment.class_id == class_id)
+
     stmt = (
         select(Enrollment)
         .join(Student, Student.id == Enrollment.student_id)
-        .where(
-            Enrollment.class_id == class_id,
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.status.not_in(CLOSED_STATUSES),
-        )
+        .where(*conditions)
         .options(
             selectinload(Enrollment.student),
             selectinload(Enrollment.enrollment_fees),
@@ -70,8 +78,8 @@ async def load_settlement(
             ).scalars()
         }
 
-    paid_by_fee = await fees_paid.paid_by_class(
-        db, class_id=class_id, academic_year_id=academic_year_id
+    paid_by_fee = await fees_paid.paid_for_scope(
+        db, academic_year_id=academic_year_id, class_id=class_id
     )
 
     premiere = inscriptions[0] if inscriptions else None
@@ -86,6 +94,10 @@ async def load_settlement(
                 # ailleurs : `matricule` n'existe pas sur le modèle, et un
                 # `getattr` sur ce nom-là aurait rendu `None` en silence.
                 student_matricule=getattr(inscription.student, "enrollment_number", None),
+                # Sur toute l'ecole, la classe situe l'eleve : sans elle, deux
+                # homonymes de niveaux differents seraient impossibles a
+                # departager sur une liste de quatre-vingt-dix-neuf lignes.
+                class_name=getattr(inscription.class_, "name", "") or "",
                 fees=tuple(
                     FeeLineInput(
                         fee_id=frais.id,
@@ -100,13 +112,19 @@ async def load_settlement(
         ),
         categories=categories,
         paid_by_fee=paid_by_fee,
-        class_name=getattr(getattr(premiere, "class_", None), "name", "") or "",
+        class_name=(
+            getattr(getattr(premiere, "class_", None), "name", "") or ""
+            if class_id is not None
+            else "Toutes les classes"
+        ),
         academic_year_name=getattr(getattr(premiere, "academic_year", None), "name", "") or "",
     )
 
 
-async def get_settlement_xlsx(db: AsyncSession, *, class_id: int, academic_year_id: int) -> bytes:
+async def get_settlement_xlsx(
+    db: AsyncSession, *, academic_year_id: int, class_id: int | None = None
+) -> bytes:
     """Le tableau de la classe, au gabarit officiel de l'établissement."""
-    matrix = await load_settlement(db, class_id=class_id, academic_year_id=academic_year_id)
+    matrix = await load_settlement(db, academic_year_id=academic_year_id, class_id=class_id)
     school = await load_school_settings_for_pdf(db)
     return generate_fee_settlement_xlsx(matrix, school)

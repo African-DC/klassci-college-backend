@@ -58,4 +58,11 @@ if git diff --cached --name-only | grep -q '^CHANGELOG.md$'; then
   fi
 fi
 
+# --- 5. Un acces se demande a la matrice, il ne se deduit pas d'un role -------
+if [ -f scripts/check_permissions.py ] && command -v python >/dev/null 2>&1; then
+  if ! python scripts/check_permissions.py --staged; then
+    refus "une route sans garde, ou un role qui autorise."       "Le detail est ci-dessus. La regle et ses exceptions : scripts/check_permissions.py"
+  fi
+fi
+
 exit 0

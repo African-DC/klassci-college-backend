@@ -15,6 +15,17 @@ message=$(cat "$message_file")
 # La premiere ligne non commentee : git y met parfois des commentaires en tete.
 sujet=$(printf '%s\n' "$message" | grep -v '^#' | sed '/^[[:space:]]*$/d' | head -1)
 
+# Une fusion, un retour arriere, un « fixup » : git ecrit lui-meme ces messages,
+# et ils ne suivent pas — et n'ont pas a suivre — le format conventionnel. Les
+# refuser bloquerait toute fusion `develop` vers `main`, ce qui est arrive des
+# la premiere branche ayant du rattraper `develop`.
+if [ -f "$(git rev-parse --git-dir)/MERGE_HEAD" ]; then
+  exit 0
+fi
+case "$(printf '%s' "$message" | head -1)" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
 refus() {
   printf '\n\033[31mCommit refuse\033[0m — %s\n\n' "$1" >&2
   shift
