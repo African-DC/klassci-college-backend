@@ -99,3 +99,37 @@ def test_le_nom_de_la_categorie_titre_le_document() -> None:
     html = render_fee_category_ledger_html(_ledger(consolide=True), ECOLE)
 
     assert "PAQUET DE RAMES" in html
+
+
+def test_la_pastille_porte_la_cle_et_non_le_mot() -> None:
+    """Sinon toute la colonne « Etat » sort sans couleur, et personne ne le voit.
+
+    `status_pill` fabrique sa classe CSS a partir de la valeur recue :
+    `pdf-pill-paid`, `-partial`, `-pending`... Lui passer « Solde » produisait
+    `pdf-pill-solde`, qui n'est definie nulle part. Le document restait juste
+    dans ses mots et muet dans ses couleurs — le genre de defaut qu'un test de
+    presence de texte ne voit pas, parce que le texte, lui, etait bien la.
+    """
+    html = render_fee_category_ledger_html(_ledger(consolide=True), ECOLE)
+
+    # La classe vient de la cle...
+    assert "pdf-pill-pending" in html
+    # ...et le mot affiche reste celui du document, pas celui de la table
+    # partagee : sur un frais on dit « Du », pas « En attente ».
+    assert ">Dû<" in html
+    # Aucune classe fabriquee a partir d'un libelle francais.
+    for mot in ("pdf-pill-du", "pdf-pill-solde", "pdf-pill-soldé", "pdf-pill-dû"):
+        assert mot not in html
+
+
+def test_le_compte_des_depots_est_celui_de_la_caisse_lue() -> None:
+    """Le nombre affiche doit etre celui que le ledger porte, sans reinterpretation.
+
+    Le cloisonnement se decide en amont, dans `load_category_ledger` : ce test
+    tient seulement la promesse du composeur, qui est de ne pas inventer un
+    chiffre a la place de celui qu'on lui donne.
+    """
+    html = render_fee_category_ledger_html(_ledger(consolide=False), ECOLE)
+
+    assert "<strong>3</strong>" in html
+    assert "jamais une quantité d'articles" in html
