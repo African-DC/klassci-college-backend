@@ -348,3 +348,38 @@ async def get_category_ledger_xlsx(
     )
     school = await load_school_settings_for_pdf(db)
     return generate_fee_category_ledger_xlsx(ledger, school)
+
+
+async def get_category_ledger_pdf(
+    db: AsyncSession,
+    *,
+    category_id: int,
+    academic_year_id: int,
+    class_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+    consolide: bool = True,
+) -> bytes:
+    """Le même document, au gabarit officiel, en PDF.
+
+    Le classeur sert à recalculer ; le PDF sert à signer et à remettre. Les
+    deux lisent le même `CategoryLedger`, chargé une fois : deux compositions
+    partant de deux lectures finiraient par annoncer deux totaux, et c'est
+    précisément le document qu'on ne peut pas se permettre de voir diverger.
+    """
+    from app.services._school_settings_helper import load_school_settings_for_pdf
+    from app.services.pdf.fee_category_ledger import generate_fee_category_ledger_pdf
+
+    ledger = await load_category_ledger(
+        db,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=received_by,
+        consolide=consolide,
+    )
+    school = await load_school_settings_for_pdf(db)
+    return generate_fee_category_ledger_pdf(ledger, school)
