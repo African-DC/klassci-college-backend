@@ -284,6 +284,8 @@ async def export_fee_category_point(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
     received_by: int | None = Query(None),
+    export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
+    inline: bool = Query(False, description="Afficher au lieu de telecharger."),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
@@ -299,25 +301,38 @@ async def export_fee_category_point(
     qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
     se lirait comme le compte de l'ecole entiere.
     """
-    return await binary_response(
-        lambda: fee_category_ledger.get_category_ledger_xlsx(
-            db,
-            category_id=category_id,
-            academic_year_id=academic_year_id,
-            class_id=class_id,
-            date_from=date_from,
-            date_to=date_to,
-            received_by=cashier_scope(
-                requested_received_by=received_by,
-                can_read_all=can_read_all,
-                current_user_id=current_user.user_id,
-            ),
-            consolide=can_read_all,
+    criteres = {
+        "category_id": category_id,
+        "academic_year_id": academic_year_id,
+        "class_id": class_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "received_by": cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
         ),
-        filename=f"point-categorie-{date.today().isoformat()}.xlsx",
-        media_type=_XLSX_MEDIA_TYPE,
+        "consolide": can_read_all,
+    }
+    jour = date.today().isoformat()
+
+    if export_format == "xlsx":
+        return await binary_response(
+            lambda: fee_category_ledger.get_category_ledger_xlsx(db, **criteres),
+            filename=f"point-categorie-{jour}.xlsx",
+            media_type=_XLSX_MEDIA_TYPE,
+            error_context="point sur une categorie de frais (classeur)",
+            disposition="attachment",
+        )
+
+    # `inline` sert l'apercu : le meme document, affiche au lieu d'etre
+    # telecharge. Un comptable qui verifie une periode avant de l'envoyer a un
+    # prestataire ne veut pas six fichiers dans son dossier de telechargements.
+    return await pdf_response(
+        lambda: fee_category_ledger.get_category_ledger_pdf(db, **criteres),
+        filename=f"point-categorie-{jour}.pdf",
         error_context="point sur une categorie de frais",
-        disposition="attachment",
+        disposition="inline" if inline else "attachment",
     )
 
 

@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-02T23:32:10Z",
+  "generated_at": "2026-09-03T00:51:55Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie",
             "audience": [
