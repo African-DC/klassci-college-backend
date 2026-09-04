@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
-from app.services.fee_category_ledger import CategoryLedger
+from app.services.fee_category_ledger import LEDGER_MAX_ROWS, CategoryLedger
 
 CAISSIERE = TokenData(user_id=12, tenant_id="local", email="sophie.yao@college.ci")
 COMPTABLE = TokenData(user_id=3, tenant_id="local", email="comptable@college.ci")
@@ -45,6 +45,16 @@ def _vide(*, consolide: bool) -> CategoryLedger:
         depots_en_nature=0,
         eleves_restant_du=0 if consolide else None,
         total_restant_du=0 if consolide else None,
+        total_attendu=0 if consolide else None,
+        taux_recouvrement=None,
+        compteurs={} if consolide else None,
+        etat_filtre=None,
+        recherche=None,
+        recherche_approchee=False,
+        total_lignes=0,
+        page=1,
+        size=LEDGER_MAX_ROWS,
+        truncated_from=None,
         lignes=(),
     )
 

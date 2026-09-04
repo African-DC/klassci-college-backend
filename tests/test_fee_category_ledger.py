@@ -29,11 +29,12 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import BigInteger, create_engine
+from sqlalchemy import BigInteger, create_engine, update
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
 from app.core.database import Base
+from app.core.exceptions import BusinessValidationError
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import (
@@ -80,8 +81,14 @@ class _Pont:
         return self._session.execute(statement)  # type: ignore[arg-type]
 
 
-def _eleve(ident: int, nom: str, prenom: str) -> Student:
-    return Student(id=ident, last_name=nom, first_name=prenom)
+def _eleve(ident: int, nom: str, prenom: str, matricule: str) -> Student:
+    """Un élève avec son matricule : la recherche cherche aussi là-dedans.
+
+    Le modèle remplit `last_name_key` / `first_name_key` à l'écriture — c'est
+    sur ces colonnes-là que la recherche porte, et les fabriquer ici à la main
+    reviendrait à écrire un second repliage.
+    """
+    return Student(id=ident, last_name=nom, first_name=prenom, enrollment_number=matricule)
 
 
 def _inscription(
@@ -168,11 +175,13 @@ def db() -> Iterator[Session]:
                 Level(id=1, name="6eme"),
                 Class(id=CLASSE_A, name="6eme A", level_id=1),
                 Class(id=CLASSE_B, name="6eme B", level_id=1),
-                _eleve(AYA, "KOUASSI", "Aya"),
-                _eleve(BAKARY, "TRAORE", "Bakary"),
-                _eleve(CYRILLE, "N'GUESSAN", "Cyrille"),
-                _eleve(DJENEBA, "OUATTARA", "Djeneba"),
-                _eleve(EMERAUDE, "ZADI", "Emeraude"),
+                _eleve(AYA, "KOUASSI", "Aya", "C-2026-001"),
+                # Accentue, comme sur la piece d'etat civil : la recherche doit
+                # le trouver sans que la personne pense a taper l'accent.
+                _eleve(BAKARY, "TRAORÉ", "Bakary", "C-2026-002"),
+                _eleve(CYRILLE, "N'GUESSAN", "Cyrille", "C-2026-003"),
+                _eleve(DJENEBA, "OUATTARA", "Djeneba", "C-2026-004"),
+                _eleve(EMERAUDE, "ZADI", "Emeraude", "C-2026-005"),
                 _inscription(INSC_AYA, AYA, CLASSE_A),
                 _inscription(INSC_BAKARY, BAKARY, CLASSE_A),
                 # Inscrit, jamais facture sur cette categorie.
@@ -197,8 +206,12 @@ def db() -> Iterator[Session]:
                     academic_year_id=ANNEE,
                     amount=Decimal("3000"),
                 ),
-                _frais(FRAIS_AYA, INSC_AYA, "3000"),
-                _frais(FRAIS_BAKARY, INSC_BAKARY, "3000"),
+                # Les statuts sont ceux que `recompute_fee_status` poserait au
+                # vu des versements plus bas : Aya soldée, Bakary à moitié,
+                # Djeneba n'a rien donné. C'est de ce champ-là, et de lui seul,
+                # que sortent les seaux.
+                _frais(FRAIS_AYA, INSC_AYA, "3000", EnrollmentFeeStatus.PAID.value),
+                _frais(FRAIS_BAKARY, INSC_BAKARY, "3000", EnrollmentFeeStatus.PARTIAL.value),
                 _frais(FRAIS_DJENEBA, INSC_DJENEBA, "3000"),
             ]
         )
@@ -469,3 +482,362 @@ async def test_le_compte_des_sans_ligne_ne_vient_pas_de_la_liste_rendue(db: Sess
 
     couverts = document.effectif_perimetre - document.eleves_sans_ligne
     assert couverts == len(document.lignes)
+
+
+# ---------------------------------------------------------------------------
+# L'attendu, le taux, les seaux — l'addition qui manquait
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_le_total_attendu_additionne_ce_qui_est_encore_du(db: Session) -> None:
+    """La donnée était là, ligne par ligne ; c'est l'addition qui manquait.
+
+    Sans elle le document n'a pas de dénominateur, et il n'est montrable à
+    aucune direction : on y lit ce qui est rentré sans savoir sur quoi.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.total_attendu == Decimal("9000")
+
+
+@pytest.mark.asyncio
+async def test_le_taux_est_le_recouvre_sur_l_attendu(db: Session) -> None:
+    """4 000 F recouvrés sur 9 000 attendus, à une décimale comme ailleurs.
+
+    Le recouvré n'est pas une seconde somme d'allocations : c'est l'attendu
+    moins ce qui reste dû. Les 2 000 F saisis mais non encaissés de Bakary
+    n'entrent donc nulle part, ni au numérateur ni au dénominateur.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.total_restant_du == Decimal("5000")
+    assert document.taux_recouvrement == 44.4
+
+
+@pytest.mark.asyncio
+async def test_une_exoneration_sort_du_denominateur_ET_du_numerateur(db: Session) -> None:
+    """Le piège du taux qui dépasse 100 %, pris par les montants.
+
+    Aya a versé ses 3 000 F, puis l'école l'exonère. Sa ligne n'est plus due :
+    elle sort de l'attendu. Si son argent restait au numérateur, on lirait
+    4 000 recouvrés sur 6 000 attendus — 66,7 % — alors que seul Bakary a
+    versé sur les lignes encore dues, soit 1 000 sur 6 000.
+    """
+    db.execute(
+        update(EnrollmentFee)
+        .where(EnrollmentFee.id == FRAIS_AYA)
+        .values(status=EnrollmentFeeStatus.WAIVED.value)
+    )
+    db.commit()
+
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.total_attendu == Decimal("6000")
+    assert document.taux_recouvrement == 16.7
+
+
+@pytest.mark.asyncio
+async def test_le_taux_ne_depasse_jamais_cent_pour_cent(db: Session) -> None:
+    """Tout ce qui reste dû est soldé : cent, et pas un point de plus."""
+    db.execute(
+        update(EnrollmentFee)
+        .where(EnrollmentFee.id.in_([FRAIS_BAKARY, FRAIS_DJENEBA]))
+        .values(status=EnrollmentFeeStatus.WAIVED.value)
+    )
+    db.commit()
+
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.total_attendu == Decimal("3000")
+    assert document.taux_recouvrement == 100.0
+
+
+@pytest.mark.asyncio
+async def test_un_taux_sans_denominateur_est_absent_et_non_nul(db: Session) -> None:
+    """Plus rien n'est dû en argent : le taux n'existe pas, il ne vaut pas zéro.
+
+    Zéro se lirait « rien n'est rentré », ce qui est le contraire de la
+    situation. L'attendu, lui, vaut bien zéro : c'est un fait connu.
+    """
+    db.execute(update(EnrollmentFee).values(status=EnrollmentFeeStatus.WAIVED.value))
+    db.commit()
+
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.total_attendu == Decimal("0")
+    assert document.taux_recouvrement is None
+
+
+@pytest.mark.asyncio
+async def test_les_compteurs_par_seau_retombent_sur_le_nombre_de_lignes(db: Session) -> None:
+    """Un compteur d'onglet qui ne retombe pas sur la liste fait douter des deux."""
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert document.compteurs == {
+        "pending": 1,
+        "partial": 1,
+        "paid": 1,
+        "waived": 0,
+        "in_kind": 0,
+    }
+    couverts = document.effectif_perimetre - document.eleves_sans_ligne
+    assert sum(document.compteurs.values()) == couverts
+
+
+@pytest.mark.asyncio
+async def test_le_recouvrement_entier_est_absent_pour_une_caissiere(db: Session) -> None:
+    """Le taux, l'attendu et les seaux forment un bloc, et il ne se sert pas à moitié.
+
+    Un taux calculé sur une seule caisse annoncerait une dette chez des
+    familles ayant payé au guichet d'à côté. Ce qu'elle garde, c'est son
+    encaissement à elle — un fait sur sa caisse.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db),
+        category_id=CATEGORIE,
+        academic_year_id=ANNEE,
+        received_by=CAISSE_SOPHIE,
+        consolide=False,
+    )
+
+    assert document.total_attendu is None
+    assert document.taux_recouvrement is None
+    assert document.compteurs is None
+    assert document.total_en_argent == Decimal("3000")
+    assert document.effectif_perimetre == 4
+
+
+# ---------------------------------------------------------------------------
+# Le seau, la recherche, la page et le plafond
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_le_seau_filtre_la_liste_sans_deplacer_les_compteurs(db: Session) -> None:
+    """Les compteurs décrivent le périmètre, la liste décrit l'onglet ouvert.
+
+    Sinon le chiffre de l'onglet vaudrait toujours la longueur de sa propre
+    liste, et les trois onglets afficheraient chacun cent pour cent d'eux-mêmes.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db),
+        category_id=CATEGORIE,
+        academic_year_id=ANNEE,
+        state=fee_category_ledger.SEAU_IMPAYES,
+    )
+
+    assert {ligne.enrollment_id for ligne in document.lignes} == {INSC_BAKARY, INSC_DJENEBA}
+    assert document.total_lignes == 2
+    assert document.etat_filtre == fee_category_ledger.SEAU_IMPAYES
+    # Le périmètre, intact.
+    assert document.compteurs is not None
+    assert sum(document.compteurs.values()) == 3
+    assert document.total_en_argent == Decimal("4000")
+    assert document.total_attendu == Decimal("9000")
+
+
+@pytest.mark.asyncio
+async def test_le_seau_sort_du_statut_et_non_du_verse_affiche(db: Session) -> None:
+    """Bakary a versé chez Marcel ; lu depuis la caisse de Sophie, son versé est nul.
+
+    Classer sur ce versé-là mettrait Aya — soldée au guichet d'à côté — dans
+    « aucun paiement ». Le statut, lui, est recalculé sur tout l'argent reçu :
+    c'est le seul champ dont un seau puisse sortir.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db),
+        category_id=CATEGORIE,
+        academic_year_id=ANNEE,
+        received_by=CAISSE_MARCEL,
+        consolide=True,
+        state=EnrollmentFeeStatus.PAID.value,
+    )
+
+    assert _ligne(document, FRAIS_AYA).paid == Decimal("0")
+    assert {ligne.enrollment_id for ligne in document.lignes} == {INSC_AYA}
+
+
+@pytest.mark.asyncio
+async def test_le_tri_par_seau_se_refuse_a_une_caissiere(db: Session) -> None:
+    """Un refus explicite, pas une liste vide qu'on lirait « personne ne doit rien »."""
+    with pytest.raises(BusinessValidationError):
+        await fee_category_ledger.load_category_ledger(
+            _Pont(db),
+            category_id=CATEGORIE,
+            academic_year_id=ANNEE,
+            received_by=CAISSE_SOPHIE,
+            consolide=False,
+            state=fee_category_ledger.SEAU_IMPAYES,
+        )
+
+
+@pytest.mark.asyncio
+async def test_un_seau_inconnu_est_refuse_et_non_ignore(db: Session) -> None:
+    """Un filtre silencieusement ignoré rendrait la liste entière sous son nom."""
+    with pytest.raises(BusinessValidationError):
+        await fee_category_ledger.load_category_ledger(
+            _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, state="en_retard"
+        )
+
+
+@pytest.mark.asyncio
+async def test_la_recherche_se_moque_de_la_casse_et_des_accents(db: Session) -> None:
+    """« TRAORÉ » doit se trouver en tapant « traore ».
+
+    La recherche porte sur la forme comparable que l'élève porte déjà en
+    colonne. Sur le nom brut, la fiche resterait introuvable sous son propre
+    nom — et on la recréerait, avec une seconde ardoise.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="traore"
+    )
+
+    assert [ligne.enrollment_id for ligne in document.lignes] == [INSC_BAKARY]
+    assert document.total_lignes == 1
+    assert document.recherche == "traore"
+
+
+@pytest.mark.asyncio
+async def test_la_recherche_trouve_par_matricule(db: Session) -> None:
+    """C'est ce que la caisse a sous les yeux quand la famille tend son carnet."""
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="C-2026-004"
+    )
+
+    assert [ligne.enrollment_id for ligne in document.lignes] == [INSC_DJENEBA]
+
+
+@pytest.mark.asyncio
+async def test_chaque_mot_cherche_doit_correspondre(db: Session) -> None:
+    """Les mots se cumulent : « a Djeneba » ne rend pas tout le monde.
+
+    Les trois noms de la liste portent un « a ». Un `OU` entre les mots ferait
+    donc remonter la classe entière dès qu'un mot est large, et la recherche
+    cesserait de servir à sa deuxième lettre.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="a Djeneba"
+    )
+
+    assert [ligne.enrollment_id for ligne in document.lignes] == [INSC_DJENEBA]
+    assert document.total_lignes == 1
+    assert document.recherche_approchee is False
+
+
+@pytest.mark.asyncio
+async def test_le_repechage_flou_rattrape_une_faute_de_frappe(db: Session) -> None:
+    """« KOUASI » pour « KOUASSI » : une page vide se lirait « pas dans cette classe ».
+
+    Même dernier recours que la liste des élèves : la recherche exacte
+    d'abord, le flou seulement quand elle n'a rien rendu.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="KOUASI"
+    )
+
+    assert [ligne.enrollment_id for ligne in document.lignes] == [INSC_AYA]
+    assert document.total_lignes == 1
+
+
+@pytest.mark.asyncio
+async def test_le_repechage_dit_qu_il_est_un_repechage(db: Session) -> None:
+    """Des fiches approchantes servies sans un mot se lisent comme LA réponse.
+
+    Et on encaisse alors sur l'homonyme. Le drapeau existe pour que l'écran
+    écrive « aucune correspondance exacte » au-dessus de ces lignes-là.
+    """
+    exacte = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="traore"
+    )
+    approchee = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, q="KOUASI"
+    )
+
+    assert exacte.recherche_approchee is False
+    assert approchee.recherche_approchee is True
+
+
+@pytest.mark.asyncio
+async def test_les_totaux_ne_baissent_pas_quand_on_tourne_la_page(db: Session) -> None:
+    """Le défaut qui rend une pagination pire que pas de pagination du tout.
+
+    Les lignes sortent triées sur le nom : KOUASSI, OUATTARA, TRAORÉ. La
+    deuxième page d'une page à une ligne montre donc Djeneba — et les chiffres
+    du haut décrivent toujours l'école entière.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, page=2, size=1
+    )
+
+    assert [ligne.enrollment_id for ligne in document.lignes] == [INSC_DJENEBA]
+    assert document.total_lignes == 3
+    assert document.page == 2
+    assert document.size == 1
+    assert document.total_en_argent == Decimal("4000")
+    assert document.total_attendu == Decimal("9000")
+    assert document.effectif_perimetre == 4
+
+
+@pytest.mark.asyncio
+async def test_le_plafond_coupe_la_liste_et_le_document_le_dit(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un document amputé qui se tait vaut moins qu'un document absent.
+
+    Le plafond réel est à cinq mille lignes ; on l'abaisse ici pour mesurer le
+    comportement plutôt que la constante.
+    """
+    monkeypatch.setattr(fee_category_ledger, "LEDGER_MAX_ROWS", 2)
+
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE
+    )
+
+    assert len(document.lignes) == 2
+    assert document.total_lignes == 3
+    assert document.truncated_from == 3
+
+
+@pytest.mark.asyncio
+async def test_tourner_une_page_n_est_pas_une_troncature(db: Session) -> None:
+    """`truncated_from` dit que le plafond a coupé, pas qu'il reste des pages."""
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=CATEGORIE, academic_year_id=ANNEE, page=1, size=1
+    )
+
+    assert len(document.lignes) == 1
+    assert document.total_lignes == 3
+    assert document.truncated_from is None
+
+
+@pytest.mark.asyncio
+async def test_le_nom_de_la_classe_vient_du_critere_et_non_des_lignes(db: Session) -> None:
+    """Un filtre peut vider la page ; il ne doit pas effacer le nom du périmètre.
+
+    Reconstitué depuis la première ligne rendue, ce nom disparaissait
+    exactement quand le document en avait le plus besoin : au-dessus d'une
+    liste vide, pour dire de quelle classe elle est vide.
+    """
+    document = await fee_category_ledger.load_category_ledger(
+        _Pont(db),
+        category_id=CATEGORIE,
+        academic_year_id=ANNEE,
+        class_id=CLASSE_A,
+        q="ZZZZZZ",
+    )
+
+    assert document.lignes == ()
+    assert document.class_name == "6eme A"

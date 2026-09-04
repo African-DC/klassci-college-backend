@@ -11,7 +11,7 @@ ce que le journal des versements fait deja.
 
 from decimal import Decimal
 
-from app.services.fee_category_ledger import CategoryLedger, LigneEleve
+from app.services.fee_category_ledger import LEDGER_MAX_ROWS, CategoryLedger, LigneEleve
 from app.services.pdf.fee_category_ledger import render_fee_category_ledger_html
 
 ECOLE = {"school_name": "College Rostan", "primary_color": "#0F3F8C"}
@@ -33,6 +33,16 @@ def _ledger(*, consolide: bool, accepts_in_kind: bool = True) -> CategoryLedger:
         depots_en_nature=3,
         eleves_restant_du=1 if consolide else None,
         total_restant_du=Decimal("3000") if consolide else None,
+        total_attendu=Decimal("3000") if consolide else None,
+        taux_recouvrement=0.0 if consolide else None,
+        compteurs=({"pending": 1} if consolide else None),
+        etat_filtre=None,
+        recherche=None,
+        recherche_approchee=False,
+        total_lignes=1,
+        page=1,
+        size=LEDGER_MAX_ROWS,
+        truncated_from=None,
         lignes=(
             LigneEleve(
                 enrollment_id=1,

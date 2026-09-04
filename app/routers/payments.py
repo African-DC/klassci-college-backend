@@ -347,6 +347,21 @@ async def fee_category_point(
     date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
     date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
     received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    state: str | None = Query(
+        None,
+        description=(
+            "Ne garder qu'un seau : impayes (aucun paiement + partiel), pending, "
+            "partial, paid, waived, in_kind."
+        ),
+    ),
+    q: str | None = Query(None, description="Chercher un eleve par nom, prenom ou matricule."),
+    page: int = Query(1, ge=1),
+    size: int = Query(
+        fee_category_ledger.LEDGER_MAX_ROWS,
+        ge=1,
+        le=fee_category_ledger.LEDGER_MAX_ROWS,
+        description="Lignes par page. Par defaut le plafond : voir le docstring.",
+    ),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
@@ -369,6 +384,20 @@ async def fee_category_point(
 
     La periode borne les evenements — versements et depots. Elle ne borne pas
     le reste du, qui est un etat et vaut a l'instant ou on le lit.
+
+    L'attendu, le taux de recouvrement et les compteurs par seau suivent la
+    meme ligne que le reste du : ils se lisent sur tout l'argent recu, donc ils
+    sont absents sans `payments:read:all`, et `state` est alors refuse en 422
+    plutot que de rendre une liste qu'on prendrait pour une verite d'ecole.
+
+    `state`, `q` et la pagination ne bornent QUE la liste : les totaux et les
+    compteurs decrivent le perimetre entier, sinon le chiffre du haut de page
+    descendrait a chaque page tournee. La liste est plafonnee, et la reponse
+    dit par `truncated_from` quand la coupe a eu lieu.
+
+    `size` vaut le plafond par defaut, et non une petite page : l'ecran
+    d'aujourd'hui demande tout, et lui rendre cinquante lignes sans bouton pour
+    la suite ferait disparaitre des eleves sans rien dire.
     """
     ledger = await fee_category_ledger.load_category_ledger(
         db,
@@ -383,6 +412,10 @@ async def fee_category_point(
             current_user_id=current_user.user_id,
         ),
         consolide=can_read_all,
+        state=state,
+        q=q,
+        page=page,
+        size=size,
     )
     return CategoryLedgerResponse.model_validate(ledger)
 

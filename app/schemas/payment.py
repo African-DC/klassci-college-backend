@@ -395,4 +395,32 @@ class CategoryLedgerResponse(BaseModel):
     eleves_restant_du: int | None = None
     total_restant_du: Decimal | None = None
 
+    #: Ce que les lignes demandent encore en argent — exonerees et deposees en
+    #: nature exclues. `null` sans le droit de lire toutes les caisses : c'est
+    #: le denominateur du recouvrement, et le recouvrement se lit sur tout
+    #: l'argent recu.
+    total_attendu: Decimal | None = None
+    #: De 0 a 100, une decimale. `null` sans ce droit, et `null` aussi quand
+    #: rien n'est attendu : un taux sans denominateur n'est pas zero.
+    taux_recouvrement: float | None = None
+    #: Le nombre de lignes par etat, sur le perimetre entier — jamais sur la
+    #: page. `null` sans le droit de lire toutes les caisses.
+    compteurs: dict[str, int] | None = None
+
+    #: Les filtres de liste appliques, pour que l'ecran et le document puissent
+    #: dire ce qu'ils montrent.
+    etat_filtre: str | None = None
+    recherche: str | None = None
+    #: Vrai quand la recherche exacte n'a rien rendu et que la liste vient du
+    #: repechage flou. L'ecran doit le dire, sinon des fiches approchantes se
+    #: lisent comme la reponse a ce qu'on a tape.
+    recherche_approchee: bool = False
+    #: Lignes retenues par le filtre sur le perimetre, avant pagination.
+    total_lignes: int
+    page: int
+    size: int
+    #: Rempli quand le plafond a coupe. `null` quand rien n'a ete ampute :
+    #: tourner une page n'est pas une troncature.
+    truncated_from: int | None = None
+
     lignes: list[CategoryLedgerRowResponse]

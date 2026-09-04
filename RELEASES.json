@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-03T23:59:45Z",
+  "generated_at": "2026-09-04T00:46:47Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,22 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Le point sur une catégorie annonce le total attendu, le taux de recouvrement et le nombre d'élèves sans paiement, partiels et à jour",
+            "audience": [
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point sur une catégorie se trie par état, se cherche par nom ou matricule — accents et fautes de frappe pardonnés — et se feuillette page par page",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé",
             "audience": [
