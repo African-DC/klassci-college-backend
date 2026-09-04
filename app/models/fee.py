@@ -468,11 +468,28 @@ class PaymentAllocation(Base, TimestampMixin):
 
     Un Payment de 50 000 XOF peut être alloué automatiquement à plusieurs
     frais (ex : 20 000 sur T1 + 10 000 sur T2 + 20 000 sur T3). Chaque
-    split est une row PaymentAllocation. La somme des allocations.amount
-    DOIT toujours égaler payment.amount (invariant comptable).
+    split est une row PaymentAllocation.
+
+    **La somme des allocations vaut exactement le montant du versement.** Cette
+    phrase était un commentaire, et un commentaire n'est pas un mécanisme : le
+    point par catégorie ne lit QUE cette table, jamais `Payment.amount`, donc un
+    versement mal ventilé disparaissait de tous ses totaux en silence pendant
+    que le journal de caisse continuait de le compter.
+
+    L'invariant est désormais tenu par trois choses qui se répondent, décrites
+    en tête de `app/services/payments/allocation_invariant.py` : la contrainte
+    unique ci-dessous, une vérification avant écriture sur les deux chemins
+    d'enregistrement, et la commande d'audit `python -m app.cli.check_allocations`.
+
+    `uq_payment_allocation` ferme le cas particulier que la somme seule ne voit
+    pas : deux lignes pour le MÊME frais sur le même versement s'additionnent
+    correctement, la somme tombe juste, et rien ne dit pourquoi elles sont deux.
     """
 
     __tablename__ = "payment_allocations"
+    __table_args__ = (
+        UniqueConstraint("payment_id", "enrollment_fee_id", name="uq_payment_allocation"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     payment_id: Mapped[int] = mapped_column(

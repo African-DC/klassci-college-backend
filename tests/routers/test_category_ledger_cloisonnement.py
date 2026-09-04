@@ -13,6 +13,7 @@ sa seule caisse lui ferait relancer une famille qui a paye au guichet d'a cote.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -21,7 +22,8 @@ from fastapi.testclient import TestClient
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
 from app.core.redis import get_redis
 from app.main import app
-from app.services.fee_category_ledger import CategoryLedger
+from app.services.fee_category_ledger import LEDGER_MAX_ROWS, CategoryLedger
+from app.services.fee_category_overview import CategoriesOverview, LigneCategorie
 
 CAISSIERE = TokenData(user_id=12, tenant_id="local", email="sophie.yao@college.ci")
 COMPTABLE = TokenData(user_id=3, tenant_id="local", email="comptable@college.ci")
@@ -34,15 +36,33 @@ def _vide(*, consolide: bool) -> CategoryLedger:
         category_id=1,
         category_name="PAQUET DE RAM",
         accepts_in_kind=True,
+        academic_year_id=1,
+        academic_year_name="2026-2027",
         class_name="Toutes les classes",
         date_from=None,
         date_to=None,
         consolide=consolide,
+        scope_label="Toutes les caisses" if consolide else "Ma caisse",
+        cashier_name=None,
+        issued_by=None,
+        issued_at=datetime(2026, 11, 12, 16, 45),
+        effectif_perimetre=0,
+        eleves_sans_ligne=0,
         eleves_en_argent=0,
         total_en_argent=0,
         depots_en_nature=0,
         eleves_restant_du=0 if consolide else None,
         total_restant_du=0 if consolide else None,
+        total_attendu=0 if consolide else None,
+        taux_recouvrement=None,
+        compteurs={} if consolide else None,
+        etat_filtre=None,
+        recherche=None,
+        recherche_approchee=False,
+        total_lignes=0,
+        page=1,
+        size=LEDGER_MAX_ROWS,
+        truncated_from=None,
         lignes=(),
     )
 
@@ -222,4 +242,110 @@ def test_un_format_invente_est_refuse(comptable: TestClient) -> None:
 def test_sans_droit_de_lecture_l_export_est_ferme() -> None:
     for client in _client(CAISSIERE, permissions=set()):
         assert client.get(EXPORT).status_code == 403
+        break
+
+
+# ---------------------------------------------------------------------------
+# La vue d'ensemble : la meme ligne de partage, avant d'avoir choisi un frais
+# ---------------------------------------------------------------------------
+
+VUE = "/payments/settlement/overview?academic_year_id=1"
+
+
+def _apercu(*, consolide: bool) -> CategoriesOverview:
+    """Une vue d'ensemble a une categorie : on teste le raccord, pas l'addition.
+
+    L'addition est mesuree sur une vraie base par
+    `tests/test_fee_category_overview.py`. Ce qui manque, et que seul le
+    routeur peut perdre, c'est ce qu'il transmet au service.
+    """
+    return CategoriesOverview(
+        academic_year_id=1,
+        class_id=None,
+        class_name="Toutes les classes",
+        date_from=None,
+        date_to=None,
+        consolide=consolide,
+        effectif_perimetre=0,
+        categories=(
+            LigneCategorie(
+                category_id=1,
+                category_name="PAQUET DE RAM",
+                accepts_in_kind=True,
+                is_mandatory=False,
+                eleves_factures=0,
+                eleves_sans_ligne=0,
+                eleves_en_argent=0,
+                total_en_argent=0,
+                depots_en_nature=0,
+                eleves_restant_du=0 if consolide else None,
+                total_restant_du=0 if consolide else None,
+                total_attendu=0 if consolide else None,
+                taux_recouvrement=0.0 if consolide else None,
+                compteurs={} if consolide else None,
+            ),
+        ),
+    )
+
+
+def _sans_charger(*, consolide: bool):
+    return patch(
+        "app.routers.payments.fee_category_overview.load_categories_overview",
+        new_callable=AsyncMock,
+        return_value=_apercu(consolide=consolide),
+    )
+
+
+def test_la_caissiere_voit_son_encaissement_par_categorie(caissiere: TestClient) -> None:
+    """Son point du soir, categorie par categorie : on ne le lui refuse pas."""
+    with _sans_charger(consolide=False) as charge:
+        reponse = caissiere.get(VUE)
+
+    assert reponse.status_code == 200
+    assert charge.await_args.kwargs["received_by"] == CAISSIERE.user_id
+    assert charge.await_args.kwargs["consolide"] is False
+
+
+def test_le_recouvrement_de_la_vue_est_absent_pour_la_caissiere(caissiere: TestClient) -> None:
+    """Attendu, taux et compteurs partent ensemble : ils se lisent sur toutes les caisses."""
+    with _sans_charger(consolide=False):
+        corps = caissiere.get(VUE).json()
+
+    assert corps["consolide"] is False
+    carte = corps["categories"][0]
+    assert carte["total_attendu"] is None
+    assert carte["taux_recouvrement"] is None
+    assert carte["total_restant_du"] is None
+    assert carte["compteurs"] is None
+
+
+def test_un_filtre_de_caisse_ne_sert_pas_de_passe_droit_sur_la_vue(caissiere: TestClient) -> None:
+    with _sans_charger(consolide=False) as charge:
+        caissiere.get(f"{VUE}&received_by=99")
+
+    assert charge.await_args.kwargs["received_by"] == CAISSIERE.user_id
+
+
+def test_le_comptable_lit_le_recouvrement_de_chaque_categorie(comptable: TestClient) -> None:
+    with _sans_charger(consolide=True) as charge:
+        corps = comptable.get(VUE).json()
+
+    assert charge.await_args.kwargs["received_by"] is None
+    assert charge.await_args.kwargs["consolide"] is True
+    assert corps["categories"][0]["taux_recouvrement"] is not None
+
+
+def test_la_vue_exige_son_annee(comptable: TestClient) -> None:
+    """Sans annee, l'attendu additionnerait tous les exercices de la base.
+
+    La carte doit annoncer le total du document qu'elle ouvre, et ce
+    document-la exige l'annee : la lui laisser facultative ici ferait diverger
+    les deux sur le dos de l'ecran.
+    """
+    assert comptable.get("/payments/settlement/overview").status_code == 422
+
+
+def test_sans_droit_de_lecture_la_vue_est_fermee() -> None:
+    for client in _client(CAISSIERE, permissions=set()):
+        assert client.get(VUE).status_code == 403
         break

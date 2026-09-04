@@ -20,6 +20,7 @@ from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
     CashierOption,
     CategoryLedgerResponse,
+    FeeCategoryOverviewResponse,
     PaymentCancel,
     PaymentCreate,
     PaymentListResponse,
@@ -31,6 +32,7 @@ from app.schemas.payment import (
 from app.services import (
     daily_cash_book_service,
     fee_category_ledger,
+    fee_category_overview,
     payment_service,
     payments_journal_service,
 )
@@ -270,6 +272,61 @@ async def export_payments(
     )
 
 
+# NOTE: /settlement/overview MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/overview",
+    response_model=FeeCategoryOverviewResponse,
+    summary="Quel frais rentre mal : une ligne par categorie, avant d'en choisir une",
+)
+async def fee_categories_overview(
+    academic_year_id: int = Query(..., description="Annee lue. Obligatoire, comme sur le point."),
+    class_id: int | None = Query(None, description="Reduire a une classe."),
+    date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
+    date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
+    received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeeCategoryOverviewResponse:
+    """La question qu'on pose AVANT de choisir une categorie.
+
+    Le point par categorie repond tres bien a « ou en est la Tenue » — a
+    condition de savoir deja que c'est la Tenue qui va mal. Cet endpoint rend
+    la ligne par categorie qui evite de deviner : attendu, entre, taux et
+    compteurs, en une lecture groupee plutot qu'un point charge par frais.
+
+    **Ce qui est entre se cloisonne ; ce qui reste du ne se cloisonne pas.**
+    Une caissiere lit, categorie par categorie, ce qu'elle a encaisse : c'est
+    le point qu'elle fait le soir. L'attendu, le taux, le reste du et les
+    compteurs se lisent sur tout l'argent recu ; sans `payments:read:all` ils
+    sont absents — jamais approches, jamais mis a zero, un zero se lisant
+    comme un solde. La reponse le dit par `consolide: false`, et l'ecran doit
+    l'ecrire en toutes lettres plutot que d'afficher une grille de tirets.
+
+    L'annee est OBLIGATOIRE, comme sur le point qu'une carte ouvre : sans
+    elle, l'attendu additionnerait tous les exercices de la base et la carte
+    n'annoncerait pas le meme total que le document qu'elle ouvre.
+
+    La periode borne les evenements — versements et depots. Elle ne borne ni
+    l'attendu ni le reste du, qui sont des etats.
+    """
+    overview = await fee_category_overview.load_categories_overview(
+        db,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        consolide=can_read_all,
+    )
+    return FeeCategoryOverviewResponse.model_validate(overview)
+
+
 # NOTE: /settlement/category/export MUST be defined BEFORE /{payment_id}
 @router.get(
     "/settlement/category/export",
@@ -298,6 +355,12 @@ async def export_fee_category_point(
     Le classeur porte en en-tete, en toutes lettres, le fait qu'il ne couvre
     qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
     se lirait comme le compte de l'ecole entiere.
+
+    Il porte aussi qui l'a tire : `issued_by_user_id` nomme l'auteur en en-tete
+    et sous la ligne de signature. La caisse LUE et la personne qui IMPRIME
+    sont deux comptes distincts — sur un point consolide, les confondre
+    designerait le comptable comme caissier d'un etat qui recapitule le travail
+    de trois autres.
     """
     criteres = {
         "category_id": category_id,
@@ -311,6 +374,7 @@ async def export_fee_category_point(
             current_user_id=current_user.user_id,
         ),
         "consolide": can_read_all,
+        "issued_by_user_id": current_user.user_id,
     }
     jour = date.today().isoformat()
 
@@ -347,6 +411,21 @@ async def fee_category_point(
     date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
     date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
     received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    state: str | None = Query(
+        None,
+        description=(
+            "Ne garder qu'un seau : impayes (aucun paiement + partiel), pending, "
+            "partial, paid, waived, in_kind."
+        ),
+    ),
+    q: str | None = Query(None, description="Chercher un eleve par nom, prenom ou matricule."),
+    page: int = Query(1, ge=1),
+    size: int = Query(
+        fee_category_ledger.LEDGER_MAX_ROWS,
+        ge=1,
+        le=fee_category_ledger.LEDGER_MAX_ROWS,
+        description="Lignes par page. Par defaut le plafond : voir le docstring.",
+    ),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
     _: None = require_permission("payments:read"),
@@ -369,6 +448,20 @@ async def fee_category_point(
 
     La periode borne les evenements — versements et depots. Elle ne borne pas
     le reste du, qui est un etat et vaut a l'instant ou on le lit.
+
+    L'attendu, le taux de recouvrement et les compteurs par seau suivent la
+    meme ligne que le reste du : ils se lisent sur tout l'argent recu, donc ils
+    sont absents sans `payments:read:all`, et `state` est alors refuse en 422
+    plutot que de rendre une liste qu'on prendrait pour une verite d'ecole.
+
+    `state`, `q` et la pagination ne bornent QUE la liste : les totaux et les
+    compteurs decrivent le perimetre entier, sinon le chiffre du haut de page
+    descendrait a chaque page tournee. La liste est plafonnee, et la reponse
+    dit par `truncated_from` quand la coupe a eu lieu.
+
+    `size` vaut le plafond par defaut, et non une petite page : l'ecran
+    d'aujourd'hui demande tout, et lui rendre cinquante lignes sans bouton pour
+    la suite ferait disparaitre des eleves sans rien dire.
     """
     ledger = await fee_category_ledger.load_category_ledger(
         db,
@@ -383,6 +476,11 @@ async def fee_category_point(
             current_user_id=current_user.user_id,
         ),
         consolide=can_read_all,
+        state=state,
+        q=q,
+        page=page,
+        size=size,
+        issued_by_user_id=current_user.user_id,
     )
     return CategoryLedgerResponse.model_validate(ledger)
 
