@@ -40,6 +40,14 @@ _COMPOSITE_MESSAGES = {
     "uq_cash_session_cashier_date": (
         "Une journée de caisse est déjà ouverte pour cette personne à cette date."
     ),
+    # Personne n'a « déjà créé » cette ligne-là : c'est le programme qui a
+    # tenté d'imputer deux fois le même frais sur un même versement. Le message
+    # par défaut enverrait la caissière chercher un doublon qu'elle ne verra
+    # nulle part, et la ferait ressaisir un versement pourtant juste.
+    "uq_payment_allocation": (
+        "Ce versement impute deux fois le même frais. Rien n'a été enregistré. "
+        "Ce n'est pas une erreur de saisie : signalez-le au support."
+    ),
     # Les six dimensions de l'index, énumérées en entier. En oublier une
     # envoie l'école chercher son doublon là où il n'est pas : elle relit cinq
     # colonnes identiques, conclut qu'il n'y a pas de doublon, et recommence.

@@ -36,6 +36,7 @@ from app.services.payments._allocation import (
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
 from app.services.payments._state import logger
+from app.services.payments.allocation_invariant import verifier as verifier_invariant
 
 
 async def _guard_method_and_drawer(
@@ -174,6 +175,15 @@ async def record_enrollment_payment(
             raise BusinessValidationError(issue.problems[0].message)
         demandees, splits = issue.directed, issue.splits
 
+        # L'INVARIANT, AVANT LA PREMIÈRE ÉCRITURE : la somme des allocations
+        # vaut exactement le versement. Il tient aujourd'hui par construction —
+        # le trop-perçu est refusé plus haut et la cascade consomme tout — mais
+        # « par construction » cesse d'être vrai au premier chemin qui laisse
+        # un reliquat non imputé. Ce reliquat-là serait alors encaissé, compté
+        # au journal de caisse, et absent de tous les points par catégorie, qui
+        # ne lisent que les allocations.
+        verifier_invariant(data.amount, [(fee.id, part) for fee, part in splits])
+
         # Tous les moyens complètent immédiatement : la caissière ne saisit un
         # versement qu'une fois l'argent reçu ou le transfert confirmé sur son
         # téléphone. Un état « en attente » pour le virement et le chèque
@@ -286,6 +296,12 @@ async def create_payment(
             raise BusinessValidationError(
                 f"Payment amount {data.amount} exceeds remaining balance {remaining}"
             )
+
+        # Le même invariant, sur le chemin legacy : ici la ventilation est 1:1
+        # et ne peut pas s'écarter, mais la poser aux DEUX endroits est tout
+        # l'intérêt d'un filet. Un filet posé sur un seul chemin ne dit rien de
+        # l'autre, et c'est toujours l'autre qui dérive.
+        verifier_invariant(data.amount, [(data.enrollment_fee_id, data.amount)])
 
         payment = await repo.create_payment(
             db,

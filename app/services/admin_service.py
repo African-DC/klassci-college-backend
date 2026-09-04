@@ -83,7 +83,7 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
-from app.services import archive_service, fees_paid
+from app.services import archive_service, fees_paid, photo_lifecycle
 from app.services import fee_entitlements as entitlements
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
@@ -551,15 +551,37 @@ async def create_student_user_account(
 
 
 async def update_student_photo(
-    db: AsyncSession, student_id: int, photo_url: str | None, *, updated_by: int
+    db: AsyncSession,
+    student_id: int,
+    photo_url: str | None,
+    *,
+    updated_by: int,
+    ip_address: str | None = None,
+    notes: str | None = None,
 ) -> Student:
-    """Update student photo_url."""
+    """Pose la photo d'un élève, journalise le geste, efface la précédente.
+
+    Les trois gestes vivent dans `photo_lifecycle.replace_photo` : écrire la
+    colonne sans écrire le journal ni effacer l'ancien fichier était ce que
+    faisait cette fonction, et `updated_by` y arrivait sans jamais servir.
+
+    `ip_address` et `notes` sont remplis quand la photo vient d'un téléphone
+    par reprise 2D : l'adresse est celle de l'appareil qui a pris la photo, et
+    non celle de l'opérateur qui confirme depuis son écran.
+    """
     student = await repo.get_student_by_id(db, student_id)
     if student is None:
         raise NotFoundError("Student", student_id)
-    student.photo_url = photo_url
-    await db.flush()
-    await db.commit()
+    await photo_lifecycle.replace_photo(
+        db,
+        student,
+        entity_type="student",
+        entity_id=student_id,
+        photo_url=photo_url,
+        updated_by=updated_by,
+        ip_address=ip_address,
+        notes=notes,
+    )
     return student
 
 
@@ -569,28 +591,54 @@ async def update_student_photo(
 
 
 async def update_teacher_photo(
-    db: AsyncSession, teacher_id: int, photo_url: str | None, *, updated_by: int
+    db: AsyncSession,
+    teacher_id: int,
+    photo_url: str | None,
+    *,
+    updated_by: int,
+    ip_address: str | None = None,
+    notes: str | None = None,
 ) -> TeacherProfile:
-    """Update teacher photo_url."""
+    """Pose la photo d'un enseignant. Voir `update_student_photo`."""
     teacher = await repo.get_teacher_by_id(db, teacher_id)
     if teacher is None:
         raise NotFoundError("Teacher", teacher_id)
-    teacher.photo_url = photo_url
-    await db.flush()
-    await db.commit()
+    await photo_lifecycle.replace_photo(
+        db,
+        teacher,
+        entity_type="teacher",
+        entity_id=teacher_id,
+        photo_url=photo_url,
+        updated_by=updated_by,
+        ip_address=ip_address,
+        notes=notes,
+    )
     return teacher
 
 
 async def update_staff_photo(
-    db: AsyncSession, staff_id: int, photo_url: str | None, *, updated_by: int
+    db: AsyncSession,
+    staff_id: int,
+    photo_url: str | None,
+    *,
+    updated_by: int,
+    ip_address: str | None = None,
+    notes: str | None = None,
 ) -> StaffProfile:
-    """Update staff photo_url."""
+    """Pose la photo d'un membre du personnel. Voir `update_student_photo`."""
     staff = await repo.get_staff_by_id(db, staff_id)
     if staff is None:
         raise NotFoundError("Staff", staff_id)
-    staff.photo_url = photo_url
-    await db.flush()
-    await db.commit()
+    await photo_lifecycle.replace_photo(
+        db,
+        staff,
+        entity_type="staff",
+        entity_id=staff_id,
+        photo_url=photo_url,
+        updated_by=updated_by,
+        ip_address=ip_address,
+        notes=notes,
+    )
     return staff
 
 

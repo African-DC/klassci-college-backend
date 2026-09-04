@@ -10,6 +10,8 @@ Le calcul vit ici, à un seul endroit, parce qu'un montant dû ne peut pas
 valoir trois sommes différentes selon l'écran qui l'affiche.
 """
 
+from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -91,6 +93,110 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     return _par_frais(
         await db.execute(_verse_par_frais(EnrollmentFee.enrollment_id == enrollment_id))
     )
+
+
+async def paid_by_fee_ids(
+    db: AsyncSession,
+    *,
+    fee_ids: Sequence[int],
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné à des frais nommés, et éventuellement à une caisse.
+
+    C'est la lecture dont a besoin un document qui regarde une catégorie de
+    frais sur toute une école : il connaît déjà ses lignes, il veut leur versé
+    en une requête plutôt qu'une par élève.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT.**
+    Un versement a une date et se borne : « combien est rentré en octobre »
+    est une question sur des événements. Ce qu'une famille doit encore vaut à
+    l'instant où on le lit, et le borner n'aurait aucun sens — c'est le même
+    appel, sans `date_from`, sans `date_to` et sans `received_by`.
+
+    `received_by` restreint à une caisse. Il n'a de sens que sur l'événement :
+    ce qui reste dû se calcule sur tout l'argent reçu, quel que soit le
+    guichet, sans quoi on annoncerait une dette chez une famille qui a payé au
+    guichet d'à côté.
+
+    Le filtre `completed` n'est pas retapé ici : il vit dans
+    `_verse_par_frais`, avec tous les autres totaux de ce module. Ce calcul a
+    déjà existé en double, recopié dans le service qui compose le point par
+    catégorie, et c'est exactement ainsi qu'un montant finit par valoir deux
+    sommes différentes selon l'écran qui l'affiche.
+
+    Aucun frais demandé, aucune requête : un `IN ()` vide part en base pour
+    rien, et certains moteurs le refusent.
+    """
+    from app.models.fee import Payment, PaymentAllocation
+
+    if not fee_ids:
+        return {}
+
+    conditions: list[object] = [PaymentAllocation.enrollment_fee_id.in_(list(fee_ids))]
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    return _par_frais(await db.execute(_verse_par_frais(*conditions)))
+
+
+async def paid_by_fee_for_scope(
+    db: AsyncSession,
+    *,
+    academic_year_id: int,
+    class_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné par un périmètre plutôt que par une liste de frais.
+
+    `paid_by_fee_ids` demande les identifiants ; c'est le bon geste quand
+    l'appelant regarde une catégorie et tient déjà ses quelques centaines de
+    lignes. La vue d'ensemble, elle, regarde TOUTES les catégories d'une année
+    à la fois : l'école entière fois ses huit catégories fait des milliers
+    d'identifiants dans un `IN (...)`, que certains moteurs refusent et
+    qu'aucun n'exécute bien. Le périmètre s'écrit alors en jointure.
+
+    La jointure sur l'inscription est posée ici et pas dans `_verse_par_frais`,
+    comme le dit ce module : la lecture qui a besoin de l'inscription l'ajoute
+    elle-même, en une ligne visible.
+
+    Les inscriptions closes sont écartées, exactement comme le fait le document
+    qui lit ce résultat. Les garder ferait entrer dans un total l'argent
+    d'inscriptions annulées, que plus aucun effectif ne compte.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT** —
+    même distinction que `paid_by_fee_ids`, et même raison : `received_by` n'a
+    de sens que sur l'événement.
+    """
+    from app.models.enrollment import CLOSED_STATUSES, Enrollment
+    from app.models.fee import EnrollmentFee, Payment
+
+    conditions: list[object] = [
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.status.not_in(CLOSED_STATUSES),
+    ]
+    if class_id is not None:
+        conditions.append(Enrollment.class_id == class_id)
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    stmt = (
+        _verse_par_frais()
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(*conditions)
+    )
+    return _par_frais(await db.execute(stmt))
 
 
 def _allocations_sur_frais_dus():
