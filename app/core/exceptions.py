@@ -68,6 +68,24 @@ class BusinessValidationError(AppException):
         super().__init__(status_code=422, detail=detail, code="VALIDATION_ERROR")
 
 
+class AllocationInvariantError(AppException):
+    """La ventilation d'un versement ne couvre pas le versement : on n'écrit rien.
+
+    Distincte d'une `BusinessValidationError`, et pas par goût du détail : ce
+    n'est PAS une erreur de saisie. La personne au guichet a tapé un montant
+    juste ; c'est la répartition calculée par le programme qui ne retombe pas
+    dessus. Sous le code `VALIDATION_ERROR`, l'écran l'enverrait corriger une
+    saisie correcte, et le défaut resterait invisible dans les journaux, noyé
+    parmi les vrais refus de saisie.
+
+    Le tout dans le même statut 422 : du point de vue du client HTTP, la
+    demande est bien refusée sans avoir rien écrit.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(status_code=422, detail=detail, code="ALLOCATION_INVARIANT")
+
+
 # ---------------------------------------------------------------------------
 # Le filet qui rattrape l'imprevu
 # ---------------------------------------------------------------------------
