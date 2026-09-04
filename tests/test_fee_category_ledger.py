@@ -6,27 +6,36 @@ vérifient le câblage des permissions, et c'est utile, mais aucune ligne n'y
 fait passer un versement réel dans le calcul. Or le défaut qu'on redoute sur
 ce document n'est pas un défaut de câblage : c'est un montant faux.
 
-Ce fichier somme donc pour de bon. La fixture a la forme que la caisse produit
-depuis la migration 0028 : le versement n'existe QUE par son allocation,
-`Payment.enrollment_fee_id` reste vide. Un calcul qui relirait l'ancienne
-relation rendrait zéro partout, et chacun de ces tests le dirait.
+Ce fichier somme donc pour de bon. Les fixtures ont la forme que la caisse
+produit depuis la migration 0028 : le versement n'existe QUE par son
+allocation, `Payment.enrollment_fee_id` reste vide. Un calcul qui relirait
+l'ancienne relation rendrait zéro partout, et chacun de ces tests le dirait.
 
-Trois propriétés y sont tenues, et ce sont les trois que le document promet :
+Quatre propriétés y sont tenues, et ce sont celles que le document promet :
 
-- **la période borne un événement, jamais un état** — ce qui est entré se
-  filtre sur la fenêtre, ce qui reste dû se lit sur tout l'argent reçu ;
+- **la période borne un événement, jamais un état** — l'argent entré et les
+  dépôts reçus se filtrent sur la fenêtre ; les états, l'attendu et le reste dû
+  se lisent sur tout ce qui a été reçu, sans borne ;
 - **ce qui est entré se cloisonne, ce qui reste dû ne se cloisonne pas** — une
-  caissière voit son encaissement à elle, et le reste dû se calcule quand même
-  sur l'argent de toutes les caisses, sans quoi on relancerait une famille qui
-  a payé au guichet d'à côté ;
+  caissière voit son encaissement à elle, dépôts en nature compris, et le reste
+  dû se calcule quand même sur l'argent de toutes les caisses, sans quoi on
+  relancerait une famille qui a payé au guichet d'à côté ;
 - **l'effectif du périmètre est un dénominateur, pas une longueur de liste** —
   un élève qu'aucune ligne de frais ne couvre est compté, au lieu de
-  disparaître du document et de le faire paraître complet.
+  disparaître du document et de le faire paraître complet ;
+- **un versement compte une fois par catégorie, et un versement annulé nulle
+  part** — un acte de caisse peut se partager entre deux frais, et le document
+  de chacun ne doit voir que sa part.
+
+Deux décors, parce qu'un seul ne pouvait pas dire les deux dernières : `db`
+porte une catégorie et une école entière, `caisse` porte deux catégories, un
+versement réparti, un versement annulé et deux dépôts faits à deux guichets.
 """
 
 from collections.abc import Iterator
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from sqlalchemy import BigInteger, create_engine, update
@@ -111,14 +120,26 @@ def _frais(
     inscription: int,
     montant: str,
     statut: str = EnrollmentFeeStatus.PENDING.value,
+    *,
+    categorie: int = CATEGORIE,
+    variante: int = 1,
+    depose_par: int | None = None,
+    depose_le: datetime | None = None,
 ) -> EnrollmentFee:
+    """Une ligne de frais. `depose_*` ne vaut que pour un dépôt en nature.
+
+    Le dépôt porte SA caisse (`deposited_by_user_id`) comme un versement porte
+    la sienne : c'est ce qui permet de vérifier qu'il se cloisonne pareil.
+    """
     return EnrollmentFee(
         id=ident,
         enrollment_id=inscription,
-        fee_variant_id=1,
-        fee_category_id=CATEGORIE,
+        fee_variant_id=variante,
+        fee_category_id=categorie,
         amount=Decimal(montant),
         status=statut,
+        deposited_by_user_id=depose_par,
+        deposited_at=depose_le,
     )
 
 
@@ -147,6 +168,24 @@ def _versement(
     )
 
 
+@compiles(BigInteger, "sqlite")
+def _bigint(type_, compiler, **kw):  # noqa: ARG001
+    """SQLite n'a pas de BIGINT auto-incrémenté : c'est INTEGER, ou rien."""
+    return "INTEGER"
+
+
+def _base_vierge() -> Session:
+    """Une base neuve au schéma réel. Deux fixtures s'en servent.
+
+    Chacune peuple son propre décor : le point par catégorie et le versement
+    réparti sur deux catégories ne peuvent pas partager le leur, la seconde
+    ajoutant justement de l'argent là où la première compte le sien.
+    """
+    moteur = create_engine("sqlite://")
+    Base.metadata.create_all(moteur)
+    return Session(moteur)
+
+
 @pytest.fixture()
 def db() -> Iterator[Session]:
     """Une catégorie, quatre inscriptions ouvertes, trois lignes de frais.
@@ -155,14 +194,7 @@ def db() -> Iterator[Session]:
     c'est lui que le document laissait tomber. L'inscription annulée, elle, ne
     doit compter dans aucun effectif.
     """
-    moteur = create_engine("sqlite://")
-
-    @compiles(BigInteger, "sqlite")
-    def _bigint(type_, compiler, **kw):  # noqa: ARG001
-        return "INTEGER"
-
-    Base.metadata.create_all(moteur)
-    with Session(moteur) as s:
+    with _base_vierge() as s:
         s.add_all(
             [
                 AcademicYear(
@@ -841,3 +873,388 @@ async def test_le_nom_de_la_classe_vient_du_critere_et_non_des_lignes(db: Sessio
 
     assert document.lignes == ()
     assert document.class_name == "6eme A"
+
+
+# ---------------------------------------------------------------------------
+# L'agrégat : ce qui ADDITIONNE, sur deux catégories et deux caisses
+#
+# Le décor précédent ne porte qu'une catégorie et pas un seul dépôt en nature :
+# il ne peut donc dire ni qu'un versement réparti compte une fois de chaque
+# côté, ni qu'un dépôt se cloisonne comme de l'argent. C'est le décor de la
+# vraie caisse — un versement qui se partage, un versement annulé, deux dépôts
+# faits par deux guichets différents.
+# ---------------------------------------------------------------------------
+
+CAT_INSCRIPTION = 30
+CAT_RAMES = 31
+VAR_INSCRIPTION = 70
+VAR_RAMES = 71
+
+FATOU, ISMAEL, KOFFI, LASSINA = 41, 42, 43, 44
+INSC_FATOU, INSC_ISMAEL, INSC_KOFFI, INSC_LASSINA = 50, 51, 52, 53
+FRAIS_FATOU_INSCRIPTION = 60
+FRAIS_FATOU_RAMES = 61
+FRAIS_ISMAEL_INSCRIPTION = 62
+FRAIS_KOFFI_RAMES = 63
+FRAIS_LASSINA_RAMES = 64
+
+
+@pytest.fixture()
+def caisse() -> Iterator[Session]:
+    """Deux catégories, un versement réparti, un versement annulé, deux dépôts.
+
+    Fatou verse 5 000 F en une fois chez Sophie : 2 000 sur l'Inscription,
+    3 000 sur les Rames. C'est un seul acte de caisse et deux imputations, et
+    c'est la forme que la migration 0028 a rendue normale.
+
+    Ismaël a un versement ANNULÉ de 30 000 F, allocation comprise : l'annulation
+    ne supprime pas les lignes, elle change l'état du versement. Un total qui
+    perdrait le filtre `completed` le ferait ressusciter et solderait sa dette.
+
+    Koffi a déposé ses rames au guichet de Sophie en octobre, Lassina à celui de
+    Marcel en novembre : deux dépôts, deux caisses, deux mois.
+    """
+    with _base_vierge() as s:
+        s.add_all(
+            [
+                AcademicYear(
+                    id=ANNEE,
+                    name="2026-2027",
+                    start_date=date(2026, 9, 14),
+                    end_date=date(2027, 7, 30),
+                    is_current=True,
+                ),
+                Level(id=1, name="6eme"),
+                Class(id=CLASSE_A, name="6eme A", level_id=1),
+                _eleve(FATOU, "BAMBA", "Fatou", "C-2026-011"),
+                _eleve(ISMAEL, "COULIBALY", "Ismael", "C-2026-012"),
+                _eleve(KOFFI, "KOFFI", "Yao", "C-2026-013"),
+                _eleve(LASSINA, "SANOGO", "Lassina", "C-2026-014"),
+                _inscription(INSC_FATOU, FATOU, CLASSE_A),
+                _inscription(INSC_ISMAEL, ISMAEL, CLASSE_A),
+                _inscription(INSC_KOFFI, KOFFI, CLASSE_A),
+                _inscription(INSC_LASSINA, LASSINA, CLASSE_A),
+                FeeCategory(
+                    id=CAT_INSCRIPTION,
+                    name="Inscription",
+                    priority=10,
+                    is_mandatory=True,
+                    accepts_in_kind=False,
+                ),
+                FeeCategory(
+                    id=CAT_RAMES,
+                    name="Paquet de rames",
+                    priority=90,
+                    is_mandatory=False,
+                    accepts_in_kind=True,
+                ),
+                FeeVariant(
+                    id=VAR_INSCRIPTION,
+                    fee_category_id=CAT_INSCRIPTION,
+                    academic_year_id=ANNEE,
+                    amount=Decimal("30000"),
+                ),
+                FeeVariant(
+                    id=VAR_RAMES,
+                    fee_category_id=CAT_RAMES,
+                    academic_year_id=ANNEE,
+                    amount=Decimal("3000"),
+                ),
+                _frais(
+                    FRAIS_FATOU_INSCRIPTION,
+                    INSC_FATOU,
+                    "30000",
+                    EnrollmentFeeStatus.PARTIAL.value,
+                    categorie=CAT_INSCRIPTION,
+                    variante=VAR_INSCRIPTION,
+                ),
+                _frais(
+                    FRAIS_FATOU_RAMES,
+                    INSC_FATOU,
+                    "3000",
+                    EnrollmentFeeStatus.PAID.value,
+                    categorie=CAT_RAMES,
+                    variante=VAR_RAMES,
+                ),
+                _frais(
+                    FRAIS_ISMAEL_INSCRIPTION,
+                    INSC_ISMAEL,
+                    "30000",
+                    categorie=CAT_INSCRIPTION,
+                    variante=VAR_INSCRIPTION,
+                ),
+                _frais(
+                    FRAIS_KOFFI_RAMES,
+                    INSC_KOFFI,
+                    "3000",
+                    EnrollmentFeeStatus.IN_KIND.value,
+                    categorie=CAT_RAMES,
+                    variante=VAR_RAMES,
+                    depose_par=CAISSE_SOPHIE,
+                    depose_le=OCTOBRE,
+                ),
+                _frais(
+                    FRAIS_LASSINA_RAMES,
+                    INSC_LASSINA,
+                    "3000",
+                    EnrollmentFeeStatus.IN_KIND.value,
+                    categorie=CAT_RAMES,
+                    variante=VAR_RAMES,
+                    depose_par=CAISSE_MARCEL,
+                    depose_le=NOVEMBRE,
+                ),
+            ]
+        )
+        s.flush()
+
+        s.add_all(
+            [
+                # UN acte de caisse, DEUX imputations.
+                _versement(
+                    600,
+                    INSC_FATOU,
+                    "5000",
+                    PaymentStatus.COMPLETED.value,
+                    CAISSE_SOPHIE,
+                    OCTOBRE,
+                ),
+                # Encaisse puis annule : la ligne reste, l'argent non.
+                _versement(
+                    601,
+                    INSC_ISMAEL,
+                    "30000",
+                    PaymentStatus.CANCELLED.value,
+                    CAISSE_SOPHIE,
+                    NOVEMBRE,
+                ),
+            ]
+        )
+        s.flush()
+        s.add_all(
+            [
+                PaymentAllocation(
+                    payment_id=600,
+                    enrollment_fee_id=FRAIS_FATOU_INSCRIPTION,
+                    amount=Decimal("2000"),
+                ),
+                PaymentAllocation(
+                    payment_id=600,
+                    enrollment_fee_id=FRAIS_FATOU_RAMES,
+                    amount=Decimal("3000"),
+                ),
+                PaymentAllocation(
+                    payment_id=601,
+                    enrollment_fee_id=FRAIS_ISMAEL_INSCRIPTION,
+                    amount=Decimal("30000"),
+                ),
+            ]
+        )
+        s.commit()
+        yield s
+
+
+async def _point(
+    db: Session, categorie: int, **criteres: Any
+) -> fee_category_ledger.CategoryLedger:
+    """Le point d'une catégorie sur ce décor-là."""
+    return await fee_category_ledger.load_category_ledger(
+        _Pont(db), category_id=categorie, academic_year_id=ANNEE, **criteres
+    )
+
+
+def _par_frais(document: fee_category_ledger.CategoryLedger, frais: int) -> object:
+    """La ligne d'un frais, retrouvée par l'inscription qui le porte."""
+    par_inscription = {
+        FRAIS_FATOU_INSCRIPTION: INSC_FATOU,
+        FRAIS_FATOU_RAMES: INSC_FATOU,
+        FRAIS_ISMAEL_INSCRIPTION: INSC_ISMAEL,
+        FRAIS_KOFFI_RAMES: INSC_KOFFI,
+        FRAIS_LASSINA_RAMES: INSC_LASSINA,
+    }
+    return next(ligne for ligne in document.lignes if ligne.enrollment_id == par_inscription[frais])
+
+
+@pytest.mark.asyncio
+async def test_un_versement_reparti_compte_une_fois_dans_chaque_categorie(
+    caisse: Session,
+) -> None:
+    """Les 5 000 F de Fatou valent 2 000 sur l'Inscription et 3 000 sur les Rames.
+
+    Une fois dans chacune, jamais deux fois dans l'une : c'est la faute qu'un
+    total lu sur `Payment.amount` plutôt que sur ses allocations commettrait
+    dans les deux sens à la fois — 3 000 F de trop d'un côté, 2 000 F de trop
+    de l'autre, et un point par catégorie qui somme plus que la caisse.
+    """
+    inscription = await _point(caisse, CAT_INSCRIPTION)
+    rames = await _point(caisse, CAT_RAMES)
+
+    assert inscription.total_en_argent == Decimal("2000")
+    assert rames.total_en_argent == Decimal("3000")
+    assert _par_frais(inscription, FRAIS_FATOU_INSCRIPTION).paid == Decimal("2000")
+    assert _par_frais(rames, FRAIS_FATOU_RAMES).paid == Decimal("3000")
+    # Un seul élève est entré de chaque côté : c'est la même personne, comptée
+    # une fois par catégorie et non deux fois dans la même.
+    assert inscription.eleves_en_argent == 1
+    assert rames.eleves_en_argent == 1
+    # Et l'acte de caisse se retrouve entier quand on rassemble les deux.
+    assert inscription.total_en_argent + rames.total_en_argent == Decimal("5000")
+
+
+@pytest.mark.asyncio
+async def test_le_reste_du_d_un_versement_reparti_ne_voit_que_sa_part(
+    caisse: Session,
+) -> None:
+    """Chaque dette ne se réduit que de ce qui lui a été imputé.
+
+    Les 5 000 F ne soldent pas les rames ET l'inscription : la ligne
+    d'inscription reste due de 28 000 F, celle des rames de rien.
+    """
+    inscription = await _point(caisse, CAT_INSCRIPTION)
+    rames = await _point(caisse, CAT_RAMES)
+
+    assert _par_frais(inscription, FRAIS_FATOU_INSCRIPTION).remaining == Decimal("28000")
+    assert _par_frais(rames, FRAIS_FATOU_RAMES).remaining == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_un_versement_annule_ne_compte_nulle_part(caisse: Session) -> None:
+    """L'annulation laisse la ligne d'allocation ; elle ne doit rendre aucun franc.
+
+    Ni dans l'entré — Ismaël n'a rien versé —, ni dans le reste dû, où
+    l'oublier aurait l'effet inverse et bien pire : sa dette de 30 000 F
+    passerait pour soldée, et personne n'irait plus la réclamer.
+    """
+    document = await _point(caisse, CAT_INSCRIPTION)
+    ligne = _par_frais(document, FRAIS_ISMAEL_INSCRIPTION)
+
+    assert ligne.paid == Decimal("0")
+    assert ligne.remaining == Decimal("30000")
+    assert ligne.status == EnrollmentFeeStatus.PENDING.value
+    # Et l'agrégat ne le compte pas davantage que la ligne.
+    assert document.total_en_argent == Decimal("2000")
+    assert document.eleves_en_argent == 1
+    assert document.total_restant_du == Decimal("58000")
+    assert document.eleves_restant_du == 2
+
+
+@pytest.mark.asyncio
+async def test_un_versement_annule_ne_gonfle_pas_le_taux(caisse: Session) -> None:
+    """Le taux se lit sur l'attendu et le reste dû, et l'annulé ne bouge ni l'un ni l'autre.
+
+    60 000 F attendus, 58 000 F encore dus : 3,3 %. Compter l'argent rendu
+    afficherait 53,3 %, et une école qui recouvre la moitié de son inscription
+    ne relance pas comme une école qui n'en a rien recouvré.
+    """
+    document = await _point(caisse, CAT_INSCRIPTION)
+
+    assert document.total_attendu == Decimal("60000")
+    assert document.taux_recouvrement == 3.3
+
+
+@pytest.mark.asyncio
+async def test_le_cloisonnement_porte_sur_le_depot_comme_sur_l_argent(
+    caisse: Session,
+) -> None:
+    """Un dépôt est quelque chose qui est ENTRÉ : il suit la ligne de partage.
+
+    Le document affirme en toutes lettres ne couvrir que la caisse qui le tire.
+    Un compteur de dépôts qui, lui, couvrirait l'école entière ferait dire au
+    même document deux périmètres à la fois — et c'est le stock que la
+    comptable irait ensuite chercher au magasin.
+    """
+    chez_sophie = await _point(caisse, CAT_RAMES, received_by=CAISSE_SOPHIE)
+    chez_marcel = await _point(caisse, CAT_RAMES, received_by=CAISSE_MARCEL)
+    toutes_caisses = await _point(caisse, CAT_RAMES)
+
+    assert chez_sophie.depots_en_nature == 1
+    assert chez_marcel.depots_en_nature == 1
+    assert toutes_caisses.depots_en_nature == 2
+    # L'argent se cloisonne au même endroit : Sophie a encaissé les rames de
+    # Fatou, Marcel n'a encaissé aucun franc sur cette catégorie.
+    assert chez_sophie.total_en_argent == Decimal("3000")
+    assert chez_marcel.total_en_argent == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_pour_une_caisse_cloisonnee_l_entre_reste_et_le_du_est_absent(
+    caisse: Session,
+) -> None:
+    """Ce qui est entré est un fait sur sa caisse ; ce qui reste dû ne l'est pas.
+
+    Marcel garde donc son dépôt — un chiffre vrai, qu'il est seul à pouvoir
+    justifier — et perd le reste dû, l'attendu, le taux et les compteurs. Aucun
+    de ces quatre-là ne descend à zéro au passage : un zéro se lirait comme un
+    solde, et « personne ne doit rien » est le contraire de « je ne peux pas
+    savoir ».
+    """
+    document = await _point(caisse, CAT_RAMES, received_by=CAISSE_MARCEL, consolide=False)
+
+    assert document.depots_en_nature == 1
+    assert document.total_en_argent == Decimal("0")
+    assert document.effectif_perimetre == 4
+    assert document.total_restant_du is None
+    assert document.eleves_restant_du is None
+    assert document.total_attendu is None
+    assert document.taux_recouvrement is None
+    assert document.compteurs is None
+    assert all(ligne.remaining is None for ligne in document.lignes)
+
+
+@pytest.mark.asyncio
+async def test_la_periode_borne_le_depot_comme_le_versement(caisse: Session) -> None:
+    """Un dépôt a une date : c'est un événement, et il se borne.
+
+    Sur novembre seul, celui de Koffi — remis en octobre — n'est pas entré ce
+    mois-là. Le compter quand même ferait annoncer au point de novembre un
+    stock qui n'y est pas arrivé.
+    """
+    document = await _point(caisse, CAT_RAMES, date_from=DEBUT_NOVEMBRE)
+
+    assert document.depots_en_nature == 1
+    assert document.total_en_argent == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_la_periode_ne_borne_ni_l_etat_des_lignes_ni_l_attendu(
+    caisse: Session,
+) -> None:
+    """« Ce qui est rentré en novembre » n'est pas « où en sont les lignes ».
+
+    La fenêtre déplace l'entré et les dépôts comptés ; elle ne doit toucher ni
+    les états, ni l'attendu, ni le reste dû. Sinon la ligne soldée de Fatou
+    redeviendrait due le mois suivant, et les deux rames déjà remises
+    repasseraient au magasin.
+    """
+    document = await _point(caisse, CAT_RAMES, date_from=DEBUT_NOVEMBRE)
+
+    assert document.compteurs == {
+        "pending": 0,
+        "partial": 0,
+        "paid": 1,
+        "waived": 0,
+        "in_kind": 2,
+    }
+    assert document.total_attendu == Decimal("3000")
+    assert document.total_restant_du == Decimal("0")
+    assert document.taux_recouvrement == 100.0
+    ligne = _par_frais(document, FRAIS_FATOU_RAMES)
+    assert ligne.status == EnrollmentFeeStatus.PAID.value
+    assert ligne.paid == Decimal("0")
+    assert ligne.remaining == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_un_depot_n_est_pas_de_l_argent_et_sort_de_l_attendu(
+    caisse: Session,
+) -> None:
+    """Deux rames remises ne sont pas 6 000 F encaissés, ni 6 000 F encore dus.
+
+    L'attendu ne retient que ce qui est encore demandé EN ARGENT : les deux
+    lignes déposées en sortent, des deux côtés du taux à la fois.
+    """
+    document = await _point(caisse, CAT_RAMES)
+
+    assert document.depots_en_nature == 2
+    assert document.total_en_argent == Decimal("3000")
+    assert document.total_attendu == Decimal("3000")
+    assert document.total_restant_du == Decimal("0")
