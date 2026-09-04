@@ -10,7 +10,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal, Protocol
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,11 +19,29 @@ from app.core.uploads import DOCUMENTS, LOGOS, PHOTOS, SIGNATURES, UploadKind
 from app.utils.file_upload import ALLOWED_DOCUMENT_TYPES
 from app.utils.photo_upload import EXTENSION_PAR_TYPE
 
-if TYPE_CHECKING:  # pragma: no cover
-    # Sous `TYPE_CHECKING` seulement : la session connait le registre, le
-    # registre ne connait la session que pour l'annoter. L'importer
-    # vraiment fermerait le cycle.
-    from ._session import HandoffSession
+
+class Depot(Protocol):
+    """Ce qu'un finaliseur lit d'un depot — et rien de plus.
+
+    Le registre n'a pas besoin de connaitre `HandoffSession` : il ne touche que
+    ces sept champs. L'annoter par un protocole plutot que par la classe casse
+    la dependance **pour de bon**, la ou un import sous `TYPE_CHECKING` la
+    laissait dormir : le cycle reapparaissait au premier qui retirait le garde,
+    et l'outil d'analyse le signalait a raison.
+
+    C'est aussi la bonne facon de le dire : une cible se fiche de savoir
+    comment une session est faite. Elle veut un sujet, un proprietaire, des
+    octets deposes et de quoi tracer.
+    """
+
+    id: str
+    subject_id: int | None
+    owner_user_id: int
+    extras: Mapping[str, str]
+    staged_client_name: str | None
+    staged_mime: str | None
+    phone_ip: str | None
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +73,7 @@ Mode = Literal["finalise", "stage-only"]
 #: `none`     : la cible est l'etablissement lui-meme (logo, tampon).
 SubjectRule = Literal["required", "optional", "self", "none"]
 
-Finaliser = Callable[[AsyncSession, "HandoffSession", str], Awaitable[None]]
+Finaliser = Callable[[AsyncSession, Depot, str], Awaitable[None]]
 
 #: Le tenant entre dans une cle Redis partagee par toutes les ecoles.
 #:
@@ -140,7 +158,7 @@ class HandoffTarget:
         return extension
 
 
-def _trace(session: "HandoffSession") -> str:
+def _trace(session: Depot) -> str:
     """Ce que le journal d'audit doit dire d'une photo arrivee par telephone.
 
     L'operateur qui confirme est deja identifie par sa session ; ce que la
@@ -151,7 +169,7 @@ def _trace(session: "HandoffSession") -> str:
     return f"photo reçue par reprise QR, session {session.id}"
 
 
-async def _finalise_student_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_student_photo(db: AsyncSession, session: Depot, url: str) -> None:
     from app.services import admin_service
 
     await admin_service.update_student_photo(
@@ -164,7 +182,7 @@ async def _finalise_student_photo(db: AsyncSession, session: "HandoffSession", u
     )
 
 
-async def _finalise_teacher_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_teacher_photo(db: AsyncSession, session: Depot, url: str) -> None:
     from app.services import admin_service
 
     await admin_service.update_teacher_photo(
@@ -177,7 +195,7 @@ async def _finalise_teacher_photo(db: AsyncSession, session: "HandoffSession", u
     )
 
 
-async def _finalise_staff_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_staff_photo(db: AsyncSession, session: Depot, url: str) -> None:
     from app.services import admin_service
 
     await admin_service.update_staff_photo(
@@ -190,7 +208,7 @@ async def _finalise_staff_photo(db: AsyncSession, session: "HandoffSession", url
     )
 
 
-async def _finalise_profile_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_profile_photo(db: AsyncSession, session: Depot, url: str) -> None:
     from app.services import profile_service
 
     await profile_service.set_my_photo(
@@ -202,7 +220,7 @@ async def _finalise_profile_photo(db: AsyncSession, session: "HandoffSession", u
     )
 
 
-async def _finalise_school_logo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_school_logo(db: AsyncSession, session: Depot, url: str) -> None:
     from app.schemas.admin import SchoolInfoUpdate
     from app.services import admin_service
 
@@ -211,7 +229,7 @@ async def _finalise_school_logo(db: AsyncSession, session: "HandoffSession", url
     )
 
 
-async def _finalise_school_signature(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_school_signature(db: AsyncSession, session: Depot, url: str) -> None:
     from app.schemas.admin import SchoolInfoUpdate
     from app.services import admin_service
 
@@ -220,7 +238,7 @@ async def _finalise_school_signature(db: AsyncSession, session: "HandoffSession"
     )
 
 
-async def _finalise_student_document(db: AsyncSession, session: "HandoffSession", url: str) -> None:
+async def _finalise_student_document(db: AsyncSession, session: Depot, url: str) -> None:
     """Le seul finaliseur qui a besoin d'autre chose que d'une URL.
 
     `add_student_document` exige un type de document et un nom de fichier. Le
@@ -242,7 +260,7 @@ async def _finalise_student_document(db: AsyncSession, session: "HandoffSession"
     )
 
 
-def _sujet(session: "HandoffSession") -> int:
+def _sujet(session: Depot) -> int:
     """L'identifiant du sujet, dont un finaliseur ne peut pas se passer."""
     if session.subject_id is None:
         raise HTTPException(status_code=409, detail="Cette session n'a pas de destinataire")
