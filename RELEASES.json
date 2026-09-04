@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-03T21:24:11Z",
+  "generated_at": "2026-09-04T04:56:47Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Poser ou retirer une photo laisse désormais une trace dans le journal : qui l'a fait, quand, et depuis quel appareil",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé",
             "audience": [

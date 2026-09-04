@@ -190,11 +190,27 @@ class HandoffTarget:
         return extension
 
 
+def _trace(session: "HandoffSession") -> str:
+    """Ce que le journal d'audit doit dire d'une photo arrivee par telephone.
+
+    L'operateur qui confirme est deja identifie par sa session ; ce que la
+    ligne d'audit ne saurait pas sans cela, c'est que l'image n'a PAS ete prise
+    depuis son ecran. L'identifiant de session permet de rapprocher la ligne
+    des journaux du serveur pendant les dix minutes ou elle a vecu.
+    """
+    return f"photo reçue par reprise QR, session {session.id}"
+
+
 async def _finalise_student_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
     from app.services import admin_service
 
     await admin_service.update_student_photo(
-        db, _sujet(session), url, updated_by=session.owner_user_id
+        db,
+        _sujet(session),
+        url,
+        updated_by=session.owner_user_id,
+        ip_address=session.phone_ip,
+        notes=_trace(session),
     )
 
 
@@ -202,7 +218,12 @@ async def _finalise_teacher_photo(db: AsyncSession, session: "HandoffSession", u
     from app.services import admin_service
 
     await admin_service.update_teacher_photo(
-        db, _sujet(session), url, updated_by=session.owner_user_id
+        db,
+        _sujet(session),
+        url,
+        updated_by=session.owner_user_id,
+        ip_address=session.phone_ip,
+        notes=_trace(session),
     )
 
 
@@ -210,14 +231,25 @@ async def _finalise_staff_photo(db: AsyncSession, session: "HandoffSession", url
     from app.services import admin_service
 
     await admin_service.update_staff_photo(
-        db, _sujet(session), url, updated_by=session.owner_user_id
+        db,
+        _sujet(session),
+        url,
+        updated_by=session.owner_user_id,
+        ip_address=session.phone_ip,
+        notes=_trace(session),
     )
 
 
 async def _finalise_profile_photo(db: AsyncSession, session: "HandoffSession", url: str) -> None:
     from app.services import profile_service
 
-    await profile_service.set_my_photo(db, session.owner_user_id, url)
+    await profile_service.set_my_photo(
+        db,
+        session.owner_user_id,
+        url,
+        ip_address=session.phone_ip,
+        notes=_trace(session),
+    )
 
 
 async def _finalise_school_logo(db: AsyncSession, session: "HandoffSession", url: str) -> None:

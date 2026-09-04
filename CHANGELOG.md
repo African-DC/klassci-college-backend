@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Poser ou retirer une photo laisse désormais une trace dans le journal : qui l'a fait, quand, et depuis quel appareil *(admin, directeur)*
 - Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé *(comptable, caissier)*
 - Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie *(comptable, caissier)*
 - Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*
