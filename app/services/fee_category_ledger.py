@@ -77,9 +77,11 @@ ne pas promettre un decompte que la base ne tient pas.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -151,6 +153,138 @@ class LigneEleve:
     #: de le savoir : absent vaut mieux que faux.
     remaining: Decimal | None
     deposited_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class Totaux:
+    """Ce qu'un ensemble de lignes de frais totalise, et sous quelles règles.
+
+    Écrit une fois, additionné deux fois : par le point d'une catégorie, et
+    par la vue d'ensemble qui les compare toutes avant qu'on en choisisse une.
+    Deux additions séparées auraient fini par annoncer deux taux différents
+    sur le même argent — c'est exactement ce qui est arrivé à la règle du
+    versé, recopiée dans ce module avant d'être rendue à `fees_paid`.
+
+    Les champs `None` le sont pour une seule raison, toujours la même : le
+    lecteur ne lit pas toutes les caisses, et le chiffre demandé se calcule
+    sur tout l'argent reçu. Absent, jamais approché, jamais mis à zéro — un
+    zéro se lirait comme un solde.
+    """
+
+    #: Ce qui est ENTRÉ : cloisonné par caisse, borné par la période.
+    eleves_en_argent: int
+    total_en_argent: Decimal
+    depots_en_nature: int
+
+    #: L'outil de recouvrement, qui se lit sur tout l'argent reçu et ne se
+    #: sert pas à moitié : reste dû, attendu, taux et compteurs partent
+    #: ensemble quand le lecteur est cloisonné.
+    eleves_restant_du: int | None
+    total_restant_du: Decimal | None
+    total_attendu: Decimal | None
+    taux_recouvrement: float | None
+    compteurs: dict[str, int] | None
+
+
+def totaliser(
+    lignes: Iterable[Any],
+    *,
+    verse: Mapping[int, Decimal],
+    verse_total: Mapping[int, Decimal],
+    consolide: bool,
+    received_by: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> Totaux:
+    """Additionne des lignes de frais déjà chargées. Aucune requête ici.
+
+    `lignes` porte les colonnes nues d'`EnrollmentFee` — identifiant, montant,
+    statut, dépôt — et rien d'autre : ce qu'on additionne, ce sont des montants
+    et des statuts, pas des noms. `verse` est le versé de la période et de la
+    caisse (l'ÉVÉNEMENT), `verse_total` le versé sans bornes (l'ÉTAT) ; les deux
+    viennent de `fees_paid`, seul détenteur de la règle de l'argent.
+
+    Les seaux sortent de `EnrollmentFee.status`, jamais du versé passé ici :
+    ce statut-là est recalculé sur tout l'argent reçu, et c'est aussi celui du
+    badge de la ligne. Le dériver du versé classerait « partiel » une famille
+    qu'une collègue a soldée.
+
+    Le taux est l'attendu moins ce qui reste dû, sur l'attendu — pas une
+    seconde somme d'allocations. Les deux termes décrivent le même ensemble de
+    lignes, donc une famille qui verse puis se fait exonérer sort des deux
+    côtés en même temps et le taux ne peut pas dépasser 100 %.
+    """
+    eleves_en_argent = 0
+    total_en_argent = Decimal("0")
+    depots = 0
+    eleves_du = 0
+    total_du = Decimal("0")
+    total_attendu = Decimal("0")
+    compteurs = {statut.value: 0 for statut in EnrollmentFeeStatus}
+
+    for row in lignes:
+        statut = str(getattr(row.status, "value", row.status))
+        montant = Decimal(str(row.amount or 0))
+        paye = verse.get(int(row.id), Decimal("0"))
+
+        # Le seau sort du statut, jamais du verse : ce statut-la est recalcule
+        # sur tout l'argent recu, et c'est aussi celui du badge de la ligne.
+        if statut in compteurs:
+            compteurs[statut] += 1
+
+        if paye > 0:
+            eleves_en_argent += 1
+            total_en_argent += paye
+
+        # Un depot est quelque chose qui est ENTRE : il se cloisonne donc comme
+        # l'argent. `received_by` ne filtrait que les versements, et ce compte
+        # rendait a une caissiere le total de toute l'ecole sous un document
+        # qui affirme en toutes lettres ne couvrir que sa caisse.
+        depose = statut == EnrollmentFeeStatus.IN_KIND.value
+        de_ma_main = received_by is None or row.deposited_by_user_id == received_by
+        if depose and de_ma_main and _dans_la_fenetre(row.deposited_at, date_from, date_to):
+            depots += 1
+
+        # L'ATTENDU : ce que les lignes demandent ENCORE en argent. Une ligne
+        # exoneree ou deposee en nature n'est plus due : elle sort du
+        # denominateur — et, parce que le numerateur est ce meme montant moins
+        # le reste du, elle sort du numerateur avec lui. Une famille qui verse
+        # puis se fait exonerer ne peut donc pas rester au numerateur seule et
+        # pousser le taux au-dela de 100 %.
+        if not is_not_cash_due(statut):
+            total_attendu += montant
+
+        if consolide:
+            # Sur tout l'argent recu, jamais sur la fenetre : une famille qui a
+            # paye le mois dernier ne doit rien ce mois-ci.
+            reste = cash_remaining(statut, montant, verse_total.get(int(row.id), Decimal("0")))
+            if reste > 0:
+                eleves_du += 1
+                total_du += reste
+
+    # LE TAUX : le recouvre sur l'attendu, et le recouvre n'est pas une seconde
+    # somme d'allocations — c'est l'attendu moins ce qui reste du. `cash_remaining`
+    # bornant deja chaque ligne a son propre montant, un trop-percu ne peut pas
+    # faire deborder le total. Absent, jamais approche, quand on ne lit pas
+    # toutes les caisses ; absent aussi quand rien n'est attendu, parce qu'un
+    # taux sans denominateur n'est pas zero. De 0 a 100 avec une decimale :
+    # c'est la convention du tableau de bord (`payments/query.py`), et deux
+    # pourcentages de formes differentes sur le meme argent se lisent comme
+    # deux chiffres qui se contredisent.
+    taux: float | None = None
+    if consolide and total_attendu > 0:
+        taux = round(float((total_attendu - total_du) / total_attendu * 100), 1)
+
+    return Totaux(
+        eleves_en_argent=eleves_en_argent,
+        total_en_argent=total_en_argent,
+        depots_en_nature=depots,
+        eleves_restant_du=eleves_du if consolide else None,
+        total_restant_du=total_du if consolide else None,
+        total_attendu=total_attendu if consolide else None,
+        taux_recouvrement=taux,
+        compteurs=compteurs if consolide else None,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -455,63 +589,19 @@ async def load_category_ledger(
     # qu'elles couvrent.
     sans_ligne = max(effectif - len(perimetre), 0)
 
-    eleves_en_argent = 0
-    total_en_argent = Decimal("0")
-    depots = 0
-    eleves_du = 0
-    total_du = Decimal("0")
-    total_attendu = Decimal("0")
-    compteurs = {statut.value: 0 for statut in EnrollmentFeeStatus}
-
-    for row in perimetre:
-        statut = str(getattr(row.status, "value", row.status))
-        montant = Decimal(str(row.amount or 0))
-        paye = verse.get(int(row.id), Decimal("0"))
-
-        # Le seau sort du statut, jamais du verse : ce statut-la est recalcule
-        # sur tout l'argent recu, et c'est aussi celui du badge de la ligne.
-        if statut in compteurs:
-            compteurs[statut] += 1
-
-        if paye > 0:
-            eleves_en_argent += 1
-            total_en_argent += paye
-
-        # Un depot est quelque chose qui est ENTRE : il se cloisonne donc comme
-        # l'argent. `received_by` ne filtrait que les versements, et ce compte
-        # rendait a une caissiere le total de toute l'ecole sous un document
-        # qui affirme en toutes lettres ne couvrir que sa caisse.
-        depose = statut == EnrollmentFeeStatus.IN_KIND.value
-        de_ma_main = received_by is None or row.deposited_by_user_id == received_by
-        if depose and de_ma_main and _dans_la_fenetre(row.deposited_at, date_from, date_to):
-            depots += 1
-
-        # L'ATTENDU : ce que les lignes demandent ENCORE en argent. Une ligne
-        # exoneree ou deposee en nature n'est plus due : elle sort du
-        # denominateur — et, parce que le numerateur est ce meme montant moins
-        # le reste du, elle sort du numerateur avec lui. Une famille qui verse
-        # puis se fait exonerer ne peut donc pas rester au numerateur seule et
-        # pousser le taux au-dela de 100 %.
-        if not is_not_cash_due(statut):
-            total_attendu += montant
-
-        if consolide:
-            # Sur tout l'argent recu, jamais sur la fenetre : une famille qui a
-            # paye le mois dernier ne doit rien ce mois-ci.
-            reste = cash_remaining(statut, montant, verse_total.get(int(row.id), Decimal("0")))
-            if reste > 0:
-                eleves_du += 1
-                total_du += reste
-
-    # LE TAUX : le recouvre sur l'attendu, et le recouvre n'est pas une seconde
-    # somme d'allocations — c'est l'attendu moins ce qui reste du. `cash_remaining`
-    # bornant deja chaque ligne a son propre montant, un trop-percu ne peut pas
-    # faire deborder le total. Absent, jamais approche, quand on ne lit pas
-    # toutes les caisses ; absent aussi quand rien n'est attendu, parce qu'un
-    # taux sans denominateur n'est pas zero.
-    taux: float | None = None
-    if consolide and total_attendu > 0:
-        taux = round(float((total_attendu - total_du) / total_attendu * 100), 1)
+    # L'ADDITION : la meme que celle de la vue d'ensemble, ecrite une fois.
+    # Sur le PERIMETRE, jamais sur la page — un total tire de la page baisserait
+    # a chaque page tournee, et le document exporte ne retomberait plus sur
+    # l'ecran.
+    totaux = totaliser(
+        perimetre,
+        verse=verse,
+        verse_total=verse_total,
+        consolide=consolide,
+        received_by=received_by,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
     # LA LISTE : le seul endroit ou le seau, la recherche et la page portent.
     liste_conditions = [*perimetre_conditions]
@@ -607,20 +697,20 @@ async def load_category_ledger(
         category_id=category_id,
         category_name=getattr(categorie, "name", "") or f"Catégorie {category_id}",
         accepts_in_kind=bool(getattr(categorie, "accepts_in_kind", False)),
-        class_name=await _nom_du_perimetre(db, class_id),
+        class_name=await nom_du_perimetre(db, class_id),
         date_from=date_from,
         date_to=date_to,
         consolide=consolide,
         effectif_perimetre=effectif,
         eleves_sans_ligne=sans_ligne,
-        eleves_en_argent=eleves_en_argent,
-        total_en_argent=total_en_argent,
-        depots_en_nature=depots,
-        eleves_restant_du=eleves_du if consolide else None,
-        total_restant_du=total_du if consolide else None,
-        total_attendu=total_attendu if consolide else None,
-        taux_recouvrement=taux,
-        compteurs=compteurs if consolide else None,
+        eleves_en_argent=totaux.eleves_en_argent,
+        total_en_argent=totaux.total_en_argent,
+        depots_en_nature=totaux.depots_en_nature,
+        eleves_restant_du=totaux.eleves_restant_du,
+        total_restant_du=totaux.total_restant_du,
+        total_attendu=totaux.total_attendu,
+        taux_recouvrement=totaux.taux_recouvrement,
+        compteurs=totaux.compteurs,
         etat_filtre=state,
         recherche=recherche,
         recherche_approchee=approchee,
@@ -632,7 +722,7 @@ async def load_category_ledger(
     )
 
 
-async def _nom_du_perimetre(db: AsyncSession, class_id: int | None) -> str:
+async def nom_du_perimetre(db: AsyncSession, class_id: int | None) -> str:
     """Le nom du périmètre, lu depuis le CRITÈRE et non depuis les lignes.
 
     Le reconstituer à partir de la première ligne rendue marchait tant que la

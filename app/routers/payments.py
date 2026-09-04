@@ -20,6 +20,7 @@ from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
     CashierOption,
     CategoryLedgerResponse,
+    FeeCategoryOverviewResponse,
     PaymentCancel,
     PaymentCreate,
     PaymentListResponse,
@@ -31,6 +32,7 @@ from app.schemas.payment import (
 from app.services import (
     daily_cash_book_service,
     fee_category_ledger,
+    fee_category_overview,
     payment_service,
     payments_journal_service,
 )
@@ -268,6 +270,61 @@ async def export_payments(
         filename=f"journal-versements-{jour}.pdf",
         error_context="journal des versements",
     )
+
+
+# NOTE: /settlement/overview MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/overview",
+    response_model=FeeCategoryOverviewResponse,
+    summary="Quel frais rentre mal : une ligne par categorie, avant d'en choisir une",
+)
+async def fee_categories_overview(
+    academic_year_id: int = Query(..., description="Annee lue. Obligatoire, comme sur le point."),
+    class_id: int | None = Query(None, description="Reduire a une classe."),
+    date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
+    date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
+    received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeeCategoryOverviewResponse:
+    """La question qu'on pose AVANT de choisir une categorie.
+
+    Le point par categorie repond tres bien a « ou en est la Tenue » — a
+    condition de savoir deja que c'est la Tenue qui va mal. Cet endpoint rend
+    la ligne par categorie qui evite de deviner : attendu, entre, taux et
+    compteurs, en une lecture groupee plutot qu'un point charge par frais.
+
+    **Ce qui est entre se cloisonne ; ce qui reste du ne se cloisonne pas.**
+    Une caissiere lit, categorie par categorie, ce qu'elle a encaisse : c'est
+    le point qu'elle fait le soir. L'attendu, le taux, le reste du et les
+    compteurs se lisent sur tout l'argent recu ; sans `payments:read:all` ils
+    sont absents — jamais approches, jamais mis a zero, un zero se lisant
+    comme un solde. La reponse le dit par `consolide: false`, et l'ecran doit
+    l'ecrire en toutes lettres plutot que d'afficher une grille de tirets.
+
+    L'annee est OBLIGATOIRE, comme sur le point qu'une carte ouvre : sans
+    elle, l'attendu additionnerait tous les exercices de la base et la carte
+    n'annoncerait pas le meme total que le document qu'elle ouvre.
+
+    La periode borne les evenements — versements et depots. Elle ne borne ni
+    l'attendu ni le reste du, qui sont des etats.
+    """
+    overview = await fee_category_overview.load_categories_overview(
+        db,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        consolide=can_read_all,
+    )
+    return FeeCategoryOverviewResponse.model_validate(overview)
 
 
 # NOTE: /settlement/category/export MUST be defined BEFORE /{payment_id}

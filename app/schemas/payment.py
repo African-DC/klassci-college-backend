@@ -424,3 +424,68 @@ class CategoryLedgerResponse(BaseModel):
     truncated_from: int | None = None
 
     lignes: list[CategoryLedgerRowResponse]
+
+
+# ---------------------------------------------------------------------------
+# La vue d'ensemble : quel frais rentre mal, avant d'en avoir choisi un
+# ---------------------------------------------------------------------------
+
+
+class FeeCategoryOverviewRowResponse(BaseModel):
+    """Une categorie de frais, et comment elle rentre."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: int
+    category_name: str
+    #: Faux, le compte de depots n'a pas lieu d'etre affiche sur cette carte.
+    accepts_in_kind: bool
+    #: Un frais facultatif qui rentre mal n'appelle pas la meme relance qu'une
+    #: scolarite : l'ecran doit pouvoir le dire sans reposer la question.
+    is_mandatory: bool
+
+    #: Combien d'inscriptions du perimetre cette categorie facture, et combien
+    #: elle en laisse de cote. Ce sont des inscriptions, pas de l'argent : ces
+    #: deux chiffres ne se cloisonnent pas.
+    eleves_factures: int
+    eleves_sans_ligne: int
+
+    #: Ce qui est ENTRE : cloisonne par caisse, borne par la periode.
+    eleves_en_argent: int
+    total_en_argent: Decimal
+    depots_en_nature: int
+
+    #: L'outil de recouvrement, qui se lit sur tout l'argent recu. `null` sans
+    #: `payments:read:all` — absent plutot que faux, et jamais mis a zero : un
+    #: zero se lirait comme un solde.
+    eleves_restant_du: int | None = None
+    total_restant_du: Decimal | None = None
+    total_attendu: Decimal | None = None
+    #: De 0 a 100, une decimale — la convention du tableau de bord. `null`
+    #: aussi quand rien n'est attendu : un taux sans denominateur n'existe pas.
+    taux_recouvrement: float | None = None
+    #: Le nombre de lignes par etat, sur le perimetre entier.
+    compteurs: dict[str, int] | None = None
+
+
+class FeeCategoryOverviewResponse(BaseModel):
+    """Le perimetre lu, et une ligne par categorie facturee."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    academic_year_id: int
+    class_id: int | None = None
+    class_name: str
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    #: Faux, chaque ligne ne porte que la caisse de l'appelant et tait le du.
+    consolide: bool
+
+    #: Les inscriptions ouvertes du perimetre : le denominateur commun a
+    #: toutes les categories. Ce n'est pas de l'argent, il ne se cloisonne pas.
+    effectif_perimetre: int
+
+    #: Dans l'ordre d'imputation configure par l'ecole, jamais dans celui du
+    #: taux : l'ordre des cartes ne doit pas dependre des droits du lecteur.
+    #: Trier par ce qui va mal est un geste d'ecran, sur des chiffres deja la.
+    categories: list[FeeCategoryOverviewRowResponse]

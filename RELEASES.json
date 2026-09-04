@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T00:46:47Z",
+  "generated_at": "2026-09-04T01:15:27Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,21 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Une vue d'ensemble répond à « quel frais rentre mal » avant d'en choisir un : par catégorie, l'attendu, l'entré, le taux et les trois compteurs",
+            "audience": [
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La vue d'ensemble sert aussi la caisse : ce qu'elle a encaissé catégorie par catégorie, le recouvrement de l'école restant réservé à qui lit toutes les caisses",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le point sur une catégorie annonce le total attendu, le taux de recouvrement et le nombre d'élèves sans paiement, partiels et à jour",
             "audience": [

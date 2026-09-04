@@ -145,6 +145,60 @@ async def paid_by_fee_ids(
     return _par_frais(await db.execute(_verse_par_frais(*conditions)))
 
 
+async def paid_by_fee_for_scope(
+    db: AsyncSession,
+    *,
+    academic_year_id: int,
+    class_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné par un périmètre plutôt que par une liste de frais.
+
+    `paid_by_fee_ids` demande les identifiants ; c'est le bon geste quand
+    l'appelant regarde une catégorie et tient déjà ses quelques centaines de
+    lignes. La vue d'ensemble, elle, regarde TOUTES les catégories d'une année
+    à la fois : l'école entière fois ses huit catégories fait des milliers
+    d'identifiants dans un `IN (...)`, que certains moteurs refusent et
+    qu'aucun n'exécute bien. Le périmètre s'écrit alors en jointure.
+
+    La jointure sur l'inscription est posée ici et pas dans `_verse_par_frais`,
+    comme le dit ce module : la lecture qui a besoin de l'inscription l'ajoute
+    elle-même, en une ligne visible.
+
+    Les inscriptions closes sont écartées, exactement comme le fait le document
+    qui lit ce résultat. Les garder ferait entrer dans un total l'argent
+    d'inscriptions annulées, que plus aucun effectif ne compte.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT** —
+    même distinction que `paid_by_fee_ids`, et même raison : `received_by` n'a
+    de sens que sur l'événement.
+    """
+    from app.models.enrollment import CLOSED_STATUSES, Enrollment
+    from app.models.fee import EnrollmentFee, Payment
+
+    conditions: list[object] = [
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.status.not_in(CLOSED_STATUSES),
+    ]
+    if class_id is not None:
+        conditions.append(Enrollment.class_id == class_id)
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    stmt = (
+        _verse_par_frais()
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(*conditions)
+    )
+    return _par_frais(await db.execute(stmt))
+
+
 def _allocations_sur_frais_dus():
     """Le socle du calcul : les allocations posées sur ce qui reste dû.
 
