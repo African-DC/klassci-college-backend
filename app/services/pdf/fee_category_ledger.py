@@ -108,6 +108,73 @@ def _reste_du(ledger: CategoryLedger) -> str:
     )
 
 
+def _approvisionnement(ledger: CategoryLedger) -> str:
+    """Combien d'articles l'ÉCOLE doit fournir, et avec quel argent.
+
+    C'est la question qui fait tirer ce document. Un frais en nature se solde
+    de deux façons, et elles n'appellent pas du tout la même suite : l'élève a
+    apporté l'article — rien à faire ; il a payé — **l'école doit le lui
+    fournir**, acheté chez le prestataire ; il n'a rien fait — on relance.
+
+    Le document additionnait les deux premières dans un total en francs et un
+    compte de dépôts, sans jamais dire le nombre qui déclenche la commande.
+
+    Rien n'est recalculé ici : les trois seaux se lisent dans `compteurs`, qui
+    porte déjà les états sur le périmètre entier.
+    """
+    if not ledger.accepts_in_kind or ledger.compteurs is None:
+        return ""
+    a_fournir = ledger.compteurs.get("paid", 0)
+    apporte = ledger.compteurs.get("in_kind", 0)
+    a_relancer = ledger.compteurs.get("pending", 0) + ledger.compteurs.get("partial", 0)
+    if not (a_fournir or apporte or a_relancer):
+        return ""
+
+    def _case(valeur: int, libelle: str, mise: str = "") -> str:
+        return (
+            f'<td style="text-align:center; padding:6px 10px;{mise}">'
+            f'<div style="font-size:15px; font-weight:700;">{valeur}</div>'
+            f'<div class="muted" style="font-size:8.5px;">{ui.esc(libelle)}</div>'
+            "</td>"
+        )
+
+    return (
+        '<div style="border:1px solid var(--border); border-radius:4px;'
+        ' padding:6px 4px; margin:6px 0 12px;">'
+        '<table style="width:100%; border-collapse:collapse;"><tr>'
+        + _case(a_fournir, "à fournir (payés en argent)", " font-weight:700;")
+        + _case(apporte, "apportés par la famille")
+        + _case(a_relancer, "ni payés ni apportés")
+        + "</tr></table>"
+        '<div class="muted" style="font-size:8.5px; text-align:center; padding:2px 8px 0;">'
+        "Un frais ouvre droit à un article : « à fournir » est le nombre à commander "
+        "chez le prestataire, et l’argent déjà encaissé ci-dessus est celui qui le paiera."
+        "</div></div>"
+    )
+
+
+def _perimetre(ledger: CategoryLedger) -> str:
+    """L'effectif lu, et ceux que ce frais ne facture pas.
+
+    Sans ce compte, le document rétrécissait son propre dénominateur en
+    silence : « tout le monde a payé » se lisait sur une liste où les élèves
+    non facturés manquaient.
+    """
+    if not ledger.effectif_perimetre:
+        return ""
+    phrase = f"{ledger.effectif_perimetre} inscription(s) sur le périmètre lu"
+    if ledger.eleves_sans_ligne:
+        phrase += (
+            f", dont {ledger.eleves_sans_ligne} que ce frais ne facture pas "
+            "et qui ne figurent donc pas ci-dessous"
+        )
+    return (
+        '<div class="muted text-center" style="font-size:9px; margin:-6px 0 10px;">'
+        f"{ui.esc(phrase)}."
+        "</div>"
+    )
+
+
 def _entetes(colonnes: tuple[mots.Colonne, ...]) -> list[Any]:
     """Les en-têtes du détail : les mots partagés, l'alignement du médium."""
     return [
@@ -285,7 +352,9 @@ def render_fee_category_ledger_html(ledger: CategoryLedger, school_settings: dic
         )
     }
         {_note_depots(ledger)}
+        {_approvisionnement(ledger)}
         {_reste_du(ledger)}
+        {_perimetre(ledger)}
         {detail}
         {_signatures(ledger, theme)}
         {

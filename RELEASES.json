@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T12:04:18Z",
+  "generated_at": "2026-09-04T15:18:54Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,13 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base",
             "audience": [
@@ -1009,7 +1016,7 @@
             "pull_request": null
           },
           {
-            "text": "L'écran du point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient en silence",
+            "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre, à l'écran comme sur le document : ils disparaissaient en silence",
             "audience": [
               "comptable",
               "caissier"

@@ -238,3 +238,41 @@ def test_un_document_complet_n_annonce_aucune_troncature() -> None:
     html = render_fee_category_ledger_html(document(consolide=True), ECOLE)
 
     assert "Resserrez" not in html
+
+
+def test_le_document_dit_combien_l_ecole_doit_commander() -> None:
+    """La question qui fait tirer ce document : combien acheter au prestataire.
+
+    Un frais en nature se solde de deux façons qui n'appellent pas la même
+    suite. Qui a apporté son article ne coûte rien ; qui a payé en argent
+    attend que l'école le lui fournisse. Le document additionnait les deux
+    dans un total en francs, sans jamais dire le nombre qui déclenche la
+    commande.
+    """
+    ledger = document(consolide=True)
+    html = render_fee_category_ledger_html(ledger, ECOLE)
+
+    assert "à fournir (payés en argent)" in html
+    assert "apportés par la famille" in html
+    assert "ni payés ni apportés" in html
+    # Le lien avec l'argent, dit en toutes lettres : c'est lui qui paiera.
+    assert "celui qui le paiera" in html
+
+
+def test_un_frais_qui_ne_s_apporte_pas_n_a_pas_de_bon_de_commande() -> None:
+    """Sur une scolarité, « à fournir » ne veut rien dire : l'école ne fournit rien."""
+    ledger = document(consolide=True, accepts_in_kind=False)
+    html = render_fee_category_ledger_html(ledger, ECOLE)
+
+    assert "à fournir" not in html
+
+
+def test_le_document_ne_retrecit_plus_son_denominateur_en_silence() -> None:
+    """Les élèves qu'aucune ligne ne couvre ne figurent nulle part dans la liste.
+
+    Sans ce compte, « tout le monde a payé » se lisait sur une liste où les
+    élèves non facturés manquaient.
+    """
+    html = render_fee_category_ledger_html(document(consolide=True), ECOLE)
+
+    assert "inscription(s) sur le périmètre lu" in html

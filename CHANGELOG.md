@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer *(comptable)*
 - Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base *(comptable, caissier)*
 - Une vérification en lecture seule liste, école par école, les versements encaissés dont la ventilation ne retombe pas sur le montant reçu *(devops, comptable)*
 - Migration `0079` : contrainte d'unicité sur les imputations de versement. Passer la vérification avant de la jouer — la migration s'arrête en nommant les versements en cause plutôt que sur une erreur de la base. Marche à suivre en tête de la révision *(technique, déploiement)*
@@ -66,7 +67,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Changed
 - Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur *(comptable, caissier)*
 - Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école *(comptable, caissier, directeur)*
-- L'écran du point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient en silence *(comptable, caissier)*
+- Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre, à l'écran comme sur le document : ils disparaissaient en silence *(comptable, caissier)*
 - Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture *(comptable, caissier)*
 - La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
 - L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
