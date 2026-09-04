@@ -35,6 +35,8 @@ from app.utils.handoff_storage import (
 )
 
 JPEG = b"\xff\xd8\xff" + b"0" * 64
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+WEBP = b"RIFF" + b"0000" + b"WEBP" + b"0" * 64
 
 SESSION = "abcDEF123"
 
@@ -126,7 +128,7 @@ async def test_le_nom_porte_la_session(sas: Path) -> None:
 
 async def test_l_extension_vient_du_type_valide_pas_du_nom_envoye(sas: Path) -> None:
     """Le telephone a nomme son fichier `envoi.bin` : le sas n'en tient aucun compte."""
-    nom = await write_staged(_envoi(JPEG), session_id=SESSION, extension="webp", max_bytes=1024)
+    nom = await write_staged(_envoi(WEBP), session_id=SESSION, extension="webp", max_bytes=1024)
 
     assert nom.endswith(".webp")
 
@@ -138,6 +140,42 @@ async def test_un_envoi_trop_gros_est_refuse(sas: Path) -> None:
 
     assert erreur.value.status_code == 400
     assert "trop volumineux" in erreur.value.detail
+
+
+@pytest.mark.parametrize(
+    ("contenu", "extension"),
+    [
+        (b"<?php system($_GET[0]); ?>", "jpg"),
+        (b"MZ\x90\x00" + b"0" * 64, "png"),
+        (JPEG, "png"),
+        (PNG, "jpg"),
+        (b"RIFF" + b"0000" + b"AVI " + b"0" * 64, "webp"),
+        (JPEG, "pdf"),
+        (b"", "jpg"),
+    ],
+)
+async def test_un_fichier_qui_ment_sur_son_format_n_entre_pas(
+    sas: Path, contenu: bytes, extension: str
+) -> None:
+    """Le type declare vient du telephone : ses octets doivent le confirmer.
+
+    Sans ce controle, un fichier annonce `image/jpeg` mais portant tout autre
+    chose serait promu tel quel sous `/uploads/photos/`, servi par le montage
+    statique, avec une extension qui ment sur son contenu.
+    """
+    with pytest.raises(HTTPException) as erreur:
+        await write_staged(_envoi(contenu), session_id=SESSION, extension=extension, max_bytes=1024)
+
+    assert erreur.value.status_code == 400
+    assert not list(sas.iterdir()), "un fichier refuse ne doit rien laisser sur le disque"
+
+
+async def test_une_extension_inconnue_du_sas_n_entre_pas(sas: Path) -> None:
+    """La liste des formats est close : un oubli ferme la porte, il ne l'ouvre pas."""
+    with pytest.raises(HTTPException) as erreur:
+        await write_staged(_envoi(JPEG), session_id=SESSION, extension="svg", max_bytes=1024)
+
+    assert erreur.value.status_code == 400
 
 
 def test_relire_un_depot_disparu_donne_404(sas: Path) -> None:
@@ -228,7 +266,7 @@ async def test_la_promotion_vide_le_sas(sas: Path) -> None:
 
 
 async def test_la_promotion_garde_l_extension_du_depot(sas: Path) -> None:
-    nom = await write_staged(_envoi(JPEG), session_id=SESSION, extension="png", max_bytes=1024)
+    nom = await write_staged(_envoi(PNG), session_id=SESSION, extension="png", max_bytes=1024)
 
     url = promote_staged(nom, kind=PHOTOS, prefix="42")
 

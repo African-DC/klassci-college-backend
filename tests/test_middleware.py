@@ -1,6 +1,7 @@
 """Tests du TenantMiddleware — extraction tenant + host allowlist."""
 
 import asyncio
+from dataclasses import replace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
+from app.core import middleware as middleware_module
 from app.core.config import settings
 from app.core.database import current_tenant_id
 from app.core.middleware import (
@@ -102,6 +104,10 @@ def test_valid_subdomain_returns_slug(host: str, expected: str) -> None:
         "/public/verify-code/lycee-x/SNI-AAAA",
         "/public/verify-file/lycee-x/token",
         "/public/verify-file-code/lycee-x/SNI-AAAA",
+        # Le dépôt par téléphone : sans cette entrée, le tenant n'est pas lu du
+        # chemin et la requête retombe sur l'établissement local — la MAUVAISE
+        # base, en silence, sur une route qui écrit dans un sas.
+        "/public/upload-handoff/lycee-x/jeton",
     ],
 )
 def test_public_document_paths_resolve_tenant(path: str) -> None:
@@ -145,6 +151,11 @@ _test_app = TenantMiddleware(
         routes=[
             Route("/tenant", _tenant_echo),
             Route("/public/verify-file/local/token", _read_upload, methods=["POST"]),
+            Route(
+                "/public/upload-handoff/local/jeton",
+                _read_upload,
+                methods=["GET", "POST"],
+            ),
         ]
     )
 )
@@ -205,6 +216,60 @@ async def test_middleware_rejects_oversized_public_pdf_before_body_parsing() -> 
 
 
 @pytest.mark.asyncio
+async def test_le_depot_par_telephone_a_son_propre_plafond_et_ses_propres_mots() -> None:
+    """Le garde du dépôt n'est pas celui de la vérification de document.
+
+    Deux différences qui se voient en salle : le plafond n'est plus celui d'un
+    PDF de vingt mégaoctets, et la personne dont la photo est trop lourde ne
+    lit plus « PDF too large » sur un écran qui ne vérifie aucun PDF.
+    """
+    garde = next(
+        g for g in middleware_module._GARDES_ENVOI_PUBLIC if g.prefixe == "/public/upload-handoff/"
+    )
+    assert garde.corps_max < _MAX_PUBLIC_UPLOAD_BODY_BYTES
+    assert garde.compteur != "document-seal-upload"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://localhost"
+    ) as client:
+        response = await client.post(
+            "/public/upload-handoff/local/jeton",
+            headers={"Content-Length": str(garde.corps_max + 1)},
+        )
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "FILE_TOO_LARGE"
+    assert "PDF" not in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_une_lecture_ne_consomme_ni_quota_ni_place_d_envoi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Le garde s'armait sur le CHEMIN seul, sans regarder la méthode.
+
+    Le `GET` par lequel un téléphone peint sa page consommait donc un jeton du
+    quota par minute et l'une des quatre places d'envoi simultané, sans porter
+    un octet. Sur une reprise — ouvrir la page, envoyer, réessayer — le budget
+    partait en trois gestes.
+    """
+    quota = AsyncMock(return_value=None)
+    monkeypatch.setattr("app.core.middleware._consume_public_upload_quota", quota)
+    epuise = asyncio.Semaphore(0)
+    monkeypatch.setattr("app.core.middleware._PUBLIC_UPLOAD_SLOTS", epuise)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_test_app), base_url="http://localhost"
+    ) as client:
+        response = await asyncio.wait_for(
+            client.get("/public/upload-handoff/local/jeton"), timeout=2
+        )
+
+    assert response.status_code == 200
+    quota.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_middleware_rejects_chunked_upload_while_streaming(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -212,7 +277,11 @@ async def test_middleware_rejects_chunked_upload_while_streaming(
         yield b"%PDF-"
         yield b"payload-too-large"
 
-    monkeypatch.setattr("app.core.middleware._MAX_PUBLIC_UPLOAD_BODY_BYTES", 8)
+    # Le plafond appartient au garde du préfixe, pas à une constante globale :
+    # la vérification de document et le dépôt de photo par téléphone n'ont ni
+    # la même taille, ni le même compteur, ni les mêmes mots.
+    etroit = tuple(replace(garde, corps_max=8) for garde in middleware_module._GARDES_ENVOI_PUBLIC)
+    monkeypatch.setattr("app.core.middleware._GARDES_ENVOI_PUBLIC", etroit)
     monkeypatch.setattr(
         "app.core.middleware._consume_public_upload_quota",
         AsyncMock(return_value=None),

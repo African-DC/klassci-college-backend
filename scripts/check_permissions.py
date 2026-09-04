@@ -66,6 +66,14 @@ ROUTES_PUBLIQUES: dict[str, str] = {
     "app/routers/public_verify.py::verify_by_seal_code": "verification d'un document par un tiers",
     "app/routers/public_verify.py::verify_file_by_token": "verification d'un fichier par un tiers",
     "app/routers/public_verify.py::verify_file_by_code": "verification d'un fichier par un tiers",
+    "app/routers/public_upload_handoff.py::describe_handoff": (
+        "page de depot ouverte en scannant un code 2D, sur un telephone sans session ; "
+        "ne rend qu'un libelle discret (prenom et initiale) et le nom de l'etablissement"
+    ),
+    "app/routers/public_upload_handoff.py::deposit_handoff": (
+        "depot d'une photo depuis un telephone sans session ; n'ecrit AUCUNE fiche, "
+        "seulement un fichier dans le sas, et c'est l'operateur authentifie qui confirme"
+    ),
 }
 
 # ---------------------------------------------------------------------------

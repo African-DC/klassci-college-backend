@@ -44,6 +44,7 @@ from app.routers.performance import admin_router as performance_admin_router
 from app.routers.performance import teacher_router as performance_teacher_router
 from app.routers.profile import router as profile_router
 from app.routers.promotions import router as promotions_router
+from app.routers.public_upload_handoff import router as public_upload_handoff_router
 from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
 from app.routers.retakes import missed_evaluations_router
@@ -137,6 +138,7 @@ app.include_router(whats_new_router)
 app.include_router(payment_method_settings_router)
 app.include_router(promotions_router)
 app.include_router(public_verify_router)
+app.include_router(public_upload_handoff_router)
 app.include_router(student_portal_router)
 app.include_router(parent_portal_router)
 app.include_router(teacher_portal_router)

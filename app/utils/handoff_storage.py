@@ -62,6 +62,32 @@ HANDOFF_ROOT = Path(settings.HANDOFF_ROOT)
 _NOM_STAGE = re.compile(r"^[a-zA-Z0-9_-]{1,64}_[0-9a-f]{8}\.[a-z0-9]{2,4}$")
 
 
+def _octets_coherents(contenu: bytes, extension: str) -> bool:
+    """Les premiers octets disent-ils la meme chose que le type declare ?
+
+    Le type d'un envoi vient de son en-tete `Content-Type`, c'est-a-dire d'une
+    chaine que le telephone choisit. Un fichier annonce `image/jpeg` qui porte
+    en realite autre chose passerait sinon toutes les gardes et se retrouverait
+    servi plus tard sous `/uploads/photos/`, avec une extension qui ment.
+    Le precedent est dans le depot : la verification publique de document
+    refuse un envoi dont le premier morceau ne commence pas par `%PDF-`.
+
+    La liste est CLOSE : une extension inconnue rend faux. Une sorte de depot
+    de plus doit donc dire ici a quoi ses octets ressemblent, faute de quoi
+    rien n'entre — c'est le sens qu'on veut a un oubli.
+    """
+    if extension == "jpg":
+        return contenu.startswith(b"\xff\xd8\xff")
+    if extension == "png":
+        return contenu.startswith(b"\x89PNG\r\n\x1a\n")
+    if extension == "webp":
+        # Un conteneur RIFF, dont le sous-type est a l'octet 8.
+        return contenu[:4] == b"RIFF" and contenu[8:12] == b"WEBP"
+    if extension == "pdf":
+        return contenu.startswith(b"%PDF-")
+    return False
+
+
 def _en_production() -> bool:
     """Meme convention que `ensure_upload_dirs` : la production seule."""
     return settings.APP_ENV.lower() in {"production", "prod"}
@@ -122,8 +148,18 @@ async def write_staged(
     Le nom porte l'identifiant de session pour qu'un fichier du sas se rattache a
     sa session sans consulter Redis : le balayeur des orphelins travaille sur le
     disque, pas sur les cles.
+
+    Rien n'entre ici dont les octets contredisent le type declare. Le controle
+    est a la porte du sas et non chez l'appelant : c'est le seul endroit par
+    lequel un fichier arrive, et une garde posee plus haut serait oubliee par le
+    deuxieme appelant.
     """
     contenu = await read_capped(file, max_bytes)
+    if not _octets_coherents(contenu, extension):
+        raise HTTPException(
+            status_code=400,
+            detail="Ce fichier ne correspond pas au format annoncé. Reprenez la photo.",
+        )
     ensure_handoff_dir()
     nom = f"{session_id}_{uuid.uuid4().hex[:8]}.{extension}"
     staged_path(nom).write_bytes(contenu)

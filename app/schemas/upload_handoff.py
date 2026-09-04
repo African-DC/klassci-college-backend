@@ -1,4 +1,4 @@
-"""Schémas de la reprise de téléversement, côté ordinateur.
+"""Schémas de la reprise de téléversement : côté ordinateur, puis côté téléphone.
 
 Ce que ces schémas laissent volontairement dehors
 =================================================
@@ -89,3 +89,50 @@ class HandoffRetaken(BaseModel):
 
     state: Literal["open"] = "open"
     retakes_left: int
+
+
+# ---------------------------------------------------------------------------
+# Côté téléphone
+# ---------------------------------------------------------------------------
+#
+# Ces deux schémas sortent d'une route publique, ouverte sans session, atteinte
+# en scannant un code que n'importe qui peut photographier dans un couloir.
+# Tout ce qu'on y met est donc à la portée de n'importe qui : la question n'est
+# pas « est-ce utile » mais « est-ce que je l'écrirais sur une affiche ».
+
+
+class PublicHandoffView(BaseModel):
+    """De quoi peindre la page du téléphone, et rien de plus.
+
+    Pas de matricule, pas de classe, pas de date de naissance, pas de nom
+    complet : `label` vaut « Kouadio A. ». Assez pour que la personne qui tient
+    le téléphone sache qui photographier quand l'élève est devant elle ; pas
+    assez pour identifier un mineur à partir d'un code volé.
+
+    `school_name` est là parce que la page doit se présenter — quelqu'un qui
+    scanne un code doit voir au nom de qui on lui demande une photo. C'est déjà
+    ce que fait la page publique de vérification de document, et le nom d'un
+    établissement est écrit sur son portail.
+
+    `accepts` et `max_bytes` viennent de la cible : le téléphone réduit son
+    image avant l'envoi et doit savoir dans quoi elle doit tenir.
+    """
+
+    school_name: str
+    label: str
+    kind: str
+    metier: str
+    accepts: list[str]
+    max_bytes: int
+    state: Literal["open", "receiving", "proposed", "done"]
+    expires_at: datetime
+
+
+class PublicHandoffReceived(BaseModel):
+    """Le dépôt est dans le sas. Rien n'est écrit, et la page le dit ainsi.
+
+    `proposed` — proposé, pas enregistré. Le téléphone n'a aucune idée de ce
+    qu'il adviendra de l'image : c'est l'opérateur qui décidera, sur son écran.
+    """
+
+    state: Literal["proposed"] = "proposed"

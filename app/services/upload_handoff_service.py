@@ -64,7 +64,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 import redis.asyncio as aioredis
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -831,6 +831,62 @@ def staged_bytes(session: HandoffSession) -> tuple[bytes, str]:
     if not session.staged_file:
         raise HTTPException(status_code=409, detail="Aucun fichier déposé pour cette session")
     return read_staged(session.staged_file), session.staged_mime or "application/octet-stream"
+
+
+async def receive_deposit(
+    redis: aioredis.Redis,
+    *,
+    tenant: str,
+    token: str,
+    file: UploadFile,
+    phone_ip: str | None,
+) -> HandoffSession:
+    """Le geste du telephone, en entier : prendre la main, poser, se retirer.
+
+    Aucune colonne n'est touchee ici, et aucune base n'est meme ouverte. Le
+    fichier va dans le sas, la session passe sous les yeux de l'operateur, et
+    c'est tout. L'ecriture attend un humain devant un ecran authentifie : c'est
+    la propriete qui rend acceptable qu'un jeton porteur circule dans un code
+    que n'importe qui peut photographier.
+
+    L'ordre compte. On prend d'abord la main — `open` -> `receiving`, en une
+    operation indivisible — PUIS on lit le fichier. L'inverse laisserait deux
+    telephones lire chacun le leur avant que l'un des deux ne perde, et le
+    perdant aurait passe une minute de 3G pour rien.
+
+    Un echec en cours de route rend la main : la session redevient `open` sans
+    consommer de reprise et sans nouveau code. C'est ce qui fait qu'un
+    « Réessayer » suffit quand la donnee mobile coupe au milieu d'un envoi.
+
+    Le type declare est confronte a la table de la CIBLE, pas a une table
+    globale : une piece jointe accepte le PDF, une photo non. Les octets, eux,
+    sont confrontes au type a la porte du sas.
+    """
+    from app.utils.handoff_storage import write_staged
+
+    session = await claim_for_upload(redis, tenant=tenant, token=token)
+    target = session.target
+    try:
+        extension = target.extension_pour(file.content_type)
+        nom = await write_staged(
+            file,
+            session_id=session.id,
+            extension=extension,
+            max_bytes=target.max_bytes,
+        )
+    except BaseException:
+        await release_claim(redis, session)
+        raise
+
+    await mark_proposed(
+        redis,
+        session,
+        staged_file=nom,
+        staged_mime=file.content_type or "application/octet-stream",
+        client_name=file.filename,
+        phone_ip=phone_ip,
+    )
+    return await load_session(redis, tenant=tenant, session_id=session.id)
 
 
 def public_view(session: HandoffSession) -> dict[str, Any]:
