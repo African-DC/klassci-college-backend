@@ -68,6 +68,12 @@ services:
       # authentification ni cloisonnement de tenant. Une photo de mineur en
       # attente de validation y serait publique.
       HANDOFF_ROOT: /app/handoff
+      # L'adresse que porte le QR, donc celle que le TELEPHONE doit
+      # atteindre — pas celle du reseau interne. Ecrite ici plutot que
+      # laissee a sa valeur par defaut : sur un serveur de demonstration,
+      # le defaut pointe vers la production, et le telephone ouvrirait un
+      # lien de depot qui n'existe pas la-bas.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://college.klassci.com}
     depends_on:
       mysql:
         condition: service_healthy
@@ -116,6 +122,12 @@ services:
       # ce qu'un telephone envoie, le worker y balaie ce que personne n'a
       # confirme. Deux valeurs differentes, et le balayage passe a cote.
       HANDOFF_ROOT: /app/handoff
+      # L'adresse que porte le QR, donc celle que le TELEPHONE doit
+      # atteindre — pas celle du reseau interne. Ecrite ici plutot que
+      # laissee a sa valeur par defaut : sur un serveur de demonstration,
+      # le defaut pointe vers la production, et le telephone ouvrirait un
+      # lien de depot qui n'existe pas la-bas.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://college.klassci.com}
     depends_on:
       mysql:
         condition: service_healthy

@@ -42,6 +42,10 @@ from app.utils import handoff_storage
 from tests.services.test_upload_handoff_service import FauxRedis
 
 SERVICE = "app.services.upload_handoff_service"
+#: On remplace un nom LA OU IL EST UTILISE, pas la ou il est re-expose.
+#: `resolve_permission` vit dans la mecanique de session ; le remplacer sur
+#: la porte d'entree ne changerait rien a ce que la session appelle.
+SESSION_MODULE = "app.services.upload_handoff._session"
 JPEG = b"\xff\xd8\xff" + b"0" * 64
 COLLEGUE = TokenData(user_id=99, tenant_id="local", email="autre@college.ci")
 
@@ -67,7 +71,7 @@ def sas(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 @pytest.fixture
 def autorise() -> Any:
     """La matrice des droits repond oui. A retourner a `False` pour tester le refus."""
-    with patch(f"{SERVICE}.resolve_permission", new_callable=AsyncMock) as resolveur:
+    with patch(f"{SESSION_MODULE}.resolve_permission", new_callable=AsyncMock) as resolveur:
         resolveur.return_value = True
         yield resolveur
 

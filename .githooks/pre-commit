@@ -29,7 +29,11 @@ case "$branche" in
 esac
 
 # --- 2. Jamais de secret ------------------------------------------------------
-secrets=$(printf '%s\n' "$indexes" | grep -E '(^|/)\.env($|\.)|\.pem$|\.p12$|id_rsa|id_ed25519$|\.secrets|credentials\.json$' || true)
+# Les gabarits sont versionnes A DESSEIN : ils ne portent aucune valeur,
+# et c'est la qu'on documente une variable neuve. On les ecarte AVANT le
+# filtre, sans quoi le hook rend impossible la mise a jour d'un fichier
+# que le depot veut garder — ce qui est arrive.
+secrets=$(printf '%s\n' "$indexes" | grep -Ev '\.env\.(example|sample|template|dist)$' | grep -E '(^|/)\.env($|\.)|\.pem$|\.p12$|id_rsa|id_ed25519$|\.secrets|credentials\.json$' || true)
 if [ -n "$secrets" ]; then
   refus "des fichiers de secrets sont indexes." "$secrets" \
     "Les valeurs vivent dans l'environnement, jamais dans le depot."
