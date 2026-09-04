@@ -83,6 +83,10 @@ class _GardeEnvoiPublic:
     trop_gros: str
     trop_souvent: str
     indisponible: str
+    #: Compter par le dernier segment du chemin plutot que par l'adresse.
+    #: Vrai quand ce segment est un jeton : il designe UN envoi, la ou une
+    #: ecole entiere ne presente qu'une seule adresse publique.
+    quota_par_chemin: bool = False
 
 
 #: Les préfixes publics qui reçoivent des fichiers. Le tenant vient du chemin.
@@ -118,7 +122,11 @@ _GARDES_ENVOI_PUBLIC: tuple[_GardeEnvoiPublic, ...] = (
         compteur="photo-handoff-upload",
         # Plus serré que la vérification : un dépôt ne se répète pas huit fois
         # par minute, et derrière ce préfixe il y a la photo d'un mineur.
+        # Cinq par JETON, pas par adresse : le WiFi de l'école ne présente
+        # qu'une IP, et compter dessus fermerait le guichet au sixième dépôt
+        # d'une minute de rentrée. Cinq tentatives couvrent une 3G qui coupe.
         par_minute=5,
+        quota_par_chemin=True,
         # La plus grosse cible du registre est la pièce jointe d'élève, à dix
         # mégaoctets ; la marge couvre l'enveloppe multipart.
         corps_max=10 * 1024 * 1024 + 256 * 1024,
@@ -158,11 +166,31 @@ def trusted_client_ip(request: Request) -> str:
     return _trusted_client_ip(request.scope, request)
 
 
+def _sujet_du_quota(scope: Scope, request: Request, garde: _GardeEnvoiPublic) -> str:
+    """Sur qui compter : le dernier segment du chemin, sinon l'adresse.
+
+    **Une école n'a qu'une adresse publique.** Les téléphones qui déposent une
+    photo sont sur son WiFi — la donnée mobile se paie — ou derrière le CGNAT
+    d'un opérateur : ils partagent tous la même IP. Compter par adresse ferait
+    donc refuser le sixième dépôt de la minute un jour de rentrée à trois
+    guichets, alors que rien d'anormal ne se passe.
+
+    Quand le chemin porte un jeton, c'est lui le bon sujet : il désigne UN
+    envoi, il expire seul, et cinq tentatives par envoi couvrent largement une
+    3G qui coupe sans ouvrir la porte à autre chose.
+    """
+    if garde.quota_par_chemin:
+        segment = scope.get("path", "").rstrip("/").rpartition("/")[2]
+        if segment:
+            return f"jeton:{segment}"
+    return f"ip:{_trusted_client_ip(scope, request)}"
+
+
 async def _consume_public_upload_quota(
     scope: Scope, request: Request, garde: _GardeEnvoiPublic
 ) -> JSONResponse | None:
-    client_ip = _trusted_client_ip(scope, request)
-    fingerprint = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:24]
+    sujet = _sujet_du_quota(scope, request, garde)
+    fingerprint = hashlib.sha256(sujet.encode("utf-8")).hexdigest()[:24]
     key = f"public:{garde.compteur}:{fingerprint}"
     try:
         redis = get_redis_client()

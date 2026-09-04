@@ -775,24 +775,24 @@ async def request_retake(redis: aioredis.Redis, session: HandoffSession) -> int:
 
 
 async def close_session(redis: aioredis.Redis, session: HandoffSession) -> None:
-    """Fin de vie : les deux cles disparaissent, le fichier du sas aussi.
+    """Fin de vie : la session disparait, et le fichier du sas avec elle.
 
     Sert a la confirmation comme a la revocation. Le jeton cesse d'ouvrir quoi
-    que ce soit a l'instant meme, sans attendre l'echeance : c'est ce qui rend
-    la revocation reelle et pas cosmetique.
+    que ce soit a l'instant meme, sans attendre l'echeance.
+
+    **L'index du jeton, lui, survit jusqu'a son echeance, et c'est sans
+    consequence.** Sa cle est l'empreinte du jeton, et une empreinte ne se
+    remonte pas : on ne peut donc pas l'effacer d'ici, ou le clair n'est plus
+    detenu. Ce qu'il rend est un identifiant de session ; la session n'existant
+    plus, `load_by_token` ne trouve rien et refuse. La revocation est reelle
+    parce que la SESSION disparait, pas parce que les deux cles disparaissent.
+
+    Cette docstring a d'abord affirme le contraire. Une propriete de securite
+    annoncee mais non tenue est pire qu'une propriete absente : elle dispense
+    le lecteur suivant de la verifier.
     """
     _oublier_le_fichier(session)
     await redis.delete(_cle_session(session.tenant, session.id))
-
-
-async def forget_token(redis: aioredis.Redis, *, tenant: str, token: str) -> None:
-    """Efface l'index d'un jeton dont on tient encore le clair.
-
-    L'index ne peut etre supprime que par qui connait le jeton : la cle est son
-    empreinte, et l'empreinte ne se remonte pas. Ailleurs, on laisse le TTL
-    faire — un index qui ne resout plus vers aucune session n'ouvre rien.
-    """
-    await redis.delete(_cle_jeton(tenant, token))
 
 
 def _oublier_le_fichier(session: HandoffSession) -> None:
