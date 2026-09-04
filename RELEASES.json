@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T02:46:21Z",
+  "generated_at": "2026-09-04T12:04:18Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1009,7 +1009,7 @@
             "pull_request": null
           },
           {
-            "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient du document en silence",
+            "text": "L'écran du point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient en silence",
             "audience": [
               "comptable",
               "caissier"
