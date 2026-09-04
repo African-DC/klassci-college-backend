@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base *(comptable, caissier)*
+- Une vérification en lecture seule liste, école par école, les versements encaissés dont la ventilation ne retombe pas sur le montant reçu *(devops, comptable)*
+- Migration `0079` : contrainte d'unicité sur les imputations de versement. Passer la vérification avant de la jouer — la migration s'arrête en nommant les versements en cause plutôt que sur une erreur de la base. Marche à suivre en tête de la révision *(technique, déploiement)*
 - Une vue d'ensemble répond à « quel frais rentre mal » avant d'en choisir un : par catégorie, l'attendu, l'entré, le taux et les trois compteurs *(comptable, directeur)*
 - La vue d'ensemble sert aussi la caisse : ce qu'elle a encaissé catégorie par catégorie, le recouvrement de l'école restant réservé à qui lit toutes les caisses *(caissier)*
 - Le point sur une catégorie annonce le total attendu, le taux de recouvrement et le nombre d'élèves sans paiement, partiels et à jour *(comptable, directeur)*

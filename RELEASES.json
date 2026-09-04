@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T01:53:52Z",
+  "generated_at": "2026-09-04T02:46:21Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,30 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une vérification en lecture seule liste, école par école, les versements encaissés dont la ventilation ne retombe pas sur le montant reçu",
+            "audience": [
+              "devops",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0079` : contrainte d'unicité sur les imputations de versement. Passer la vérification avant de la jouer — la migration s'arrête en nommant les versements en cause plutôt que sur une erreur de la base. Marche à suivre en tête de la révision",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Une vue d'ensemble répond à « quel frais rentre mal » avant d'en choisir un : par catégorie, l'attendu, l'entré, le taux et les trois compteurs",
             "audience": [
