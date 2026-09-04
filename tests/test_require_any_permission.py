@@ -8,7 +8,7 @@ qui lui demandait un droit qu'on ne lui donnera pas.
 
 `require_any_permission` laisse passer qui détient l'un OU l'autre, sans jamais
 faire une seconde lecture de la matrice des droits : elle s'appuie sur
-`_resolve_permission`, comme `require_permission`.
+`resolve_permission`, comme `require_permission`.
 
 La matrice tourne sur SQLite via le module standard : le vrai SQL du dépôt,
 jointures comprises, sans base MySQL à provisionner.
