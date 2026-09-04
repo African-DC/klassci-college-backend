@@ -351,7 +351,10 @@ async def test_revoquer_efface_le_depot_et_la_session(
     ouverte = _ouvrir(client)
     await _deposer(redis_partage, sas, ouverte)
 
-    assert client.delete(f"/admin/upload-handoff/{ouverte['id']}").status_code == 204
+    # L'appel AVANT l'assertion : `python -O` efface les `assert`, et avec eux
+    # la fermeture que le reste du test suppose faite.
+    fermeture = client.delete(f"/admin/upload-handoff/{ouverte['id']}")
+    assert fermeture.status_code == 204
     assert list(sas.iterdir()) == []
     assert client.get(f"/admin/upload-handoff/{ouverte['id']}").status_code == 404
 

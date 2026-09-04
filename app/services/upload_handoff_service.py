@@ -657,7 +657,17 @@ async def load_session(redis: aioredis.Redis, *, tenant: str, session_id: str) -
     if session.tenant != tenant:
         # La cle porte deja le tenant : arriver ici signifie qu'une cle a ete
         # construite autrement quelque part. On refuse plutot que de servir.
-        logger.error("Session de depot au mauvais etablissement : %s", session_id)
+        #
+        # L'identifiant N'EST PAS journalise : il vient du chemin d'une URL
+        # publique, donc de l'exterieur. Un retour a la ligne glisse dedans
+        # fabrique une fausse entree de journal, et c'est le journal qu'on lit
+        # le jour ou l'on cherche a comprendre. Les deux etablissements
+        # suffisent a diagnostiquer, et ils viennent de la session.
+        logger.error(
+            "Session de depot lue depuis le mauvais etablissement (attendu %r, trouve %r)",
+            tenant,
+            session.tenant,
+        )
         raise HTTPException(status_code=404, detail="Session de dépôt expirée ou introuvable")
     return session
 

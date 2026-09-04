@@ -314,7 +314,11 @@ def test_toute_cible_sait_ecrire_ce_qu_elle_recoit() -> None:
 
 def _slugs_deja_exiges_par_les_routes() -> set[str]:
     routeurs = Path(__file__).resolve().parents[2] / "app" / "routers"
-    motif = re.compile(r"require_(?:any_)?permission\(\s*((?:\"[^\"]+\"\s*,?\s*)+)\)")
+    # Pas de quantificateur imbrique : `(?:"..."\s*,?\s*)+` fait exploser le
+    # retour arriere sur une entree taillee pour, et ce motif lit des fichiers
+    # du depot. On capture l'interieur de l'appel d'un seul tenant, sans
+    # alternance, puis on en extrait les chaines.
+    motif = re.compile(r"require_(?:any_)?permission\(([^()]*)\)")
     slugs: set[str] = set()
     for chemin in routeurs.rglob("*.py"):
         for groupe in motif.findall(chemin.read_text(encoding="utf-8")):
