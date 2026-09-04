@@ -28,6 +28,12 @@ pydyf>=0.11.0,<0.12
 # Visible) en pur Python, rendu SVG → aucune dépendance native. Imprimé sur les
 # documents officiels comme cachet signé pour la vérification publique.
 ppf-datamatrix==0.2
+# segno : génération de codes QR en pur Python, rendu SVG → aucune dépendance
+# native. Ne remplace pas ppf-datamatrix ci-dessus : le Datamatrix répond à la
+# norme 2D-Doc du sceau documentaire, le QR répond à « l'appareil photo natif
+# d'un téléphone doit savoir le lire » — nécessaire pour la reprise de photo par
+# téléphone, et qu'un Datamatrix ne sait pas faire.
+segno==1.6.6
 # openpyxl : génération de classeurs Excel (.xlsx) en pur Python — export des
 # statistiques DREN. Aucune dépendance native, install rapide.
 openpyxl==3.1.5
