@@ -62,6 +62,12 @@ services:
       # monterait le volume la ou le code n'ecrit pas encore, et le code seul
       # ecrirait la ou aucun volume n'est monte.
       UPLOAD_ROOT: /app/uploads
+      # Sas de depot : les photos qu'un telephone envoie et qu'aucun operateur
+      # n'a encore validees. Racine SEPAREE d'UPLOAD_ROOT, et ce n'est pas un
+      # rangement : le backend monte UPLOAD_ROOT en entier sous /uploads, sans
+      # authentification ni cloisonnement de tenant. Une photo de mineur en
+      # attente de validation y serait publique.
+      HANDOFF_ROOT: /app/handoff
     depends_on:
       mysql:
         condition: service_healthy
@@ -83,6 +89,13 @@ services:
       # son montage StaticFiles sur /uploads exige que le dossier existe des
       # le demarrage. Sans volume, il le recree vide a chaque conteneur.
       - klassci_uploads:/app/uploads
+      # Le sas de depot. Il n'est PAS monte pour durer - une session de depot
+      # vit dix minutes - mais pour etre le MEME dossier ici et dans le worker :
+      # le backend y ecrit ce qu'un telephone envoie, le worker y balaiera les
+      # fichiers qu'aucun operateur n'a confirmes. Sans ce partage, le balayeur
+      # regarderait un dossier vide pendant que les photos s'entassent dans la
+      # couche jetable du backend.
+      - klassci_handoff:/app/handoff
     networks:
       - klassci
       - dokploy-network
@@ -99,6 +112,10 @@ services:
       # Meme racine que le backend, meme valeur, meme volume : un document
       # produit ici doit etre lisible par celui qui le sert.
       UPLOAD_ROOT: /app/uploads
+      # Meme sas que le backend, meme valeur, meme volume : le backend y depose
+      # ce qu'un telephone envoie, le worker y balaie ce que personne n'a
+      # confirme. Deux valeurs differentes, et le balayage passe a cote.
+      HANDOFF_ROOT: /app/handoff
     depends_on:
       mysql:
         condition: service_healthy
@@ -118,6 +135,12 @@ services:
       # backend, et la premiere tache qui composera un document ne doit pas
       # dependre de quelqu'un se souvenant d'ajouter un volume ce jour-la.
       - klassci_uploads:/app/uploads
+      # Le sas, monte ici pour que le balayage des depots orphelins voie les
+      # fichiers que le backend y ecrit. Le TTL Redis fait disparaitre la
+      # session, pas le fichier : sans ce montage, le sas accumulerait des
+      # photos d'eleves indefiniment, et la tache qui doit les effacer
+      # tournerait sur un dossier vide en rapportant zero.
+      - klassci_handoff:/app/handoff
     networks:
       - klassci
 
@@ -218,6 +241,16 @@ volumes:
   klassci_uploads:
     external: true
     name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_uploads
+  # `klassci_handoff` n'existe pas encore sur le serveur : il est donc declare
+  # normalement, et docker le creera. Le mettre `external` comme ses voisins
+  # ferait echouer le `up` sur un volume introuvable, alors que ceux-la sont
+  # externes precisement parce qu'ils portaient deja des donnees a adopter.
+  #
+  # Il n'a rien a conserver : un depot non confirme vit dix minutes, et le
+  # perdre au redeploiement ne coute qu'une photo a reprendre. Ce qu'il porte,
+  # c'est le partage entre le backend qui ecrit et le worker qui balaie.
+  klassci_handoff:
+    name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_handoff
   klassci_mysql:
     external: true
     name: ${KLASSCI_VOLUME_PREFIX:-linux}_klassci_mysql

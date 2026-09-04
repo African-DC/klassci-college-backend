@@ -11,6 +11,14 @@ faces d'une meme. Les tenir separees, c'est laisser un endpoint ecrire dans
 `signatures/` et rendre une URL `/uploads/photos/...`, et decouvrir la
 divergence le jour ou un document sort sans son image. `UploadKind` les porte
 donc ensemble, et c'est la seule maniere de nommer un emplacement ici.
+
+Corollaire, et c'est le piege : TOUT ce qui vit sous cette racine est public.
+Le montage est un `StaticFiles` brut, sans authentification ni cloisonnement de
+tenant, et le nom d'un fichier n'est qu'un prefixe suivi de huit caracteres
+hexadecimaux. Un fichier recu mais pas encore valide par un humain — la photo
+qu'un telephone vient de deposer — n'a donc rien a faire ici : il attend dans le
+sas de `app/utils/handoff_storage.py`, sous une racine qui n'est montee nulle
+part. N'ajoutez pas d'`UploadKind` pour lui.
 """
 
 import logging
