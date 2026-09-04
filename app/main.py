@@ -58,6 +58,7 @@ from app.routers.teacher_attendance import teacher_router as teacher_attendance_
 from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
+from app.routers.upload_handoff import router as upload_handoff_router
 from app.routers.whats_new import router as whats_new_router
 from app.utils.handoff_storage import ensure_handoff_dir
 
@@ -158,6 +159,7 @@ app.include_router(performance_admin_router)
 app.include_router(performance_teacher_router)
 app.include_router(profile_router)
 app.include_router(audit_router)
+app.include_router(upload_handoff_router)
 
 
 # ---------------------------------------------------------------------------
