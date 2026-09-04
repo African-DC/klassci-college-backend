@@ -73,6 +73,18 @@ une ligne est deposee ou elle ne l'est pas. « Douze depots » veut donc dire
 douze eleves ayant remis ce que leur ligne demandait, et non douze paquets si
 une ligne en vaut deux. Le document parle de depots, jamais de paquets, pour
 ne pas promettre un decompte que la base ne tient pas.
+
+## Le document nomme ce dont il parle
+
+Un point qui ne dit ni son annee, ni sa caisse, ni son porteur, ni la date de
+son tirage n'est pas une piece : deux tirages de deux exercices, ou de deux
+caisses, sont indiscernables une fois poses cote a cote sur un bureau. Le
+perimetre, les filtres, la caisse lue, l'auteur et l'instant sont donc portes
+par le document lui-meme — lus du CRITERE, jamais reconstitues depuis les
+lignes rendues, qu'un filtre peut vider sans que la classe cesse d'exister.
+
+L'instant est RECU, pas relu : un composeur qui va chercher l'heure ne se teste
+pas, et le PDF et le classeur d'un meme point ne portaient alors pas la meme.
 """
 
 from __future__ import annotations
@@ -89,7 +101,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import BusinessValidationError
 from app.core.names import compact
-from app.models.academic import Class
+from app.models.academic import AcademicYear, Class
 from app.models.enrollment import CLOSED_STATUSES, Enrollment
 from app.models.fee import (
     EnrollmentFee,
@@ -99,7 +111,10 @@ from app.models.fee import (
     is_not_cash_due,
 )
 from app.models.user import Student
+from app.repositories import payment_journal_repository as journal_repository
 from app.services import fees_paid
+from app.services.payments._cashier import cashier_name
+from app.services.payments.journal_labels import scope_label
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
 #: Au-dela, le document cesse de rendre service : personne ne relit cinq mille
@@ -294,12 +309,34 @@ class CategoryLedger:
     category_id: int
     category_name: str
     accepts_in_kind: bool
+    #: L'année lue. Paramètre OBLIGATOIRE de l'entrée, et pourtant imprimé
+    #: nulle part : deux points de deux exercices sortaient indiscernables une
+    #: fois posés côte à côte sur un bureau.
+    academic_year_id: int
+    academic_year_name: str
+    #: Le périmètre, lu du CRITÈRE et non des lignes rendues — voir
+    #: `nom_du_perimetre`.
     class_name: str
     date_from: datetime | None
     date_to: datetime | None
     #: Vrai quand le lecteur voit toutes les caisses. Faux, le document ne
     #: porte que ce qu'il a lui-même encaissé, et ne dit rien des impayés.
     consolide: bool
+
+    #: « Ma caisse — N'GUESSAN Marcel », ou « Toutes les caisses ». La phrase
+    #: est celle du journal des versements (`journal_labels.scope_label`) :
+    #: deux documents de caisse qui nomment leur caisse autrement se lisent
+    #: comme deux périmètres différents.
+    scope_label: str
+    #: Le nom du porteur de la caisse lue, quand une seule l'est. Il porte la
+    #: ligne de signature d'un état de guichet : faire signer « La Direction »
+    #: sous le point d'une caissière n'engage personne.
+    cashier_name: str | None
+    #: Qui a tiré le document, et quand. INJECTÉS, jamais relus par le
+    #: composeur : un document qui va chercher l'heure lui-même ne se teste
+    #: pas, et ses deux sorties ne portent alors pas le même instant.
+    issued_by: str | None
+    issued_at: datetime
 
     #: Combien d'inscriptions ouvertes tient le périmètre demandé — l'année,
     #: et la classe s'il y en a une. Ce n'est pas de l'argent : ce chiffre ne
@@ -474,6 +511,8 @@ async def load_category_ledger(
     q: str | None = None,
     page: int = 1,
     size: int = LEDGER_MAX_ROWS,
+    issued_by_user_id: int | None = None,
+    issued_at: datetime | None = None,
 ) -> CategoryLedger:
     """Compose le point d'une catégorie.
 
@@ -503,6 +542,11 @@ async def load_category_ledger(
 
     La liste est plafonnée à `LEDGER_MAX_ROWS`, et `truncated_from` le dit
     quand la coupe a eu lieu.
+
+    `issued_by_user_id` et `issued_at` nomment et datent le tirage. Ils sont
+    reçus, jamais devinés : le composeur du PDF relisait l'heure lui-même, ce
+    qui rendait le document intestable et donnait deux instants différents au
+    PDF et au classeur d'un même point.
     """
     statuts_du_seau = _seau_demande(state, consolide=consolide)
     recherche = (q or "").strip() or None
@@ -693,14 +737,28 @@ async def load_category_ledger(
             )
         )
 
+    # QUI TIRE LE DOCUMENT, ET SUR QUELLE CAISSE. Deux comptes différents : le
+    # porteur de la caisse lue — celui dont le document raconte l'encaissement
+    # — et celui qui l'imprime. Sur un point consolidé tiré par le comptable,
+    # les confondre désignerait le comptable comme caissier d'un état qui
+    # récapitule le travail de trois autres.
+    porteur = await _nom_du_compte(db, received_by)
+    editeur = await _nom_du_compte(db, issued_by_user_id)
+
     return CategoryLedger(
         category_id=category_id,
         category_name=getattr(categorie, "name", "") or f"Catégorie {category_id}",
         accepts_in_kind=bool(getattr(categorie, "accepts_in_kind", False)),
+        academic_year_id=academic_year_id,
+        academic_year_name=await nom_de_l_annee(db, academic_year_id),
         class_name=await nom_du_perimetre(db, class_id),
         date_from=date_from,
         date_to=date_to,
         consolide=consolide,
+        scope_label=scope_label(restricted=not consolide, cashier_name=porteur),
+        cashier_name=porteur,
+        issued_by=editeur,
+        issued_at=issued_at or datetime.now(),
         effectif_perimetre=effectif,
         eleves_sans_ligne=sans_ligne,
         eleves_en_argent=totaux.eleves_en_argent,
@@ -737,6 +795,32 @@ async def nom_du_perimetre(db: AsyncSession, class_id: int | None) -> str:
     return nom or ""
 
 
+async def nom_de_l_annee(db: AsyncSession, academic_year_id: int) -> str:
+    """Le nom de l'année lue — « 2026-2027 ».
+
+    L'année est le premier critère du périmètre et un paramètre obligatoire de
+    l'entrée, mais elle n'était imprimée nulle part : deux points de deux
+    exercices sortaient identiques, et rien sur la feuille ne disait lequel on
+    tenait en main.
+    """
+    nom = (
+        await db.execute(select(AcademicYear.name).where(AcademicYear.id == academic_year_id))
+    ).scalar_one_or_none()
+    return nom or ""
+
+
+async def _nom_du_compte(db: AsyncSession, user_id: int | None) -> str | None:
+    """Le nom lisible d'un compte, ou `None` quand il n'y en a pas à nommer.
+
+    `None` et un nom introuvable disent la même chose au document : il
+    n'annonce alors pas d'auteur, plutôt que d'imprimer un tiret qui se lirait
+    comme un champ cassé.
+    """
+    if user_id is None:
+        return None
+    return cashier_name(await journal_repository.get_cashier(db, user_id))
+
+
 def _dans_la_fenetre(
     quand: datetime | None, date_from: datetime | None, date_to: datetime | None
 ) -> bool:
@@ -760,22 +844,25 @@ async def get_category_ledger_xlsx(
     date_to: datetime | None = None,
     received_by: int | None = None,
     consolide: bool = True,
+    issued_by_user_id: int | None = None,
 ) -> bytes:
     """Le même document, au gabarit officiel de l'établissement.
 
     La signature est recopiée plutôt que passée en `**kwargs` : un classeur qui
     perdrait `consolide` en chemin sortirait sans son avertissement, et c'est
     la ligne qui empêche de prendre un document de guichet pour le compte de
-    l'école entière.
+    l'école entière. `issued_by_user_id` suit la même règle, et pour la même
+    raison : c'est lui qui nomme l'auteur en en-tête et sous la signature.
 
     Import local, comme ailleurs : la fabrique de classeur importe les formes
     définies plus haut, et l'importer au chargement fermerait le cycle.
 
     Le seau et la recherche de l'écran ne sont volontairement pas transmis : le
-    document porte le périmètre entier, plafond compris. Un classeur amputé
-    d'un filtre qu'il ne nomme pas se lirait comme le point complet, et c'est
-    la pièce qu'un prestataire garde. Les y ajouter suppose que l'en-tête
-    nomme d'abord ses filtres.
+    document porte le périmètre entier, plafond compris — et le dit, désormais,
+    par sa mention de troncature. Un classeur amputé d'un filtre qu'il ne nomme
+    pas se lirait comme le point complet, et c'est la pièce qu'un prestataire
+    garde. L'en-tête sait maintenant nommer ses filtres (`filters_label`) : les
+    y ajouter ne dépend plus que du chemin qui les transporte.
     """
     from app.services._school_settings_helper import load_school_settings_for_pdf
     from app.services.exports.fee_category_ledger_xlsx import (
@@ -791,6 +878,7 @@ async def get_category_ledger_xlsx(
         date_to=date_to,
         received_by=received_by,
         consolide=consolide,
+        issued_by_user_id=issued_by_user_id,
     )
     school = await load_school_settings_for_pdf(db)
     return generate_fee_category_ledger_xlsx(ledger, school)
@@ -806,6 +894,7 @@ async def get_category_ledger_pdf(
     date_to: datetime | None = None,
     received_by: int | None = None,
     consolide: bool = True,
+    issued_by_user_id: int | None = None,
 ) -> bytes:
     """Le même document, au gabarit officiel, en PDF.
 
@@ -829,6 +918,7 @@ async def get_category_ledger_pdf(
         date_to=date_to,
         received_by=received_by,
         consolide=consolide,
+        issued_by_user_id=issued_by_user_id,
     )
     school = await load_school_settings_for_pdf(db)
     return generate_fee_category_ledger_pdf(ledger, school)

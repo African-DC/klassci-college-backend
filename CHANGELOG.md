@@ -61,6 +61,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur *(comptable, caissier)*
+- Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école *(comptable, caissier, directeur)*
 - Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient du document en silence *(comptable, caissier)*
 - Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture *(comptable, caissier)*
 - La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
@@ -82,6 +84,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés *(comptable, caissier)*
+- Le point par catégorie annonce quand il a été coupé au plafond, au lieu de se laisser lire comme complet *(comptable, caissier)*
+- Le point par catégorie ne porte plus une colonne « Reste à payer » vide de bout en bout quand il ne couvre qu'une caisse *(caissier)*
 - Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse *(comptable, caissier)*
 - Les états du point par catégorie retrouvent leurs couleurs sur le document PDF *(comptable, caissier)*
 - Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune *(comptable, caissier)*

@@ -355,6 +355,12 @@ async def export_fee_category_point(
     Le classeur porte en en-tete, en toutes lettres, le fait qu'il ne couvre
     qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
     se lirait comme le compte de l'ecole entiere.
+
+    Il porte aussi qui l'a tire : `issued_by_user_id` nomme l'auteur en en-tete
+    et sous la ligne de signature. La caisse LUE et la personne qui IMPRIME
+    sont deux comptes distincts — sur un point consolide, les confondre
+    designerait le comptable comme caissier d'un etat qui recapitule le travail
+    de trois autres.
     """
     criteres = {
         "category_id": category_id,
@@ -368,6 +374,7 @@ async def export_fee_category_point(
             current_user_id=current_user.user_id,
         ),
         "consolide": can_read_all,
+        "issued_by_user_id": current_user.user_id,
     }
     jour = date.today().isoformat()
 
@@ -473,6 +480,7 @@ async def fee_category_point(
         q=q,
         page=page,
         size=size,
+        issued_by_user_id=current_user.user_id,
     )
     return CategoryLedgerResponse.model_validate(ledger)
 

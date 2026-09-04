@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T01:15:27Z",
+  "generated_at": "2026-09-04T01:53:52Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -968,6 +968,23 @@
         ],
         "Changed": [
           {
+            "text": "Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école",
+            "audience": [
+              "comptable",
+              "caissier",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre : ils disparaissaient du document en silence",
             "audience": [
               "comptable",
@@ -1474,6 +1491,29 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie annonce quand il a été coupé au plafond, au lieu de se laisser lire comme complet",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie ne porte plus une colonne « Reste à payer » vide de bout en bout quand il ne couvre qu'une caisse",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse",
             "audience": [

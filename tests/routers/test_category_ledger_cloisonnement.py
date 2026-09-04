@@ -13,6 +13,7 @@ sa seule caisse lui ferait relancer une famille qui a paye au guichet d'a cote.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -35,10 +36,16 @@ def _vide(*, consolide: bool) -> CategoryLedger:
         category_id=1,
         category_name="PAQUET DE RAM",
         accepts_in_kind=True,
+        academic_year_id=1,
+        academic_year_name="2026-2027",
         class_name="Toutes les classes",
         date_from=None,
         date_to=None,
         consolide=consolide,
+        scope_label="Toutes les caisses" if consolide else "Ma caisse",
+        cashier_name=None,
+        issued_by=None,
+        issued_at=datetime(2026, 11, 12, 16, 45),
         effectif_perimetre=0,
         eleves_sans_ligne=0,
         eleves_en_argent=0,
