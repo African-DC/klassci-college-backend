@@ -6,6 +6,13 @@ le sceau Ed25519 de l'empreinte du PDF conservé par `document_issuance_service`
 
 Rendu en SVG inline : WeasyPrint le rasterise nativement, donc aucune dépendance
 image (Pillow, libdmtx…) n'est requise.
+
+Ce module n'est PAS remplacé par `app/services/qr_svg.py`, et les deux codes ne
+sont pas interchangeables. Le Datamatrix est la forme attendue du sceau
+documentaire (norme 2D-Doc) et s'imprime sur une pièce ; le QR existe parce que
+l'appareil photo natif d'un téléphone sait le lire sans application, ce qu'aucun
+Datamatrix ne permet. `ppf-datamatrix` ne produit d'ailleurs pas de QR, et
+`segno` pas de Datamatrix.
 """
 
 from __future__ import annotations

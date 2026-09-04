@@ -44,6 +44,7 @@ from app.routers.performance import admin_router as performance_admin_router
 from app.routers.performance import teacher_router as performance_teacher_router
 from app.routers.profile import router as profile_router
 from app.routers.promotions import router as promotions_router
+from app.routers.public_upload_handoff import router as public_upload_handoff_router
 from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
 from app.routers.retakes import missed_evaluations_router
@@ -58,7 +59,9 @@ from app.routers.teacher_attendance import teacher_router as teacher_attendance_
 from app.routers.teacher_portal import router as teacher_portal_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
+from app.routers.upload_handoff import router as upload_handoff_router
 from app.routers.whats_new import router as whats_new_router
+from app.utils.handoff_storage import ensure_handoff_dir
 
 # Sentry must be initialized BEFORE FastAPI() so its middleware attaches.
 # No-op if SENTRY_DSN is empty.
@@ -79,6 +82,14 @@ app = FastAPI(
 # intégration continue) sans empêcher l'API entière de se lancer.
 ensure_upload_dirs()
 app.mount("/uploads", StaticFiles(directory=UPLOAD_ROOT, check_dir=False), name="uploads")
+
+# --- Sas de dépôt (photo reçue d'un téléphone, pas encore validée) ---
+# Le dossier est créé ici, et il s'arrête là : AUCUN `app.mount` ne le sert.
+# Le montage ci-dessus est un `StaticFiles` sans authentification ni
+# cloisonnement de tenant ; la photo d'un mineur que personne n'a encore
+# regardée n'a rien à y faire. Son seul chemin de lecture est un endpoint
+# authentifié. Voir `app/utils/handoff_storage.py`.
+ensure_handoff_dir()
 
 # --- Middleware (ordre : dernier ajouté = premier exécuté) ---
 # TenantMiddleware ajouté en 1er → s'exécute en dernier (inner layer)
@@ -127,6 +138,7 @@ app.include_router(whats_new_router)
 app.include_router(payment_method_settings_router)
 app.include_router(promotions_router)
 app.include_router(public_verify_router)
+app.include_router(public_upload_handoff_router)
 app.include_router(student_portal_router)
 app.include_router(parent_portal_router)
 app.include_router(teacher_portal_router)
@@ -149,6 +161,7 @@ app.include_router(performance_admin_router)
 app.include_router(performance_teacher_router)
 app.include_router(profile_router)
 app.include_router(audit_router)
+app.include_router(upload_handoff_router)
 
 
 # ---------------------------------------------------------------------------

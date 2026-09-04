@@ -37,11 +37,17 @@ logger = logging.getLogger(__name__)
 # Hôtes qui mappent vers le tenant de développement local
 # Inclut "testserver" (par défaut FastAPI TestClient) pour ne pas casser la suite tests.
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "testserver", "backend", ""}
-_PUBLIC_UPLOAD_PREFIXES = ("/public/verify-file/", "/public/verify-file-code/")
 _MAX_PUBLIC_UPLOAD_BODY_BYTES = 20 * 1024 * 1024 + 256 * 1024
 _PUBLIC_UPLOADS_PER_MINUTE = 8
 _PUBLIC_UPLOAD_SLOTS = asyncio.Semaphore(4)
 _PUBLIC_UPLOAD_MEMORY_BYTES = 1024 * 1024
+#: Les methodes qui portent un corps. Le garde ne s'arme que sur celles-la.
+#:
+#: Il se declenchait sur le CHEMIN seul. Le `GET` par lequel un telephone peint
+#: sa page de depot consommait donc un jeton du quota par minute ET l'une des
+#: quatre places d'envoi simultane, sans porter un octet. Sur une reprise —
+#: ouvrir la page, envoyer, reessayer — le budget partait en trois gestes.
+_METHODES_AVEC_CORPS = frozenset({"POST", "PUT", "PATCH"})
 _RATE_LIMIT_SCRIPT = """
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then
@@ -49,6 +55,86 @@ if count == 1 then
 end
 return count
 """
+
+
+@dataclass(frozen=True)
+class _GardeEnvoiPublic:
+    """Le plafond, le quota et les mots d'un préfixe public qui reçoit un fichier.
+
+    Une seule constante servait les deux : un plafond de corps de 20 Mo écrit
+    pour un PDF de vérification, un compteur Redis unique, et des messages qui
+    parlent de PDF et de vérification. Le dépôt de photo par téléphone hérite
+    d'un préfixe voisin mais pas du sujet : une secrétaire dont la photo est
+    trop lourde lisait « PDF too large », et son envoi consommait le budget de
+    quelqu'un qui vérifie un diplôme à l'autre bout du pays.
+
+    `compteur` est le segment de clé Redis : deux préfixes qui le partagent
+    partagent leur quota, et l'affluence de l'un ferme l'autre.
+
+    `corps_max` est le filet GROSSIER, pris avant que le corps ne soit lu ; le
+    plafond exact d'une cible reste `read_capped`, plus bas. Il vaut donc la
+    plus grosse cible du préfixe, pas la plus petite.
+    """
+
+    prefixe: str
+    compteur: str
+    par_minute: int
+    corps_max: int
+    trop_gros: str
+    trop_souvent: str
+    indisponible: str
+    #: Compter par le dernier segment du chemin plutot que par l'adresse.
+    #: Vrai quand ce segment est un jeton : il designe UN envoi, la ou une
+    #: ecole entiere ne presente qu'une seule adresse publique.
+    quota_par_chemin: bool = False
+
+
+#: Les préfixes publics qui reçoivent des fichiers. Le tenant vient du chemin.
+#:
+#: TROISIÈME des trois listes que toute nouvelle route publique doit rejoindre.
+#: Les deux autres : `_tenant_from_public_path` juste en dessous (sans quoi la
+#: mauvaise base est ouverte) et `ROUTES_PUBLIQUES` dans
+#: `scripts/check_permissions.py` (sans quoi l'intégration continue sort
+#: « route sans garde »). En oublier une donne un échec différent à chaque fois.
+_GARDES_ENVOI_PUBLIC: tuple[_GardeEnvoiPublic, ...] = (
+    _GardeEnvoiPublic(
+        prefixe="/public/verify-file/",
+        compteur="document-seal-upload",
+        par_minute=_PUBLIC_UPLOADS_PER_MINUTE,
+        corps_max=_MAX_PUBLIC_UPLOAD_BODY_BYTES,
+        trop_gros="PDF too large",
+        trop_souvent="Trop de vérifications. Réessayez dans une minute.",
+        indisponible="Vérification de fichier temporairement indisponible.",
+    ),
+    _GardeEnvoiPublic(
+        prefixe="/public/verify-file-code/",
+        compteur="document-seal-upload",
+        par_minute=_PUBLIC_UPLOADS_PER_MINUTE,
+        corps_max=_MAX_PUBLIC_UPLOAD_BODY_BYTES,
+        trop_gros="PDF too large",
+        trop_souvent="Trop de vérifications. Réessayez dans une minute.",
+        indisponible="Vérification de fichier temporairement indisponible.",
+    ),
+    _GardeEnvoiPublic(
+        prefixe="/public/upload-handoff/",
+        # Compteur distinct : une journée d'inscriptions ne doit pas fermer la
+        # vérification publique des diplômes, ni l'inverse.
+        compteur="photo-handoff-upload",
+        # Plus serré que la vérification : un dépôt ne se répète pas huit fois
+        # par minute, et derrière ce préfixe il y a la photo d'un mineur.
+        # Cinq par JETON, pas par adresse : le WiFi de l'école ne présente
+        # qu'une IP, et compter dessus fermerait le guichet au sixième dépôt
+        # d'une minute de rentrée. Cinq tentatives couvrent une 3G qui coupe.
+        par_minute=5,
+        quota_par_chemin=True,
+        # La plus grosse cible du registre est la pièce jointe d'élève, à dix
+        # mégaoctets ; la marge couvre l'enveloppe multipart.
+        corps_max=10 * 1024 * 1024 + 256 * 1024,
+        trop_gros="Fichier trop volumineux. Reprenez la photo.",
+        trop_souvent="Trop d'envois. Réessayez dans une minute.",
+        indisponible="Dépôt par téléphone temporairement indisponible.",
+    ),
+)
 
 
 def _trusted_client_ip(scope: Scope, request: Request) -> str:
@@ -64,30 +150,65 @@ def _trusted_client_ip(scope: Scope, request: Request) -> str:
     return peer_host
 
 
-async def _consume_public_upload_quota(scope: Scope, request: Request) -> JSONResponse | None:
-    client_ip = _trusted_client_ip(scope, request)
-    fingerprint = hashlib.sha256(client_ip.encode("utf-8")).hexdigest()[:24]
-    key = f"public:document-seal-upload:{fingerprint}"
+def trusted_client_ip(request: Request) -> str:
+    """L'adresse de l'appelant, telle qu'on peut la journaliser.
+
+    Le même primitif que le quota d'envoi public, exposé pour les routes qui
+    doivent écrire une adresse dans le journal d'audit. Un dépôt de photo par
+    téléphone en est une : l'opérateur qui confirme est identifié par sa
+    session, mais la seule trace de qui a réellement pris la photo est
+    l'adresse d'où elle est arrivée.
+
+    L'en-tête `X-Forwarded-For` n'est cru que si le pair est la boucle locale,
+    donc le reverse-proxy. Ailleurs, il est écrit par le client lui-même et
+    vaut ce que vaut un champ libre.
+    """
+    return _trusted_client_ip(request.scope, request)
+
+
+def _sujet_du_quota(scope: Scope, request: Request, garde: _GardeEnvoiPublic) -> str:
+    """Sur qui compter : le dernier segment du chemin, sinon l'adresse.
+
+    **Une école n'a qu'une adresse publique.** Les téléphones qui déposent une
+    photo sont sur son WiFi — la donnée mobile se paie — ou derrière le CGNAT
+    d'un opérateur : ils partagent tous la même IP. Compter par adresse ferait
+    donc refuser le sixième dépôt de la minute un jour de rentrée à trois
+    guichets, alors que rien d'anormal ne se passe.
+
+    Quand le chemin porte un jeton, c'est lui le bon sujet : il désigne UN
+    envoi, il expire seul, et cinq tentatives par envoi couvrent largement une
+    3G qui coupe sans ouvrir la porte à autre chose.
+    """
+    if garde.quota_par_chemin:
+        segment = scope.get("path", "").rstrip("/").rpartition("/")[2]
+        if segment:
+            return f"jeton:{segment}"
+    return f"ip:{_trusted_client_ip(scope, request)}"
+
+
+async def _consume_public_upload_quota(
+    scope: Scope, request: Request, garde: _GardeEnvoiPublic
+) -> JSONResponse | None:
+    sujet = _sujet_du_quota(scope, request, garde)
+    fingerprint = hashlib.sha256(sujet.encode("utf-8")).hexdigest()[:24]
+    key = f"public:{garde.compteur}:{fingerprint}"
     try:
         redis = get_redis_client()
         count = await redis.eval(_RATE_LIMIT_SCRIPT, 1, key, 60)
     except Exception:
-        logger.exception("Document seal upload rate limiter unavailable")
-        return JSONResponse(
-            status_code=503,
-            content={"detail": "Vérification de fichier temporairement indisponible."},
-        )
-    if count > _PUBLIC_UPLOADS_PER_MINUTE:
+        logger.exception("Public upload rate limiter unavailable for %s", garde.prefixe)
+        return JSONResponse(status_code=503, content={"detail": garde.indisponible})
+    if count > garde.par_minute:
         return JSONResponse(
             status_code=429,
-            content={"detail": "Trop de vérifications. Réessayez dans une minute."},
+            content={"detail": garde.trop_souvent},
             headers={"Retry-After": "60"},
         )
     return None
 
 
 async def _spool_limited_body(
-    receive: Receive,
+    receive: Receive, corps_max: int
 ) -> tuple[tempfile.SpooledTemporaryFile[bytes], int] | None:
     """Spool a bounded upload before Starlette's multipart parser sees it."""
     body = tempfile.SpooledTemporaryFile(max_size=_PUBLIC_UPLOAD_MEMORY_BYTES, mode="w+b")
@@ -99,7 +220,7 @@ async def _spool_limited_body(
                 break
             chunk = message.get("body", b"")
             received_bytes += len(chunk)
-            if received_bytes > _MAX_PUBLIC_UPLOAD_BODY_BYTES:
+            if received_bytes > corps_max:
                 body.close()
                 return None
             body.write(chunk)
@@ -139,35 +260,51 @@ def _replay_spooled_body(body: tempfile.SpooledTemporaryFile[bytes], size: int) 
     return replay
 
 
-def _file_too_large() -> JSONResponse:
+def _file_too_large(garde: _GardeEnvoiPublic) -> JSONResponse:
+    # Le `code` reste commun aux préfixes : le client le teste, pas le message.
+    # C'est le message qui change, parce que c'est lui qu'un humain lit.
     return JSONResponse(
         status_code=413,
-        content={"detail": "PDF too large", "code": "FILE_TOO_LARGE"},
+        content={"detail": garde.trop_gros, "code": "FILE_TOO_LARGE"},
     )
+
+
+def _garde_de_l_envoi(scope: Scope, path: str) -> _GardeEnvoiPublic | None:
+    """Le garde qui s'applique à cette requête, ou aucun.
+
+    La méthode compte autant que le chemin : un `GET` ne porte pas de corps, et
+    n'a donc ni à consommer le quota d'envoi ni à occuper une place du sémaphore.
+    """
+    if scope["type"] != "http" or scope.get("method") not in _METHODES_AVEC_CORPS:
+        return None
+    for garde in _GARDES_ENVOI_PUBLIC:
+        if path.startswith(garde.prefixe):
+            return garde
+    return None
 
 
 async def _prepare_public_upload(
     scope: Scope, request: Request, receive: Receive
 ) -> tuple[_PreparedUpload | None, JSONResponse | None]:
-    is_upload = scope["type"] == "http" and request.url.path.startswith(_PUBLIC_UPLOAD_PREFIXES)
-    if not is_upload:
+    garde = _garde_de_l_envoi(scope, request.url.path)
+    if garde is None:
         return _PreparedUpload(receive), None
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit():
-        if int(content_length) > _MAX_PUBLIC_UPLOAD_BODY_BYTES:
-            return None, _file_too_large()
-    if quota_response := await _consume_public_upload_quota(scope, request):
+        if int(content_length) > garde.corps_max:
+            return None, _file_too_large(garde)
+    if quota_response := await _consume_public_upload_quota(scope, request, garde):
         return None, quota_response
 
     await _PUBLIC_UPLOAD_SLOTS.acquire()
     try:
-        spooled = await _spool_limited_body(receive)
+        spooled = await _spool_limited_body(receive, garde.corps_max)
     except BaseException:
         _PUBLIC_UPLOAD_SLOTS.release()
         raise
     if spooled is None:
         _PUBLIC_UPLOAD_SLOTS.release()
-        return None, _file_too_large()
+        return None, _file_too_large(garde)
     body, size = spooled
     return _PreparedUpload(_replay_spooled_body(body, size), body, True), None
 
@@ -272,17 +409,23 @@ def _tenant_from_subdomain(hostname: str) -> str | None:
 
 
 def _tenant_from_public_path(path: str) -> str | None:
-    """Extrait le tenant du path des routes publiques de vérification.
+    """Extrait le tenant du path des routes publiques.
 
     Ces routes (`/public/verify/{tenant}/...`, `/public/verify-code/{tenant}/...`,
-    `/public/mailpulse/inbound/{tenant}`) n'ont pas de JWT : le tenant est porté
-    par l'URL pour scoper la bonne DB.
+    `/public/upload-handoff/{tenant}/...`, `/public/mailpulse/inbound/{tenant}`)
+    n'ont pas de JWT : le tenant est porté par l'URL pour scoper la bonne DB.
+
+    DEUXIÈME des trois listes que toute nouvelle route publique doit rejoindre
+    (cf. `_GARDES_ENVOI_PUBLIC` plus haut). L'oublier ici ne donne pas une
+    erreur : cela donne un tenant de repli — l'établissement local — donc la
+    MAUVAISE base ouverte, en silence.
     """
     for prefix in (
         "/public/verify/",
         "/public/verify-code/",
         "/public/verify-file/",
         "/public/verify-file-code/",
+        "/public/upload-handoff/",
         "/public/mailpulse/inbound/",
     ):
         if path.startswith(prefix):

@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     # d'élèves et le tampon de l'établissement disparaissent au redéploiement.
     UPLOAD_ROOT: str = "/app/uploads"
 
+    # Sas de dépôt : racine des fichiers reçus d'un téléphone et pas encore
+    # confirmés par un opérateur. Elle est DISTINCTE d'`UPLOAD_ROOT`, et ce
+    # n'est pas un rangement : `UPLOAD_ROOT` est montée en entier sous
+    # `/uploads` par un `StaticFiles` sans authentification ni cloisonnement de
+    # tenant. Y déposer la photo d'un mineur en attente de validation la
+    # rendrait publique à qui devine huit caractères hexadécimaux.
+    #
+    # Elle n'a pas besoin de survivre à un redéploiement : une session de dépôt
+    # dure dix minutes. Elle doit en revanche être le MÊME dossier pour le
+    # backend et pour le worker, sinon le balayeur des fichiers orphelins
+    # regarde un dossier vide pendant qu'ils s'accumulent ailleurs.
+    HANDOFF_ROOT: str = "/app/handoff"
+
     # Public login URL template — utilisé pour générer le lien envoyé dans
     # l'email de bienvenue tenant et l'URL affichée côté super-admin.
     # {slug} est remplacé par le slug du tenant.

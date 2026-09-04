@@ -17,6 +17,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - La vue d'ensemble sert aussi la caisse : ce qu'elle a encaissé catégorie par catégorie, le recouvrement de l'école restant réservé à qui lit toutes les caisses *(caissier)*
 - Le point sur une catégorie annonce le total attendu, le taux de recouvrement et le nombre d'élèves sans paiement, partiels et à jour *(comptable, directeur)*
 - Le point sur une catégorie se trie par état, se cherche par nom ou matricule — accents et fautes de frappe pardonnés — et se feuillette page par page *(comptable, caissier)*
+- Poser ou retirer une photo laisse désormais une trace dans le journal : qui l'a fait, quand, et depuis quel appareil *(admin, directeur)*
 - Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé *(comptable, caissier)*
 - Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie *(comptable, caissier)*
 - Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*

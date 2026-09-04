@@ -61,7 +61,23 @@ async def save_image_upload(file: UploadFile, *, kind: UploadKind, prefix: str) 
     """
     ext = extension_pour(file.content_type)
     contenu = await read_capped(file, kind.max_bytes)
+    return save_bytes(contenu, kind=kind, prefix=prefix, ext=ext)
 
+
+def save_bytes(contenu: bytes, *, kind: UploadKind, prefix: str, ext: str) -> str:
+    """Écrit des octets déjà validés dans une sorte, retourne son URL publique.
+
+    Le triplet nommer / écrire / construire l'URL n'existe qu'ici. Le refaire
+    ailleurs rouvre le défaut que `save_image_upload` a fermé : plus rien ne
+    garantit que le dossier écrit et l'URL rendue désignent le même endroit.
+
+    Les octets arrivent parfois d'un `UploadFile`, parfois d'un fichier déjà
+    posé sur le disque — le sas de dépôt par téléphone en est un. La provenance
+    change, le geste non, et c'est le geste qui doit rester unique.
+
+    Ne valide rien : le type déclaré et le plafond de taille se contrôlent avant,
+    là où le fichier est encore un envoi.
+    """
     os.makedirs(kind.directory, exist_ok=True)
     filename = f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}"
     kind.path_for(filename).write_bytes(contenu)

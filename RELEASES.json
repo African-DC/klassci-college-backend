@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T15:18:54Z",
+  "generated_at": "2026-09-04T15:36:53Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -68,6 +68,14 @@
             "audience": [
               "comptable",
               "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Poser ou retirer une photo laisse désormais une trace dans le journal : qui l'a fait, quand, et depuis quel appareil",
+            "audience": [
+              "admin",
+              "directeur"
             ],
             "pull_request": null
           },
