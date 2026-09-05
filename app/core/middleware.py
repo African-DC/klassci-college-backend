@@ -321,7 +321,7 @@ _PROD_HOST_RE = re.compile(
 _ALLOWED_HOST_RE = re.compile(settings.ALLOWED_HOST_PATTERN)
 
 
-def _is_host_allowed(hostname: str) -> bool:
+def is_host_allowed(hostname: str) -> bool:
     """Vérifie que le hostname est dans l'allowlist.
 
     Acceptés :
@@ -478,7 +478,7 @@ class TenantMiddleware:
             host = request.headers.get("host", "")
             hostname = host.split(":")[0]
 
-            if not _is_host_allowed(hostname):
+            if not is_host_allowed(hostname):
                 logger.warning("Rejected request with disallowed Host header: %s", host[:100])
                 response = JSONResponse(
                     status_code=400,

@@ -193,12 +193,50 @@ __all__ = [
 PUBLIC_PATH = "televerser"
 
 
-def handoff_url(tenant: str, token: str) -> str:
-    """L'URL absolue encodee dans le code QR."""
-    return f"{settings.PUBLIC_BASE_URL.rstrip('/')}/{PUBLIC_PATH}/{_tenant_valide(tenant)}/{token}"
+def base_publique(origine: str | None) -> str:
+    """Ou le telephone doit arriver : l'ecran de l'operateur d'abord.
+
+    Le code QR designe une page du PORTAIL, pas du serveur. La bonne adresse
+    est donc celle que l'operateur a sous les yeux : son navigateur y est
+    connecte, il l'a atteinte, elle existe. Aucune variable ne peut etre plus
+    juste que ce fait-la.
+
+    C'est ce qui ferme la faute que `PUBLIC_BASE_URL` rendait invisible. Une
+    adresse mal reglee y restait parfaitement valide — un nom public, un
+    certificat, une page qui repond — et le telephone ouvrait la bonne page du
+    MAUVAIS etablissement, avec un jeton qui n'y existe pas. Rien dans le
+    message d'erreur ne pouvait le laisser deviner.
+
+    **L'origine est confrontee a l'allowlist** (`is_host_allowed`, celle du
+    middleware, pas une seconde definition) : c'est le navigateur qui l'annonce,
+    donc on ne la croit pas sur parole. Refusee, on retombe sur la variable ;
+    absente elle aussi, l'appelant refusera d'ouvrir la session.
+    """
+    if origine:
+        adresse = urlparse(origine.strip())
+        if adresse.scheme in {"http", "https"} and adresse.hostname:
+            from app.core.middleware import is_host_allowed
+
+            if is_host_allowed(adresse.hostname.lower()):
+                return f"{adresse.scheme}://{adresse.netloc}"
+            logger.warning(
+                "Reprise par code QR — origine refusee par l'allowlist : %s",
+                adresse.hostname,
+            )
+    return settings.PUBLIC_BASE_URL.strip()
 
 
-def public_base_warnings() -> list[str]:
+def handoff_url(tenant: str, token: str, *, base: str) -> str:
+    """L'URL absolue encodee dans le code QR.
+
+    La base est PASSEE, jamais relue ici : l'avertissement rendu a l'operateur
+    doit parler de l'adresse que ce lien porte reellement, et deux lectures
+    d'une meme configuration finissent par en donner deux versions.
+    """
+    return f"{base.rstrip('/')}/{PUBLIC_PATH}/{_tenant_valide(tenant)}/{token}"
+
+
+def public_base_warnings(base: str) -> list[str]:
     """Ce qui empechera le telephone d'arriver au bout du lien, dit a l'avance.
 
     Le code QR encode une URL ABSOLUE, construite depuis `PUBLIC_BASE_URL`. Or
@@ -222,7 +260,7 @@ def public_base_warnings() -> list[str]:
     mobile, qui reste la seule verification qui vaille.
     """
     alertes: list[str] = []
-    base = settings.PUBLIC_BASE_URL.strip()
+    base = base.strip()
     adresse = urlparse(base)
     hote = (adresse.hostname or "").lower()
 
@@ -395,6 +433,7 @@ async def start_session(
     target_kind: str,
     subject_id: int | None = None,
     extras: Mapping[str, str] | None = None,
+    origine: str | None = None,
 ) -> OpenedSession:
     """Ouvre une session de depot et rend de quoi peindre l'ecran de l'operateur.
 
@@ -409,6 +448,22 @@ async def start_session(
     """
     target = get_target(target_kind)
     await _autoriser(db, current_user, target)
+
+    # L'adresse AVANT la session : sans elle, le code QR ne menerait nulle
+    # part, et on aurait laisse derriere soi une session ouverte que personne
+    # ne viendra fermer. On refuse plutot que d'en fabriquer une qui designe
+    # un autre etablissement.
+    base = base_publique(origine)
+    if not base:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "L'adresse publique du portail n'est pas configurée sur ce serveur : "
+                "le code QR ne mènerait nulle part. Prévenez votre administrateur "
+                "(PUBLIC_BASE_URL)."
+            ),
+        )
+
     label = await resolve_label(db, target, subject_id)
 
     session, token = await open_session(
@@ -420,12 +475,12 @@ async def start_session(
         subject_id=subject_id,
         extras=extras,
     )
-    url = handoff_url(session.tenant, token)
+    url = handoff_url(session.tenant, token, base=base)
     return OpenedSession(
         session=session,
         url=url,
         qr_svg=qr_svg(url),
-        warnings=tuple(public_base_warnings()),
+        warnings=tuple(public_base_warnings(base)),
     )
 
 
