@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-06T01:58:51Z",
+  "generated_at": "2026-09-06T02:14:12Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,23 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil",
+            "audience": [
+              "admin",
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0081` : les deux colonnes de ce réglage, à leur valeur neutre. Une école qui n'ouvre jamais cet écran ne voit aucun changement. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision",
             "audience": [

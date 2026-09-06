@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil *(admin, comptable, directeur)*
+- Migration `0081` : les deux colonnes de ce réglage, à leur valeur neutre. Une école qui n'ouvre jamais cet écran ne voit aucun changement. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
 - Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
 - Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer *(comptable)*
 - Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base *(comptable, caissier)*

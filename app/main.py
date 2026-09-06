@@ -16,6 +16,7 @@ from app.core.uploads import UPLOAD_ROOT, ensure_upload_dirs
 from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
 from app.routers.archive import router as archive_router
+from app.routers.arrears_policy import router as arrears_policy_router
 from app.routers.attachments import router as attachments_router
 from app.routers.attendance import router as attendance_router
 from app.routers.audit import router as audit_router
@@ -136,6 +137,7 @@ app.include_router(notifications_router)
 app.include_router(payments_router)
 app.include_router(whats_new_router)
 app.include_router(payment_method_settings_router)
+app.include_router(arrears_policy_router)
 app.include_router(promotions_router)
 app.include_router(public_verify_router)
 app.include_router(public_upload_handoff_router)
