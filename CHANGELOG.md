@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille *(secrétariat, éducateur, parent)* (#446)
+- Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme *(éducateur, directeur des études)* (#446)
 - Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre *(admin, comptable, directeur, secrétariat)*
 - Le refus annonce le montant dû à qui a le droit de le lire, l'état seul aux autres, et jamais un zéro trompeur *(comptable, secrétariat)*
 - La promotion de fin d'année n'est jamais bloquée par une dette : elle informe, elle ne refuse pas *(admin, directeur)*

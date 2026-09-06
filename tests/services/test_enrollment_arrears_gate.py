@@ -697,3 +697,43 @@ def test_le_motif_de_derogation_ne_voyage_pas_dans_l_url() -> None:
     for chemin, route in postes.items():
         noms = {p.name for p in route.dependant.query_params}
         assert "override_reason" not in noms, f"{chemin} le remet dans l'adresse"
+
+
+@pytest.mark.asyncio
+async def test_le_refus_et_le_bandeau_partent_du_meme_montant(
+    db: tuple[_AsyncBridge, Session],
+) -> None:
+    """Le refus ne peut pas opposer une dette que le bandeau n'a pas annoncée.
+
+    Les deux ont d'abord calculé leur somme chacun de leur côté — l'un sur
+    tous les frais encore dus, l'autre sur les seuls frais obligatoires. Le
+    même assistant de réinscription aurait annoncé une dette dans son bandeau
+    et en aurait opposé une autre à la validation, et le seuil que la
+    direction fixe en lisant le premier n'aurait pas mordu là où elle croit.
+
+    Ce test tient l'invariant : sur les exercices antérieurs, le montant du
+    refus est celui que la lecture affichée somme.
+    """
+    bridge, session = db
+
+    from app.services import enrollment_arrears, fees_paid
+
+    an_courant = session.get(AcademicYear, AN_COURANT)
+    refus = await enrollment_arrears.prior_year_arrears(
+        bridge,  # type: ignore[arg-type]
+        1,
+        before=an_courant.start_date,
+    )
+
+    # La meme dette, vue par la lecture qui alimente le bandeau : on retire
+    # l'exercice courant, exactement ce que l'ecran affiche deja.
+    bandeau = await fees_paid.remaining_outside_year(
+        bridge,  # type: ignore[arg-type]
+        student_id=1,
+        academic_year_id=AN_COURANT,
+    )
+
+    assert refus.amount == bandeau
+    # Et c'est bien la dette que le jeu d'essai pose, pas un zero qui
+    # verifierait l'egalite sans rien prouver.
+    assert refus.amount == DETTE

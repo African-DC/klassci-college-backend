@@ -66,7 +66,6 @@ from app.core.exceptions import EnrollmentBlockedByArrearsError
 from app.models.academic import AcademicYear
 from app.models.enrollment import CLOSED_STATUSES, Enrollment
 from app.models.user import Student
-from app.repositories import installment_repository
 from app.services import arrears_policy, fees_paid
 from app.services.finance_visibility import FinanceView
 
@@ -146,13 +145,15 @@ async def prior_year_arrears(db: AsyncSession, student_id: int, *, before: date)
     `enrollment_history.anterior_enrollments`, et il n'y a aucune raison qu'une
     seconde définition de « l'année d'avant » vive dans le dépôt.
 
-    Le reste dû se lit inscription par inscription, par les deux fonctions que
-    le dépôt déclare être les pendants exactes l'une de l'autre —
-    `installment_repository.mandatory_total` pour l'attendu,
-    `fees_paid.paid_on_mandatory` pour le versé. Recopier ici leur périmètre
-    commun — frais obligatoires, ni exonérés ni déposés en nature, versements
-    encaissés — en ferait une troisième définition, et un montant qui vaut deux
-    sommes selon l'écran est le défaut que ce dépôt combat depuis le début.
+    Le montant vient de `fees_paid.remaining_by_enrollment`, le seul endroit
+    qui dise ce qu'une famille doit. Cette fonction a d'abord calculé sa propre
+    somme, sur les seuls frais obligatoires, pendant que le bandeau affiché
+    deux écrans plus tôt sommait tous les frais encore dus : le même assistant
+    annonçait une dette et en opposait une autre, et le seuil que la direction
+    avait fixé en lisant la première ne mordait pas là où elle croyait.
+
+    Ici on ne fait plus que **cadrer** : quelles inscriptions regarder, et
+    comment les nommer. Le cadrage appartient à l'appelant ; le montant, non.
 
     Le reste est borné à zéro **par inscription**. Un trop-perçu sur une année
     ne doit pas éponger la dette d'une autre : ce sont deux exercices, et la
@@ -172,17 +173,27 @@ async def prior_year_arrears(db: AsyncSession, student_id: int, *, before: date)
         .order_by(AcademicYear.start_date)
     )
 
+    anterieures = [
+        (int(enrollment_id), str(year_name))
+        for enrollment_id, year_name in (await db.execute(stmt)).all()
+    ]
+    if not anterieures:
+        return PriorArrears(amount=Decimal("0"), years=())
+
+    # Une seule lecture pour tout l'eleve, puis on ne garde que les exercices
+    # anterieurs : la boucle d'avant interrogeait la base deux fois par
+    # inscription.
+    par_inscription = await fees_paid.remaining_by_enrollment(db, student_id=student_id)
+
     total = Decimal("0")
     annees: list[str] = []
-    for enrollment_id, year_name in (await db.execute(stmt)).all():
-        attendu = await installment_repository.mandatory_total(db, int(enrollment_id))
-        verse = await fees_paid.paid_on_mandatory(db, int(enrollment_id))
-        reste = max(attendu - verse, Decimal("0"))
+    for enrollment_id, year_name in anterieures:
+        reste = par_inscription.get(enrollment_id, Decimal("0"))
         if reste <= 0:
             continue
         total += reste
-        if str(year_name) not in annees:
-            annees.append(str(year_name))
+        if year_name not in annees:
+            annees.append(year_name)
 
     return PriorArrears(amount=total, years=tuple(annees))
 
