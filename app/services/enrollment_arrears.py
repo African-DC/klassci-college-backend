@@ -261,12 +261,25 @@ async def ensure_enrollable(
         },
         notes=motif,
     )
+    # Le motif ne va PAS dans le journal applicatif.
+    #
+    # Il nomme une famille — « cas social », « la mere est decedee » — et un
+    # journal d'application se lit sans droit particulier, se copie dans un
+    # outil de supervision, et part parfois chez un tiers. Sa place est
+    # l'ecriture d'audit ci-dessus : elle est structuree, elle porte l'auteur,
+    # et sa lecture est gardee par `audit:read:financial`.
+    #
+    # Le motif porterait de surcroit un retour a la ligne s'il en contenait un,
+    # ce qui fabriquerait une fausse entree de journal — et c'est ce journal
+    # qu'on lit le jour ou l'on cherche a comprendre.
+    #
+    # On journalise donc le FAIT, pas sa justification : de quoi retrouver
+    # l'ecriture d'audit qui, elle, dit tout.
     logger.info(
-        "Derogation inscription pour l'eleve %s sur %s par l'utilisateur %s : %s",
+        "Derogation inscription : eleve %s, exercice %s, par l'utilisateur %s",
         student_id,
-        year.name,
+        year.id,
         actor_id,
-        motif,
     )
 
 

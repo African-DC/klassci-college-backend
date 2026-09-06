@@ -20,6 +20,7 @@ Les tests appellent le service pour de vrai, sur une base réelle : ce qu'ils
 gardent est l'existence du garde sur chaque chemin, et cela ne se simule pas.
 """
 
+import logging
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
@@ -737,3 +738,40 @@ async def test_le_refus_et_le_bandeau_partent_du_meme_montant(
     # Et c'est bien la dette que le jeu d'essai pose, pas un zero qui
     # verifierait l'egalite sans rien prouver.
     assert refus.amount == DETTE
+
+
+@pytest.mark.asyncio
+async def test_le_motif_ne_part_pas_dans_le_journal_applicatif(
+    db: tuple[_AsyncBridge, Session], caplog: pytest.LogCaptureFixture
+) -> None:
+    """Un motif nomme une famille : il n'a rien à faire dans les logs.
+
+    Il vient d'être sorti de l'adresse pour cette raison exacte. L'y laisser
+    ressortir par le journal applicatif n'aurait rien réglé : un journal se
+    lit sans droit particulier, se recopie dans un outil de supervision, et
+    part parfois chez un tiers. L'écriture d'audit, elle, est structurée,
+    porte son auteur, et sa lecture est gardée.
+
+    Un retour à la ligne dans le motif y fabriquerait de surcroît une fausse
+    entrée — et c'est ce journal qu'on lit le jour où l'on cherche à
+    comprendre.
+    """
+    bridge, session = db
+    _politique(session, ArrearsPolicy.BLOCK)
+    motif = "cas social : la mere est decedee"
+
+    from app.services import enrollment_arrears
+
+    with caplog.at_level(logging.INFO):
+        await enrollment_arrears.ensure_enrollable(
+            bridge,  # type: ignore[arg-type]
+            student_id=1,
+            year=session.get(AcademicYear, AN_COURANT),
+            actor_id=SECRETAIRE,
+            clearance=_guichet(may_override=True, motif=motif),
+        )
+
+    journal = "\n".join(r.getMessage() for r in caplog.records)
+    assert "Derogation inscription" in journal, "la derogation doit se tracer"
+    assert "cas social" not in journal
+    assert "decedee" not in journal
