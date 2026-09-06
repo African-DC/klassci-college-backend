@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille *(secrétariat, éducateur, parent)* (#446)
+- Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme *(éducateur, directeur des études)* (#446)
 - Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer *(comptable)*
 - Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base *(comptable, caissier)*
 - Une vérification en lecture seule liste, école par école, les versements encaissés dont la ventilation ne retombe pas sur le montant reçu *(devops, comptable)*

@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-04T15:36:53Z",
+  "generated_at": "2026-09-06T01:48:04Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,23 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille",
+            "audience": [
+              "secrétariat",
+              "éducateur",
+              "parent"
+            ],
+            "pull_request": 446
+          },
+          {
+            "text": "Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme",
+            "audience": [
+              "éducateur",
+              "directeur des études"
+            ],
+            "pull_request": 446
+          },
           {
             "text": "Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer",
             "audience": [

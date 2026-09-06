@@ -35,6 +35,7 @@ from app.services import (
     fees_paid,
 )
 from app.services import fee_entitlements as entitlements
+from app.services.finance_visibility import FinanceView
 
 logger = logging.getLogger(__name__)
 
@@ -224,11 +225,33 @@ async def get_child_grades(
 
 
 async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> ChildFeesResponse:
-    """Retourne les frais d'un enfant pour son inscription active."""
+    """Retourne les frais d'un enfant pour son inscription active.
+
+    Et, à côté, ce qui reste dû sur les autres exercices. Cet écran lit
+    l'inscription la plus récente : le jour de la réinscription, la dette de
+    l'année précédente en sortirait sans qu'un seul chiffre ne devienne faux,
+    et la famille cesserait de la voir — donc de la régler.
+    """
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
     enrollment = await repo.get_student_active_enrollment(db, student_id)
+
+    # L'année affichée est retirée pour n'être pas comptée deux fois. Aucune
+    # inscription en cours, aucune année à retirer : tout ce que l'enfant doit
+    # est ailleurs, et c'est précisément le cas de la famille pas encore
+    # réinscrite — celle dont cet écran ne disait plus rien.
+    #
+    # `FinanceView.INTERNAL` écrit en toutes lettres : c'est la famille qui lit
+    # sa propre situation, et cette même réponse lui rend déjà `total_due` et
+    # `total_paid`. Aucune permission ne s'interpose ici ; le dire à l'appel
+    # vaut mieux que de laisser un défaut le décider en silence.
+    arrears = await fees_paid.arrears_outside_year(
+        db,
+        student_id=student_id,
+        academic_year_id=enrollment.academic_year_id if enrollment else None,
+        finance=FinanceView.INTERNAL,
+    )
 
     if enrollment is None:
         return ChildFeesResponse(
@@ -237,6 +260,7 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
             fees=[],
             total_due=Decimal("0.00"),
             total_paid=Decimal("0.00"),
+            **arrears,
         )
 
     # Source de verite : les allocations, pas `EnrollmentFee.payments`, qui
@@ -289,6 +313,7 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
         fees=fees,
         total_due=total_due,
         total_paid=total_paid,
+        **arrears,
     )
 
 
