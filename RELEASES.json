@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-06T02:43:12Z",
+  "generated_at": "2026-09-06T04:47:40Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1581,6 +1581,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur",
             "audience": [
