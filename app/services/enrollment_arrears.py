@@ -53,7 +53,7 @@ motif obligatoire — jamais son appel.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from typing import ClassVar
@@ -117,6 +117,16 @@ class ArrearsClearance:
     #: aucun montant puisqu'il n'affiche rien. La promotion de fin d'année s'en
     #: sert, l'amorçage d'une démonstration aussi.
     INFORM_ONLY: ClassVar[ArrearsClearance]
+
+    def avec_motif(self, motif: str | None) -> ArrearsClearance:
+        """La même clairance, plus le motif que l'appelant a saisi.
+
+        Les droits se résolvent en dépendance, avant que le corps ne soit lu ;
+        le motif, lui, vient du corps. Il se greffe donc ici plutôt que de
+        voyager dans l'adresse — il nomme une famille, et une URL finit dans
+        les journaux d'accès du serveur et chez tous les intermédiaires.
+        """
+        return replace(self, override_reason=motif)
 
 
 ArrearsClearance.INFORM_ONLY = ArrearsClearance(

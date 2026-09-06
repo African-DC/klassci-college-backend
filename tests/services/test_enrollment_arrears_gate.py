@@ -665,3 +665,35 @@ def test_le_detail_structure_arrive_entier_au_client() -> None:
     assert detail["arrears_amount"] is None
     assert detail["has_arrears"] is True
     assert detail["can_override"] is True
+
+
+def test_le_motif_de_derogation_ne_voyage_pas_dans_l_url() -> None:
+    """Un motif nomme une famille : il n'a rien à faire dans une adresse.
+
+    « Cas social », « la mère est décédée » — une URL finit dans les journaux
+    d'accès du serveur et chez tous les intermédiaires, en clair et pour
+    toujours. Le dépôt porte déjà cette règle pour le motif de purge
+    (`tests/test_enrollment_purge.py`) ; elle vaut ici pour la même raison.
+
+    Il a d'abord voyagé dans l'adresse, par imitation d'un jumeau qui le fait
+    encore. Ce test empêche le retour, et il vise les TROIS créations : une
+    seule route qui l'y remettrait suffirait à ressortir le motif en clair.
+    """
+    from app.main import app
+
+    chemins = {"/enrollments", "/enrollments/with-student", "/enrollments/re-enroll"}
+    postes = {
+        getattr(r, "path", None): r
+        for r in app.routes
+        if getattr(r, "path", None) in chemins and "POST" in getattr(r, "methods", set())
+    }
+
+    # Sur un poste sans les bibliotheques natives, `app.main` ne monte qu'une
+    # partie des routeurs. Un test qui echouerait la deviendrait un rouge
+    # permanent de plus, et un rouge permanent finit par ne plus se lire.
+    if set(postes) != chemins:
+        pytest.skip("les routes d'inscription ne sont pas montees dans cet environnement")
+
+    for chemin, route in postes.items():
+        noms = {p.name for p in route.dependant.query_params}
+        assert "override_reason" not in noms, f"{chemin} le remet dans l'adresse"

@@ -68,21 +68,16 @@ def arrears_clearance() -> Any:
     en décident l'ÉTENDUE. C'est exactement le cas que cette dépendance sert
     déjà pour le journal des versements.
 
-    Le motif de dérogation voyage en paramètre de requête, comme chez le jumeau
-    `document_release_service` : le corps des trois créations est partagé avec
-    la promotion de masse, et un champ de plus y serait un champ que personne
-    n'y remplit jamais.
+    **Le motif ne passe pas par ici** : il vient du corps de la requête, et
+    chaque route le greffe par `clearance.avec_motif(data.override_reason)`.
+    Une dépendance est résolue avant que le corps ne soit lu, donc le motif
+    n'aurait pu venir que de l'adresse — or il nomme une famille, et une URL
+    finit dans les journaux d'accès du serveur et chez tous les
+    intermédiaires. Le dépôt porte déjà cette règle, écrite dans
+    `tests/test_enrollment_purge.py`.
     """
 
     async def _resolve(
-        override_reason: str | None = Query(
-            None,
-            description=(
-                "Motif de dérogation. Requis pour inscrire malgré une dette "
-                "d'un exercice précédent."
-            ),
-            max_length=500,
-        ),
         may_read_amounts: bool = has_permission("payments:read"),
         may_read_status: bool = has_permission("payments:status:read"),
         may_override: bool = has_permission("enrollments:arrears:override"),
@@ -92,7 +87,6 @@ def arrears_clearance() -> Any:
                 may_read_payments=may_read_amounts, may_read_status=may_read_status
             ),
             may_override=may_override,
-            override_reason=override_reason,
         )
 
     return Depends(_resolve)
@@ -138,7 +132,10 @@ async def create_enrollment(
     n'est pas « vous n'avez pas le droit ».
     """
     return await enrollment_service.create_enrollment(
-        db, data, created_by=current_user.user_id, arrears=arrears
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
     )
 
 
@@ -161,7 +158,10 @@ async def create_enrollment_with_student(
     reinscription saisie comme un nouvel eleve passerait.
     """
     return await enrollment_service.create_enrollment_with_student(
-        db, data, created_by=current_user.user_id, arrears=arrears
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
     )
 
 
@@ -184,7 +184,10 @@ async def re_enroll_student(
     lisent la dernière inscription de l'élève.
     """
     return await enrollment_service.re_enroll_student(
-        db, data, created_by=current_user.user_id, arrears=arrears
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
     )
 
 
