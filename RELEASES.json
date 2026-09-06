@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-05T17:39:28Z",
+  "generated_at": "2026-09-06T04:59:52Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,74 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille",
+            "audience": [
+              "secrétariat",
+              "éducateur",
+              "parent"
+            ],
+            "pull_request": 446
+          },
+          {
+            "text": "Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme",
+            "audience": [
+              "éducateur",
+              "directeur des études"
+            ],
+            "pull_request": 446
+          },
+          {
+            "text": "Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre",
+            "audience": [
+              "admin",
+              "comptable",
+              "directeur",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le refus annonce le montant dû à qui a le droit de le lire, l'état seul aux autres, et jamais un zéro trompeur",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La promotion de fin d'année n'est jamais bloquée par une dette : elle informe, elle ne refuse pas",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil",
+            "audience": [
+              "admin",
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0081` : les deux colonnes de ce réglage, à leur valeur neutre. Une école qui n'ouvre jamais cet écran ne voit aucun changement. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer",
             "audience": [
@@ -1530,6 +1598,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur",
             "audience": [

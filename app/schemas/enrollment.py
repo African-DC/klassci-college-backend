@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.fee import FeeEntitlement
+from app.schemas.fee import ArrearsOutsideYear, FeeEntitlement
 
 
 class InKindDeposit(BaseModel):
@@ -54,6 +54,13 @@ class EnrollmentCreate(BaseModel):
     #: les cles `undefined`, le champ disparait du corps, et le serveur deduit
     #: alors que l'ecran promettait le contraire.
     is_new_student: bool | None = None
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
 
 
 class EnrollmentUpdate(BaseModel):
@@ -218,6 +225,14 @@ class EnrollmentWithStudentCreate(BaseModel):
             raise ValueError("must be a positive integer")
         return v
 
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
+
 
 class ReEnrollmentCreate(BaseModel):
     """Re-enrolls an existing student for a new year/class."""
@@ -235,6 +250,14 @@ class ReEnrollmentCreate(BaseModel):
         if v <= 0:
             raise ValueError("must be a positive integer")
         return v
+
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------------------
@@ -290,13 +313,18 @@ class BulkValidateResponse(BaseModel):
     failed: list[BulkValidateFailure]
 
 
-class NewStudentSuggestionResponse(BaseModel):
+class NewStudentSuggestionResponse(ArrearsOutsideYear):
     """Ce que l'ecran doit pre-cocher dans la case « nouvel eleve », et pourquoi.
 
     Trois reponses, jamais deux. `null` n'est pas une panne : c'est
     l'etablissement qui n'a pas declare ses annees passees exploitables, et la
     secretaire qui reste seule a savoir. La phrase le lui dit en clair, plutot
     que de laisser une case vide sans explication.
+
+    Elle porte aussi ce que l'eleve doit encore sur les autres exercices. Cet
+    ecran est le dernier moment ou quelqu'un regarde le dossier avant que la
+    reinscription ne fasse basculer tous les autres sur la nouvelle annee : une
+    dette qu'on ne voit pas ici ne se reverra nulle part.
     """
 
     suggested: bool | None

@@ -66,6 +66,12 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "enrollments:validate", "name": "Validate an enrollment"},
     {"slug": "enrollments:delete", "name": "Delete enrollments"},
     {"slug": "enrollments:promote", "name": "Mass-promote enrollments year over year"},
+    # Passer outre un blocage pour dette d'un exercice precedent. Direction
+    # seulement : celui qui constate l'impaye ne doit pas etre celui qui
+    # l'efface. Distinct de `documents:release:override`, qui ne concerne que
+    # la retenue d'un document — debloquer un bulletin et inscrire un debiteur
+    # sont deux gestes, et l'un ne doit pas emporter l'autre.
+    {"slug": "enrollments:arrears:override", "name": "Enrol a student despite arrears"},
     {"slug": "grades:read", "name": "View grades"},
     {"slug": "grades:write", "name": "Write grades"},
     {"slug": "grades:edit", "name": "Modify already-recorded grades"},

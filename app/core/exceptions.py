@@ -2,6 +2,7 @@
 
 import logging
 import secrets
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -84,6 +85,44 @@ class AllocationInvariantError(AppException):
 
     def __init__(self, detail: str) -> None:
         super().__init__(status_code=422, detail=detail, code="ALLOCATION_INVARIANT")
+
+
+class EnrollmentBlockedByArrearsError(AppException):
+    """Refus d'inscrire tant qu'une dette d'un exercice revolu n'est pas reglee.
+
+    **402 et non 403.** Le depot distingue deja « il faut payer » de « vous
+    n'avez pas le droit » : c'est le meme statut que la retenue d'un document
+    officiel. L'ecran doit pouvoir proposer un chemin de paiement, ou la
+    derogation, plutot qu'un refus sec.
+
+    **Dediee, et surtout pas `BusinessValidationError`.** Sous ce code, le
+    refus pour dette se confondrait avec « la classe est pleine » ou « l'annee
+    n'existe pas » : trois causes, trois gestes differents au guichet, et un
+    seul message a l'ecran.
+
+    **Pas une `HTTPException` non plus.** La promotion de masse enveloppe
+    chaque creation et range tout ce qui n'est pas une erreur de validation
+    metier dans « Erreur inattendue, voir les logs » : un refus poli y
+    deviendrait quarante-trois erreurs opaques le jour de la promotion. Une
+    classe a soi rend ce cas reconnaissable partout ou il compte.
+
+    Le detail est structure — code, message, montant, `can_override` — et non
+    une phrase : c'est l'ecran qui compose ce que la personne au guichet lit,
+    et il lui faut les pieces separement. Le montant qu'il porte suit la
+    permission de l'appelant, `None` quand elle manque et jamais `0` : voir
+    `app/services/enrollment_arrears.py`.
+    """
+
+    def __init__(self, detail: dict[str, Any]) -> None:
+        super().__init__(
+            status_code=402,
+            # `AppException.detail` reste une phrase : c'est elle qui part dans
+            # les journaux et dans `str(exc)`. La charge structuree voyage a
+            # cote, et le handler dedie l'envoie a sa place au client.
+            detail=str(detail.get("message", "")),
+            code="ENROLLMENT_BLOCKED_BY_ARREARS",
+        )
+        self.payload = detail
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +224,21 @@ def register_exception_handlers(app: FastAPI) -> None:
         # jamais exposer un nom de table ou d'index a l'utilisateur.
         logger.warning("Contrainte violee sur %s : %s", request.url.path, exc.orig)
         return JSONResponse(status_code=status_code, content={"detail": detail, "code": code})
+
+    @app.exception_handler(EnrollmentBlockedByArrearsError)
+    async def enrollment_arrears_handler(
+        request: Request, exc: EnrollmentBlockedByArrearsError
+    ) -> JSONResponse:
+        """Rend la charge structuree la ou le client attend le detail.
+
+        Starlette choisit le handler en remontant la MRO de l'exception : celui
+        d'`AppException` reste le filet de toutes les autres, et celui-ci passe
+        devant pour la seule qui porte un detail compose.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.payload, "code": exc.code},
+        )
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
