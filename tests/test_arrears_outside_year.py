@@ -397,3 +397,54 @@ async def test_sans_aucun_droit_financier_rien_ne_sort(db: Session) -> None:
     )
     assert bloc["fees_arrears_other_years"] is None
     assert bloc["has_arrears_other_years"] is None
+
+
+@pytest.mark.asyncio
+async def test_les_deux_lectures_partent_du_meme_montant(db: Session) -> None:
+    """Le bandeau et le refus doivent annoncer la même dette.
+
+    Ils ont commencé par la calculer chacun de son côté — l'un sur tous les
+    frais encore dus, l'autre sur les seuls frais obligatoires. Le même
+    assistant de réinscription annonçait alors 300 000 F dans son bandeau et
+    en opposait 180 000 dans son refus, et le seuil que la direction avait
+    fixé en lisant le premier ne mordait pas là où elle croyait.
+
+    Ce test tient l'invariant à la source : ce qu'une lecture somme sur les
+    inscriptions d'un exercice donné vaut ce que l'autre en retire.
+    """
+    par_inscription = await fees_paid.remaining_by_enrollment(
+        _Pont(db), student_id=FRAIS_FACULTATIF
+    )
+    total = sum(par_inscription.values(), Decimal("0"))
+
+    hors_annee = await fees_paid.remaining_outside_year(
+        _Pont(db), student_id=FRAIS_FACULTATIF, academic_year_id=ANNEE_COURANTE
+    )
+    sans_retrait = await fees_paid.remaining_outside_year(
+        _Pont(db), student_id=FRAIS_FACULTATIF, academic_year_id=None
+    )
+
+    # Sans retrait, les deux lectures disent le meme nombre.
+    assert sans_retrait == total
+    # Le retrait ne fait qu'oter ce que l'ecran montre deja.
+    assert hors_annee <= total
+
+
+@pytest.mark.asyncio
+async def test_un_dossier_clos_n_apporte_aucune_ligne(db: Session) -> None:
+    """Zéro n'est pas une dette, et un dossier annulé n'en a plus du tout.
+
+    Cet élève porte les deux : une inscription annulée sur l'exercice
+    précédent, et une inscription vivante sur l'exercice courant. La lecture
+    par inscription doit rendre la seconde et taire la première — sans quoi
+    l'appelant qui nomme les exercices en dette citerait un dossier fermé.
+    """
+    par_inscription = await fees_paid.remaining_by_enrollment(_Pont(db), student_id=DOSSIER_CLOS)
+
+    # L'inscription vivante est la seule a figurer : le dossier clos n'apporte
+    # aucune ligne, et rien ne reste a devoir en dehors de l'annee courante.
+    assert len(par_inscription) == 1
+    hors_annee = await fees_paid.remaining_outside_year(
+        _Pont(db), student_id=DOSSIER_CLOS, academic_year_id=ANNEE_COURANTE
+    )
+    assert hors_annee == Decimal("0")

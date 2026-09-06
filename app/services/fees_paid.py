@@ -136,34 +136,86 @@ async def remaining_outside_year(
     un trop-perçu sur une année n'éponge pas la dette d'une autre, sans quoi
     l'école croirait soldé un exercice qui ne l'est pas.
     """
+    par_inscription = await remaining_by_enrollment(db, student_id=student_id)
+    if academic_year_id is None:
+        return sum(par_inscription.values(), Decimal("0"))
+
+    from app.models.enrollment import Enrollment
+
+    affichees = {
+        int(i)
+        for (i,) in (
+            await db.execute(
+                select(Enrollment.id).where(
+                    Enrollment.student_id == student_id,
+                    Enrollment.academic_year_id == academic_year_id,
+                )
+            )
+        ).all()
+    }
+    return sum(
+        (reste for eid, reste in par_inscription.items() if eid not in affichees),
+        Decimal("0"),
+    )
+
+
+async def remaining_by_enrollment(db: AsyncSession, *, student_id: int) -> dict[int, Decimal]:
+    """Ce qu'un élève doit encore, inscription par inscription.
+
+    **Le seul endroit qui dit ce qu'une famille doit.** Deux lectures s'en
+    servent, et elles ne cadrent pas le même ensemble d'années : l'une retire
+    l'exercice déjà affiché, l'autre ne garde que les exercices antérieurs.
+    Le cadrage leur appartient ; le montant, non.
+
+    Elles ont commencé par le calculer chacune de son côté — l'une sur tous les
+    frais encore dus, l'autre sur les seuls frais obligatoires. Le même
+    assistant de réinscription annonçait alors une dette dans son bandeau et en
+    opposait une autre dans son refus, et le seuil que la direction avait fixé
+    en lisant le premier ne mordait pas là où elle croyait. Un montant qui vaut
+    deux sommes selon l'écran est le défaut que ce module existe pour empêcher.
+
+    Le périmètre est celui des frais **encore dus en argent, obligatoires ou
+    non** : une tenue impayée est de l'argent que la famille doit, et c'est
+    déjà celui du `total_due` que le portail affiche. L'échéancier, lui, ne
+    couvre que l'obligatoire — c'est une autre question, et elle a sa propre
+    lecture.
+
+    Le reste se plafonne à zéro **ligne par ligne** : un trop-perçu sur un
+    frais n'éponge pas la dette d'un autre, ni celle d'un autre exercice.
+
+    Une inscription refusée ou annulée ne figure pas : `CLOSED_STATUSES` dit
+    que sa dette est close, et la relancer ferait réapparaître un impayé sur un
+    dossier fermé. Une inscription sans reste dû non plus — la lire dans le
+    résultat ferait croire à une dette de zéro là où il n'y a rien.
+    """
     from app.models.enrollment import CLOSED_STATUSES, Enrollment
     from app.models.fee import EnrollmentFee, cash_remaining
 
-    conditions: list[object] = [
-        Enrollment.student_id == student_id,
-        Enrollment.status.not_in(CLOSED_STATUSES),
-    ]
-    if academic_year_id is not None:
-        conditions.append(Enrollment.academic_year_id != academic_year_id)
-
     stmt = (
-        select(EnrollmentFee.id, EnrollmentFee.status, EnrollmentFee.amount)
+        select(
+            EnrollmentFee.enrollment_id,
+            EnrollmentFee.id,
+            EnrollmentFee.status,
+            EnrollmentFee.amount,
+        )
         .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(*conditions)
+        .where(
+            Enrollment.student_id == student_id,
+            Enrollment.status.not_in(CLOSED_STATUSES),
+        )
     )
     lignes = (await db.execute(stmt)).all()
-    # Aucune ligne ailleurs : pas la peine d'aller chercher le versé.
     if not lignes:
-        return Decimal("0")
+        return {}
 
     verse = await paid_by_enrollment_fee(db, student_id)
-    return sum(
-        (
-            cash_remaining(statut, montant, verse.get(int(fee_id), Decimal("0")))
-            for fee_id, statut, montant in lignes
-        ),
-        Decimal("0"),
-    )
+    par_inscription: dict[int, Decimal] = {}
+    for enrollment_id, fee_id, statut, montant in lignes:
+        reste = cash_remaining(statut, montant, verse.get(int(fee_id), Decimal("0")))
+        if reste:
+            cle = int(enrollment_id)
+            par_inscription[cle] = par_inscription.get(cle, Decimal("0")) + reste
+    return par_inscription
 
 
 async def arrears_outside_year(
