@@ -341,3 +341,32 @@ class OptionalFeeOptionListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+# ---------------------------------------------------------------------------
+# Arriérés — ce qui reste dû sur les autres exercices
+# ---------------------------------------------------------------------------
+
+
+class ArrearsOutsideYear(BaseModel):
+    """Ce qu'un élève doit encore sur les exercices autres que celui affiché.
+
+    Deux réponses portent ces champs — celle qui prépare une réinscription et
+    le résumé des frais du portail parent — et les héritent d'ici plutôt que
+    de les redéclarer chacune. Deux déclarations finiraient par porter deux
+    noms, puis deux règles de masquage, pour un seul et même montant.
+
+    `None` n'est pas zéro. Un montant à `None` dit « vous n'avez pas le droit
+    de lire cette somme » ; un zéro dirait « cette famille ne doit rien
+    ailleurs ». Qui voit quoi se décide dans `app/services/finance_visibility`,
+    et le calcul dans `app/services/fees_paid`.
+
+    Les deux champs valent `None` par défaut : une réponse qui oublierait de
+    les remplir masque, elle ne publie pas.
+    """
+
+    #: Reste dû sur les autres exercices. `None` sans `payments:read`.
+    fees_arrears_other_years: Decimal | None = None
+    #: L'alerte seule, sans somme : ce que voit `payments:status:read`.
+    #: `None` quand l'appelant n'a droit ni aux montants ni à l'état.
+    has_arrears_other_years: bool | None = None

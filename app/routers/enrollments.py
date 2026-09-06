@@ -7,7 +7,13 @@ Les endpoints paiements `/enrollments/{id}/payments` sont dans
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
     BulkValidateRequest,
@@ -30,8 +36,10 @@ from app.services import (
     enrollment_fees,
     enrollment_history,
     enrollment_service,
+    fees_paid,
 )
 from app.services.enrollment_archive import ENROLLMENT_KIND
+from app.services.finance_visibility import FinanceView
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -116,6 +124,8 @@ async def suggest_new_student(
         description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
     ),
     _: None = require_permission("enrollments:create"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> NewStudentSuggestionResponse:
     """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
@@ -133,11 +143,27 @@ async def suggest_new_student(
     Le chemin la place AVANT `/{enrollment_id}` : sans cela, FastAPI ferait
     correspondre `new-student-suggestion` au paramètre d'identifiant et
     rendrait une erreur de validation.
+
+    Elle rend aussi ce que l'élève doit encore sur les AUTRES exercices. C'est
+    le dernier écran où quelqu'un regarde le dossier avant que la
+    réinscription ne fasse basculer les portails et la fiche élève sur la
+    nouvelle année : une dette qu'on ne voit pas ici ne se reverra plus.
+
+    Le droit de la lire ne se déduit pas de celui d'inscrire : le secrétariat
+    porte `payments:read`, l'éducateur `payments:status:read`, et les deux
+    montent des inscriptions. Les deux booléens se résolvent donc ici et se
+    passent au service, qui ne connaît ni rôle ni permission.
     """
     suggested, reason = await enrollment_history.suggest_new_student(
         db, student_id, academic_year_id
     )
-    return NewStudentSuggestionResponse(suggested=suggested, reason=reason)
+    arrears = await fees_paid.arrears_outside_year(
+        db,
+        student_id=student_id,
+        academic_year_id=academic_year_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
+    return NewStudentSuggestionResponse(suggested=suggested, reason=reason, **arrears)
 
 
 @router.get(
