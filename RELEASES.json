@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-06T01:48:04Z",
+  "generated_at": "2026-09-06T04:48:04Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1547,6 +1547,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés",
             "audience": [

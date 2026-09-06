@@ -41,6 +41,14 @@ class HandoffOpenRequest(BaseModel):
     target_kind: str
     subject_id: int | None = None
     extras: dict[str, _Complement] = Field(default_factory=dict, max_length=8)
+    #: L'adresse que l'opérateur a sous les yeux, telle que son navigateur la
+    #: connaît. C'est elle que le téléphone doit atteindre : le serveur, lui,
+    #: ne sait pas sous quel nom public on l'appelle — il tourne derrière un
+    #: proxy et ne voit ni le schéma ni le domaine du dehors.
+    #:
+    #: Elle est confrontée à l'allowlist côté serveur : le navigateur l'annonce,
+    #: on ne le croit pas sur parole.
+    origin: str | None = Field(default=None, max_length=255)
 
 
 class HandoffSessionState(BaseModel):
