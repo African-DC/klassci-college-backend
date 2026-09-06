@@ -66,8 +66,14 @@ class Settings(BaseSettings):
     # Base URL publique du frontend — sert à construire l'URL de vérification
     # encodée dans le QR code des documents officiels :
     #   {PUBLIC_BASE_URL}/verifier/{tenant}/{token}
-    # À surcharger via env sur le serveur de démo (ex: http://94.72.96.119).
-    PUBLIC_BASE_URL: str = "https://college.klassci.com"
+    #
+    # AUCUNE valeur par défaut, et surtout pas un domaine d'établissement.
+    # Elle en portait un : toute installation qui oubliait de la renseigner
+    # imprimait donc des QR pointant vers l'école d'à côté — et un certificat
+    # authentique s'y vérifiait en « document inconnu », ce qui le fait passer
+    # pour un faux. Vide, le code refuse de fabriquer un lien plutôt que d'en
+    # fabriquer un qui désigne quelqu'un d'autre.
+    PUBLIC_BASE_URL: str = ""
 
     # Sceau numérique institutionnel KLASSCI. La clé privée est une graine
     # Ed25519 brute de 32 octets encodée en base64url. Elle est indépendante

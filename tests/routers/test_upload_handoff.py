@@ -91,8 +91,14 @@ def eleve_nomme() -> Any:
         yield charger
 
 
+#: L'adresse que le navigateur de l'operateur annonce. Les tests la posent
+#: comme le portail la pose : c'est elle, et non une variable de serveur, qui
+#: dit ou le telephone doit arriver.
+ORIGINE = "https://college.klassci.com"
+
+
 def _ouvrir(client: TestClient, **corps: Any) -> dict[str, Any]:
-    charge = {"target_kind": "student_photo", "subject_id": 42}
+    charge = {"target_kind": "student_photo", "subject_id": 42, "origin": ORIGINE}
     charge.update(corps)
     reponse = client.post("/admin/upload-handoff", json=charge)
     assert reponse.status_code == 201, reponse.text
@@ -371,16 +377,55 @@ async def test_revoquer_efface_le_depot_et_la_session(
 def test_une_adresse_publique_locale_est_annoncee_a_l_operateur(
     client: TestClient, redis_partage: FauxRedis, autorise: Any, eleve_nomme: Any
 ) -> None:
-    """Un code QR vers `localhost` est valide et ne mene nulle part.
+    """Un code QR vers le reseau local est valide et ne mene nulle part.
 
-    C'est le seul defaut de configuration de toute la chaine qui ne produise
-    aucune erreur : le telephone dit « site inaccessible », et l'operateur n'a
-    aucun moyen de comprendre pourquoi. On le dit sur SON ecran, a l'ouverture.
+    C'est le seul defaut de toute la chaine qui ne produise aucune erreur : le
+    telephone dit « site inaccessible », et l'operateur n'a aucun moyen de
+    comprendre pourquoi. On le dit sur SON ecran, a l'ouverture.
+
+    L'operateur est ici sur le portail par l'adresse du reseau de l'ecole —
+    ce qui arrive des qu'on ouvre l'application depuis un poste du bureau.
     """
-    with patch(f"{SERVICE}.settings") as reglages:
-        reglages.PUBLIC_BASE_URL = "http://192.168.1.40:3000"
-        corps = _ouvrir(client)
+    corps = _ouvrir(client, origin="http://192.168.1.40:3000")
 
     assert len(corps["warnings"]) == 2
     assert "donnée mobile" in corps["warnings"][0]
     assert "HTTP" in corps["warnings"][1]
+    # L'avertissement parle de l'adresse que le code porte REELLEMENT.
+    assert corps["url"].startswith("http://192.168.1.40:3000/televerser/")
+
+
+def test_une_origine_hors_allowlist_ne_devient_pas_l_adresse_du_code(
+    client: TestClient, redis_partage: FauxRedis, autorise: Any, eleve_nomme: Any
+) -> None:
+    """C'est le navigateur qui annonce l'origine : on ne le croit pas sur parole.
+
+    Sans ce controle, un en-tete forge suffirait a faire pointer le code QR
+    d'une ecole vers un site tiers — et l'operateur y verrait un code parfait.
+    """
+    with patch(f"{SERVICE}.settings") as reglages:
+        reglages.PUBLIC_BASE_URL = "https://college.klassci.com"
+        corps = _ouvrir(client, origin="https://sitemalveillant.example")
+
+    assert "sitemalveillant" not in corps["url"]
+    assert corps["url"].startswith("https://college.klassci.com/televerser/")
+
+
+def test_sans_adresse_publique_la_session_ne_s_ouvre_pas(
+    client: TestClient, redis_partage: FauxRedis, autorise: Any, eleve_nomme: Any
+) -> None:
+    """Mieux vaut refuser que fabriquer un lien qui designe une autre ecole.
+
+    La variable portait un domaine d'etablissement en valeur par defaut : toute
+    installation qui l'oubliait envoyait donc ses telephones chez le voisin,
+    avec un jeton qui n'y existe pas. Elle n'en porte plus, et l'absence se dit.
+    """
+    with patch(f"{SERVICE}.settings") as reglages:
+        reglages.PUBLIC_BASE_URL = ""
+        reponse = client.post(
+            "/admin/upload-handoff",
+            json={"target_kind": "student_photo", "subject_id": 42},
+        )
+
+    assert reponse.status_code == 503
+    assert "PUBLIC_BASE_URL" in reponse.json()["detail"]

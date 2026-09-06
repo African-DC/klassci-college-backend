@@ -73,6 +73,7 @@ async def open_handoff(
         target_kind=data.target_kind,
         subject_id=data.subject_id,
         extras=data.extras,
+        origine=data.origin,
     )
     cible = ouverte.session.target
     return HandoffSessionOpened(
