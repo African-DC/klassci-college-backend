@@ -18,13 +18,13 @@ from app.core.middleware import (
     _MAX_PUBLIC_UPLOAD_BODY_BYTES,
     TenantMiddleware,
     _extract_tenant,
-    _is_host_allowed,
     _tenant_from_public_path,
     _trusted_client_ip,
+    is_host_allowed,
 )
 
 # ---------------------------------------------------------------------------
-# _is_host_allowed — allowlist
+# is_host_allowed — allowlist
 # ---------------------------------------------------------------------------
 
 
@@ -46,7 +46,7 @@ from app.core.middleware import (
     ],
 )
 def test_allowed_hosts(host: str) -> None:
-    assert _is_host_allowed(host)
+    assert is_host_allowed(host)
 
 
 @pytest.mark.parametrize(
@@ -66,11 +66,11 @@ def test_allowed_hosts(host: str) -> None:
     ],
 )
 def test_disallowed_hosts(host: str) -> None:
-    assert not _is_host_allowed(host)
+    assert not is_host_allowed(host)
 
 
 # ---------------------------------------------------------------------------
-# _extract_tenant — hôtes locaux (préconditionnés via _is_host_allowed)
+# _extract_tenant — hôtes locaux (préconditionnés via is_host_allowed)
 # ---------------------------------------------------------------------------
 
 
