@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-05T17:39:28Z",
+  "generated_at": "2026-09-06T01:58:51Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer",
             "audience": [
