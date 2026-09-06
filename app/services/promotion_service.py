@@ -190,6 +190,7 @@ async def execute_promotion(
     # Import dynamique pour éviter circular import enrollment_service ↔ promotion_service
     from app.schemas.enrollment import EnrollmentCreate
     from app.services import enrollment_service
+    from app.services.enrollment_arrears import ArrearsClearance
 
     for source_enrollment in source_enrollments:
         target_class_id = class_mapping.get(source_enrollment.class_id)
@@ -219,8 +220,13 @@ async def execute_promotion(
                 fee_variant_id=None,
                 notes=None,
             )
+            # La politique de dettes est forcée à `inform` : une promotion de
+            # masse est un geste de fin d'année, pas un guichet. Refuser ici
+            # ne produirait pas des refus lisibles mais autant d'« Erreur
+            # inattendue », puisque le `except Exception` ci-dessous range
+            # tout ce qui n'est pas une validation métier dans l'imprévu.
             new_enrollment = await enrollment_service.create_enrollment(
-                db, new_data, created_by=executed_by
+                db, new_data, created_by=executed_by, arrears=ArrearsClearance.INFORM_ONLY
             )
             promoted_ids.append(new_enrollment.id)
         except BusinessValidationError as exc:

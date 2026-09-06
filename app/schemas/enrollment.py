@@ -54,6 +54,13 @@ class EnrollmentCreate(BaseModel):
     #: les cles `undefined`, le champ disparait du corps, et le serveur deduit
     #: alors que l'ecran promettait le contraire.
     is_new_student: bool | None = None
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
 
 
 class EnrollmentUpdate(BaseModel):
@@ -218,6 +225,14 @@ class EnrollmentWithStudentCreate(BaseModel):
             raise ValueError("must be a positive integer")
         return v
 
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
+
 
 class ReEnrollmentCreate(BaseModel):
     """Re-enrolls an existing student for a new year/class."""
@@ -235,6 +250,14 @@ class ReEnrollmentCreate(BaseModel):
         if v <= 0:
             raise ValueError("must be a positive integer")
         return v
+
+    #: Motif de la dérogation, quand on inscrit malgré une dette d'un exercice
+    #: précédent. **Dans le corps, jamais dans l'adresse** : il nomme une
+    #: famille — « cas social », « la mère est décédée » — et une URL finit
+    #: dans les journaux d'accès du serveur et chez tous les intermédiaires,
+    #: en clair et pour toujours. Le dépôt porte déjà cette règle, écrite noir
+    #: sur blanc dans `tests/test_enrollment_purge.py`.
+    override_reason: str | None = Field(default=None, max_length=500)
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 from datetime import date
 from typing import TYPE_CHECKING
 
@@ -16,10 +17,11 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
+from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.enrollment import Enrollment
@@ -241,6 +243,41 @@ class Subject(Base, TimestampMixin):
 # ---------------------------------------------------------------------------
 
 
+class ArrearsPolicy(str, enum.Enum):
+    """Ce que l'établissement décide de faire d'une dette d'un exercice passé.
+
+    Une dette d'une année révolue est aujourd'hui un angle mort : les deux
+    portails lisent la dernière inscription de l'élève, la vue d'ensemble exige
+    une année. Le jour où la famille se réinscrit, l'ardoise de l'exercice
+    précédent sort des deux écrans à la fois — aucun chiffre n'est faux, et
+    personne ne la voit plus.
+
+    Ce que l'école fait de cette dette n'est pas au logiciel d'en décider :
+    l'une relance et inscrit quand même, l'autre conditionne la réinscription.
+    D'où trois valeurs et pas un booléen.
+
+    `OFF` est le défaut, et c'est l'identité : ni bandeau, ni refus, ni même
+    une requête de plus. Une école qui n'ouvre jamais cet écran ne voit aucun
+    changement. Voir `app/services/arrears_policy.py` : le garde sort avant
+    d'avoir quoi que ce soit à demander à la base.
+    """
+
+    #: Le logiciel ignore la question. Comportement d'avant ce réglage.
+    OFF = "off"
+    #: On affiche la dette au guichet, et on inscrit quand même.
+    INFORM = "inform"
+    #: Au-delà du seuil, la réinscription est refusée à qui ne peut pas déroger
+    #: (`enrollments:arrears:override`).
+    BLOCK = "block"
+
+
+#: Un montant en francs CFA n'est jamais négatif. MySQL le refuse à la source
+#: avec `UNSIGNED` ; SQLite, sur lequel tournent les tests, ne connaît pas la
+#: nuance et prend un INTEGER ordinaire. Le schéma d'entrée pose la même borne
+#: (`ge=0`), de sorte que le refus arrive au formulaire et pas en 500.
+_XOF_NON_SIGNE = Integer().with_variant(mysql.INTEGER(unsigned=True), "mysql")
+
+
 class SchoolSettings(Base, TimestampMixin):
     """Paramètres de l'établissement (singleton par tenant)."""
 
@@ -363,4 +400,21 @@ class SchoolSettings(Base, TimestampMixin):
     # dans les réglages le lève.
     enrollment_history_is_reliable: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
+    )
+    # Politique de l'établissement sur les dettes d'un exercice précédent.
+    # `off` par défaut, y compris pour les écoles déjà en service : le défaut
+    # est l'identité, il ne se lève que par un geste dans les réglages.
+    arrears_policy: Mapped[str] = mapped_column(
+        ValueEnum(ArrearsPolicy, name="arrears_policy"),
+        nullable=False,
+        default=ArrearsPolicy.OFF,
+        server_default=ArrearsPolicy.OFF.value,
+    )
+    # Seuil en francs CFA à partir duquel `block` refuse. `0` refuse au premier
+    # franc dû, ce qui est le sens littéral du réglage et non une valeur vide.
+    # La colonne est renseignée quelle que soit la politique : repasser de
+    # `block` à `inform` puis revenir ne doit pas faire perdre le seuil que la
+    # direction avait fixé.
+    arrears_block_threshold_xof: Mapped[int] = mapped_column(
+        _XOF_NON_SIGNE, nullable=False, default=0, server_default="0"
     )
