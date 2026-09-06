@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-06T02:14:12Z",
+  "generated_at": "2026-09-06T02:43:12Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,32 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre",
+            "audience": [
+              "admin",
+              "comptable",
+              "directeur",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le refus annonce le montant dû à qui a le droit de le lire, l'état seul aux autres, et jamais un zéro trompeur",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La promotion de fin d'année n'est jamais bloquée par une dette : elle informe, elle ne refuse pas",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil",
             "audience": [

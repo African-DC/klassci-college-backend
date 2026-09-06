@@ -26,7 +26,13 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     ReEnrollmentCreate,
 )
-from app.services import enrollment_fees, enrollment_history, enrollment_notifications
+from app.services import (
+    enrollment_arrears,
+    enrollment_fees,
+    enrollment_history,
+    enrollment_notifications,
+)
+from app.services.enrollment_arrears import ArrearsClearance
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -100,12 +106,32 @@ async def create_enrollment(
     db: AsyncSession,
     data: EnrollmentCreate,
     created_by: int,
+    *,
+    arrears: ArrearsClearance,
 ) -> EnrollmentResponse:
-    """Crée une inscription et le frais associé si fee_variant_id fourni."""
+    """Crée une inscription et le frais associé si fee_variant_id fourni.
+
+    `arrears` dit ce que l'appelant a le droit de faire, et de voir, face à une
+    ardoise d'un exercice révolu. Il se résout au routeur — trois permissions
+    lues en base — et se passe toujours explicitement : ce service ne connaît
+    ni rôle ni slug, et un garde dont l'oubli est permissif n'est pas un garde.
+    """
     # Valider que l'année scolaire existe (hors transaction — lecture seule)
     academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
     if academic_year is None:
         raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
+
+    # Porte de paiement — AVANT la transaction, et ce n'est pas un détail : le
+    # garde n'a pas le droit de commettre au milieu d'un `begin_nested()`, il
+    # validerait la moitié d'une inscription. Il lit, et laisse sa ligne de
+    # journal au commit ci-dessous.
+    await enrollment_arrears.ensure_enrollable(
+        db,
+        student_id=data.student_id,
+        year=academic_year,
+        actor_id=created_by,
+        clearance=arrears,
+    )
 
     # Tout dans une seule transaction avec FOR UPDATE pour éviter les race conditions
     async with db.begin_nested():
@@ -406,17 +432,36 @@ async def create_enrollment_with_student(
     db: AsyncSession,
     data: EnrollmentWithStudentCreate,
     created_by: int,
+    *,
+    arrears: ArrearsClearance,
 ) -> EnrollmentResponse:
-    """Cree un eleve, un parent optionnel, et une inscription en une transaction."""
+    """Cree un eleve, un parent optionnel, et une inscription en une transaction.
+
+    La seconde porte vers `repo.create_enrollment`, et celle que le formulaire
+    « Nouvelle inscription » emprunte. Garder l'autre seule ne servirait à
+    rien : c'est ici qu'une réinscription saisie comme un nouvel élève
+    passerait. Le garde n'a pas encore d'identifiant d'élève à lui donner — on
+    est en train de le créer — il lui passe donc le matricule, seul point de
+    rapprochement sûr avec un dossier déjà en base.
+    """
     # Resolve academic year
-    academic_year_id = data.academic_year_id
-    if academic_year_id is None:
-        current = await _get_current_academic_year(db)
-        academic_year_id = current.id
+    if data.academic_year_id is None:
+        academic_year = await _get_current_academic_year(db)
     else:
-        ay = await repo.get_academic_year_by_id(db, academic_year_id)
-        if ay is None:
-            raise BusinessValidationError(f"AcademicYear {academic_year_id} not found")
+        academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
+        if academic_year is None:
+            raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
+    academic_year_id = academic_year.id
+
+    # Même porte que dans `create_enrollment`, et à la même place : avant toute
+    # écriture, hors transaction.
+    await enrollment_arrears.ensure_enrollable(
+        db,
+        matricule=data.enrollment_number,
+        year=academic_year,
+        actor_id=created_by,
+        clearance=arrears,
+    )
 
     async with db.begin_nested():
         # Capacity guard
@@ -584,8 +629,14 @@ async def re_enroll_student(
     db: AsyncSession,
     data: ReEnrollmentCreate,
     created_by: int,
+    *,
+    arrears: ArrearsClearance,
 ) -> EnrollmentResponse:
-    """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
+    """Re-inscrit un eleve existant dans une nouvelle classe/annee.
+
+    Aucun garde ici : ce chemin délègue à `create_enrollment`, qui le porte. Il
+    se contente de lui transmettre ce que le routeur a résolu.
+    """
     # Resolve academic year
     academic_year_id = data.academic_year_id
     if academic_year_id is None:
@@ -605,7 +656,7 @@ async def re_enroll_student(
         notes=data.notes,
         in_kind_deposits=data.in_kind_deposits,
     )
-    return await create_enrollment(db, enrollment_data, created_by=created_by)
+    return await create_enrollment(db, enrollment_data, created_by=created_by, arrears=arrears)
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre *(admin, comptable, directeur, secrétariat)*
+- Le refus annonce le montant dû à qui a le droit de le lire, l'état seul aux autres, et jamais un zéro trompeur *(comptable, secrétariat)*
+- La promotion de fin d'année n'est jamais bloquée par une dette : elle informe, elle ne refuse pas *(admin, directeur)*
 - Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil *(admin, comptable, directeur)*
 - Migration `0081` : les deux colonnes de ce réglage, à leur valeur neutre. Une école qui n'ouvre jamais cet écran ne voit aucun changement. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
 - Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
