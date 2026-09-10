@@ -20,16 +20,19 @@ from sqlalchemy.orm import selectinload
 from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear, Class, Level, Subject
 from app.models.deep_report import ClassVisit, Scholarship, StudentTransfer, TeacherTraining
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.grade import Bulletin
 from app.models.timetable import TimetableSlot
 from app.models.user import Genre, StaffProfile, Student, TeacherProfile
+from app.services import enrollment_history
 from app.services.deep_report._metrics import Cycle, cycle_of_level
 
 # Une inscription rejetée ou annulée n'occupe pas de place dans l'effectif ;
-# une inscription en validation, si. C'est le périmètre déjà retenu par les
-# statistiques DREN existantes, on ne le change pas en cours de route.
-_COUNTED_STATUSES = (EnrollmentStatus.VALIDE, EnrollmentStatus.EN_VALIDATION)
+# une inscription en validation, si. Le périmètre est celui d'
+# `enrollment_history`, partagé avec la case « nouvel élève » du formulaire
+# d'inscription : deux listes de statuts finiraient par diverger, et une
+# seule des deux bougerait le jour où un statut s'ajoute.
+_COUNTED_STATUSES = enrollment_history.COUNTED_STATUSES
 
 
 def _enum_value(raw: object) -> str | None:
@@ -252,19 +255,12 @@ async def _load_history(
     année antérieure en base, on ne peut rien affirmer : `has_history` vaut
     False et la colonne restera vide plutôt que d'annoncer « Non Red » pour
     tout le monde, ce qui serait faux dès le premier redoublant.
+
+    La requête vit dans `enrollment_history` : la case « nouvel élève » du
+    formulaire d'inscription pose la même question, et une facture se
+    construit dessus.
     """
-    stmt = (
-        select(Enrollment.student_id, Class.level_id)
-        .join(Class, Class.id == Enrollment.class_id)
-        .join(AcademicYear, AcademicYear.id == Enrollment.academic_year_id)
-        .where(
-            AcademicYear.start_date < academic_year.start_date,
-            Enrollment.status.in_(_COUNTED_STATUSES),
-        )
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-    return {(row[0], row[1]) for row in rows}, bool(rows)
+    return await enrollment_history.levels_attended_before(db, academic_year.start_date)
 
 
 async def _load_teachers(db: AsyncSession) -> list[TeacherProfile]:

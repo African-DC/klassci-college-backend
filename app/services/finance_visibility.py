@@ -33,6 +33,9 @@ AMOUNT_FIELDS = frozenset(
         "fees_remaining",
         "fees_rate",
         "fees_balance",
+        # Ce que la famille doit sur les AUTRES exercices — même sensibilité
+        # que le solde de l'année, et même masquage.
+        "fees_arrears_other_years",
     }
 )
 

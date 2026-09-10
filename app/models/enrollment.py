@@ -5,7 +5,15 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -24,6 +32,26 @@ class EnrollmentStatus(str, enum.Enum):
     VALIDE = "valide"
     REJETE = "rejete"
     ANNULE = "annule"
+
+
+#: Statuts d'une inscription qui n'est plus un dossier vivant.
+#:
+#: Un refus et une annulation ferment le dossier pour deux raisons qui se
+#: rejoignent : la dette est close, donc la relancer ferait reapparaitre un
+#: impaye sur un dossier clos ; et l'eleve n'est pas la, donc le faire figurer
+#: dans une liste de saisie fait perdre du temps a qui la remplit.
+#:
+#: Ce couple etait ecrit a huit endroits, en trois syntaxes differentes. Le
+#: jour ou un statut de fermeture s'ajoute, une seule des huit bougera. Meme
+#: motif que `NOT_CASH_DUE` cote frais, et meme remede : on le nomme une fois,
+#: la ou l'enum est defini.
+CLOSED_STATUSES = (EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)
+
+
+def is_closed(status: EnrollmentStatus | str) -> bool:
+    """True si ce dossier est refuse ou annule : il ne doit plus rien, et il
+    n'a plus a etre renseigne."""
+    return status in CLOSED_STATUSES
 
 
 class AssignmentStatus(str, enum.Enum):
@@ -76,6 +104,14 @@ class Enrollment(Base, TimestampMixin, ArchivableMixin):
     )
     # Numero de la decision d'affectation, reclame par le rapport DEEP.
     assignment_decision_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # `None` = on n'a pas tranche, et ce n'est pas un oubli. Un etablissement
+    # dont les annees passees ne sont pas reconstituees n'a aucun moyen de
+    # savoir qui est nouveau : deduire « aucune inscription anterieure donc
+    # nouveau » facturerait les frais d'entree a tous ses anciens eleves.
+    # Une inscription restee a `None` ne recoit donc aucun tarif porteur d'un
+    # profil — voir `enrollment_fees.applicable_profile_keys`, meme regle et
+    # meme raison que `applicable_scope_keys` quand l'affectation manque.
+    is_new_student: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     status: Mapped[str] = mapped_column(
         ValueEnum(EnrollmentStatus, name="enrollment_status"),
         nullable=False,

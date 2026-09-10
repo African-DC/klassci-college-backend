@@ -14,15 +14,15 @@ PDF, qui la relisent depuis le disque.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+# Le dossier monté par `app.main` sous `/uploads`. Le semis tourne sur la même
+# machine que l'application : écrire ici suffit à rendre l'image servable.
+from app.core.uploads import UPLOAD_ROOT
+
 logger = logging.getLogger("klassci.seed")
 
-#: Le dossier monté par `app.main` sous `/uploads`. Le semis tourne sur la même
-#: machine que l'application : écrire ici suffit à rendre l'image servable.
-UPLOAD_ROOT = Path("/tmp/klassci-uploads")
 PHOTO_FOLDER = "portraits"
 
 SIZE = 256

@@ -88,9 +88,7 @@ def is_in_kind(status: EnrollmentFeeStatus | str) -> bool:
     return status == EnrollmentFeeStatus.IN_KIND
 
 
-def cash_remaining(
-    status: EnrollmentFeeStatus | str, amount: Decimal, paid: Decimal
-) -> Decimal:
+def cash_remaining(status: EnrollmentFeeStatus | str, amount: Decimal, paid: Decimal) -> Decimal:
     """Reste encaissable. Zéro dès que la ligne n'est plus due en argent."""
     if is_not_cash_due(status):
         return Decimal("0")
@@ -130,6 +128,24 @@ class FeeAssignmentScope(str, enum.Enum):
 
     AFFECTE = "affecte"
     NON_AFFECTE = "non_affecte"
+
+
+class FeeEnrollmentProfile(str, enum.Enum):
+    """A qui s'applique un tarif selon l'anciennete de l'eleve dans l'ecole.
+
+    Calque exact de `FeeAssignmentScope`, pour une raison voisine : ce qu'un
+    nouvel arrivant paie a son entree — le dossier cartonne, le badge, la
+    premiere dotation de tenue — un ancien ne le repaie pas. Deux valeurs
+    suffisent : l'ecole ne facture pas differemment un eleve present depuis
+    deux ans et un autre depuis six.
+
+    `None` sur un tarif signifie « s'applique a tout le monde » : c'est ce
+    qui permet aux grilles deja configurees de continuer a fonctionner sans
+    qu'on y touche.
+    """
+
+    NOUVEAU = "nouveau"
+    ANCIEN = "ancien"
 
 
 class FeeCategory(Base, TimestampMixin):
@@ -194,15 +210,16 @@ class FeeVariant(Base, TimestampMixin):
             "level_key",
             "series_key",
             "scope_key",
+            "profile_key",
             name="uq_fee_variant_dimensions",
         ),
     )
 
     # Colonnes generees par la base : `NULL` n'etant jamais egal a `NULL`,
     # une contrainte posee directement sur `level_id` / `series_id` /
-    # `assignment_scope` ne se declenche jamais des que l'un d'eux est vide.
-    # C'est ce qui laissait creer des tarifs en double sur tous les niveaux de
-    # college, ou la serie est toujours vide.
+    # `assignment_scope` / `enrollment_profile` ne se declenche jamais des que
+    # l'un d'eux est vide. C'est ce qui laissait creer des tarifs en double sur
+    # tous les niveaux de college, ou la serie est toujours vide.
     level_key: Mapped[int] = mapped_column(
         BigInteger, Computed("COALESCE(level_id, 0)", persisted=True), nullable=False
     )
@@ -211,6 +228,9 @@ class FeeVariant(Base, TimestampMixin):
     )
     scope_key: Mapped[str] = mapped_column(
         String(20), Computed("COALESCE(assignment_scope, '')", persisted=True), nullable=False
+    )
+    profile_key: Mapped[str] = mapped_column(
+        String(20), Computed("COALESCE(enrollment_profile, '')", persisted=True), nullable=False
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -227,6 +247,12 @@ class FeeVariant(Base, TimestampMixin):
     )
     assignment_scope: Mapped[str | None] = mapped_column(
         ValueEnum(FeeAssignmentScope, name="fee_assignment_scope"),
+        nullable=True,
+        index=True,
+    )
+    #: `None` = ce tarif s'applique a tout le monde, nouveaux comme anciens.
+    enrollment_profile: Mapped[str | None] = mapped_column(
+        ValueEnum(FeeEnrollmentProfile, name="fee_enrollment_profile"),
         nullable=True,
         index=True,
     )
@@ -442,11 +468,28 @@ class PaymentAllocation(Base, TimestampMixin):
 
     Un Payment de 50 000 XOF peut être alloué automatiquement à plusieurs
     frais (ex : 20 000 sur T1 + 10 000 sur T2 + 20 000 sur T3). Chaque
-    split est une row PaymentAllocation. La somme des allocations.amount
-    DOIT toujours égaler payment.amount (invariant comptable).
+    split est une row PaymentAllocation.
+
+    **La somme des allocations vaut exactement le montant du versement.** Cette
+    phrase était un commentaire, et un commentaire n'est pas un mécanisme : le
+    point par catégorie ne lit QUE cette table, jamais `Payment.amount`, donc un
+    versement mal ventilé disparaissait de tous ses totaux en silence pendant
+    que le journal de caisse continuait de le compter.
+
+    L'invariant est désormais tenu par trois choses qui se répondent, décrites
+    en tête de `app/services/payments/allocation_invariant.py` : la contrainte
+    unique ci-dessous, une vérification avant écriture sur les deux chemins
+    d'enregistrement, et la commande d'audit `python -m app.cli.check_allocations`.
+
+    `uq_payment_allocation` ferme le cas particulier que la somme seule ne voit
+    pas : deux lignes pour le MÊME frais sur le même versement s'additionnent
+    correctement, la somme tombe juste, et rien ne dit pourquoi elles sont deux.
     """
 
     __tablename__ = "payment_allocations"
+    __table_args__ = (
+        UniqueConstraint("payment_id", "enrollment_fee_id", name="uq_payment_allocation"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     payment_id: Mapped[int] = mapped_column(

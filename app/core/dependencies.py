@@ -166,7 +166,7 @@ def require_permission(permission_slug: str) -> Any:
         # Une seule lecture de la matrice, partagée avec `has_permission` :
         # dupliquer la résolution des droits est exactement là où l'on ne veut
         # aucune divergence possible.
-        if not await _resolve_permission(current_user, db, permission_slug):
+        if not await resolve_permission(current_user, db, permission_slug):
             if current_user.auth_method == "pat":
                 raise PermissionDeniedError(f"PAT scope missing: {permission_slug}")
             raise PermissionDeniedError(permission_slug)
@@ -174,13 +174,25 @@ def require_permission(permission_slug: str) -> Any:
     return Depends(_check)
 
 
-async def _resolve_permission(
+async def resolve_permission(
     current_user: TokenData, db: AsyncSession, permission_slug: str
 ) -> bool:
     """Répond à « cet appelant a-t-il ce droit ? », sans décider quoi en faire.
 
     Pour un PAT, la réponse vient du scope déclaré à la création du token ;
     pour un JWT, de la matrice rôle/permission en base.
+
+    C'est le seul primitif de ce module qui prenne son slug À L'APPEL. Tout ce
+    qui l'entoure — `require_permission`, `require_any_permission`,
+    `has_permission` — sont des fabriques de dépendances FastAPI : elles fixent
+    leur slug à la déclaration de la route, ce qui suffit tant que la route
+    connaît le droit qu'elle exige.
+
+    Certains gestes ne le connaissent qu'à l'exécution. Ouvrir une session de
+    dépôt par téléphone en est un : le droit demandé dépend de ce qu'on
+    photographie — un élève, un enseignant, le logo de l'établissement — et vit
+    dans le registre des cibles, pas dans la signature de la route. Ces
+    appelants passent par ici, jamais par une comparaison de rôle.
     """
     if current_user.auth_method == "pat":
         from app.services.pat_service import scope_matches
@@ -190,6 +202,40 @@ async def _resolve_permission(
     from app.repositories.permission_repository import check_user_permission
 
     return bool(await check_user_permission(db, current_user.user_id, permission_slug))
+
+
+def require_any_permission(*permission_slugs: str) -> Any:
+    """Dépendance qui laisse passer qui détient AU MOINS UN de ces droits.
+
+    Certains gestes appartiennent légitimement à deux métiers. Régénérer les
+    frais d'une inscription en est un : la comptabilité le déclenche depuis la
+    fiche élève, le secrétariat depuis le dossier d'inscription, et n'accepter
+    que le slug de l'autre condamne l'un des deux à réclamer de l'aide pour un
+    bouton de sa propre page.
+
+    Bâtie sur `resolve_permission`, comme `require_permission` : une seconde
+    lecture de la matrice des droits finirait par répondre autre chose que la
+    première, et plus personne ne saurait laquelle fait foi.
+    """
+    if not permission_slugs:
+        raise ValueError("require_any_permission attend au moins une permission")
+
+    async def _check(
+        current_user: TokenData = Depends(get_current_user),
+        db: AsyncSession = Depends(get_tenant_db),
+    ) -> None:
+        for slug in permission_slugs:
+            if await resolve_permission(current_user, db, slug):
+                return
+        # Le message nomme TOUTES les permissions acceptées. N'en citer qu'une
+        # enverrait un PAT réclamer un scope qu'on ne lui accordera peut-être
+        # jamais, alors que l'autre lui était ouvert.
+        manquantes = " ou ".join(permission_slugs)
+        if current_user.auth_method == "pat":
+            raise PermissionDeniedError(f"PAT scope missing: {manquantes}")
+        raise PermissionDeniedError(manquantes)
+
+    return Depends(_check)
 
 
 def has_permission(permission_slug: str) -> Any:
@@ -206,7 +252,7 @@ def has_permission(permission_slug: str) -> Any:
         current_user: TokenData = Depends(get_current_user),
         db: AsyncSession = Depends(get_tenant_db),
     ) -> bool:
-        return await _resolve_permission(current_user, db, permission_slug)
+        return await resolve_permission(current_user, db, permission_slug)
 
     return Depends(_check)
 

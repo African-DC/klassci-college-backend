@@ -1,9 +1,6 @@
 """Router admin — CRUD endpoints pour les entités de base."""
 
-import os
-import uuid
-
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_read import audit_read
@@ -12,9 +9,12 @@ from app.core.dependencies import (
     get_current_user,
     get_tenant_db,
     has_permission,
+    require_any_permission,
     require_permission,
 )
+from app.core.uploads import LOGOS, PHOTOS, SIGNATURES
 from app.models.academic import SchoolSettings
+from app.repositories import admin_repository as admin_repo
 from app.schemas.admin import (
     AcademicYearCreate,
     AcademicYearListResponse,
@@ -24,6 +24,7 @@ from app.schemas.admin import (
     ClassListResponse,
     ClassResponse,
     ClassUpdate,
+    EnrollmentHistoryCoverageResponse,
     EnrollmentPatternPreview,
     EnrollmentPatternUpdate,
     HolidaysUpdateRequest,
@@ -82,14 +83,16 @@ from app.schemas.admin import (
     UserAccountCreate,
     UserAccountUpdate,
 )
-from app.services import admin_service, enrollment_fees, matricule_service
+from app.services import (
+    admin_service,
+    enrollment_fees,
+    enrollment_history,
+    matricule_service,
+)
 from app.services.finance_visibility import FinanceView
-from app.utils.photo_upload import extension_pour
+from app.utils.photo_upload import save_image_upload
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-UPLOAD_DIR = "/tmp/klassci-uploads/photos"
-SIGNATURE_UPLOAD_DIR = "/tmp/klassci-uploads/signatures"
 
 
 # ---------------------------------------------------------------------------
@@ -203,20 +206,7 @@ async def upload_student_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un eleve."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"{student_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"{student_id}")
     student = await admin_service.update_student_photo(
         db, student_id, photo_url, updated_by=current_user.user_id
     )
@@ -276,7 +266,7 @@ async def get_student_fees(
 async def regenerate_enrollment_fees(
     enrollment_id: int,
     current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:students:update"),
+    _: None = require_any_permission("enrollments:update", "admin:students:update"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Régénère les frais obligatoires d'une inscription.
@@ -285,6 +275,11 @@ async def regenerate_enrollment_fees(
     les autres, et recrée les frais obligatoires correspondant à la classe
     actuelle. La réponse porte le décompte des deux et un message à
     afficher tel quel.
+
+    Deux droits l'ouvrent, et détenir l'un suffit : le secrétariat corrige un
+    profil d'inscription depuis le dossier, la comptabilité rejoue une grille
+    depuis la fiche élève. Exiger `admin:students:update` du secrétariat
+    laissait son propre bouton en échec.
     """
     async with db.begin_nested():
         result = await enrollment_fees.regenerate_enrollment_fees(
@@ -382,20 +377,7 @@ async def upload_teacher_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un enseignant."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"teacher_{teacher_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"teacher_{teacher_id}")
     teacher = await admin_service.update_teacher_photo(
         db, teacher_id, photo_url, updated_by=current_user.user_id
     )
@@ -483,20 +465,7 @@ async def upload_staff_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> dict:
     """Upload ou remplace la photo de profil d'un membre du personnel."""
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    filename = f"staff_{staff_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    photo_url = f"/uploads/photos/{filename}"
+    photo_url = await save_image_upload(file, kind=PHOTOS, prefix=f"staff_{staff_id}")
     staff = await admin_service.update_staff_photo(
         db, staff_id, photo_url, updated_by=current_user.user_id
     )
@@ -859,6 +828,61 @@ async def get_settings(
     return await _build_settings_response(db, school)
 
 
+@router.get(
+    "/settings/enrollment-history-coverage",
+    response_model=EnrollmentHistoryCoverageResponse,
+    summary="Ce que declarer son historique exploitable impliquerait, en chiffres",
+)
+async def enrollment_history_coverage(
+    _: None = require_permission("admin:academic-years:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> EnrollmentHistoryCoverageResponse:
+    """Combien d'eleves de l'annee en cours sont rattaches a un antecedent.
+
+    A afficher a cote de la case « historique exploitable », parce que c'est
+    la seule chose qui manquait. Le calcul de la facture etait deja juste :
+    une inscription non tranchee ne recoit aucun tarif a profil. Ce qui
+    manquait, c'est qu'au moment de cocher, rien ne disait a l'ecole que zero
+    de ses soixante-dix-huit eleves n'est rattache au passe enregistre, et
+    qu'ils seraient donc tous traites comme des arrivants.
+
+    Sans annee courante declaree, il n'y a pas de cohorte a mesurer : on rend
+    une couverture vide plutot qu'une erreur, l'ecran des reglages doit rester
+    lisible sur un etablissement qui vient d'etre provisionne.
+    """
+    academic_year_id = await admin_repo.get_current_academic_year_id(db)
+    if academic_year_id is None:
+        return EnrollmentHistoryCoverageResponse(
+            enrolled_this_year=0,
+            with_anterior=0,
+            ratio=0.0,
+            threshold=enrollment_history.COUVERTURE_MINIMALE,
+            is_sufficient=False,
+            warning=(
+                "Aucune annee scolaire courante n'est definie : le logiciel ne "
+                "peut mesurer aucun rattachement."
+            ),
+        )
+
+    couverture = await enrollment_history.history_coverage(db, academic_year_id)
+    warning = None
+    if not couverture.is_sufficient:
+        warning = (
+            f"{couverture.with_anterior} de vos {couverture.enrolled_this_year} eleves "
+            "inscrits cette annee ont une inscription enregistree sur une annee "
+            "anterieure. Si vous activez ce reglage, le logiciel les traitera tous "
+            "comme de nouveaux eleves."
+        )
+    return EnrollmentHistoryCoverageResponse(
+        enrolled_this_year=couverture.enrolled_this_year,
+        with_anterior=couverture.with_anterior,
+        ratio=couverture.ratio,
+        threshold=enrollment_history.COUVERTURE_MINIMALE,
+        is_sufficient=couverture.is_sufficient,
+        warning=warning,
+    )
+
+
 @router.put("/settings/school-info", response_model=SchoolSettingsResponse)
 async def update_school_info(
     data: SchoolInfoUpdate,
@@ -928,20 +952,9 @@ async def upload_school_signature(
     Reutilise le pattern d'upload des photos eleves : MIME whitelist,
     5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
     """
-    ext = extension_pour(file.content_type)
-
-    os.makedirs(SIGNATURE_UPLOAD_DIR, exist_ok=True)
-    filename = f"signature_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(SIGNATURE_UPLOAD_DIR, filename)
-
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "Fichier trop volumineux (max 5 Mo)")
-
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    signature_url = f"/uploads/signatures/{filename}"
+    ancienne = (await admin_service.get_school_settings(db)).signature_image_url
+    signature_url = await save_image_upload(file, kind=SIGNATURES, prefix="signature")
+    SIGNATURES.delete_public(ancienne)
     school = await admin_service.update_school_info(
         db,
         SchoolInfoUpdate(signature_image_url=signature_url),
@@ -957,7 +970,44 @@ async def delete_school_signature(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> None:
     """Retire la signature officielle de l'etablissement."""
+    ancienne = (await admin_service.get_school_settings(db)).signature_image_url
     await admin_service.clear_school_signature(db, updated_by=current_user.user_id)
+    SIGNATURES.delete_public(ancienne)
+
+
+@router.post("/settings/logo")
+async def upload_school_logo(
+    file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Upload le logo de l'etablissement, affiche a l'ecran et sur les documents.
+
+    Meme contrat que la signature juste au-dessus : whitelist MIME partagee,
+    5 Mo max, nom de fichier unique avec UUIDv4 8 chars.
+    """
+    ancien = (await admin_service.get_school_settings(db)).logo_url
+    logo_url = await save_image_upload(file, kind=LOGOS, prefix="logo")
+    LOGOS.delete_public(ancien)
+    school = await admin_service.update_school_info(
+        db,
+        SchoolInfoUpdate(logo_url=logo_url),
+        updated_by=current_user.user_id,
+    )
+    return {"logo_url": school.logo_url}
+
+
+@router.delete("/settings/logo", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_school_logo(
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> None:
+    """Retire le logo de l'etablissement."""
+    ancien = (await admin_service.get_school_settings(db)).logo_url
+    await admin_service.clear_school_logo(db, updated_by=current_user.user_id)
+    LOGOS.delete_public(ancien)
 
 
 # ---------------------------------------------------------------------------

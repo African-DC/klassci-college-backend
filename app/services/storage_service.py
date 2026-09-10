@@ -8,10 +8,9 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import settings
+from app.core.uploads import UPLOAD_ROOT
 
 logger = logging.getLogger(__name__)
-
-LOCAL_UPLOAD_DIR = Path("/tmp/klassci-uploads")
 
 
 def _get_s3_client():
@@ -70,8 +69,8 @@ def _upload_to_s3(file_bytes: bytes, key: str, content_type: str) -> str:
 
 
 def _upload_to_local(file_bytes: bytes, key: str) -> str:
-    """Fallback : stockage local dans /tmp/klassci-uploads/."""
-    file_path = LOCAL_UPLOAD_DIR / key
+    """Fallback : stockage local sous la racine persistante servie par `/uploads`."""
+    file_path = UPLOAD_ROOT / key
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(file_bytes)
     logger.info("File stored locally: %s", file_path)

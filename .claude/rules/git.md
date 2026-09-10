@@ -50,6 +50,28 @@ hotfix/*    ← hotfix/payment-duplicate-charge
 - Squash merge vers develop
 - Supprimer la branche après merge
 
+## Hooks — la première ligne, pas la dernière
+
+```bash
+sh scripts/install-hooks.sh     # une fois par clone
+```
+
+`core.hooksPath` fait lire les hooks dans `.githooks/`, qui est versionné : les
+règles voyagent avec le code, et une correction profite à tout le monde au
+prochain `pull`.
+
+| Hook | Ce qu'il arrête |
+|---|---|
+| `commit-msg` | signature automatique (`Co-Authored-By`, `Generated with`), format non conventionnel, sujet > 72 caractères, `WIP` ; avertit sur un `feat`/`fix`/`perf` sans changelog |
+| `pre-commit` | commit sur `main`, fichier de secrets indexé, ruff en échec ; régénère `RELEASES.json` quand le changelog bouge |
+| `pre-push` | push direct sur `main`/`develop`, nom de branche que la CI refusera |
+
+**Ils préviennent, ils n'imposent pas.** Un hook local s'installe volontairement
+et se contourne par `--no-verify` : la CI reste le garde-fou qui compte. Leur
+valeur est de dire la règle au moment où on s'en écarte, plutôt qu'en revue
+trois jours plus tard — ou, pour le nom de branche, après un aller-retour de CI
+et une PR à rouvrir, ce qui est déjà arrivé.
+
 ## Ce Qu'on Ne Fait JAMAIS
 
 ```bash

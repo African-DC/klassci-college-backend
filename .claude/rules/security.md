@@ -50,6 +50,28 @@ async def create_enrollment(
     ...
 ```
 
+## Ce qui vérifie cette règle
+
+```bash
+python scripts/check_permissions.py
+```
+
+Deux contrôles, tenus par un hook `pre-commit` et par la CI :
+
+- **Toute route est gardée.** Une route sans `require_permission` doit être
+  déclarée dans `ROUTES_PUBLIQUES`, avec la raison qui la rend ouverte. Cette
+  liste est de la documentation autant qu'une exception : elle répond à
+  « qu'est-ce qui est ouvert sur cette API », sans relire trois cents signatures.
+- **Aucun rôle ne décide d'un accès** dans `app/routers/`, `core/dependencies.py`
+  et `core/middleware.py`. Ailleurs, comparer un rôle sert à choisir la bonne
+  table de profil — c'est du polymorphisme, et l'interdire noierait le contrôle
+  de faux positifs jusqu'à ce que quelqu'un le désactive.
+
+**Ce qu'il ne fait pas** : vérifier que le droit demandé est le *bon*. Rien ne
+sait que le tableau des soldes relève de `payments:read:all` et non de
+`payments:read` — c'est un jugement, il se prend en revue. Le contrôle garantit
+qu'un droit est demandé, pas qu'il est le bon.
+
 ## Audit Log Obligatoire
 
 ```python

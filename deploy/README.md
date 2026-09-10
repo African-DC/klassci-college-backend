@@ -42,6 +42,10 @@ Stack Docker Compose geree par Dokploy (projet klassci-college, env production, 
 - Caddy interne (/svc -> backend, reste -> frontend), labels Traefik sur le service proxy
 - Fichiers Dokploy : /etc/dokploy/compose/klassci-college-prod/code/
 - Volumes existants : linux_klassci_mysql, linux_klassci_redis (ne pas recreer, jamais down -v)
+- Volume des televersements : cree par le compose, donc nomme d'apres le projet
+  (klassci-college-prod_klassci_uploads). Ni external ni prefixe, voir plus bas.
+- Attention : la production n'execute PAS le compose versionne. Lire la section
+  « La production ne monte pas ce fichier » avant toute intervention.
 - Superadmin plateforme : tenant local, email superadmin@klassci.com
 - Premier etablissement : 
 - Premier etablissement : rostan-bouake (College Rostan Bouake)
@@ -236,7 +240,10 @@ printf 'services:
     ports: !override
       - "8099:80"
 ' > docker-compose.override.yml
-for v in mysql redis uploads; do docker volume create restoretest_klassci_$v; done
+# Seuls mysql et redis sont `external` : ils doivent exister avant le montage.
+# Le volume des téléversements, lui, est créé par le compose sous le nom du
+# projet, donc `restoretest_klassci_uploads`. Ne pas le créer à la main.
+for v in mysql redis; do docker volume create restoretest_klassci_$v; done
 KLASSCI_VOLUME_PREFIX=restoretest docker compose -p restoretest up -d
 curl -s -o /dev/null -w '%{http_code}
 ' http://127.0.0.1:8099/svc/health   # attendu : 200
@@ -252,6 +259,116 @@ for v in mysql redis uploads; do docker volume rm restoretest_klassci_$v; done
 Résultat du 2026-08-25 : sept services montés, backend et frontend en 200, les
 volumes de production intacts et la production ininterrompue pendant l'exercice.
 
+## La production ne monte pas ce fichier (constaté le 2026-08-31)
+
+Si vous découvrez ce problème longtemps après, commencez par ici. C'est le
+piège le plus coûteux de ce dossier, et il ne se voit sur aucun écran.
+
+`deploy/linux/docker-compose.dokploy.yml` est la référence du dépôt. **Ce n'est
+pas ce que la production exécute.** L'application `klassci-college-prod` est
+déclarée dans Dokploy en mode **« docker raw »** : Dokploy détient lui-même le
+texte du compose et l'écrit dans
+`/etc/dokploy/compose/klassci-college-prod/code/docker-compose.yml` au moment du
+déploiement. Il ne va pas le chercher dans ce dépôt. Conséquence dans les deux
+sens : modifier le fichier versionné ne change rien à la production, et modifier
+la production depuis l'interface Dokploy ne remonte rien ici. Deux exemplaires,
+aucun lien, aucune alerte quand ils s'éloignent.
+
+Ils ont déjà dérivé deux fois, et en sens inverse :
+
+| Date | Ce qui manquait | Où |
+|---|---|---|
+| 2026-08-25 | service `beat` | dans le **dépôt** (ajouté ici depuis) |
+| 2026-08-31 | service `beat` | dans la **production** (à reporter là-bas) |
+| 2026-08-31 | volume des téléversements et `UPLOAD_ROOT` | dans la production **et** dans le dépôt (corrigé ici) |
+
+Le `beat` du 2026-08-25 avait donc été recopié du serveur vers le dépôt, puis a
+disparu du serveur. Personne ne l'a vu partir : rien ne tombe en panne quand un
+ordonnanceur n'est pas là, il ne se passe simplement plus rien à minuit.
+
+### Pourquoi ce n'est pas un détail
+
+`beat` est le seul service qui déclenche `cash.close_stale_sessions_all_tenants`,
+le balayage qui clôture d'office les sessions de caisse restées ouvertes.
+Sans lui, une session ouverte lundi reste ouverte mardi, le bordereau du jour
+agrège deux journées et l'écart de caisse s'accumule en silence. Le `worker`
+seul ne suffit pas : il exécute les tâches, il n'en programme aucune.
+
+Le volume, lui, est ce qui empêche les téléversements de repartir avec le
+conteneur. Sans lui, la photo d'un élève et le logo de l'établissement vivent
+dans la couche jetable et disparaissent au redéploiement suivant, sans erreur,
+sans trace, jusqu'à ce qu'un bulletin sorte sans logo.
+
+### Ce qu'il faut reporter dans la production
+
+Prendre le compose versionné comme source et remettre à niveau celui de
+Dokploy, **par l'interface Dokploy** (un `git pull` sur le serveur ne changera
+rien) :
+
+1. le service `beat` en entier, image backend, commande
+   `celery -A app.core.celery_app beat --loglevel=info`, sans volume ;
+2. sur `backend` et sur `worker` : le montage `klassci_uploads:/app/uploads` et
+   la variable `UPLOAD_ROOT=/app/uploads` ;
+3. l'entrée `klassci_uploads:` dans la section `volumes`, **sans** `external` et
+   **sans** `name` : contrairement à `klassci_mysql` et `klassci_redis`, ce
+   volume n'a pas d'antécédent à adopter, c'est le compose qui doit le créer.
+
+Avant de recréer le conteneur backend, sauver ce qu'il détient encore. Les
+fichiers déjà téléversés sont dans son `/tmp`, c'est-à-dire nulle part :
+
+```bash
+ssh -4 -F deploy/ssh_config klassci-prod
+C=$(docker ps -q --filter name=klassci-college-prod-backend)   # vérifier le nom
+docker cp "$C:/tmp/klassci-uploads/." /root/sauvegarde-uploads
+# ... déployer la nouvelle version depuis l'interface Dokploy ...
+D=$(docker ps -q --filter name=klassci-college-prod-backend)
+docker cp /root/sauvegarde-uploads/. "$D:/app/uploads"
+```
+
+### Comment vérifier, à n'importe quel moment
+
+```bash
+ssh -4 -F deploy/ssh_config klassci-prod
+
+# 1. Les services qui tournent vraiment. `beat` doit y être.
+docker ps --filter name=klassci-college-prod --format '{{.Names}}\t{{.Status}}'
+
+# 2. Le backend a-t-il un volume sur /app/uploads ?
+docker inspect --format '{{json .Mounts}}' $(docker ps -q --filter name=klassci-college-prod-backend)
+
+# 3. Le texte que Dokploy exécute...
+docker run --rm -v /etc/dokploy/compose/klassci-college-prod/code:/c:ro \
+  alpine sha256sum /c/docker-compose.yml
+
+# ... comparé au blob du dépôt, jamais au fichier du disque (fins de ligne).
+git show HEAD:deploy/linux/docker-compose.dokploy.yml | sha256sum
+```
+
+Ces deux empreintes **ne coïncideront pas** tant que Dokploy garde sa propre
+copie. L'égalité n'est donc pas le critère utile ici : ce sont le `docker ps` et
+les montages qu'il faut lire, parce qu'ils disent ce qui tourne, pas ce qui est
+écrit quelque part.
+
+### Ce qui a été constaté, et ce qui ne l'a pas été
+
+Constaté le 2026-08-31 : la production ne fait pas tourner `beat`, et son
+conteneur backend n'a aucun volume, donc écrit ses téléversements dans sa propre
+couche jetable.
+
+Non vérifié depuis le poste au moment d'écrire ces lignes : l'intitulé exact du
+mode dans l'interface Dokploy, et le contenu octet par octet du compose que
+Dokploy conserve. La conclusion tient sans cela, car elle repose sur ce qui
+tourne. Si vous êtes sur le serveur, les trois commandes ci-dessus lèvent le
+doute en une minute, et il vaut mieux les lancer que croire ce paragraphe.
+
+### La vraie correction, un jour
+
+Tant que Dokploy garde sa copie, cette dérive se reproduira. La sortie est de
+basculer l'application sur le mode où Dokploy déploie depuis le dépôt Git et
+son chemin de compose. Tant que ce n'est pas fait, toute modification
+d'infrastructure se fait **deux fois**, ici et dans l'interface, dans la même
+demi-heure. Une seule des deux, et le compte à rebours repart.
+
 ## Fidélité au serveur
 
 Les fichiers de ce dossier doivent correspondre, à l'octet près, à ce que les
@@ -262,6 +379,10 @@ La première synchronisation, le 2026-08-25, a trouvé que le compose versionné
 **n'avait pas le service `beat`** que la production fait tourner. Rebâtir depuis
 le dépôt aurait donné un système où la fermeture nocturne des sessions de caisse
 ne s'exécute jamais, sans que rien ne le signale.
+
+Le 2026-08-31, la dérive s'est inversée : `beat` est ici, et c'est la production
+qui ne l'a plus. Voir la section précédente, qui dit pourquoi la comparaison
+d'empreintes ci-dessous ne peut pas l'attraper toute seule.
 
 Vérifier après toute modification côté serveur :
 

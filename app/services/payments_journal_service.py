@@ -39,6 +39,8 @@ from app.services.payments._cashier import cashier_label, cashier_name
 from app.services.payments._response import student_identity
 from app.services.payments.journal_data import (
     COMPLETED,
+    UNALLOCATED,
+    FeeShare,
     GroupTotal,
     JournalLine,
     PaymentsJournal,
@@ -60,25 +62,46 @@ from app.services.pdf.payments_journal import generate_payments_journal_pdf
 # ---------------------------------------------------------------------------
 
 
-def _fee_label(payment: Payment) -> str:
-    """Ce sur quoi le versement a été imputé.
+def _fee_shares(payment: Payment) -> tuple[FeeShare, ...]:
+    """Ce sur quoi le versement a été imputé, et pour combien sur chacun.
 
-    Un versement s'impute par priorité sur plusieurs frais : on nomme le
-    premier et on signale les autres plutôt que de n'en montrer qu'un, ce qui
-    laisserait croire que la somme entière est allée là.
+    Toutes les catégories, jamais un extrait : la somme des parts doit se
+    relire dans le montant de la ligne. Un versement de 85 000 F réparti sur
+    trois frais se décomposait auparavant en « Scolarité (+2) », et les deux
+    catégories cachées ne figuraient nulle part ailleurs dans le document.
+
+    Les parts sont cumulées **par catégorie** et non par frais : une famille
+    qui règle trois tranches de scolarité lit « Scolarité 60 000 », pas trois
+    lignes identiques qu'il faudrait additionner de tête.
+
+    L'ordre est celui des imputations, qui est celui des priorités de frais :
+    le trier autrement le rendrait indépendant de la logique de cascade, et
+    deux versements identiques se liraient dans deux ordres différents.
     """
-    noms: list[str] = []
+    parts: dict[str, Decimal] = {}
     for allocation in getattr(payment, "allocations", None) or []:
         ef = getattr(allocation, "enrollment_fee", None)
         fv = getattr(ef, "fee_variant", None) if ef is not None else None
         cat = getattr(fv, "category", None) if fv is not None else None
-        if cat is not None and cat.name and cat.name not in noms:
-            noms.append(cat.name)
-    if not noms:
-        return "—"
-    if len(noms) == 1:
-        return noms[0]
-    return f"{noms[0]} (+{len(noms) - 1})"
+        nom = getattr(cat, "name", None)
+        if not nom:
+            continue
+        montant = Decimal(str(getattr(allocation, "amount", 0) or 0))
+        parts[nom] = parts.get(nom, Decimal("0")) + montant
+
+    shares = [FeeShare(category_name=nom, amount=montant) for nom, montant in parts.items()]
+
+    # Ce que le versement porte au-delà de ses imputations. L'invariant
+    # comptable veut que ce reste soit nul, et il l'est ; mais un versement
+    # ancien peut n'avoir aucune allocation, et la cellule disait alors « — »
+    # sur de l'argent réellement encaissé. Le nommer coûte une ligne et évite
+    # qu'un total d'export ne se décompose pas.
+    montant_total = Decimal(str(getattr(payment, "amount", 0) or 0))
+    reste = montant_total - sum((share.amount for share in shares), Decimal("0"))
+    if reste > 0:
+        shares.append(FeeShare(category_name=UNALLOCATED, amount=reste))
+
+    return tuple(shares)
 
 
 def _to_line(payment: Payment) -> JournalLine:
@@ -88,7 +111,7 @@ def _to_line(payment: Payment) -> JournalLine:
         created_at=payment.created_at,
         student_name=nom or "—",
         student_matricule=matricule,
-        fee_label=_fee_label(payment),
+        fee_shares=_fee_shares(payment),
         method=enum_value(payment.method) or "",
         reference=payment.reference,
         amount=payment.amount,

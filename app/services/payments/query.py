@@ -1,17 +1,19 @@
 """Read-only queries paiements : list, get, get_by_enrollment, summary."""
 
-from datetime import datetime, time, timedelta
+from dataclasses import replace
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.academic import AcademicYear
-from app.models.enrollment import Enrollment
 from app.models.fee import Payment, PaymentStatus
 from app.repositories import installment_repository
 from app.repositories import payment_repository as repo
-from app.repositories.payment_filters import PaymentFilters, apply_payment_filters
+from app.repositories.payment_filters import (
+    PaymentFilters,
+    apply_payment_scope,
+    belongs_to_year,
+)
 from app.schemas.payment import (
     PaymentListResponse,
     PaymentResponse,
@@ -56,40 +58,20 @@ async def get_student_payments(db: AsyncSession, enrollment_id: int) -> list[Pay
     return [payment_to_response(p) for p in payments]
 
 
-async def _belongs_to_year(db: AsyncSession, academic_year_id: int):
-    """Condition « ce versement relève de cette année scolaire ».
+# Les tests historiques importent le prédicat depuis ici. Il vit désormais
+# avec les autres critères du journal, pour que liste et bandeau ne puissent
+# pas en avoir deux lectures.
+_belongs_to_year = belongs_to_year
 
-    Une jointure interne sur l'inscription ferait disparaître des totaux tout
-    versement dont l'élève a été supprimé : le tableau de bord annoncerait
-    moins d'argent encaissé que le bordereau de caisse du même jour, et
-    personne ne saurait lequel croire.
 
-    On rattache donc le versement orphelin par sa date. C'est exact : une
-    somme encaissée le 12 novembre relève de l'année scolaire qui couvre le
-    12 novembre, que la fiche élève existe encore ou non.
-    """
-    dates = (
-        await db.execute(
-            select(AcademicYear.start_date, AcademicYear.end_date).where(
-                AcademicYear.id == academic_year_id
-            )
-        )
-    ).one_or_none()
-
-    par_inscription = Enrollment.academic_year_id == academic_year_id
-    if dates is None:
-        return par_inscription
-
-    start = datetime.combine(dates.start_date, time.min)
-    # Borne haute exclusive au lendemain de la fin : un versement encaissé à
-    # 16 h le dernier jour ne doit pas tomber hors de l'année.
-    end = datetime.combine(dates.end_date, time.min) + timedelta(days=1)
-    return or_(
-        par_inscription,
-        and_(
-            Payment.enrollment_id.is_(None), Payment.created_at >= start, Payment.created_at < end
-        ),
-    )
+def _filtres_avec_annee(
+    filters: PaymentFilters | None, academic_year_id: int | None
+) -> PaymentFilters:
+    """L'année du bandeau et celle des filtres sont la même question."""
+    filtres = filters or PaymentFilters()
+    if academic_year_id is not None and filtres.academic_year_id is None:
+        return replace(filtres, academic_year_id=academic_year_id)
+    return filtres
 
 
 async def get_payments_summary(
@@ -125,14 +107,14 @@ async def get_payments_summary(
     et non ce que l'école a recouvré.
     """
     cloisonne = received_by is not None
+    filtres = _filtres_avec_annee(filters, academic_year_id)
+    annee = filtres.academic_year_id
 
     total_expected: float | None = None
     completion_rate: float | None = None
     if not cloisonne:
-        total_expected = float(
-            await installment_repository.mandatory_total_for_year(db, academic_year_id)
-        )
-        total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, academic_year_id))
+        total_expected = float(await installment_repository.mandatory_total_for_year(db, annee))
+        total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, annee))
     else:
         encaisse_stmt = select(
             func.coalesce(
@@ -145,17 +127,11 @@ async def get_payments_summary(
                 0,
             )
         ).where(Payment.received_by == received_by)
-        if academic_year_id is not None:
-            encaisse_stmt = encaisse_stmt.select_from(Payment).outerjoin(
-                Enrollment, Payment.enrollment_id == Enrollment.id
-            )
-            encaisse_stmt = encaisse_stmt.where(await _belongs_to_year(db, academic_year_id))
-        if filters is not None:
-            # « Encaisse par vous » est un agregat de caisse, comme le compte
-            # juste a cote : les deux doivent repondre a la meme question,
-            # sinon la carte affiche un montant de l'annee sous un nombre
-            # filtre, et affirme que le filtre vaut pour les deux.
-            encaisse_stmt = apply_payment_filters(encaisse_stmt, filters)
+        # « Encaisse par vous » est un agregat de caisse, comme le compte
+        # juste a cote : les deux doivent repondre a la meme question,
+        # sinon la carte affiche un montant de l'annee sous un nombre
+        # filtre, et affirme que le filtre vaut pour les deux.
+        encaisse_stmt = await apply_payment_scope(db, encaisse_stmt, filtres)
         total_paid = float((await db.execute(encaisse_stmt)).scalar() or 0)
 
     pay_stmt = select(
@@ -179,19 +155,13 @@ async def get_payments_summary(
             0,
         ).label("total_cancelled"),
     )
-    if academic_year_id is not None:
-        pay_stmt = pay_stmt.select_from(Payment).outerjoin(
-            Enrollment, Payment.enrollment_id == Enrollment.id
-        )
-        pay_stmt = pay_stmt.where(await _belongs_to_year(db, academic_year_id))
     if cloisonne:
         pay_stmt = pay_stmt.where(Payment.received_by == received_by)
-    if filters is not None:
-        # Le meme predicat que la liste, pas une recopie. Sans lui, filtrer sur
-        # « Annule » laissait le bandeau annoncer tout l'argent recu au-dessus
-        # d'un tableau qui en montrait trois : deux chiffres, deux perimetres,
-        # et rien a l'ecran pour dire lequel on lit.
-        pay_stmt = apply_payment_filters(pay_stmt, filters)
+    # Le meme predicat que la liste, pas une recopie. Sans lui, filtrer sur
+    # « Annule » laissait le bandeau annoncer tout l'argent recu au-dessus
+    # d'un tableau qui en montrait trois : deux chiffres, deux perimetres,
+    # et rien a l'ecran pour dire lequel on lit.
+    pay_stmt = await apply_payment_scope(db, pay_stmt, filtres)
 
     pay_row = (await db.execute(pay_stmt)).one()
 

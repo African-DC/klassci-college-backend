@@ -149,6 +149,24 @@ def test_la_situation_reprend_les_montants_qui_lui_sont_donnes():
     assert html.count(money(situation["total_remaining"])) == 2
 
 
+def test_une_ligne_deposee_dit_depose_pas_exonere():
+    """Le reçu ne confond pas un article apporté avec une bourse DRENA."""
+    lines = [
+        _line("Inscription", "37000", "37000"),
+        {
+            "name": "Ramette A4",
+            "due": Decimal("2500"),
+            "paid": Decimal("0"),
+            "remaining": Decimal("0"),
+            "status": "in_kind",
+        },
+    ]
+    html = build_receipt_html(_payment(situation=_situation(lines)), SCHOOL)
+    assert html.count("Déposé") == 2
+    assert "Exonéré" not in html
+    assert html.count("Ramette A4") == 2
+
+
 def test_chaque_frais_a_sa_ligne_avec_du_verse_reste():
     html = build_receipt_html(_payment(), SCHOOL)
     for frais in SIX_FRAIS:

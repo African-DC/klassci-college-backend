@@ -36,6 +36,25 @@ class Settings(BaseSettings):
     # Tenant
     LOCAL_TENANT_ID: str = "local"  # tenant utilisé en dev local
 
+    # Uploads : racine des fichiers servis sous /uploads (photos, signatures,
+    # logos, documents). Doit pointer sur un volume persistant : un chemin
+    # temporaire est vidé à chaque recréation du conteneur, donc les photos
+    # d'élèves et le tampon de l'établissement disparaissent au redéploiement.
+    UPLOAD_ROOT: str = "/app/uploads"
+
+    # Sas de dépôt : racine des fichiers reçus d'un téléphone et pas encore
+    # confirmés par un opérateur. Elle est DISTINCTE d'`UPLOAD_ROOT`, et ce
+    # n'est pas un rangement : `UPLOAD_ROOT` est montée en entier sous
+    # `/uploads` par un `StaticFiles` sans authentification ni cloisonnement de
+    # tenant. Y déposer la photo d'un mineur en attente de validation la
+    # rendrait publique à qui devine huit caractères hexadécimaux.
+    #
+    # Elle n'a pas besoin de survivre à un redéploiement : une session de dépôt
+    # dure dix minutes. Elle doit en revanche être le MÊME dossier pour le
+    # backend et pour le worker, sinon le balayeur des fichiers orphelins
+    # regarde un dossier vide pendant qu'ils s'accumulent ailleurs.
+    HANDOFF_ROOT: str = "/app/handoff"
+
     # Public login URL template — utilisé pour générer le lien envoyé dans
     # l'email de bienvenue tenant et l'URL affichée côté super-admin.
     # {slug} est remplacé par le slug du tenant.
@@ -47,8 +66,14 @@ class Settings(BaseSettings):
     # Base URL publique du frontend — sert à construire l'URL de vérification
     # encodée dans le QR code des documents officiels :
     #   {PUBLIC_BASE_URL}/verifier/{tenant}/{token}
-    # À surcharger via env sur le serveur de démo (ex: http://94.72.96.119).
-    PUBLIC_BASE_URL: str = "https://college.klassci.com"
+    #
+    # AUCUNE valeur par défaut, et surtout pas un domaine d'établissement.
+    # Elle en portait un : toute installation qui oubliait de la renseigner
+    # imprimait donc des QR pointant vers l'école d'à côté — et un certificat
+    # authentique s'y vérifiait en « document inconnu », ce qui le fait passer
+    # pour un faux. Vide, le code refuse de fabriquer un lien plutôt que d'en
+    # fabriquer un qui désigne quelqu'un d'autre.
+    PUBLIC_BASE_URL: str = ""
 
     # Sceau numérique institutionnel KLASSCI. La clé privée est une graine
     # Ed25519 brute de 32 octets encodée en base64url. Elle est indépendante

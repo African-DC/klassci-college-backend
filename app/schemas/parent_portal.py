@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.fee import FeeEntitlement
+from app.schemas.fee import ArrearsOutsideYear, FeeEntitlement
 
 # ---------------------------------------------------------------------------
 # Children
@@ -131,7 +131,16 @@ class FeeDetail(BaseModel):
     payments: list[PaymentDetail]
 
 
-class ChildFeesResponse(BaseModel):
+class ChildFeesResponse(ArrearsOutsideYear):
+    """Les frais de l'annee affichee, et ce qui reste du sur les autres.
+
+    `total_due` et `total_paid` ne portent que l'inscription montree — celle
+    de l'annee en cours des que l'enfant est reinscrit. Ce qui restait du sur
+    l'annee precedente sortirait alors de cet ecran sans qu'aucun chiffre ne
+    devienne faux, et la famille cesserait de le voir : d'ou le second
+    montant, tenu a part pour ne rien compter deux fois.
+    """
+
     student_id: int
     enrollment_id: int | None
     fees: list[FeeDetail]

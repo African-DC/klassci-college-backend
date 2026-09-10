@@ -97,7 +97,7 @@ def test_la_route_refuse_sans_le_droit_de_lire_les_eleves(client: TestClient) ->
     routeur, pour que le test suive si le câblage change.
     """
     with patch(
-        "app.core.dependencies._resolve_permission",
+        "app.core.dependencies.resolve_permission",
         new_callable=AsyncMock,
         return_value=False,
     ):

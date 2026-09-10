@@ -162,11 +162,14 @@ def _situation_rows(situation: dict[str, Any]) -> str:
 
     rows: list[str] = []
     for line in shown:
+        depose = str(line.get("status") or "") == "in_kind"
+        paid_cell = "Déposé" if depose else format_xof(line.get("paid"))
+        rest_cell = "—" if depose else format_xof(line.get("remaining"))
         rows.append(
             f'<tr><td class="rc-l">{esc(_clip(line.get("name") or "—", MAX_FEE_NAME))}</td>'
             f"<td>{esc(format_xof(line.get('due')))}</td>"
-            f"<td>{esc(format_xof(line.get('paid')))}</td>"
-            f'<td class="rc-rest">{esc(format_xof(line.get("remaining")))}</td></tr>'
+            f"<td>{esc(paid_cell)}</td>"
+            f'<td class="rc-rest">{esc(rest_cell)}</td></tr>'
         )
     if folded:
         due = sum((Decimal(str(f.get("due") or 0)) for f in folded), Decimal("0"))

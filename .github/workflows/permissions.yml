@@ -1,0 +1,20 @@
+name: Permissions
+
+# Les hooks previennent au moment ou l'on se trompe ; ils s'installent
+# volontairement et `--no-verify` passe outre. Ce workflow est le filet qui
+# compte : il tourne sur chaque PR, sans que personne ait rien a installer.
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+jobs:
+  verifier:
+    name: Une route est gardee, un role n'autorise pas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/check_permissions.py

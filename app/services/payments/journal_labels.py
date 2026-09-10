@@ -1,17 +1,24 @@
-"""Les phrases que porte l'en-tête d'un journal des versements.
+"""Les phrases d'un journal des versements : son en-tête, et ses cellules.
 
 Un document exporté sans dire ce qu'il contient est un piège : deux tirages du
 même écran, à deux filtres différents, sont indiscernables une fois imprimés.
 L'en-tête doit donc nommer la période, les filtres et le périmètre — et ne
 nommer que ce qui a réellement été appliqué à la requête.
 
+`fee_cell` y a rejoint l'en-tête pour la même raison qui les rassemble tous
+ici : le PDF et le classeur doivent écrire les mêmes mots. Deux rendus séparés
+du même versement, c'est deux vérités selon le fichier qu'on ouvre.
+
 Fonctions pures, sans base de données : elles se lisent et se testent seules.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
+from app.services.payments.journal_data import FeeShare
+from app.services.pdf._helpers import format_xof
 from app.services.pdf.theme import method_label, status_label
 
 #: Ce qu'on écrit quand rien ne borne la période.
@@ -48,6 +55,22 @@ def filters_label(*, status: str | None, method: str | None) -> str:
     if method:
         parts.append(f"Moyen de paiement : {method_label(method)}")
     return " · ".join(parts)
+
+
+def fee_cell(shares: Sequence[FeeShare]) -> str:
+    """Le contenu de la cellule « Frais » : une catégorie par ligne, son montant.
+
+    Écrit ici, et non dans chacune des deux fabriques de documents, parce que
+    le PDF et le classeur doivent montrer la même chose. Deux rendus séparés
+    du même versement, c'est deux vérités selon le fichier qu'on ouvre.
+
+    Le retour à la ligne plutôt que la virgule : trois catégories mises bout à
+    bout dépassent la colonne et se lisent comme une seule phrase. Empilées,
+    l'œil descend la cellule comme il descend le reste du tableau.
+    """
+    if not shares:
+        return "—"
+    return "\n".join(f"{share.category_name} {format_xof(share.amount)}" for share in shares)
 
 
 def scope_label(*, restricted: bool, cashier_name: str | None) -> str:

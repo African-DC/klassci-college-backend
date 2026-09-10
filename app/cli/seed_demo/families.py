@@ -25,6 +25,7 @@ from app.models.enrollment import AssignmentStatus, Enrollment, EnrollmentStatus
 from app.models.user import Parent, Student
 from app.schemas.enrollment import EnrollmentUpdate, EnrollmentWithStudentCreate, ParentInput
 from app.services import admin_service, enrollment_service
+from app.services.enrollment_arrears import ArrearsClearance
 
 #: Répartition de l'affectation. Un privé ivoirien accueille une part
 #: importante d'élèves affectés par l'État, c'est même son modèle
@@ -194,6 +195,9 @@ async def enrol_cohorts(ctx: SeedContext) -> None:
                         ),
                     ),
                     ctx.actor_id,
+                    # Un semis n'est pas un guichet : il informe, il ne refuse
+                    # jamais. Même clause que la promotion de masse.
+                    arrears=ArrearsClearance.INFORM_ONLY,
                 )
             except BusinessValidationError as refus:
                 # Une classe pleine ne doit pas arrêter le semis des dix-sept

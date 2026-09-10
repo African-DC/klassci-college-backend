@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.tasks.timetable_tasks",
         "app.tasks.audit_tasks",
         "app.tasks.cash_tasks",
+        "app.tasks.handoff_tasks",
     ],
 )
 
@@ -40,5 +41,19 @@ celery_app.conf.beat_schedule = {
     "cash-close-stale-sessions": {
         "task": "cash.close_stale_sessions_all_tenants",
         "schedule": crontab(hour=_SWEEP_HOUR_UTC, minute=_SWEEP_MINUTE_UTC),
+    },
+    # Le sas des dépôts par téléphone, balayé au quart d'heure et non la nuit.
+    #
+    # Une session vit dix minutes ; un fichier qu'aucun opérateur n'a confirmé
+    # n'appartient déjà plus à personne au bout de vingt. Attendre minuit
+    # laisserait une journée d'inscriptions de photos d'élèves sur le volume,
+    # sans session pour les désigner ni écran pour les montrer. Le balayage ne
+    # coûte qu'un parcours de dossier : sa fréquence n'a pas à être avare.
+    #
+    # Pas d'heure d'école ici, contrairement à la clôture de caisse : rien dans
+    # ce geste ne dépend du fuseau de l'établissement.
+    "handoff-sweep-staged": {
+        "task": "handoff.sweep_staged",
+        "schedule": crontab(minute="*/15"),
     },
 }

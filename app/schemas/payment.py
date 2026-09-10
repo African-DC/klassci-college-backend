@@ -26,6 +26,25 @@ _ALLOWED_METHODS = set(SELECTABLE_METHODS)
 # ---------------------------------------------------------------------------
 
 
+class PaymentAllocationItem(BaseModel):
+    """Une imputation nommée par le caissier : ce montant, sur ce frais.
+
+    Sert le cas du guichet : « je pose 30 000 sur l'inscription, et le reste va
+    où il doit aller ». Les lignes nommées sont imputées telles quelles, le
+    reliquat éventuel cascade ensuite par priorité comme d'habitude.
+    """
+
+    enrollment_fee_id: int = Field(gt=0)
+    amount: Decimal
+
+    @field_validator("amount")
+    @classmethod
+    def amount_positive(cls, v: Decimal) -> Decimal:
+        if v <= 0:
+            raise ValueError("allocation amount must be positive")
+        return v
+
+
 class EnrollmentPaymentCreate(BaseModel):
     """Body du nouvel endpoint POST /enrollments/{id}/payments (Wave-style)."""
 
@@ -33,6 +52,12 @@ class EnrollmentPaymentCreate(BaseModel):
     method: str
     reference: str | None = None
     notes: str | None = None
+    #: Imputations nommées, facultatives. Absent ou vide : allocation en
+    #: cascade par priorité, le comportement historique, inchangé. Renseigné :
+    #: chaque montant va au frais désigné et le reliquat cascade sur le reste
+    #: dû. Le plafond borne la taille du corps reçu, pas le métier : une
+    #: inscription compte une dizaine de frais, pas cinquante.
+    allocations: list[PaymentAllocationItem] = Field(default_factory=list, max_length=50)
 
     @field_validator("amount")
     @classmethod
@@ -40,6 +65,17 @@ class EnrollmentPaymentCreate(BaseModel):
         if v <= 0:
             raise ValueError("amount must be positive")
         return v
+
+    @field_validator("allocations", mode="before")
+    @classmethod
+    def null_vaut_vide(cls, v: object) -> object:
+        """`"allocations": null` vaut « rien de nommé », pas un refus.
+
+        Un formulaire qui ne coche aucune imputation envoie tantôt le champ
+        absent, tantôt `null` : les deux disent la même chose et doivent
+        cascader, plutôt que rendre une erreur de validation illisible.
+        """
+        return [] if v is None else v
 
     @field_validator("method")
     @classmethod
@@ -221,21 +257,63 @@ class AllocationPreviewLine(BaseModel):
     fee_category_priority: int
     fee_total: Decimal
     fee_paid_before: Decimal
+    #: Reste encaissable avant ce versement. Zero des que la ligne n'est plus
+    #: due en argent (exoneree, deposee en nature) : le client affiche ce
+    #: nombre au lieu de rejouer la regle qui le produit.
+    cash_remaining_before: Decimal
+    #: Ce que le caissier a nomme lui-meme sur ce frais, zero s'il a laisse
+    #: faire la cascade. `allocated - directed` est donc la part cascadee.
+    directed: Decimal = Decimal("0")
     allocated: Decimal
     fee_paid_after: Decimal
     status_after: str
 
 
+class AllocationPreviewProblem(BaseModel):
+    """Ce qui empêche d'enregistrer, et sur quelle ligne le dire.
+
+    `enrollment_fee_id` est `null` quand le problème porte sur la répartition
+    entière : l'écran l'affiche alors au-dessus de la liste et non sous une
+    ligne.
+    """
+
+    enrollment_fee_id: int | None = None
+    message: str
+
+
+class AllocationPreviewRequest(BaseModel):
+    """Corps du preview : le montant, et la répartition que le caissier tape.
+
+    Le preview prend un corps et non des paramètres d'URL parce que la
+    répartition est une liste. Il n'écrit rien.
+    """
+
+    amount: Decimal = Field(gt=0)
+    #: Mêmes règles que l'enregistrement, et pour cause : c'est la même
+    #: fonction qui les vérifie. Absente ou vide, l'aperçu montre la cascade.
+    allocations: list[PaymentAllocationItem] = Field(default_factory=list, max_length=50)
+
+
 class AllocationPreviewResponse(BaseModel):
-    """Réponse du preview /enrollments/{id}/payments/preview?amount=X."""
+    """Réponse du preview POST /enrollments/{id}/payments/preview."""
 
     enrollment_id: int
     amount: Decimal
     total_remaining_before: Decimal
     total_remaining_after: Decimal
+    #: Somme nommée par le caissier, et somme placée par la cascade. Les deux
+    #: viennent du serveur : l'écran n'additionne rien lui-même.
+    directed_total: Decimal = Decimal("0")
+    cascaded_total: Decimal = Decimal("0")
     surplus: Decimal
     can_record: bool
     reject_reason: str | None
+    #: Vide quand la répartition est honorable. Non vide, `can_record` est faux
+    #: et aucune ligne ne porte d'allocation : on ne montre pas une répartition
+    #: que la caisse refuserait. `directed` continue en revanche d'être rendu,
+    #: c'est l'écho de la demande et non une imputation : un écran qui l'effacerait
+    #: nierait ce que le caissier vient de taper.
+    problems: list[AllocationPreviewProblem] = Field(default_factory=list)
     lines: list[AllocationPreviewLine]
 
 
@@ -259,3 +337,155 @@ class PaymentMethodListResponse(BaseModel):
     """
 
     items: list[PaymentMethodOption]
+
+
+# ---------------------------------------------------------------------------
+# Le point sur une categorie de frais
+# ---------------------------------------------------------------------------
+
+
+class CategoryLedgerRowResponse(BaseModel):
+    """Un eleve, et ou il en est sur cette categorie."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    enrollment_id: int
+    student_id: int
+    first_name: str
+    last_name: str
+    student_matricule: str | None = None
+    class_name: str = ""
+    status: str
+    due: Decimal
+    #: Entre en argent sur la periode demandee.
+    paid: Decimal
+    #: `null` quand l'appelant ne lit pas toutes les caisses : ce qui reste du
+    #: ne se calcule pas sur une seule, et l'absence vaut mieux qu'un faux.
+    remaining: Decimal | None = None
+    deposited_at: datetime | None = None
+
+
+class CategoryLedgerResponse(BaseModel):
+    """Le document : ce qui est entre, ce qui manque, et par qui."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: int
+    category_name: str
+    #: Faux, le bloc « en nature » n'a pas lieu d'etre affiche.
+    accepts_in_kind: bool
+    class_name: str
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    #: Faux, le document ne porte que la caisse de l'appelant et tait les impayes.
+    consolide: bool
+
+    #: Inscriptions ouvertes du perimetre. Ce n'est pas de l'argent : ce
+    #: chiffre ne se cloisonne pas, et il est rendu meme sans le droit de lire
+    #: toutes les caisses.
+    effectif_perimetre: int
+    #: Ceux qu'aucune ligne de frais de cette categorie ne couvre. Ils sont
+    #: absents de `lignes`, et les ignorer faisait retrecir le denominateur
+    #: du document sans que rien ne le dise.
+    eleves_sans_ligne: int
+
+    eleves_en_argent: int
+    total_en_argent: Decimal
+    depots_en_nature: int
+    eleves_restant_du: int | None = None
+    total_restant_du: Decimal | None = None
+
+    #: Ce que les lignes demandent encore en argent — exonerees et deposees en
+    #: nature exclues. `null` sans le droit de lire toutes les caisses : c'est
+    #: le denominateur du recouvrement, et le recouvrement se lit sur tout
+    #: l'argent recu.
+    total_attendu: Decimal | None = None
+    #: De 0 a 100, une decimale. `null` sans ce droit, et `null` aussi quand
+    #: rien n'est attendu : un taux sans denominateur n'est pas zero.
+    taux_recouvrement: float | None = None
+    #: Le nombre de lignes par etat, sur le perimetre entier — jamais sur la
+    #: page. `null` sans le droit de lire toutes les caisses.
+    compteurs: dict[str, int] | None = None
+
+    #: Les filtres de liste appliques, pour que l'ecran et le document puissent
+    #: dire ce qu'ils montrent.
+    etat_filtre: str | None = None
+    recherche: str | None = None
+    #: Vrai quand la recherche exacte n'a rien rendu et que la liste vient du
+    #: repechage flou. L'ecran doit le dire, sinon des fiches approchantes se
+    #: lisent comme la reponse a ce qu'on a tape.
+    recherche_approchee: bool = False
+    #: Lignes retenues par le filtre sur le perimetre, avant pagination.
+    total_lignes: int
+    page: int
+    size: int
+    #: Rempli quand le plafond a coupe. `null` quand rien n'a ete ampute :
+    #: tourner une page n'est pas une troncature.
+    truncated_from: int | None = None
+
+    lignes: list[CategoryLedgerRowResponse]
+
+
+# ---------------------------------------------------------------------------
+# La vue d'ensemble : quel frais rentre mal, avant d'en avoir choisi un
+# ---------------------------------------------------------------------------
+
+
+class FeeCategoryOverviewRowResponse(BaseModel):
+    """Une categorie de frais, et comment elle rentre."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    category_id: int
+    category_name: str
+    #: Faux, le compte de depots n'a pas lieu d'etre affiche sur cette carte.
+    accepts_in_kind: bool
+    #: Un frais facultatif qui rentre mal n'appelle pas la meme relance qu'une
+    #: scolarite : l'ecran doit pouvoir le dire sans reposer la question.
+    is_mandatory: bool
+
+    #: Combien d'inscriptions du perimetre cette categorie facture, et combien
+    #: elle en laisse de cote. Ce sont des inscriptions, pas de l'argent : ces
+    #: deux chiffres ne se cloisonnent pas.
+    eleves_factures: int
+    eleves_sans_ligne: int
+
+    #: Ce qui est ENTRE : cloisonne par caisse, borne par la periode.
+    eleves_en_argent: int
+    total_en_argent: Decimal
+    depots_en_nature: int
+
+    #: L'outil de recouvrement, qui se lit sur tout l'argent recu. `null` sans
+    #: `payments:read:all` — absent plutot que faux, et jamais mis a zero : un
+    #: zero se lirait comme un solde.
+    eleves_restant_du: int | None = None
+    total_restant_du: Decimal | None = None
+    total_attendu: Decimal | None = None
+    #: De 0 a 100, une decimale — la convention du tableau de bord. `null`
+    #: aussi quand rien n'est attendu : un taux sans denominateur n'existe pas.
+    taux_recouvrement: float | None = None
+    #: Le nombre de lignes par etat, sur le perimetre entier.
+    compteurs: dict[str, int] | None = None
+
+
+class FeeCategoryOverviewResponse(BaseModel):
+    """Le perimetre lu, et une ligne par categorie facturee."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    academic_year_id: int
+    class_id: int | None = None
+    class_name: str
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+    #: Faux, chaque ligne ne porte que la caisse de l'appelant et tait le du.
+    consolide: bool
+
+    #: Les inscriptions ouvertes du perimetre : le denominateur commun a
+    #: toutes les categories. Ce n'est pas de l'argent, il ne se cloisonne pas.
+    effectif_perimetre: int
+
+    #: Dans l'ordre d'imputation configure par l'ecole, jamais dans celui du
+    #: taux : l'ordre des cartes ne doit pas dependre des droits du lecteur.
+    #: Trier par ce qui va mal est un geste d'ecran, sur des chiffres deja la.
+    categories: list[FeeCategoryOverviewRowResponse]

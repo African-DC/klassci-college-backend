@@ -99,6 +99,17 @@ async def get_bulletin(
 async def get_bulletin_pdf(
     bulletin_id: int,
     _read: None = audit_read("bulletin", param="bulletin_id"),
+    # Ce motif reste dans l'adresse, et ce n'est PAS un oubli.
+    #
+    # Il nomme une famille, et une URL finit dans les journaux d'acces du
+    # serveur : la creation d'inscription a donc deplace le sien dans le corps
+    # de la requete. Ici c'est impossible — ces routes sont des GET qui rendent
+    # un PDF, une requete GET n'a pas de corps, et les passer en POST casserait
+    # les liens que l'on ouvre directement dans un onglet.
+    #
+    # Le jour ou l'on voudra fermer ce trou : deux temps, un POST qui enregistre
+    # la derogation et un GET qui delivre. C'est un changement de la remise de
+    # documents, pas un detail de signature — a decider, pas a improviser.
     override_reason: str | None = Query(
         None,
         description="Motif de derogation. Requis pour delivrer malgre un impaye.",

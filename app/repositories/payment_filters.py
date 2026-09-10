@@ -14,10 +14,12 @@ les exports, sans qu'on ait à y repenser à chaque nouveau lecteur.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.academic import AcademicYear
 from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant, Payment, PaymentAllocation
 from app.models.user import Student
@@ -43,6 +45,9 @@ class PaymentFilters:
     search: str | None = None
     #: Categorie de frais, atteinte par les allocations du versement.
     fee_category_id: int | None = None
+    #: Annee scolaire de l'inscription creditee. Sans elle, le journal
+    #: melange les encaissements de toutes les annees et le collecté gonfle.
+    academic_year_id: int | None = None
 
 
 def apply_payment_filters[S: Select](stmt: S, filters: PaymentFilters) -> S:
@@ -107,4 +112,64 @@ def apply_payment_filters[S: Select](stmt: S, filters: PaymentFilters) -> S:
     return stmt
 
 
-__all__ = ["PaymentFilters", "apply_payment_filters"]
+async def belongs_to_year(db: AsyncSession, academic_year_id: int):
+    """Condition « ce versement relève de cette année scolaire ».
+
+    Une jointure interne sur l'inscription ferait disparaître des totaux tout
+    versement dont l'élève a été supprimé : le tableau de bord annoncerait
+    moins d'argent encaissé que le bordereau de caisse du même jour, et
+    personne ne saurait lequel croire.
+
+    On rattache donc le versement orphelin par sa date. C'est exact : une
+    somme encaissée le 12 novembre relève de l'année scolaire qui couvre le
+    12 novembre, que la fiche élève existe encore ou non.
+
+    Le rattachement à l'inscription passe par une sous-requête, pas une
+    jointure : la liste, le bandeau et l'export peuvent alors partager ce
+    prédicat sans se marcher sur un `JOIN enrollments` déjà posé ailleurs.
+    """
+    dates = (
+        await db.execute(
+            select(AcademicYear.start_date, AcademicYear.end_date).where(
+                AcademicYear.id == academic_year_id
+            )
+        )
+    ).one_or_none()
+
+    par_inscription = Payment.enrollment_id.in_(
+        select(Enrollment.id).where(Enrollment.academic_year_id == academic_year_id)
+    )
+    if dates is None:
+        return par_inscription
+
+    start = datetime.combine(dates.start_date, time.min)
+    # Borne haute exclusive au lendemain de la fin : un versement encaissé à
+    # 16 h le dernier jour ne doit pas tomber hors de l'année.
+    end = datetime.combine(dates.end_date, time.min) + timedelta(days=1)
+    return or_(
+        par_inscription,
+        and_(
+            Payment.enrollment_id.is_(None), Payment.created_at >= start, Payment.created_at < end
+        ),
+    )
+
+
+async def apply_payment_scope[S: Select](db: AsyncSession, stmt: S, filters: PaymentFilters) -> S:
+    """Les critères d'écran, plus l'année quand elle est posée.
+
+    L'année n'est pas un filtre comme les autres : sans elle, le journal
+    additionne des exercices. Elle vit pourtant dans le même objet, pour que
+    liste, bandeau et export ne puissent pas en avoir deux lectures.
+    """
+    stmt = apply_payment_filters(stmt, filters)
+    if filters.academic_year_id is not None:
+        stmt = stmt.where(await belongs_to_year(db, filters.academic_year_id))
+    return stmt
+
+
+__all__ = [
+    "PaymentFilters",
+    "apply_payment_filters",
+    "apply_payment_scope",
+    "belongs_to_year",
+]

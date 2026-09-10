@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.fee import FeeAssignmentScope, FeeEntitlementKind
+from app.models.fee import FeeAssignmentScope, FeeEnrollmentProfile, FeeEntitlementKind
 
 # ---------------------------------------------------------------------------
 # Contrepartie — ce que la famille recoit contre un frais
@@ -142,6 +142,9 @@ class FeeVariantCreate(BaseModel):
     # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que
     # pour les affectes ou que pour les non affectes.
     assignment_scope: FeeAssignmentScope | None = None
+    # `None` = ce tarif s'applique a tout le monde. Sinon il ne vaut que pour
+    # les nouveaux eleves ou que pour les anciens.
+    enrollment_profile: FeeEnrollmentProfile | None = None
 
 
 class FeeVariantUpdate(BaseModel):
@@ -161,6 +164,9 @@ class FeeVariantUpdate(BaseModel):
     # champ absent d'un champ envoye vide, sans quoi une portee posee par
     # erreur ne se retirerait plus jamais depuis l'ecran.
     assignment_scope: FeeAssignmentScope | None = None
+    # Meme regle et meme piege que la portee ci-dessus : remettre ce champ a
+    # `None` doit rendre le tarif applicable a tout le monde.
+    enrollment_profile: FeeEnrollmentProfile | None = None
 
 
 class FeeVariantResponse(BaseModel):
@@ -176,6 +182,7 @@ class FeeVariantResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     assignment_scope: str | None = None
+    enrollment_profile: str | None = None
 
 
 class FeeVariantListResponse(BaseModel):
@@ -204,27 +211,83 @@ class _FeePropagationImpact(BaseModel):
     academic_year_id: int
     #: Le montant du tarif tel qu'il est aujourd'hui : celui qui sera recopie.
     amount: Decimal
-    #: Somme des quatre paquets. Une categorie ne produisant qu'une ligne par
+    #: Somme des six paquets. Une categorie ne produisant qu'une ligne par
     #: inscription, ce total est aussi le nombre d'inscriptions touchees.
     enrollments_concerned: int
     fees_already_up_to_date: int
     fees_kept_with_payments: int
     fees_waived: int
-    #: Ecart total de dette en francs, negatif quand le tarif baisse.
+    #: Lignes reglees par un depot d'article. Comptees a part de `fees_waived`
+    #: parce qu'un depot n'est pas une exoneration DRENA, mais comptees quand
+    #: meme : sans elles la somme des paquets serait inferieure au total.
+    fees_in_kind: int
+    #: Ecart de dette en francs, negatif quand le tarif baisse. Il ne chiffre
+    #: JAMAIS que ce que l'appel ecrit : sur l'apercu et sur une repercussion
+    #: sans creation, les seules reecritures ; avec `create_missing`, les
+    #: reecritures plus le montant entier de chaque ligne creee. Ce que les
+    #: lignes manquantes couteraient, quand on ne les cree pas, est annonce a
+    #: part dans `message` : les fondre ici ferait lire un chiffre que la
+    #: comptabilite ne retrouverait jamais.
     debt_delta: Decimal
     message: str
+
+
+class FeePropagationRequest(BaseModel):
+    """Ce que l'ecole demande en confirmant la repercussion.
+
+    Deux gestes distincts derriere un meme bouton, et le second se demande.
+    """
+
+    #: `false`, le defaut : on ne fait que reecrire les lignes qui portent deja
+    #: ce tarif. Corriger le prix de la tenue ne cree alors aucune dette.
+    #: `true` : les inscriptions que ce tarif doit atteindre et qui ne portent
+    #: aucune ligne de sa categorie en recoivent une.
+    create_missing: bool = False
 
 
 class FeePropagationPreview(_FeePropagationImpact):
     """Ce qui se passerait. Rien n'est ecrit."""
 
     fees_to_update: int
+    #: Les inscriptions auxquelles ce tarif doit une ligne et qui n'en portent
+    #: aucune de sa categorie : l'ecole vient d'ajouter un tarif que les eleves
+    #: deja inscrits n'ont jamais recu. Compte dans TOUS les cas, creation
+    #: demandee ou non : l'ecole doit voir l'occasion meme si elle ne la saisit
+    #: pas ce jour-la.
+    fees_to_create: int
 
 
 class FeePropagationResult(_FeePropagationImpact):
-    """Ce qui a ete ecrit : le compte des lignes reellement reecrites."""
+    """Ce qui a ete ecrit : le compte des lignes reellement reecrites et creees."""
 
     fees_updated: int
+    #: Zero quand `create_missing` valait `false` : rien n'a ete cree, et le
+    #: total `enrollments_concerned` ne compte alors pas ces inscriptions-la.
+    fees_created: int
+
+
+class MandatoryBasketLine(BaseModel):
+    """Le socle obligatoire d'un niveau pour un public donné."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    level_id: int
+    #: `affecte` ou `non_affecte`.
+    assignment_scope: str
+    #: `nouveau`, `ancien`, ou `null` pour « profil non tranché ».
+    enrollment_profile: str | None
+    total: Decimal
+
+
+class MandatoryBasketResponse(BaseModel):
+    """Toutes les combinaisons d'un coup, six par niveau.
+
+    L'ecran de simulation bascule entre publics pendant que la personne
+    reflechit : lui rendre le tableau entier lui evite un aller-retour par
+    bascule, et lui evite surtout de recalculer l'arbitrage lui-meme.
+    """
+
+    items: list[MandatoryBasketLine]
 
 
 # ---------------------------------------------------------------------------
@@ -278,3 +341,32 @@ class OptionalFeeOptionListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+# ---------------------------------------------------------------------------
+# Arriérés — ce qui reste dû sur les autres exercices
+# ---------------------------------------------------------------------------
+
+
+class ArrearsOutsideYear(BaseModel):
+    """Ce qu'un élève doit encore sur les exercices autres que celui affiché.
+
+    Deux réponses portent ces champs — celle qui prépare une réinscription et
+    le résumé des frais du portail parent — et les héritent d'ici plutôt que
+    de les redéclarer chacune. Deux déclarations finiraient par porter deux
+    noms, puis deux règles de masquage, pour un seul et même montant.
+
+    `None` n'est pas zéro. Un montant à `None` dit « vous n'avez pas le droit
+    de lire cette somme » ; un zéro dirait « cette famille ne doit rien
+    ailleurs ». Qui voit quoi se décide dans `app/services/finance_visibility`,
+    et le calcul dans `app/services/fees_paid`.
+
+    Les deux champs valent `None` par défaut : une réponse qui oublierait de
+    les remplir masque, elle ne publie pas.
+    """
+
+    #: Reste dû sur les autres exercices. `None` sans `payments:read`.
+    fees_arrears_other_years: Decimal | None = None
+    #: L'alerte seule, sans somme : ce que voit `payments:status:read`.
+    #: `None` quand l'appelant n'a droit ni aux montants ni à l'état.
+    has_arrears_other_years: bool | None = None

@@ -2,12 +2,25 @@
 
 Les endpoints paiements `/enrollments/{id}/payments` sont dans
 `enrollment_payments.py` (séparation par sous-domaine, anti-god-code).
+
+Les trois créations d'inscription résolvent ici, et ici seulement, ce que
+l'appelant a le droit de faire face à une ardoise d'un exercice révolu :
+trois permissions lues dans la matrice, jamais un rôle. Le service reçoit le
+résultat et n'a rien à demander à personne.
 """
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    has_permission,
+    require_permission,
+)
 from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
     BulkValidateRequest,
@@ -19,13 +32,65 @@ from app.schemas.enrollment import (
     EnrollmentWithStudentCreate,
     FeeVariantResponse,
     InKindDepositResponse,
+    InKindRosterResponse,
+    InKindRosterRowResponse,
+    NewStudentSuggestionResponse,
     ReEnrollmentCreate,
     SubscribeOptionRequest,
 )
-from app.services import archive_service, enrollment_fees, enrollment_service
+from app.services import (
+    archive_service,
+    enrollment_fees,
+    enrollment_history,
+    enrollment_service,
+    fees_paid,
+)
 from app.services.enrollment_archive import ENROLLMENT_KIND
+from app.services.enrollment_arrears import ArrearsClearance
+from app.services.finance_visibility import FinanceView
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
+
+
+def arrears_clearance() -> Any:
+    """Ce que l'appelant peut faire, et voir, d'une ardoise d'un exercice révolu.
+
+    Trois droits, tous lus dans la matrice :
+
+    - `payments:read` — le montant apparaît dans le refus.
+    - `payments:status:read` — un booléen, et rien de plus : on valide un
+      dossier sans apprendre la situation économique du foyer.
+    - `enrollments:arrears:override` — le droit de passer outre, semé par la
+      migration `0080` et porté par la direction seule tant qu'une école n'en
+      décide pas autrement.
+
+    `has_permission` et non `require_permission` : ces droits ne décident pas
+    de l'accès à la route — la secrétaire inscrit sans lire les paiements — ils
+    en décident l'ÉTENDUE. C'est exactement le cas que cette dépendance sert
+    déjà pour le journal des versements.
+
+    **Le motif ne passe pas par ici** : il vient du corps de la requête, et
+    chaque route le greffe par `clearance.avec_motif(data.override_reason)`.
+    Une dépendance est résolue avant que le corps ne soit lu, donc le motif
+    n'aurait pu venir que de l'adresse — or il nomme une famille, et une URL
+    finit dans les journaux d'accès du serveur et chez tous les
+    intermédiaires. Le dépôt porte déjà cette règle, écrite dans
+    `tests/test_enrollment_purge.py`.
+    """
+
+    async def _resolve(
+        may_read_amounts: bool = has_permission("payments:read"),
+        may_read_status: bool = has_permission("payments:status:read"),
+        may_override: bool = has_permission("enrollments:arrears:override"),
+    ) -> ArrearsClearance:
+        return ArrearsClearance(
+            view=FinanceView.of(
+                may_read_payments=may_read_amounts, may_read_status=may_read_status
+            ),
+            may_override=may_override,
+        )
+
+    return Depends(_resolve)
 
 
 @router.get("", response_model=EnrollmentListResponse)
@@ -58,10 +123,21 @@ async def create_enrollment(
     data: EnrollmentCreate,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("enrollments:create"),
+    arrears: ArrearsClearance = arrears_clearance(),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
-    """Crée une nouvelle inscription."""
-    return await enrollment_service.create_enrollment(db, data, created_by=current_user.user_id)
+    """Crée une nouvelle inscription.
+
+    Répond 402 quand l'établissement bloque au-delà d'un seuil et que l'élève
+    traîne une dette d'un exercice révolu. 402 et non 403 : « il faut payer »
+    n'est pas « vous n'avez pas le droit ».
+    """
+    return await enrollment_service.create_enrollment(
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
+    )
 
 
 @router.post(
@@ -73,11 +149,20 @@ async def create_enrollment_with_student(
     data: EnrollmentWithStudentCreate,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("enrollments:create"),
+    arrears: ArrearsClearance = arrears_clearance(),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
-    """Cree un eleve + parent optionnel + inscription en une seule operation."""
+    """Cree un eleve + parent optionnel + inscription en une seule operation.
+
+    Gardee par la meme porte que `POST /enrollments`, et pas par habitude : un
+    controle sur une seule des deux ne servirait a rien, c'est ici qu'une
+    reinscription saisie comme un nouvel eleve passerait.
+    """
     return await enrollment_service.create_enrollment_with_student(
-        db, data, created_by=current_user.user_id
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
     )
 
 
@@ -90,10 +175,104 @@ async def re_enroll_student(
     data: ReEnrollmentCreate,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("enrollments:create"),
+    arrears: ArrearsClearance = arrears_clearance(),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
-    """Re-inscrit un eleve existant dans une nouvelle classe/annee."""
-    return await enrollment_service.re_enroll_student(db, data, created_by=current_user.user_id)
+    """Re-inscrit un eleve existant dans une nouvelle classe/annee.
+
+    Le chemin le plus exposé du lot : c'est la réinscription qui fait sortir
+    une ardoise de l'exercice précédent des deux portails, puisque tous deux
+    lisent la dernière inscription de l'élève.
+    """
+    return await enrollment_service.re_enroll_student(
+        db,
+        data,
+        created_by=current_user.user_id,
+        arrears=arrears.avec_motif(data.override_reason),
+    )
+
+
+@router.get(
+    "/new-student-suggestion",
+    response_model=NewStudentSuggestionResponse,
+    summary="Suggest whether a student is new for a given academic year",
+)
+async def suggest_new_student(
+    student_id: int = Query(..., description="Eleve qu'on s'apprete a inscrire"),
+    academic_year_id: int = Query(
+        ...,
+        description="Année pour laquelle on inscrit : l'antériorité se juge par rapport à elle.",
+    ),
+    _: None = require_permission("enrollments:create"),
+    may_read_amounts: bool = has_permission("payments:read"),
+    may_read_status: bool = has_permission("payments:status:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> NewStudentSuggestionResponse:
+    """Ce que la case « nouvel élève » doit afficher avant que la secrétaire ne tranche.
+
+    Trois réponses possibles, et `null` en est une : tant que l'établissement
+    n'a pas déclaré ses années passées exploitables dans ses réglages, rien ne
+    permet de dire qui est nouveau. La phrase le lui explique, et elle coche
+    elle-même.
+
+    Même droit que la création d'une inscription : cette suggestion ne se lit
+    que pour remplir ce formulaire-là. Elle vit avec les inscriptions et non
+    dans le routeur d'administration : son sujet est l'inscription, et c'est
+    la seule raison qui doit décider où vit un endpoint.
+
+    Le chemin la place AVANT `/{enrollment_id}` : sans cela, FastAPI ferait
+    correspondre `new-student-suggestion` au paramètre d'identifiant et
+    rendrait une erreur de validation.
+
+    Elle rend aussi ce que l'élève doit encore sur les AUTRES exercices. C'est
+    le dernier écran où quelqu'un regarde le dossier avant que la
+    réinscription ne fasse basculer les portails et la fiche élève sur la
+    nouvelle année : une dette qu'on ne voit pas ici ne se reverra plus.
+
+    Le droit de la lire ne se déduit pas de celui d'inscrire : le secrétariat
+    porte `payments:read`, l'éducateur `payments:status:read`, et les deux
+    montent des inscriptions. Les deux booléens se résolvent donc ici et se
+    passent au service, qui ne connaît ni rôle ni permission.
+    """
+    suggested, reason = await enrollment_history.suggest_new_student(
+        db, student_id, academic_year_id
+    )
+    arrears = await fees_paid.arrears_outside_year(
+        db,
+        student_id=student_id,
+        academic_year_id=academic_year_id,
+        finance=FinanceView.of(may_read_payments=may_read_amounts, may_read_status=may_read_status),
+    )
+    return NewStudentSuggestionResponse(suggested=suggested, reason=reason, **arrears)
+
+
+@router.get(
+    "/in-kind-roster",
+    response_model=InKindRosterResponse,
+    summary="La classe entiere, pour la saisie en lot du profil et des depots",
+)
+async def in_kind_roster(
+    class_id: int = Query(..., description="Classe sur laquelle l'educateur travaille"),
+    academic_year_id: int = Query(..., description="Annee de la classe"),
+    _: None = require_permission("enrollments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> InKindRosterResponse:
+    """Ce qu'il reste a renseigner sur chaque eleve d'une classe.
+
+    Une classe a la fois, jamais toute l'ecole : c'est l'unite de travail de
+    l'educateur, sa liste a la main. En un appel, parce que soixante-dix-huit
+    fiches ouvertes une par une, c'est un travail qui ne se termine pas.
+
+    Chaque ligne porte le profil tel qu'il est, `null` compris, et seulement
+    les articles que cette inscription-la peut recevoir. Une case affichee sur
+    un frais que l'eleve ne doit pas serait une invitation a se tromper.
+    """
+    lignes = await enrollment_fees.in_kind_roster(
+        db, class_id=class_id, academic_year_id=academic_year_id
+    )
+    return InKindRosterResponse(
+        items=[InKindRosterRowResponse.model_validate(ligne) for ligne in lignes]
+    )
 
 
 @router.get("/fee-variants", response_model=list[FeeVariantResponse])
@@ -106,11 +285,36 @@ async def get_applicable_fee_variants(
             "Class étant universel (refactor #97), l'AY n'est plus inférée depuis la classe."
         ),
     ),
+    assignment_status: str | None = Query(
+        None,
+        description="Statut d'affectation de l'inscription, pour resoudre les tarifs qui en dependent.",
+    ),
+    is_new_student: bool | None = Query(
+        None,
+        description=(
+            "Profil de l'inscription. Omis, l'apercu ne montre que les tarifs "
+            "sans profil, comme une inscription non tranchee."
+        ),
+    ),
     _: None = require_permission("enrollments:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> list[FeeVariantResponse]:
-    """Retourne les fee variants applicables pour une classe donnee."""
-    return await enrollment_fees.get_applicable_fee_variants(db, class_id, academic_year_id)
+    """Retourne les fee variants applicables pour une classe donnee.
+
+    Les deux dimensions sont passees au service, et c'est le point de cet
+    endpoint : sans elles il resout les tarifs comme une inscription dont on
+    ne sait rien, donc en ecartant tout tarif porteur d'une portee ou d'un
+    profil. Le guichet lisait alors une facture ou la chemise cartonnee
+    n'apparaissait jamais, alors que l'inscription creee juste apres la
+    portait. L'apercu et la generation reelle doivent annoncer la meme chose.
+    """
+    return await enrollment_fees.get_applicable_fee_variants(
+        db,
+        class_id,
+        academic_year_id,
+        assignment_status=assignment_status,
+        is_new_student=is_new_student,
+    )
 
 
 @router.get("/{enrollment_id}", response_model=EnrollmentResponse)
@@ -141,6 +345,44 @@ async def mark_in_kind_deposit(
             enrollment_id=enrollment_id,
             fee_id=fee_id,
             deposited_by=current_user.user_id,
+        )
+    await db.commit()
+    return InKindDepositResponse(
+        id=fee.id,
+        status=fee.status,
+        deposited_at=fee.deposited_at,
+        deposited_by_user_id=fee.deposited_by_user_id,
+    )
+
+
+@router.delete(
+    "/{enrollment_id}/fees/{fee_id}/in-kind-deposit",
+    response_model=InKindDepositResponse,
+    summary="Annuler un depot en nature pose par erreur",
+)
+async def cancel_in_kind_deposit(
+    enrollment_id: int,
+    fee_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("enrollments:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> InKindDepositResponse:
+    """La ligne redevient due. 409 si elle n'etait pas deposee.
+
+    Marquer un article depose retire la ligne du du, et l'application n'offrait
+    aucun retour : un depot pose par erreur a deja du etre corrige a la main
+    dans la base. Avec une saisie en lot, ou l'educateur coche quarante cases
+    d'affilee, ce manque n'etait plus tenable.
+
+    Rend le meme corps que la pose : l'ecran lit un seul contrat, quel que
+    soit le sens du geste.
+    """
+    async with db.begin_nested():
+        fee = await enrollment_fees.cancel_in_kind_deposit(
+            db,
+            enrollment_id=enrollment_id,
+            fee_id=fee_id,
+            cancelled_by=current_user.user_id,
         )
     await db.commit()
     return InKindDepositResponse(

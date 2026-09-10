@@ -9,6 +9,12 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 
+#: « Champ absent », a distinguer d'un `None` envoye exprès. Sur
+#: `is_new_student`, `None` est une valeur metier — « on n'a pas tranche » —
+#: et non une absence : sans cette sentinelle, une decision posee par erreur
+#: ne se retirerait plus jamais depuis l'ecran.
+UNSET: object = object()
+
 
 async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollment | None:
     """Retourne une inscription par ID avec ses relations chargées."""
@@ -51,7 +57,13 @@ async def list_enrollments(
         base = base.where(Enrollment.class_id == class_id)
     if student_id is not None:
         base = base.where(Enrollment.student_id == student_id)
-    if status is not None:
+    if status == "a_valider":
+        base = base.where(
+            Enrollment.status.in_(
+                (EnrollmentStatus.PROSPECT.value, EnrollmentStatus.EN_VALIDATION.value)
+            )
+        )
+    elif status is not None:
         base = base.where(Enrollment.status == status)
     if academic_year_id is not None:
         base = base.where(Enrollment.academic_year_id == academic_year_id)
@@ -82,6 +94,7 @@ async def create_enrollment(
     notes: str | None,
     assignment_status: str | None = None,
     assignment_decision_number: str | None = None,
+    is_new_student: bool | None = None,
 ) -> Enrollment:
     """Crée une inscription et la flush pour obtenir l'ID."""
     enrollment = Enrollment(
@@ -92,6 +105,7 @@ async def create_enrollment(
         notes=notes,
         assignment_status=assignment_status,
         assignment_decision_number=assignment_decision_number,
+        is_new_student=is_new_student,
     )
     db.add(enrollment)
     await db.flush()
@@ -104,7 +118,15 @@ async def create_enrollment_fee(
     enrollment_id: int,
     fee_variant_id: int,
 ) -> EnrollmentFee:
-    """Crée un EnrollmentFee en récupérant le montant depuis FeeVariant."""
+    """Crée un EnrollmentFee en récupérant le montant depuis FeeVariant.
+
+    Ne teste AUCUNE dimension du tarif : ni la série, ni le statut
+    d'affectation, ni le profil d'élève. Un appelant qui reçoit un
+    `fee_variant_id` d'un client passe donc par
+    `enrollment_fees.create_explicit_enrollment_fee`, qui pose le garde avant
+    d'appeler d'ici. Écrire directement ici depuis un corps de requête
+    contournerait l'invariant que tout le reste du code tient.
+    """
     variant_stmt = select(FeeVariant).where(FeeVariant.id == fee_variant_id)
     variant = (await db.execute(variant_stmt)).scalar_one_or_none()
     if variant is None:
@@ -132,6 +154,9 @@ async def update_enrollment(
     status: str | None = None,
     notes: str | None = None,
     class_id: int | None = None,
+    is_new_student: object = UNSET,
+    assignment_status: object = UNSET,
+    assignment_decision_number: object = UNSET,
 ) -> Enrollment:
     """Met à jour les champs modifiables d'une inscription."""
     if status is not None:
@@ -140,6 +165,16 @@ async def update_enrollment(
         enrollment.notes = notes
     if class_id is not None:
         enrollment.class_id = class_id
+    # Le seul champ dont `None` est une valeur, pas une absence : c'est ce qui
+    # permet de remettre une inscription à « on n'a pas tranché ».
+    if is_new_student is not UNSET:
+        enrollment.is_new_student = is_new_student
+    # Même sentinelle : `None` veut dire « non renseigné », pas « laisser tel
+    # quel ». Sans ça, corriger l'affectation depuis la fiche n'écrivait rien.
+    if assignment_status is not UNSET:
+        enrollment.assignment_status = assignment_status
+    if assignment_decision_number is not UNSET:
+        enrollment.assignment_decision_number = assignment_decision_number
     await db.flush()
     return enrollment
 

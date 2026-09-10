@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+from app.core.uploads import PHOTOS
 from app.schemas.profile import (
     MyProfileResponse,
     MyProfileUpdate,
@@ -16,7 +17,7 @@ from app.schemas.profile import (
     PhotoUrlResponse,
 )
 from app.services import notification_pref_service, profile_service
-from app.utils.photo_upload import save_photo_upload
+from app.utils.photo_upload import save_image_upload
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -49,7 +50,7 @@ async def upload_my_photo(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> PhotoUrlResponse:
     """L'enseignant / le personnel téléverse sa propre photo."""
-    url = await save_photo_upload(file, prefix=f"u{current_user.user_id}")
+    url = await save_image_upload(file, kind=PHOTOS, prefix=f"u{current_user.user_id}")
     saved = await profile_service.set_my_photo(db, current_user.user_id, url)
     return PhotoUrlResponse(photo_url=saved)
 

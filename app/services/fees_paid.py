@@ -10,11 +10,15 @@ Le calcul vit ici, à un seul endroit, parce qu'un montant dû ne peut pas
 valoir trois sommes différentes selon l'écran qui l'affiche.
 """
 
+from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.services.finance_visibility import FinanceView, redact
 
 if TYPE_CHECKING:
     from app.models.fee import Payment
@@ -32,6 +36,36 @@ def _par_frais(rows: object) -> dict[int, Decimal]:
     return {int(fee_id): Decimal(str(total or 0)) for fee_id, total in rows.all()}  # type: ignore[attr-defined]
 
 
+def _verse_par_frais(*conditions: object):
+    """Le socle commun : les allocations encaissées, groupées par frais.
+
+    Deux lectures s'en servent — un élève, une inscription. Ce qu'elles
+    partagent vraiment, et qui ne doit exister qu'une fois, c'est le
+    filtre `completed` : la réversibilité d'une annulation ne tient que parce
+    que tout total joint `Payment` et écarte ce qui n'est pas encaissé, et il
+    suffirait d'une requête écrite sans ce filtre pour ressusciter de l'argent
+    rendu. `tests/services/test_payment_cancel_reversal.py` existe pour ça.
+
+    **La jointure sur l'inscription n'est pas ici**, et c'est délibéré. Lire
+    les versements d'une inscription se fait par `EnrollmentFee.enrollment_id`,
+    sans jamais toucher la table des inscriptions ; la poser pour tout le monde
+    donnerait à cette lecture une dépendance qu'elle n'a pas. La lecture qui a
+    besoin de l'inscription l'ajoute elle-même, en une ligne visible.
+    """
+    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+
+    return (
+        select(
+            PaymentAllocation.enrollment_fee_id,
+            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+        )
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .where(Payment.status == PaymentStatus.COMPLETED.value, *conditions)
+        .group_by(PaymentAllocation.enrollment_fee_id)
+    )
+
+
 async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int, Decimal]:
     """Montant encaissé sur chaque frais de l'élève, indexé par frais.
 
@@ -39,21 +73,12 @@ async def paid_by_enrollment_fee(db: AsyncSession, student_id: int) -> dict[int,
     coûterait une requête par frais.
     """
     from app.models.enrollment import Enrollment
-    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+    from app.models.fee import EnrollmentFee
 
     stmt = (
-        select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
-        )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        _verse_par_frais()
         .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
-        .where(
-            Enrollment.student_id == student_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
-        )
-        .group_by(PaymentAllocation.enrollment_fee_id)
+        .where(Enrollment.student_id == student_id)
     )
     return _par_frais(await db.execute(stmt))
 
@@ -65,20 +90,277 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
     redoublé a deux inscriptions, et mélanger leurs versements ferait
     apparaître comme soldée une année qui ne l'est pas.
     """
-    from app.models.fee import EnrollmentFee, Payment, PaymentAllocation, PaymentStatus
+    from app.models.fee import EnrollmentFee
+
+    return _par_frais(
+        await db.execute(_verse_par_frais(EnrollmentFee.enrollment_id == enrollment_id))
+    )
+
+
+async def remaining_outside_year(
+    db: AsyncSession, *, student_id: int, academic_year_id: int | None
+) -> Decimal:
+    """Ce qu'un élève doit encore, hors d'un exercice donné.
+
+    L'angle mort que cette lecture éclaire : les portails et la fiche d'un
+    élève montrent son inscription la plus récente. Le jour où une famille se
+    réinscrit, ce qu'elle devait sur l'année précédente sort de tous les
+    écrans à la fois — non parce qu'un calcul devient faux, mais parce que
+    plus personne ne le regarde. On le somme donc ici, sur les autres années.
+
+    `academic_year_id` est l'exercice qu'on RETIRE : celui que l'écran affiche
+    déjà. Ce nombre vient s'ajouter à ce qu'il montre, il ne doit pas le
+    recompter. `None` ne retire rien, et c'est le cas qui compte le plus : un
+    élève pas encore réinscrit n'a aucune année en cours, et tout ce qu'il
+    doit est ailleurs.
+
+    Ce qui ne compte pas, et pourquoi :
+
+    - une inscription refusée ou annulée — `CLOSED_STATUSES` dit déjà que sa
+      dette est close, et la relancer ferait réapparaître un impayé sur un
+      dossier fermé ;
+    - une ligne exonérée ou déposée en nature — elle n'est plus due en argent,
+      et `cash_remaining` porte cette règle pour tout le projet ;
+    - un versement annulé ou encore en attente — le filtre `completed` vit
+      dans `_verse_par_frais`, et le versé se lit par `paid_by_enrollment_fee`,
+      bornée à l'élève et à aucune caisse : ce qui reste dû se calcule sur tout
+      l'argent reçu, quel que soit le guichet où la famille a payé.
+
+    Le périmètre est celui des frais **encore dus en argent**, obligatoires ou
+    non — pas celui de l'échéancier. Une tenue impayée est de l'argent que la
+    famille doit à l'école, et c'est déjà le périmètre du `total_due` que le
+    portail affiche juste au-dessus de ce chiffre ; en retenir un autre ferait
+    un écran qui se contredit lui-même.
+
+    Le reste se plafonne à zéro **ligne par ligne**, comme partout ailleurs :
+    un trop-perçu sur une année n'éponge pas la dette d'une autre, sans quoi
+    l'école croirait soldé un exercice qui ne l'est pas.
+    """
+    par_inscription = await remaining_by_enrollment(db, student_id=student_id)
+    if academic_year_id is None:
+        return sum(par_inscription.values(), Decimal("0"))
+
+    from app.models.enrollment import Enrollment
+
+    affichees = {
+        int(i)
+        for (i,) in (
+            await db.execute(
+                select(Enrollment.id).where(
+                    Enrollment.student_id == student_id,
+                    Enrollment.academic_year_id == academic_year_id,
+                )
+            )
+        ).all()
+    }
+    return sum(
+        (reste for eid, reste in par_inscription.items() if eid not in affichees),
+        Decimal("0"),
+    )
+
+
+async def remaining_by_enrollment(db: AsyncSession, *, student_id: int) -> dict[int, Decimal]:
+    """Ce qu'un élève doit encore, inscription par inscription.
+
+    **Le seul endroit qui dit ce qu'une famille doit.** Deux lectures s'en
+    servent, et elles ne cadrent pas le même ensemble d'années : l'une retire
+    l'exercice déjà affiché, l'autre ne garde que les exercices antérieurs.
+    Le cadrage leur appartient ; le montant, non.
+
+    Elles ont commencé par le calculer chacune de son côté — l'une sur tous les
+    frais encore dus, l'autre sur les seuls frais obligatoires. Le même
+    assistant de réinscription annonçait alors une dette dans son bandeau et en
+    opposait une autre dans son refus, et le seuil que la direction avait fixé
+    en lisant le premier ne mordait pas là où elle croyait. Un montant qui vaut
+    deux sommes selon l'écran est le défaut que ce module existe pour empêcher.
+
+    Le périmètre est celui des frais **encore dus en argent, obligatoires ou
+    non** : une tenue impayée est de l'argent que la famille doit, et c'est
+    déjà celui du `total_due` que le portail affiche. L'échéancier, lui, ne
+    couvre que l'obligatoire — c'est une autre question, et elle a sa propre
+    lecture.
+
+    Le reste se plafonne à zéro **ligne par ligne** : un trop-perçu sur un
+    frais n'éponge pas la dette d'un autre, ni celle d'un autre exercice.
+
+    Une inscription refusée ou annulée ne figure pas : `CLOSED_STATUSES` dit
+    que sa dette est close, et la relancer ferait réapparaître un impayé sur un
+    dossier fermé. Une inscription sans reste dû non plus — la lire dans le
+    résultat ferait croire à une dette de zéro là où il n'y a rien.
+    """
+    from app.models.enrollment import CLOSED_STATUSES, Enrollment
+    from app.models.fee import EnrollmentFee, cash_remaining
 
     stmt = (
         select(
-            PaymentAllocation.enrollment_fee_id,
-            func.coalesce(func.sum(PaymentAllocation.amount), 0),
+            EnrollmentFee.enrollment_id,
+            EnrollmentFee.id,
+            EnrollmentFee.status,
+            EnrollmentFee.amount,
         )
-        .join(Payment, Payment.id == PaymentAllocation.payment_id)
-        .join(EnrollmentFee, EnrollmentFee.id == PaymentAllocation.enrollment_fee_id)
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
         .where(
-            EnrollmentFee.enrollment_id == enrollment_id,
-            Payment.status == PaymentStatus.COMPLETED.value,
+            Enrollment.student_id == student_id,
+            Enrollment.status.not_in(CLOSED_STATUSES),
         )
-        .group_by(PaymentAllocation.enrollment_fee_id)
+    )
+    lignes = (await db.execute(stmt)).all()
+    if not lignes:
+        return {}
+
+    verse = await paid_by_enrollment_fee(db, student_id)
+    par_inscription: dict[int, Decimal] = {}
+    for enrollment_id, fee_id, statut, montant in lignes:
+        reste = cash_remaining(statut, montant, verse.get(int(fee_id), Decimal("0")))
+        if reste:
+            cle = int(enrollment_id)
+            par_inscription[cle] = par_inscription.get(cle, Decimal("0")) + reste
+    return par_inscription
+
+
+async def arrears_outside_year(
+    db: AsyncSession,
+    *,
+    student_id: int,
+    academic_year_id: int | None,
+    finance: FinanceView,
+) -> dict:
+    """La même somme, rédigée selon ce que l'appelant a le droit de lire.
+
+    Composée ici, une fois, parce que deux écrans la publient : la réponse qui
+    prépare une réinscription et le résumé des frais que lit la famille. Les
+    recomposer chacun de son côté ferait d'abord diverger le nom des champs,
+    puis la règle de masquage.
+
+    Trois lectures, et non deux :
+
+    - `payments:read` — le montant, et l'alerte ;
+    - `payments:status:read` seul — l'alerte, sans aucune somme ;
+    - ni l'un ni l'autre — `None` partout.
+
+    Le secrétariat et la caisse portent `payments:read` **sans**
+    `payments:status:read` : les deux ensembles ne s'emboîtent pas. Un garde
+    écrit « si l'état est permis alors l'alerte » priverait donc le guichet de
+    tout affichage. `FinanceView.of` fait déjà découler l'état du droit aux
+    montants — on s'appuie dessus au lieu de retrancher ce cas ici, sans quoi
+    la règle vaudrait deux choses selon l'endroit où on la lit.
+
+    Le montant masqué vaut `None`, jamais `0` : un zéro se lirait « cette
+    famille ne doit rien ailleurs », et c'est exactement le mensonge que cet
+    écran existe pour ne plus dire.
+    """
+    montant = await remaining_outside_year(
+        db, student_id=student_id, academic_year_id=academic_year_id
+    )
+    return redact(
+        {
+            "fees_arrears_other_years": montant,
+            "has_arrears_other_years": montant > 0 if finance.status else None,
+        },
+        finance,
+    )
+
+
+async def paid_by_fee_ids(
+    db: AsyncSession,
+    *,
+    fee_ids: Sequence[int],
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné à des frais nommés, et éventuellement à une caisse.
+
+    C'est la lecture dont a besoin un document qui regarde une catégorie de
+    frais sur toute une école : il connaît déjà ses lignes, il veut leur versé
+    en une requête plutôt qu'une par élève.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT.**
+    Un versement a une date et se borne : « combien est rentré en octobre »
+    est une question sur des événements. Ce qu'une famille doit encore vaut à
+    l'instant où on le lit, et le borner n'aurait aucun sens — c'est le même
+    appel, sans `date_from`, sans `date_to` et sans `received_by`.
+
+    `received_by` restreint à une caisse. Il n'a de sens que sur l'événement :
+    ce qui reste dû se calcule sur tout l'argent reçu, quel que soit le
+    guichet, sans quoi on annoncerait une dette chez une famille qui a payé au
+    guichet d'à côté.
+
+    Le filtre `completed` n'est pas retapé ici : il vit dans
+    `_verse_par_frais`, avec tous les autres totaux de ce module. Ce calcul a
+    déjà existé en double, recopié dans le service qui compose le point par
+    catégorie, et c'est exactement ainsi qu'un montant finit par valoir deux
+    sommes différentes selon l'écran qui l'affiche.
+
+    Aucun frais demandé, aucune requête : un `IN ()` vide part en base pour
+    rien, et certains moteurs le refusent.
+    """
+    from app.models.fee import Payment, PaymentAllocation
+
+    if not fee_ids:
+        return {}
+
+    conditions: list[object] = [PaymentAllocation.enrollment_fee_id.in_(list(fee_ids))]
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    return _par_frais(await db.execute(_verse_par_frais(*conditions)))
+
+
+async def paid_by_fee_for_scope(
+    db: AsyncSession,
+    *,
+    academic_year_id: int,
+    class_id: int | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    received_by: int | None = None,
+) -> dict[int, Decimal]:
+    """Le même calcul, borné par un périmètre plutôt que par une liste de frais.
+
+    `paid_by_fee_ids` demande les identifiants ; c'est le bon geste quand
+    l'appelant regarde une catégorie et tient déjà ses quelques centaines de
+    lignes. La vue d'ensemble, elle, regarde TOUTES les catégories d'une année
+    à la fois : l'école entière fois ses huit catégories fait des milliers
+    d'identifiants dans un `IN (...)`, que certains moteurs refusent et
+    qu'aucun n'exécute bien. Le périmètre s'écrit alors en jointure.
+
+    La jointure sur l'inscription est posée ici et pas dans `_verse_par_frais`,
+    comme le dit ce module : la lecture qui a besoin de l'inscription l'ajoute
+    elle-même, en une ligne visible.
+
+    Les inscriptions closes sont écartées, exactement comme le fait le document
+    qui lit ce résultat. Les garder ferait entrer dans un total l'argent
+    d'inscriptions annulées, que plus aucun effectif ne compte.
+
+    **La fenêtre borne un ÉVÉNEMENT ; l'appeler sans fenêtre lit un ÉTAT** —
+    même distinction que `paid_by_fee_ids`, et même raison : `received_by` n'a
+    de sens que sur l'événement.
+    """
+    from app.models.enrollment import CLOSED_STATUSES, Enrollment
+    from app.models.fee import EnrollmentFee, Payment
+
+    conditions: list[object] = [
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.status.not_in(CLOSED_STATUSES),
+    ]
+    if class_id is not None:
+        conditions.append(Enrollment.class_id == class_id)
+    if date_from is not None:
+        conditions.append(Payment.created_at >= date_from)
+    if date_to is not None:
+        conditions.append(Payment.created_at < date_to)
+    if received_by is not None:
+        conditions.append(Payment.received_by == received_by)
+
+    stmt = (
+        _verse_par_frais()
+        .join(Enrollment, Enrollment.id == EnrollmentFee.enrollment_id)
+        .where(*conditions)
     )
     return _par_frais(await db.execute(stmt))
 

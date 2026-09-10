@@ -9,6 +9,31 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille *(secrétariat, éducateur, parent)* (#446)
+- Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme *(éducateur, directeur des études)* (#446)
+- Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre *(admin, comptable, directeur, secrétariat)*
+- Le refus annonce le montant dû à qui a le droit de le lire, l'état seul aux autres, et jamais un zéro trompeur *(comptable, secrétariat)*
+- La promotion de fin d'année n'est jamais bloquée par une dette : elle informe, elle ne refuse pas *(admin, directeur)*
+- Chaque école décide elle-même de ce qu'elle fait d'une dette d'un exercice précédent : ne rien faire, informer le guichet, ou bloquer la réinscription au-delà d'un seuil *(admin, comptable, directeur)*
+- Migration `0081` : les deux colonnes de ce réglage, à leur valeur neutre. Une école qui n'ouvre jamais cet écran ne voit aucun changement. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
+- Migration `0080` : le droit de passer outre un blocage pour dette d'un exercice précédent, accordé à la direction seule. Elle n'active aucun blocage : elle existe pour que celui à venir ne puisse enfermer une école sans issue. À jouer sur CHAQUE base d'établissement, marche à suivre en tête de la révision *(technique, déploiement)*
+- Le document d'un frais fourni par un prestataire dit combien d'articles l'école doit commander, combien les familles ont apportés, et combien restent à relancer *(comptable)*
+- Un versement dont la ventilation ne couvre pas son montant n'est plus enregistré, et deux imputations sur le même frais sont refusées par la base *(comptable, caissier)*
+- Une vérification en lecture seule liste, école par école, les versements encaissés dont la ventilation ne retombe pas sur le montant reçu *(devops, comptable)*
+- Migration `0079` : contrainte d'unicité sur les imputations de versement. Passer la vérification avant de la jouer — la migration s'arrête en nommant les versements en cause plutôt que sur une erreur de la base. Marche à suivre en tête de la révision *(technique, déploiement)*
+- Une vue d'ensemble répond à « quel frais rentre mal » avant d'en choisir un : par catégorie, l'attendu, l'entré, le taux et les trois compteurs *(comptable, directeur)*
+- La vue d'ensemble sert aussi la caisse : ce qu'elle a encaissé catégorie par catégorie, le recouvrement de l'école restant réservé à qui lit toutes les caisses *(caissier)*
+- Le point sur une catégorie annonce le total attendu, le taux de recouvrement et le nombre d'élèves sans paiement, partiels et à jour *(comptable, directeur)*
+- Le point sur une catégorie se trie par état, se cherche par nom ou matricule — accents et fautes de frappe pardonnés — et se feuillette page par page *(comptable, caissier)*
+- Poser ou retirer une photo laisse désormais une trace dans le journal : qui l'a fait, quand, et depuis quel appareil *(admin, directeur)*
+- Le point sur une catégorie s'édite aussi en PDF officiel, aux couleurs et au logo de l'établissement, et s'affiche avant d'être téléchargé *(comptable, caissier)*
+- Le point sur une catégorie de frais : ce qui est entré en argent, ce qui a été déposé en nature, et qui doit encore, sur la période choisie *(comptable, caissier)*
+- Les évolutions du serveur alimentent la fenêtre « Nouveautés » du portail, chaque ligne adressée au rôle qu'elle concerne *(tous)*
+- Les évolutions du produit sont publiées dans un flux lisible par la vitrine, avec le public concerné par chaque ligne *(devops)*
+- Un dépôt en nature posé par erreur s'annule depuis l'application, au lieu d'une correction à la main en base *(admin, comptable)* (#399)
+- Un tarif peut ne viser que les nouveaux élèves, ou que les anciens ; l'école déclare si son historique permet de pré-remplir la case *(admin, comptable, secrétariat)*
+- Répercuter un tarif peut aussi créer les lignes manquantes chez les élèves déjà inscrits, sur demande explicite *(admin, comptable)*
+- Le logo de l'établissement s'installe et se retire depuis les paramètres, et apparaît sur les documents officiels *(admin)*
 - La console SQL avertit quand une requête renomme un élève sans mettre à jour sa clé de recherche, ce qui le rendrait introuvable *(super-admin)*
 - L'archive de sauvegarde est copiée chaque nuit sur une seconde machine, par une clé restreinte au seul dépôt de fichiers *(devops)*
 - La sauvegarde nocturne couvre désormais toutes les bases d'établissement : elle les reconnaît à leur contenu et non à leur nom, et refuse d'archiver un fichier vide *(devops)*
@@ -46,8 +71,15 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'état des frais annonce, sous le tableau, ce que chaque frais ouvre à la famille, en plus de son montant *(parent, secrétariat)*
 - Le reçu de versement s'imprime en deux exemplaires sur une seule feuille A4, à couper au milieu : un pour la famille, un pour le classeur *(caissier, comptable)*
 - Chaque exemplaire du reçu porte la situation financière de l'élève, frais par frais : ce qui est dû, ce qui est déjà versé et ce qu'il reste à payer, avec la prochaine échéance ou le retard *(caissier, comptable, parent)*
+- Le caissier peut poser lui-même une partie du versement sur un frais précis, le reste allant automatiquement aux frais dus par priorité *(caissier, comptable)*
 
 ### Changed
+- Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur *(comptable, caissier)*
+- Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école *(comptable, caissier, directeur)*
+- Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre, à l'écran comme sur le document : ils disparaissaient en silence *(comptable, caissier)*
+- Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture *(comptable, caissier)*
+- La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat *(technique)* (#390)
+- L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran *(technique)*
 - WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF) *(sécurité)*
 - Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3 *(technique)*
 - L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement *(tous)*
@@ -65,6 +97,26 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille *(admin, secrétariat)*
+- Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur *(admin, secrétariat)*
+- Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés *(comptable, caissier)*
+- Le point par catégorie annonce quand il a été coupé au plafond, au lieu de se laisser lire comme complet *(comptable, caissier)*
+- Le point par catégorie ne porte plus une colonne « Reste à payer » vide de bout en bout quand il ne couvre qu'une caisse *(caissier)*
+- Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse *(comptable, caissier)*
+- Les états du point par catégorie retrouvent leurs couleurs sur le document PDF *(comptable, caissier)*
+- Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune *(comptable, caissier)*
+- Corriger l'affectation d'un élève sur sa fiche l'enregistre vraiment, et rejoue aussitôt ses frais : l'affectation décide du tarif subventionné *(admin, secrétariat, comptable)*
+- Le journal des versements se filtre par catégorie de frais sans exiger la gestion de la grille tarifaire *(caissier, comptable)*
+- Liste, bandeau et exports de versements se bornent à l'année demandée : un encaissement d'un autre exercice n'y figure plus *(admin, comptable, caissier)*
+- La liste des inscriptions se filtre vraiment par année, classe et « à valider », au lieu de ne retrancher que la page déjà chargée *(admin, secrétariat)*
+- Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point *(technique)*
+- Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes *(admin, secrétariat)* (#394)
+- Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu *(admin, technique)* (#387)
+- Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent *(caissier, comptable)* (#379)
+- Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître *(admin, secrétariat)*
+- La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis *(devops)*
+- Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur *(technique)*
+- Un envoi trop volumineux est refusé pendant la lecture, sans être d'abord chargé entièrement en mémoire *(technique)*
 - La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante *(technique)*
 - La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie *(admin, secrétariat)*
 - La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route *(super-admin)*

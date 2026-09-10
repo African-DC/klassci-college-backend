@@ -39,9 +39,12 @@ def _make_enrollment(status: EnrollmentStatus, enrollment_id: int = 1) -> Simple
         created_by=1,
         enrollment_fees=[],
         # Le double doit porter ce que le modèle porte : la fiche relit ces
-        # deux champs, et les omettre ici masquerait leur absence en réponse.
+        # champs, et les omettre ici masquerait leur absence en réponse.
         assignment_status=None,
         assignment_decision_number=None,
+        # `None` est la valeur d'une inscription dont le profil n'a pas été
+        # tranché, et c'est celle de toutes les inscriptions déjà en base.
+        is_new_student=None,
         created_at=now,
         updated_at=now,
     )

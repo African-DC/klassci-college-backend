@@ -3,17 +3,19 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.datetimes import current_business_date
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import pdf_response
 from app.schemas.cash_session import (
     CashSessionCloseRequest,
     CashSessionListResponse,
     CashSessionRegularizeRequest,
     CashSessionResponse,
 )
-from app.services import cash_closure_service, cash_session_service
+from app.services import cash_closure_service, cash_session_service, daily_cash_book_service
 
 router = APIRouter(prefix="/cash-sessions", tags=["cash-sessions"])
 
@@ -58,6 +60,39 @@ async def close_my_cash_session(
     """Fige le théorique espèces, calcule l'écart avec le montant compté, verrouille."""
     return await cash_session_service.close_my_session(
         db, current_user.user_id, business_date or current_business_date(), data
+    )
+
+
+@router.get(
+    "/me/daily-cash-book",
+    summary="Bordereau de ma caisse (PDF)",
+)
+async def get_my_daily_cash_book(
+    business_date: date | None = Query(
+        None,
+        alias="date",
+        description="Journée à imprimer (YYYY-MM-DD). Par défaut : aujourd'hui.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("cash-session:manage"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Pièce de la caisse connectée, jamais celle d'un collègue.
+
+    Contrairement à `GET /payments/daily-cash-book`, la portée ne dépend pas
+    de `payments:read:all` : un admin qui tient un guichet imprime ici SA
+    caisse, pas le consolidé de l'école.
+    """
+    target = business_date or current_business_date()
+    return await pdf_response(
+        lambda: daily_cash_book_service.get_daily_cash_book_pdf(
+            db,
+            target,
+            cashier_user_id=current_user.user_id,
+            restrict_to_cashier=True,
+        ),
+        filename=f"bordereau-{target.isoformat()}.pdf",
+        error_context=f"bordereau de caisse {target.isoformat()}",
     )
 
 

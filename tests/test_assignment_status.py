@@ -79,6 +79,10 @@ def test_la_portee_entre_dans_la_cle_d_unicite() -> None:
         "level_key",
         "series_key",
         "scope_key",
+        # Le profil d'inscription est entré dans la clé pour la même raison
+        # que la portée : sans lui, un tarif « nouveau » et la grille générale
+        # ne pourraient pas coexister sur la même catégorie.
+        "profile_key",
     }
 
 
@@ -89,6 +93,7 @@ def test_les_colonnes_de_cle_neutralisent_les_valeurs_vides() -> None:
         ("level_key", "COALESCE(level_id, 0)"),
         ("series_key", "COALESCE(series_id, 0)"),
         ("scope_key", "COALESCE(assignment_scope, '')"),
+        ("profile_key", "COALESCE(enrollment_profile, '')"),
     ):
         column = FeeVariant.__table__.columns[name]
         assert column.computed is not None, f"{name} doit etre calculee par la base"

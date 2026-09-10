@@ -73,9 +73,16 @@ def test_avec_le_droit_rien_n_est_touche() -> None:
 
 def test_tout_champ_de_montant_connu_est_couvert() -> None:
     """Un champ financier ajouté plus tard sans être listé fuiterait en silence."""
-    assert {"fees_expected", "fees_paid", "fees_remaining", "fees_rate", "fees_balance"} == set(
-        AMOUNT_FIELDS
-    )
+    assert {
+        "fees_expected",
+        "fees_paid",
+        "fees_remaining",
+        "fees_rate",
+        "fees_balance",
+        # Ce que la famille doit sur les AUTRES exercices : même sensibilité
+        # que le solde de l'année, donc même masquage.
+        "fees_arrears_other_years",
+    } == set(AMOUNT_FIELDS)
 
 
 # ---------------------------------------------------------------------------

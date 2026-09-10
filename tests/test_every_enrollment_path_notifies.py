@@ -30,6 +30,7 @@ from app.models.academic import AcademicYear, Class, Level
 from app.models.user import User
 from app.schemas.enrollment import EnrollmentCreate, EnrollmentWithStudentCreate
 from app.services import enrollment_service
+from app.services.enrollment_arrears import ArrearsClearance
 
 SECRETAIRE = 1
 
@@ -136,6 +137,7 @@ async def test_le_formulaire_complet_previent_la_caisse(db: Session, prevenus: l
             enrollment_number="26000001A",
         ),
         created_by=SECRETAIRE,
+        arrears=ArrearsClearance.INFORM_ONLY,
     )
     assert prevenus == [reponse.id]
 
@@ -155,6 +157,7 @@ async def test_l_inscription_d_un_eleve_existant_previent_aussi(
             enrollment_number="26000002B",
         ),
         created_by=SECRETAIRE,
+        arrears=ArrearsClearance.INFORM_ONLY,
     )
     prevenus.clear()
 
@@ -167,5 +170,6 @@ async def test_l_inscription_d_un_eleve_existant_previent_aussi(
         _AsyncBridge(db),  # type: ignore[arg-type]
         EnrollmentCreate(student_id=cree.student_id, class_id=1, academic_year_id=1),
         created_by=SECRETAIRE,
+        arrears=ArrearsClearance.INFORM_ONLY,
     )
     assert prevenus == [reponse.id]

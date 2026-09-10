@@ -12,10 +12,12 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/klassci/klassci-backend
 EnvironmentFile=/home/ubuntu/klassci/klassci-backend/.env
-# Ensure the uploads dir exists before the process starts. /tmp is volatile on
-# reboot and ReadWritePaths refuses to bind a missing path. PermissionsStartOnly
-# legacy is replaced by '+' prefix which lets the command run as root.
-ExecStartPre=+/usr/bin/install -d -m 0755 -o ubuntu -g ubuntu /tmp/klassci-uploads
+# Ensure the uploads dir exists before the process starts. It must match
+# UPLOAD_ROOT in the .env above: student photos, signature stamp and school
+# logo live there, so a volatile path (/tmp) loses them on every reboot.
+# PermissionsStartOnly legacy is replaced by '+' prefix which lets the
+# command run as root.
+ExecStartPre=+/usr/bin/install -d -m 0755 -o ubuntu -g ubuntu /var/lib/klassci/uploads
 ExecStart=/home/ubuntu/klassci/klassci-backend/.venv/bin/uvicorn app.main:app \
     --host 0.0.0.0 --port 8000 \
     --proxy-headers --forwarded-allow-ips=127.0.0.1,::1
@@ -26,13 +28,12 @@ StandardError=journal
 SyslogIdentifier=klassci-backend
 
 # Hardening
-# /tmp is writable by default with PrivateTmp=false — no need to whitelist
-# /tmp/klassci-uploads in ReadWritePaths (would require the path to exist at
-# namespace setup time, which happens BEFORE ExecStartPre).
+# The uploads root is created by ExecStartPre above and whitelisted here so
+# the service can write into it under ProtectSystem=full.
 NoNewPrivileges=true
 ProtectSystem=full
 PrivateTmp=false
-ReadWritePaths=/home/ubuntu/klassci/klassci-backend
+ReadWritePaths=/home/ubuntu/klassci/klassci-backend /var/lib/klassci/uploads
 
 [Install]
 WantedBy=multi-user.target

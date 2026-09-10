@@ -19,6 +19,8 @@ from app.repositories.payment_filters import PaymentFilters
 from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.payment import (
     CashierOption,
+    CategoryLedgerResponse,
+    FeeCategoryOverviewResponse,
     PaymentCancel,
     PaymentCreate,
     PaymentListResponse,
@@ -27,7 +29,13 @@ from app.schemas.payment import (
     PaymentResponse,
     PaymentSummaryResponse,
 )
-from app.services import daily_cash_book_service, payment_service, payments_journal_service
+from app.services import (
+    daily_cash_book_service,
+    fee_category_ledger,
+    fee_category_overview,
+    payment_service,
+    payments_journal_service,
+)
 from app.services.payments import methods as payment_methods
 from app.services.payments.scope import cashier_scope
 
@@ -52,6 +60,10 @@ async def list_payments(
     fee_category_id: int | None = Query(
         None, description="Ne garder que les versements imputes sur cette categorie."
     ),
+    academic_year_id: int | None = Query(
+        None,
+        description="Ne garder que les versements d'inscriptions de cette annee scolaire.",
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     current_user: TokenData = Depends(get_current_user),
@@ -75,6 +87,7 @@ async def list_payments(
             date_to=date_to,
             search=search,
             fee_category_id=fee_category_id,
+            academic_year_id=academic_year_id,
             received_by=cashier_scope(
                 requested_received_by=received_by,
                 can_read_all=can_read_all,
@@ -173,6 +186,7 @@ async def get_payments_summary(
             date_to=date_to,
             search=search,
             fee_category_id=fee_category_id,
+            academic_year_id=academic_year_id,
         ),
         received_by=cashier_scope(
             requested_received_by=received_by,
@@ -212,6 +226,7 @@ async def export_payments(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
     received_by: int | None = Query(None),
+    academic_year_id: int | None = Query(None),
     export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
@@ -230,6 +245,7 @@ async def export_payments(
         method=method,
         date_from=date_from,
         date_to=date_to,
+        academic_year_id=academic_year_id,
         received_by=cashier_scope(
             requested_received_by=received_by,
             can_read_all=can_read_all,
@@ -254,6 +270,219 @@ async def export_payments(
         filename=f"journal-versements-{jour}.pdf",
         error_context="journal des versements",
     )
+
+
+# NOTE: /settlement/overview MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/overview",
+    response_model=FeeCategoryOverviewResponse,
+    summary="Quel frais rentre mal : une ligne par categorie, avant d'en choisir une",
+)
+async def fee_categories_overview(
+    academic_year_id: int = Query(..., description="Annee lue. Obligatoire, comme sur le point."),
+    class_id: int | None = Query(None, description="Reduire a une classe."),
+    date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
+    date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
+    received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeeCategoryOverviewResponse:
+    """La question qu'on pose AVANT de choisir une categorie.
+
+    Le point par categorie repond tres bien a « ou en est la Tenue » — a
+    condition de savoir deja que c'est la Tenue qui va mal. Cet endpoint rend
+    la ligne par categorie qui evite de deviner : attendu, entre, taux et
+    compteurs, en une lecture groupee plutot qu'un point charge par frais.
+
+    **Ce qui est entre se cloisonne ; ce qui reste du ne se cloisonne pas.**
+    Une caissiere lit, categorie par categorie, ce qu'elle a encaisse : c'est
+    le point qu'elle fait le soir. L'attendu, le taux, le reste du et les
+    compteurs se lisent sur tout l'argent recu ; sans `payments:read:all` ils
+    sont absents — jamais approches, jamais mis a zero, un zero se lisant
+    comme un solde. La reponse le dit par `consolide: false`, et l'ecran doit
+    l'ecrire en toutes lettres plutot que d'afficher une grille de tirets.
+
+    L'annee est OBLIGATOIRE, comme sur le point qu'une carte ouvre : sans
+    elle, l'attendu additionnerait tous les exercices de la base et la carte
+    n'annoncerait pas le meme total que le document qu'elle ouvre.
+
+    La periode borne les evenements — versements et depots. Elle ne borne ni
+    l'attendu ni le reste du, qui sont des etats.
+    """
+    overview = await fee_category_overview.load_categories_overview(
+        db,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        consolide=can_read_all,
+    )
+    return FeeCategoryOverviewResponse.model_validate(overview)
+
+
+# NOTE: /settlement/category/export MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/category/export",
+    summary="Le point d'une categorie au format classeur",
+)
+async def export_fee_category_point(
+    category_id: int = Query(...),
+    academic_year_id: int = Query(...),
+    class_id: int | None = Query(None),
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    received_by: int | None = Query(None),
+    export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
+    inline: bool = Query(False, description="Afficher au lieu de telecharger."),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Le document que le comptable tire, ou la caissiere pour sa seule caisse.
+
+    Meme cloisonnement que l'ecran, et pour la meme raison : un export garde
+    moins fermement que la vue qu'il reproduit est une porte derobee, et c'est
+    le genre de fuite qu'on ne voit jamais en regardant l'interface.
+
+    Le classeur porte en en-tete, en toutes lettres, le fait qu'il ne couvre
+    qu'une caisse quand c'est le cas. Sans cette ligne, un document de guichet
+    se lirait comme le compte de l'ecole entiere.
+
+    Il porte aussi qui l'a tire : `issued_by_user_id` nomme l'auteur en en-tete
+    et sous la ligne de signature. La caisse LUE et la personne qui IMPRIME
+    sont deux comptes distincts — sur un point consolide, les confondre
+    designerait le comptable comme caissier d'un etat qui recapitule le travail
+    de trois autres.
+    """
+    criteres = {
+        "category_id": category_id,
+        "academic_year_id": academic_year_id,
+        "class_id": class_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "received_by": cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        "consolide": can_read_all,
+        "issued_by_user_id": current_user.user_id,
+    }
+    jour = date.today().isoformat()
+
+    if export_format == "xlsx":
+        return await binary_response(
+            lambda: fee_category_ledger.get_category_ledger_xlsx(db, **criteres),
+            filename=f"point-categorie-{jour}.xlsx",
+            media_type=_XLSX_MEDIA_TYPE,
+            error_context="point sur une categorie de frais (classeur)",
+            disposition="attachment",
+        )
+
+    # `inline` sert l'apercu : le meme document, affiche au lieu d'etre
+    # telecharge. Un comptable qui verifie une periode avant de l'envoyer a un
+    # prestataire ne veut pas six fichiers dans son dossier de telechargements.
+    return await pdf_response(
+        lambda: fee_category_ledger.get_category_ledger_pdf(db, **criteres),
+        filename=f"point-categorie-{jour}.pdf",
+        error_context="point sur une categorie de frais",
+        disposition="inline" if inline else "attachment",
+    )
+
+
+# NOTE: /settlement/category MUST be defined BEFORE /{payment_id}
+@router.get(
+    "/settlement/category",
+    response_model=CategoryLedgerResponse,
+    summary="Le point sur une categorie de frais : entre en argent, en nature, et du",
+)
+async def fee_category_point(
+    category_id: int = Query(..., description="La categorie de frais regardee."),
+    academic_year_id: int = Query(..., description="Annee lue."),
+    class_id: int | None = Query(None, description="Reduire a une classe."),
+    date_from: datetime | None = Query(None, description="Debut de periode, inclus."),
+    date_to: datetime | None = Query(None, description="Fin de periode, exclue."),
+    received_by: int | None = Query(None, description="Restreindre a une caisse."),
+    state: str | None = Query(
+        None,
+        description=(
+            "Ne garder qu'un seau : impayes (aucun paiement + partiel), pending, "
+            "partial, paid, waived, in_kind."
+        ),
+    ),
+    q: str | None = Query(None, description="Chercher un eleve par nom, prenom ou matricule."),
+    page: int = Query(1, ge=1),
+    size: int = Query(
+        fee_category_ledger.LEDGER_MAX_ROWS,
+        ge=1,
+        le=fee_category_ledger.LEDGER_MAX_ROWS,
+        description="Lignes par page. Par defaut le plafond : voir le docstring.",
+    ),
+    current_user: TokenData = Depends(get_current_user),
+    can_read_all: bool = has_permission("payments:read:all"),
+    _: None = require_permission("payments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> CategoryLedgerResponse:
+    """Une vue detaillee sur un frais : qui a paye, qui a depose, qui doit encore.
+
+    **Ce qui est entre se cloisonne ; ce qui reste du ne se cloisonne pas.**
+
+    Une caissiere lit ce qu'elle a encaisse sur cette categorie : c'est un fait
+    sur sa caisse, et le lui refuser l'empecherait de faire son point. Le
+    filtre de caisse est celui de la liste et des exports, decide par
+    `cashier_scope` — un filtre demande n'a jamais servi de passe-droit.
+
+    Ce qu'une famille doit encore, en revanche, se calcule sur tout l'argent
+    recu : filtre sur un guichet, il annoncerait une dette chez une famille qui
+    a paye a cote. Sans `payments:read:all`, il n'est donc pas calcule du tout,
+    et la reponse le dit par `consolide: false` plutot que de rendre un zero
+    qu'on prendrait pour un solde.
+
+    La periode borne les evenements — versements et depots. Elle ne borne pas
+    le reste du, qui est un etat et vaut a l'instant ou on le lit.
+
+    L'attendu, le taux de recouvrement et les compteurs par seau suivent la
+    meme ligne que le reste du : ils se lisent sur tout l'argent recu, donc ils
+    sont absents sans `payments:read:all`, et `state` est alors refuse en 422
+    plutot que de rendre une liste qu'on prendrait pour une verite d'ecole.
+
+    `state`, `q` et la pagination ne bornent QUE la liste : les totaux et les
+    compteurs decrivent le perimetre entier, sinon le chiffre du haut de page
+    descendrait a chaque page tournee. La liste est plafonnee, et la reponse
+    dit par `truncated_from` quand la coupe a eu lieu.
+
+    `size` vaut le plafond par defaut, et non une petite page : l'ecran
+    d'aujourd'hui demande tout, et lui rendre cinquante lignes sans bouton pour
+    la suite ferait disparaitre des eleves sans rien dire.
+    """
+    ledger = await fee_category_ledger.load_category_ledger(
+        db,
+        category_id=category_id,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        date_from=date_from,
+        date_to=date_to,
+        received_by=cashier_scope(
+            requested_received_by=received_by,
+            can_read_all=can_read_all,
+            current_user_id=current_user.user_id,
+        ),
+        consolide=can_read_all,
+        state=state,
+        q=q,
+        page=page,
+        size=size,
+        issued_by_user_id=current_user.user_id,
+    )
+    return CategoryLedgerResponse.model_validate(ledger)
 
 
 # NOTE: /daily-cash-book MUST be defined BEFORE /{payment_id}

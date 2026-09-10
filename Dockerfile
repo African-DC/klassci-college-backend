@@ -26,6 +26,8 @@ COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
 COPY scripts ./scripts
+# Le flux des versions, servi par /whats-new au modal « Nouveautes ».
+COPY RELEASES.json .
 
 EXPOSE 8000
 

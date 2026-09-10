@@ -21,6 +21,24 @@ from app.models.fee import PaymentStatus
 COMPLETED = PaymentStatus.COMPLETED.value
 
 
+#: Ce qu'on écrit devant la part d'un versement qui n'a atterri sur aucun frais.
+UNALLOCATED = "Non imputé"
+
+
+@dataclass(frozen=True, slots=True)
+class FeeShare:
+    """Une catégorie de frais, et ce que ce versement lui a versé.
+
+    Le journal montrait le premier frais et comptait les autres — `Scolarité
+    (+2)`. Le comptable ne pouvait donc pas savoir sur quoi les 85 000 F d'une
+    famille étaient partis, et les deux catégories cachées ne figuraient nulle
+    part ailleurs dans le document.
+    """
+
+    category_name: str
+    amount: Decimal
+
+
 @dataclass(frozen=True, slots=True)
 class JournalLine:
     """Une ligne du journal, telle qu'elle sera imprimée."""
@@ -29,7 +47,9 @@ class JournalLine:
     created_at: datetime
     student_name: str
     student_matricule: str | None
-    fee_label: str
+    #: Toutes les catégories touchées, jamais un extrait. Vide quand le
+    #: versement ne dit rien : la cellule vaut alors un tiret.
+    fee_shares: tuple[FeeShare, ...]
     method: str
     reference: str | None
     amount: Decimal

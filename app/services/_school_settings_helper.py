@@ -27,6 +27,16 @@ _PDF_EXCLUDE = {
     "day_end_hour",
     "created_at",
     "updated_at",
+    # Réglage de saisie, pas une identité d'établissement : il dit au
+    # formulaire d'inscription s'il peut deviner le profil d'un élève. Aucun
+    # document officiel n'a de raison de l'imprimer.
+    "enrollment_history_is_reliable",
+    # Politique de recouvrement, pas une identité d'établissement : elle dit au
+    # guichet ce qu'il fait d'une ardoise de l'an dernier. Aucun document
+    # officiel n'a de raison d'imprimer la règle interne de l'école, ni le
+    # seuil au-dessus duquel elle refuse.
+    "arrears_policy",
+    "arrears_block_threshold_xof",
     # MailPulse — config technique et secrets, jamais dans un PDF.
     "mailpulse_enabled",
     "mailpulse_base_url",
