@@ -9,6 +9,8 @@
 | `recording`   | `record_enrollment_payment` (cible) + `create_payment` (legacy) |
 | `preview`     | `preview_allocation` (UX caissier read-only) |
 | `lifecycle`   | `validate_payment` + `cancel_payment` (transitions) |
+| `_correction` | ce qu'exige toute correction : un motif, et l'autorite |
+| `reallocation` | `reallocate_payment` (deplacer une imputation) |
 | `query`       | `list_payments`, `get_payment`, `get_student_payments`, summary |
 | `receipt`     | `get_payment_receipt_pdf` |
 
@@ -28,6 +30,7 @@ from app.services.payments.query import (
     get_student_payments,
     list_payments,
 )
+from app.services.payments.reallocation import reallocate_payment
 from app.services.payments.receipt import get_payment_receipt_pdf
 from app.services.payments.recording import create_payment, record_enrollment_payment
 
@@ -46,6 +49,7 @@ __all__ = [
     "resolve_allocation",
     "preview_allocation",
     "recompute_fee_status",
+    "reallocate_payment",
     "record_enrollment_payment",
     "validate_payment",
 ]

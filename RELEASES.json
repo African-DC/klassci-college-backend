@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-11T18:39:37Z",
+  "generated_at": "2026-09-11T22:23:00Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,23 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Une imputation posée sur le mauvais frais se déplace vers le bon, sans annuler ni ressaisir le versement",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Ce déplacement exige un motif écrit et ne touche ni au montant encaissé, ni à la caisse, ni à la clôture du jour",
+            "audience": [
+              "comptable",
+              "caissier",
+              "directeur"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Les articles qu'une inscription peut recevoir en dépôt se lisent sans le droit d'ouvrir la caisse : le nom et l'état, jamais un montant",
             "audience": [
