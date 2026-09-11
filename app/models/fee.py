@@ -78,6 +78,23 @@ class EnrollmentFeeStatus(str, enum.Enum):
 NOT_CASH_DUE = (EnrollmentFeeStatus.WAIVED, EnrollmentFeeStatus.IN_KIND)
 
 
+#: Statuts de versement qui posent encore de l'argent sur un frais.
+#:
+#: `completed` est encaissé. `pending` ne l'est pas encore, mais sa validation
+#: ne repasse par aucun contrôle métier : un article déposé sous un versement
+#: en attente serait soldé en argent une minute plus tard, sur une ligne que
+#: `recompute_fee_status` ne touche plus.
+#:
+#: `cancelled`, `failed` et `refunded` ne laissent derrière eux que leurs
+#: allocations, conservées exprès — c'est l'historique de la famille. Elles ne
+#: posent plus un franc, et ne doivent donc rien interdire.
+#:
+#: Ici plutôt qu'auprès du seul appelant, à côté de `NOT_CASH_DUE` : ce fichier
+#: est déjà le seul endroit qui dise ce que vaut un statut, et l'écrire
+#: ailleurs en chaînes littérales survivrait en silence à un renommage.
+LIVE_PAYMENT_STATUSES = (PaymentStatus.PENDING, PaymentStatus.COMPLETED)
+
+
 def is_not_cash_due(status: EnrollmentFeeStatus | str) -> bool:
     """True si ce frais n'est plus dû en argent (exonéré ou déposé en nature)."""
     return status in NOT_CASH_DUE
