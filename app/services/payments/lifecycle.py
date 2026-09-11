@@ -14,11 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.fee import Payment, PaymentAllocation, PaymentStatus
 from app.repositories import payment_repository as repo
 from app.schemas.payment import PaymentResponse
 from app.services.payments._allocation import paid_for_fees, recompute_fee_status
+from app.services.payments._correction import ensure_cashier_may_correct, motif_valide
 from app.services.payments._notification import dispatch_payment_notification
 from app.services.payments._response import payment_to_response
 from app.services.payments._state import VALID_TRANSITIONS, status_value
@@ -100,52 +101,6 @@ async def validate_payment(
     return payment_to_response(refreshed)
 
 
-async def _ensure_cashier_may_cancel(db: AsyncSession, payment: Payment, cashier_id: int) -> None:
-    """Un caissier ne corrige que sa propre saisie, journée encore ouverte."""
-    from app.repositories import cash_session_repository as cash_repo
-
-    if payment.received_by != cashier_id:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Ce versement a été encaissé par une autre caisse. "
-                "Demandez la correction à la comptabilité."
-            ),
-        )
-    if await cash_repo.is_day_locked(db, cashier_id, payment.created_at.date()):
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Votre journée de caisse est clôturée : ce versement ne peut plus être "
-                "annulé ici. Demandez la correction à la comptabilité."
-            ),
-        )
-
-
-#: La longueur minimale d'un motif d'annulation, une fois les espaces réduits.
-#: L'écran mesure la même chose, sur la même chaîne normalisée.
-MOTIF_MINIMUM = 10
-
-#: La colonne fait 500 caractères ; au-delà MySQL tronquerait sans le dire.
-MOTIF_MAXIMUM = 500
-
-
-def _motif_valide(motif: str) -> str:
-    """Un motif court n'est pas un motif.
-
-    « erreur », « test », « ok » ne disent rien a qui relira le bordereau dans
-    six mois — et c'est precisement a ce moment qu'on le relit. On exige une
-    phrase, pas un mot.
-    """
-    propre = " ".join(motif.split())
-    if len(propre) < MOTIF_MINIMUM:
-        raise BusinessValidationError(
-            "Indiquez le motif de l'annulation en une phrase : elle figurera sur "
-            "le bordereau de caisse et sur le reçu."
-        )
-    return propre[:MOTIF_MAXIMUM]
-
-
 async def cancel_payment(
     db: AsyncSession,
     payment_id: int,
@@ -175,8 +130,11 @@ async def cancel_payment(
     Ne sert que le cas où **aucun argent n'a bougé** : une saisie en trop, un
     double. Un encaissement réel mais non dû se rembourse ou se reporte en
     avoir — l'annuler ferait disparaître un billet qui est dans le tiroir, et
-    la caisse serait en excédent inexpliqué à la clôture. Une imputation sur
-    le mauvais frais se ré-affecte. Ni l'un ni l'autre n'existe encore.
+    la caisse serait en excédent inexpliqué à la clôture. Celui-là n'existe
+    toujours pas. Une imputation sur le mauvais frais, en revanche, se déplace
+    désormais sans toucher au versement : voir `reallocation`. Annuler
+    161 000 F pour en déplacer 3 000 laissait au journal une annulation hors de
+    proportion avec l'erreur, et à la famille un reçu qui la racontait.
 
     `may_cancel_any` est sans valeur par défaut à dessein : c'est un garde de
     sécurité, et un défaut permissif le désactiverait en silence chez le
@@ -185,7 +143,7 @@ async def cancel_payment(
     journée n'est pas clôturée. Après clôture, l'écart a été constaté et signé,
     revenir dessus rendrait faux un document déjà remis.
     """
-    motif = _motif_valide(reason)
+    motif = motif_valide(reason)
 
     async with db.begin_nested():
         payment = await _load_payment_for_transition(db, payment_id)
@@ -193,7 +151,7 @@ async def cancel_payment(
         _ensure_transition_allowed(current, "cancelled")
 
         if not may_cancel_any:
-            await _ensure_cashier_may_cancel(db, payment, cancelled_by)
+            await ensure_cashier_may_correct(db, payment, cancelled_by, geste="annulé")
 
         # Snapshot des allocations pour l'audit avant la transition
         allocations_snapshot = [

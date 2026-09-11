@@ -9,6 +9,8 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Une imputation posée sur le mauvais frais se déplace vers le bon, sans annuler ni ressaisir le versement *(comptable, caissier)*
+- Ce déplacement exige un motif écrit et ne touche ni au montant encaissé, ni à la caisse, ni à la clôture du jour *(comptable, caissier, directeur)*
 - Les articles qu'une inscription peut recevoir en dépôt se lisent sans le droit d'ouvrir la caisse : le nom et l'état, jamais un montant *(éducateur, secrétariat)*
 - Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille *(secrétariat, éducateur, parent)* (#446)
 - Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme *(éducateur, directeur des études)* (#446)
