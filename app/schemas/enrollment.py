@@ -339,9 +339,22 @@ class DepositableFeeResponse(BaseModel):
     fee_id: int
     fee_category_id: int
     category_name: str
-    #: `pending` reste a deposer, `in_kind` deja depose. Les autres statuts ne
-    #: remontent pas : une ligne payee ou exoneree ne se depose plus.
+    #: L'etat du frais, tel quel. `pending` reste a deposer, `in_kind` est deja
+    #: depose, et les autres — paye, partiel, exonere — remontent aussi : la
+    #: categorie accepte le depot, mais cette ligne-la n'attend plus rien.
+    #: L'ecran doit alors n'offrir aucun des deux gestes ; le serveur les refuse
+    #: tous les deux, et un bouton qui repond 409 vaut moins que pas de bouton.
     status: str
+
+
+class DepositableFeeListResponse(BaseModel):
+    """Les articles deposables d'une seule inscription.
+
+    Servi a qui inscrit sans lire la caisse : aucun montant n'y figure, le nom
+    de l'article et son etat suffisent a decider s'il reste a deposer.
+    """
+
+    items: list[DepositableFeeResponse]
 
 
 class InKindRosterRowResponse(BaseModel):

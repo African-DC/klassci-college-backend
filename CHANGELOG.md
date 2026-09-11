@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Les articles qu'une inscription peut recevoir en dépôt se lisent sans le droit d'ouvrir la caisse : le nom et l'état, jamais un montant *(éducateur, secrétariat)*
 - Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille *(secrétariat, éducateur, parent)* (#446)
 - Ce montant reste réservé à qui manipule l'argent : les autres voient qu'il reste quelque chose à régler, jamais la somme *(éducateur, directeur des études)* (#446)
 - Une réinscription peut être refusée tant qu'une dette d'un exercice précédent n'est pas réglée, avec un motif obligatoire pour passer outre *(admin, comptable, directeur, secrétariat)*
@@ -97,6 +98,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû *(comptable, secrétariat, éducateur)*
 - Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille *(admin, secrétariat)*
 - Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur *(admin, secrétariat)*
 - Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés *(comptable, caissier)*

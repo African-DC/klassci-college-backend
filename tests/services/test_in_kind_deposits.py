@@ -190,7 +190,20 @@ def db() -> Iterator[_AsyncBridge]:
     engine.dispose()
 
 
-def _verse(bridge: _AsyncBridge, montant: str, *, sur: int, payment_id: int = 1) -> None:
+def _verse(
+    bridge: _AsyncBridge,
+    montant: str,
+    *,
+    sur: int,
+    payment_id: int = 1,
+    statut: PaymentStatus = PaymentStatus.COMPLETED,
+) -> None:
+    """Pose un versement et son allocation sur un frais.
+
+    `statut` existe pour le versement contre-passé : l'annulation conserve
+    l'allocation — c'est l'historique de la famille — et c'est précisément ce
+    que le dépôt en nature prenait à tort pour de l'argent posé.
+    """
     session = bridge._session
     session.add(
         Payment(
@@ -198,7 +211,7 @@ def _verse(bridge: _AsyncBridge, montant: str, *, sur: int, payment_id: int = 1)
             enrollment_id=INSCRIPTION,
             amount=Decimal(montant),
             method=PaymentMethod.CASH,
-            status=PaymentStatus.COMPLETED,
+            status=statut,
         )
     )
     session.flush()
@@ -460,3 +473,137 @@ async def test_annuler_un_depot_portant_un_versement_est_refuse(db: _AsyncBridge
         )
 
     assert db._session.get(EnrollmentFee, FRAIS_RAMETTE).status == EnrollmentFeeStatus.IN_KIND
+
+
+# ---------------------------------------------------------------------------
+# Le versement annulé : il laisse son allocation, il ne doit rien interdire
+# ---------------------------------------------------------------------------
+
+
+async def test_depot_possible_apres_annulation_du_versement(db: _AsyncBridge) -> None:
+    """Le cas réel : réglé en argent par erreur, contre-passé, apporté en nature.
+
+    L'annulation conserve l'allocation exprès. Le dépôt la lisait sans filtrer
+    sur le statut du versement et répondait « un versement y est déjà imputé »
+    — sur une ligne que le même écran montrait entièrement due. La
+    régularisation n'existait plus que dans la base.
+    """
+    _verse(db, "2500", sur=FRAIS_RAMETTE, statut=PaymentStatus.CANCELLED)
+
+    with patch("app.services.enrollment_fees.audit_log", new=AsyncMock()):
+        fee = await enrollment_fees.mark_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            deposited_by=7,
+        )
+
+    assert fee.status == EnrollmentFeeStatus.IN_KIND
+
+
+async def test_un_versement_en_attente_bloque_toujours_le_depot(db: _AsyncBridge) -> None:
+    """En attente n'est pas annulé : sa validation ne repasse par aucun contrôle.
+
+    Déposer sous un versement en attente, c'est accepter que la caisse solde
+    la ligne en argent une minute plus tard sur un frais que le recalcul de
+    statut ne touche plus.
+    """
+    _verse(db, "2500", sur=FRAIS_RAMETTE, statut=PaymentStatus.PENDING)
+
+    with (
+        patch("app.services.enrollment_fees.audit_log", new=AsyncMock()),
+        pytest.raises(ConflictError, match="versement"),
+    ):
+        await enrollment_fees.mark_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            deposited_by=1,
+        )
+
+    assert db._session.get(EnrollmentFee, FRAIS_RAMETTE).status == EnrollmentFeeStatus.PENDING
+
+
+async def test_annuler_un_depot_apres_un_versement_annule(db: _AsyncBridge) -> None:
+    """Le retour en arrière ne doit pas rester bloqué non plus.
+
+    Sans ce test, corriger un côté aurait laissé la ligne déposable mais
+    définitivement indéposable-à-l'envers, ce qui est la même impasse.
+    """
+    ramette = db._session.get(EnrollmentFee, FRAIS_RAMETTE)
+    assert ramette is not None
+    ramette.status = EnrollmentFeeStatus.IN_KIND
+    db._session.flush()
+    _verse(db, "2500", sur=FRAIS_RAMETTE, statut=PaymentStatus.CANCELLED)
+
+    with patch("app.services.enrollment_fees.audit_log", new=AsyncMock()):
+        fee = await enrollment_fees.cancel_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            cancelled_by=1,
+        )
+
+    assert fee.status == EnrollmentFeeStatus.PENDING
+
+
+# ---------------------------------------------------------------------------
+# Les articles d'une fiche, pour qui n'a pas le droit de lire la caisse
+# ---------------------------------------------------------------------------
+
+
+async def test_articles_deposables_d_une_fiche_sans_montant(db: _AsyncBridge) -> None:
+    """Seules les catégories qui acceptent le dépôt, et pas un franc dedans.
+
+    C'est la lecture qui manquait à l'éducateur : le détail des frais est fait
+    de montants, donc fermé à qui n'a pas `payments:read`, et la fiche lui
+    répondait une porte close là où il a le droit de poser un dépôt.
+    """
+    articles = await enrollment_fees.depositable_fees(
+        db,  # type: ignore[arg-type]
+        enrollment_id=INSCRIPTION,
+    )
+
+    noms = [a.category_name for a in articles]
+    assert noms == ["Chemise cartonnée", "Ramette"]
+    assert all(not hasattr(a, "amount") for a in articles)
+    assert {a.status for a in articles} == {"pending"}
+
+
+async def test_articles_deposables_suivent_le_depot(db: _AsyncBridge) -> None:
+    """L'état rendu est celui du frais : l'écran sait quel geste proposer."""
+    with patch("app.services.enrollment_fees.audit_log", new=AsyncMock()):
+        await enrollment_fees.mark_in_kind_deposit(
+            db,  # type: ignore[arg-type]
+            enrollment_id=INSCRIPTION,
+            fee_id=FRAIS_RAMETTE,
+            deposited_by=7,
+        )
+
+    articles = await enrollment_fees.depositable_fees(
+        db,  # type: ignore[arg-type]
+        enrollment_id=INSCRIPTION,
+    )
+    par_nom = {a.category_name: a.status for a in articles}
+    assert par_nom == {"Chemise cartonnée": "pending", "Ramette": "in_kind"}
+
+
+async def test_articles_deposables_gardent_la_ligne_deja_reglee(db: _AsyncBridge) -> None:
+    """Une ligne payée reste dans la liste, avec son état.
+
+    L'écarter ferait disparaître la ramette de la vue de l'éducateur, qui la
+    chercherait. La rendre « à remettre » lui ferait cliquer sur un geste que
+    le serveur refuse. Elle remonte donc telle quelle, et c'est l'écran qui
+    n'offre alors aucun des deux boutons.
+    """
+    ramette = db._session.get(EnrollmentFee, FRAIS_RAMETTE)
+    assert ramette is not None
+    ramette.status = EnrollmentFeeStatus.PAID
+    db._session.flush()
+
+    articles = await enrollment_fees.depositable_fees(
+        db,  # type: ignore[arg-type]
+        enrollment_id=INSCRIPTION,
+    )
+    par_nom = {a.category_name: a.status for a in articles}
+    assert par_nom == {"Chemise cartonnée": "pending", "Ramette": "paid"}

@@ -212,6 +212,61 @@ ssh -F deploy/ssh_config klassci 'nssm restart klassci-frontend'
     regarder**, plutôt que de lire le vert de la CI. La production Contabo est
     Linux et n'est pas concernée — vérifié en rendant un PDF dans son image.
 
+11. **`UPLOAD_ROOT` doit être posé sur la démo Windows** (2026-09-10). Depuis
+    que la racine des téléversements est lue dans l'environnement
+    (`app/core/uploads.py`), son défaut `/app/uploads` se résout sous Windows
+    en `C:\app\uploads` — un dossier vide que l'application crée elle-même au
+    démarrage. Les fichiers réels étaient restés dans `C:\tmp\klassci-uploads`,
+    l'ancien emplacement codé en dur.
+
+    Aucune erreur, aucun journal : l'application démarre, sert, et rend 404 sur
+    chaque image. 757 élèves avaient une photo en base et plus une seule ne
+    s'affichait. La démo porte donc désormais, dans `C:\klassci\backend\.env` :
+
+    ```
+    UPLOAD_ROOT=C:\klassci\uploads
+    ```
+
+    Les 768 fichiers y ont été copiés depuis `C:\tmp\klassci-uploads`, laissé en
+    place comme repli. Le `.env` n'étant pas dans l'archive `git archive`, ce
+    réglage survit aux déploiements suivants. La production Contabo n'est pas
+    concernée : `UPLOAD_ROOT=/app/uploads` avec le volume `linux_klassci_uploads`
+    monté à cet endroit.
+
+    **Contrôle après déploiement** — regarder une image servie, jamais la seule
+    existence du dossier :
+
+    ```bash
+    curl -o /dev/null -w '%{http_code}\n' \
+      http://94.72.96.119/svc/uploads/portraits/kls26-0001.png   # attendu : 200
+    ```
+
+12. **Ne jamais réécrire un `.env` avec `Set-Content -Encoding UTF8`**
+    (2026-09-10). PowerShell 5.1 pose une marque d'ordre d'octets `EF BB BF` en
+    tête : la première variable devient `\ufeffAPP_ENV`, la configuration est
+    rejetée, et NSSM relance le service toutes les quatre secondes.
+
+    Le symptôme égare : `Get-Service` répond `Running` entre deux relances, et
+    les journaux `backend.*.log` sont **à zéro octet** parce que le processus
+    meurt avant d'en ouvrir un. Rien ne désigne le `.env`.
+
+    Ajouter en octets bruts, ce qui préserve aussi les fins de ligne :
+
+    ```powershell
+    $p = "C:\klassci\backend\.env"
+    Copy-Item $p "$p.bak-$(Get-Date -Format yyyyMMddHHmmss)" -Force
+    $b = [System.IO.File]::ReadAllBytes($p)
+    $add = [System.Text.Encoding]::ASCII.GetBytes("MA_VAR=valeur`n")
+    $out = New-Object byte[] ($b.Length + $add.Length)
+    [Array]::Copy($b, 0, $out, 0, $b.Length)
+    [Array]::Copy($add, 0, $out, $b.Length, $add.Length)
+    [System.IO.File]::WriteAllBytes("$p.tmp", $out)
+    Move-Item "$p.tmp" $p -Force
+    ```
+
+    Vérifier après écriture que les trois premiers octets ne sont pas
+    `EF BB BF`.
+
 ## Éprouver une restauration, sans toucher à la production
 
 Vérifier que ce dossier reconstruit un système qui marche demande de le monter

@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-06T04:59:52Z",
+  "generated_at": "2026-09-11T18:39:37Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Les articles qu'une inscription peut recevoir en dépôt se lisent sans le droit d'ouvrir la caisse : le nom et l'état, jamais un montant",
+            "audience": [
+              "éducateur",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Ce qu'un élève doit encore sur les exercices précédents s'affiche au moment de le réinscrire, et sur le portail de sa famille",
             "audience": [
@@ -1598,6 +1606,15 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû",
+            "audience": [
+              "comptable",
+              "secrétariat",
+              "éducateur"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille",
             "audience": [

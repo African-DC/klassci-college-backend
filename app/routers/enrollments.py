@@ -25,6 +25,8 @@ from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
     BulkValidateRequest,
     BulkValidateResponse,
+    DepositableFeeListResponse,
+    DepositableFeeResponse,
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
@@ -325,6 +327,34 @@ async def get_enrollment(
 ) -> EnrollmentResponse:
     """Retourne une inscription par ID."""
     return await enrollment_service.get_enrollment(db, enrollment_id)
+
+
+@router.get(
+    "/{enrollment_id}/in-kind-fees",
+    response_model=DepositableFeeListResponse,
+    summary="Les articles deposables de cette inscription, sans montant",
+)
+async def get_depositable_fees(
+    enrollment_id: int,
+    _: None = require_permission("enrollments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> DepositableFeeListResponse:
+    """Ce que cette inscription peut recevoir en depot, et ou ca en est.
+
+    `enrollments:read` et non `payments:read` : la reponse ne porte aucun
+    montant, seulement le nom de l'article et son etat. C'est la lecture qui
+    manquait a l'educateur — il a le droit de poser un depot depuis la fiche,
+    mais la seule liste qui montrait ses articles etait faite de sommes, donc
+    fermee, et l'ecran lui repondait une porte close la ou il peut agir.
+
+    Le detail des frais reste, lui, derriere `payments:read`. Ouvrir cette
+    liste-ci n'ouvre rien d'autre : un article sans son tarif ne dit pas ce que
+    la famille doit.
+    """
+    articles = await enrollment_fees.depositable_fees(db, enrollment_id=enrollment_id)
+    return DepositableFeeListResponse(
+        items=[DepositableFeeResponse.model_validate(article) for article in articles]
+    )
 
 
 @router.patch(
