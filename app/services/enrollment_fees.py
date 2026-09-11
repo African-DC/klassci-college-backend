@@ -35,7 +35,6 @@ from app.models.fee import (
     FeeCategory,
     FeeEnrollmentProfile,
     FeeVariant,
-    PaymentAllocation,
     is_not_cash_due,
 )
 from app.models.user import Student
@@ -694,7 +693,14 @@ async def mark_in_kind_deposit(
     fee_id: int,
     deposited_by: int,
 ) -> EnrollmentFee:
-    """Dépôt tardif : pending sans allocation → in_kind. Sinon 409."""
+    """Dépôt tardif : pending sans versement vivant → in_kind. Sinon 409.
+
+    « Vivant » et non « existant » : un versement annulé laisse son allocation
+    derrière lui, exprès, et elle ne doit rien interdire. Le frais réglé par
+    erreur puis contre-passé — la famille ayant finalement apporté l'article —
+    est exactement le cas que le contrôle sur la seule table des allocations
+    rendait impossible à régulariser depuis l'application.
+    """
     fee = (
         await db.execute(
             select(EnrollmentFee).where(
@@ -715,14 +721,7 @@ async def mark_in_kind_deposit(
             "déjà imputé, ou la ligne n'est plus due. On n'annule pas un paiement."
         )
 
-    has_alloc = (
-        await db.execute(
-            select(PaymentAllocation.id)
-            .where(PaymentAllocation.enrollment_fee_id == fee.id)
-            .limit(1)
-        )
-    ).first()
-    if has_alloc is not None:
+    if await fees_paid.fee_carries_live_payment(db, fee.id):
         raise ConflictError(
             "Impossible de marquer ce frais comme déposé : un versement y est déjà imputé."
         )
@@ -762,6 +761,24 @@ class DepositableFee:
     status: str
 
 
+def _article_deposable(frais: EnrollmentFee, categorie: FeeCategory) -> DepositableFee:
+    """Une ligne de frais telle que l'écran de dépôt la lit.
+
+    Les deux lectures — un dossier, une classe — passent par ici pour que le
+    statut se rende de la même façon. SQLAlchemy tantôt rend l'énumération,
+    tantôt sa chaîne, selon que l'objet sort du cache d'identité de la session
+    ou d'une lecture fraîche : une seule des deux lectures qui l'oublierait
+    enverrait « EnrollmentFeeStatus.PENDING » à l'écran, qui n'y reconnaîtrait
+    aucun de ses deux états et n'afficherait plus aucun geste.
+    """
+    return DepositableFee(
+        fee_id=frais.id,
+        fee_category_id=frais.fee_category_id,
+        category_name=categorie.name,
+        status=str(getattr(frais.status, "value", frais.status)),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class InKindRosterRow:
     """Une ligne de la liste de saisie : un élève, son profil, ses articles."""
@@ -772,6 +789,40 @@ class InKindRosterRow:
     last_name: str
     is_new_student: bool | None
     fees: list[DepositableFee]
+
+
+async def depositable_fees(db: AsyncSession, *, enrollment_id: int) -> list[DepositableFee]:
+    """Les articles qu'une inscription peut recevoir en dépôt, sans un montant.
+
+    Le pendant, pour un seul dossier, de ce que `in_kind_roster` rend pour une
+    classe. Il existe parce que le dépôt en nature n'est pas un geste de
+    caisse : l'éducateur qui reçoit le paquet de rames a `enrollments:update`
+    et n'a pas `payments:read`. Or la fiche d'inscription n'affichait ses
+    articles qu'au travers de la liste des frais, qui est faite de montants et
+    reste donc fermée — il y lisait une porte close là où il a le droit d'agir,
+    et concluait que déclarer un dépôt depuis la fiche n'existait pas.
+
+    **Aucun montant ne sort d'ici**, et c'est ce qui permet d'ouvrir la lecture
+    à `enrollments:read` : le nom de l'article et son état suffisent à décider
+    s'il reste à déposer. Ajouter le tarif un jour rouvrirait la question du
+    droit de le lire, et il faudrait alors passer par `FinanceView`.
+
+    Les articles dont la catégorie n'accepte pas le dépôt ne remontent pas :
+    une case « Scolarité T1 » proposée au dépôt serait une invitation à solder
+    une dette réelle sans un franc.
+    """
+    stmt = (
+        select(EnrollmentFee, FeeCategory)
+        .join(FeeCategory, FeeCategory.id == EnrollmentFee.fee_category_id)
+        .where(
+            EnrollmentFee.enrollment_id == enrollment_id,
+            FeeCategory.accepts_in_kind.is_(True),
+        )
+        .order_by(FeeCategory.name, EnrollmentFee.id)
+    )
+    return [
+        _article_deposable(frais, categorie) for frais, categorie in (await db.execute(stmt)).all()
+    ]
 
 
 async def in_kind_roster(
@@ -831,14 +882,7 @@ async def in_kind_roster(
             categorie = categories.get(frais.fee_category_id)
             if categorie is None or not categorie.accepts_in_kind:
                 continue
-            articles.append(
-                DepositableFee(
-                    fee_id=frais.id,
-                    fee_category_id=frais.fee_category_id,
-                    category_name=categorie.name,
-                    status=str(getattr(frais.status, "value", frais.status)),
-                )
-            )
+            articles.append(_article_deposable(frais, categorie))
         lignes.append(
             InKindRosterRow(
                 enrollment_id=inscription.id,
@@ -876,7 +920,9 @@ async def cancel_in_kind_deposit(
     devrait jamais en porter — `plannable_fees` l'écarte de toute imputation.
     Le refaire coûte une requête et ferme la question : rendre « due » une
     ligne sur laquelle de l'argent aurait atterri par un chemin qu'on n'a pas
-    prévu ferait réapparaître une dette déjà payée.
+    prévu ferait réapparaître une dette déjà payée. Un versement **annulé** ne
+    compte pas : il ne pose plus d'argent, et le laisser bloquer condamnait la
+    ligne aux deux gestes à la fois.
     """
     fee = (
         await db.execute(
@@ -894,14 +940,7 @@ async def cancel_in_kind_deposit(
             "Cette ligne n'est pas marquée déposée : il n'y a pas de dépôt à annuler."
         )
 
-    has_alloc = (
-        await db.execute(
-            select(PaymentAllocation.id)
-            .where(PaymentAllocation.enrollment_fee_id == fee.id)
-            .limit(1)
-        )
-    ).first()
-    if has_alloc is not None:
+    if await fees_paid.fee_carries_live_payment(db, fee.id):
         raise ConflictError(
             "Impossible d'annuler ce dépôt : un versement est imputé sur cette ligne."
         )

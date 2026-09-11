@@ -496,3 +496,37 @@ async def fee_ids_with_allocations(db: AsyncSession, enrollment_id: int) -> set[
         .distinct()
     )
     return {int(fee_id) for fee_id in (await db.execute(stmt)).scalars().all()}
+
+
+async def fee_carries_live_payment(db: AsyncSession, fee_id: int) -> bool:
+    """Ce frais porte-t-il un versement qui compte encore ?
+
+    Distincte de `fee_ids_with_allocations`, qui répond « ce frais porte-t-il
+    une écriture » — la question de la clé étrangère, posée avant de détruire
+    une ligne, et à laquelle un versement annulé répond oui.
+
+    Ici la question est celle du guichet : « de l'argent est-il posé là ? »
+    — `LIVE_PAYMENT_STATUSES` dit lesquels comptent, et pourquoi.
+    Un versement annulé ne l'est plus. Le vérifier sur la seule table des
+    allocations, comme le faisait le dépôt en nature, rendait définitivement
+    non déposable un frais dont le versement venait d'être contre-passé : la
+    famille avait finalement apporté l'article, la caisse avait annulé sa
+    saisie, et l'application répondait qu'un versement y était imputé en
+    montrant par ailleurs un reste dû complet. C'est le piège que
+    `lifecycle.cancel_payment` nomme dans sa docstring — « ne jamais écrire un
+    consommateur d'allocations sans ce filtre » — pris à l'envers : ici le
+    filtre manquant ne ressuscitait pas de l'argent, il ressuscitait un
+    interdit.
+    """
+    from app.models.fee import LIVE_PAYMENT_STATUSES, Payment, PaymentAllocation
+
+    stmt = (
+        select(PaymentAllocation.id)
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .where(
+            PaymentAllocation.enrollment_fee_id == fee_id,
+            Payment.status.in_(LIVE_PAYMENT_STATUSES),
+        )
+        .limit(1)
+    )
+    return (await db.execute(stmt)).first() is not None
