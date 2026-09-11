@@ -26,6 +26,7 @@ from app.schemas.payment import (
     PaymentListResponse,
     PaymentMethodListResponse,
     PaymentMethodOption,
+    PaymentReallocate,
     PaymentResponse,
     PaymentSummaryResponse,
 )
@@ -587,6 +588,39 @@ async def cancel_payment(
         reason=data.reason,
         cancelled_by=current_user.user_id,
         may_cancel_any=may_cancel_any,
+    )
+
+
+@router.post("/{payment_id}/reallocate", response_model=PaymentResponse)
+async def reallocate_payment(
+    payment_id: int,
+    data: PaymentReallocate,
+    current_user: TokenData = Depends(get_current_user),
+    may_reallocate_any: bool = has_permission("payments:cancel:any"),
+    _: None = require_permission("payments:create"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> PaymentResponse:
+    """Deplace une imputation vers le bon frais, motif obligatoire.
+
+    Meme autorite que l'annulation, et aucune permission nouvelle : re-viser
+    une ecriture est strictement moins destructeur que la defaire, et la meme
+    main doit pouvoir faire les deux. Le comptable corrige n'importe quel
+    versement ; le caissier ne corrige que sa propre saisie, journee non
+    clôturee.
+
+    Le versement ne change ni de montant, ni de date, ni de caissier : la
+    caisse n'est pas touchee, et la clôture du jour tombe juste sans rien
+    savoir de cette correction.
+    """
+    return await payment_service.reallocate_payment(
+        db,
+        payment_id,
+        from_fee_id=data.from_enrollment_fee_id,
+        to_fee_id=data.to_enrollment_fee_id,
+        amount=data.amount,
+        reason=data.reason,
+        reallocated_by=current_user.user_id,
+        may_reallocate_any=may_reallocate_any,
     )
 
 

@@ -152,6 +152,26 @@ class PaymentCancel(BaseModel):
     reason: str = Field(max_length=2000)
 
 
+class PaymentReallocate(BaseModel):
+    """Deplacer une imputation d'un frais vers un autre, sur ce versement.
+
+    Le montant est borne par deux plafonds que seul le serveur connait — ce
+    qui est reellement impute sur le frais de depart, et le reste du frais
+    d'arrivee. Les poser ici en dupliquerait la regle sans pouvoir la tenir :
+    Pydantic ne lit pas la base. Le seul controle qui vaille ici est qu'on
+    deplace quelque chose de positif.
+
+    `reason` suit la meme regle que le motif d'annulation, et pour la meme
+    raison : la longueur minimale se mesure apres reduction des espaces, ce
+    que Pydantic ne fait pas. Voir `_correction.MOTIF_MINIMUM`.
+    """
+
+    from_enrollment_fee_id: int
+    to_enrollment_fee_id: int
+    amount: Decimal = Field(gt=0)
+    reason: str = Field(max_length=2000)
+
+
 class PaymentResponse(BaseModel):
     id: int
     #: `None` quand l'élève a été supprimé définitivement. Le versement, lui,
