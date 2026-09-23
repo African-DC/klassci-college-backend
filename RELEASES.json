@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-11T22:23:00Z",
+  "generated_at": "2026-09-23T06:45:01Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,49 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Le journal affiche un nom plutôt qu'un numéro pour les versements et les fiches qu'il modifie ou supprime, et le garde après suppression",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un versement mène à l'élève et à l'inscription concernés, et la recherche du journal accepte enfin un nom d'élève",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une suppression enregistre ce qui a disparu : treize des seize suppressions auditées n'en gardaient aucune trace, et une fiche effacée ne se retrouve plus",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La modification d'un élève, d'un enseignant, d'un membre du personnel, d'un parent, d'une classe, d'une matière ou d'un frais enregistre l'état d'avant",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0082` : les deux colonnes qui portent le nom du sujet et ses fiches liées. Les lignes déjà écrites gardent leur numéro, l'écran le dit. À jouer sur CHAQUE base d'établissement",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Une imputation posée sur le mauvais frais se déplace vers le bon, sans annuler ni ressaisir le versement",
             "audience": [

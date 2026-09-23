@@ -14,6 +14,12 @@ class AuditEntryResponse(BaseModel):
     action: str
     entity_type: str
     entity_id: int | None
+    # Nom du sujet, figé au moment de l'acte : l'écran dit « Aminata Traoré ·
+    # 6e B » au lieu de « #42 », et continue de le dire si la fiche est
+    # supprimée. Vide pour les lignes antérieures à la migration 0082.
+    subject_label: str | None = None
+    #: `[{type, id, label}]` — les autres fiches touchées par l'action.
+    related_entities: list[dict[str, Any]] | None = None
     user_id: int | None
     # Nom résolu à la lecture depuis les fiches ; e-mail et rôle figés à
     # l'écriture, donc toujours là même si le compte a disparu.

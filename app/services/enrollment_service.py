@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import frozen
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
@@ -740,6 +741,7 @@ async def unsubscribe_optional_fee(
         raise NotFoundError("StudentOption", option_id)
 
     option_id_for_audit = student_option.id
+    disparu = frozen(student_option, "enrollment_id", "optional_fee_option_id", "quantity")
     await db.delete(student_option)
     await db.flush()
 
@@ -749,6 +751,7 @@ async def unsubscribe_optional_fee(
         action=AuditAction.DELETE,
         user_id=deleted_by,
         entity_id=option_id_for_audit,
+        old_values=disparu,
     )
 
 

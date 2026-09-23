@@ -75,6 +75,14 @@ class AuditLog(Base):
     # telle qu'elle s'appelle aujourd'hui, pas telle qu'elle signait en 2024.
     actor_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     actor_role: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Le sujet de l'action, nomme au moment ou elle a lieu. Meme parti pris que
+    # pour l'auteur, et pour la meme raison : une fiche supprimee ne se
+    # retrouve plus. Le nom est fourni par le service qui agit, depuis
+    # l'objet qu'il tient deja : voir `audit_values.subject_of`.
+    subject_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # `[{type, id, label}]` — les autres fiches que l'action touche. L'eleve et
+    # la classe derriere un versement, par exemple.
+    related_entities: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -95,6 +103,8 @@ async def audit_log(
     new_values: dict[str, Any] | None = None,
     ip_address: str | None = None,
     notes: str | None = None,
+    subject_label: str | None = None,
+    related: list[dict[str, Any]] | None = None,
 ) -> None:
     """Enregistre une entrée d'audit dans la transaction courante.
 
@@ -103,6 +113,12 @@ async def audit_log(
 
     À appeler sur toutes les mutations sensibles :
     paiements, notes, inscriptions, rôles/permissions.
+
+    `subject_label` et `related` nomment ce sur quoi l'action porte. Ils sont
+    fournis par l'appelant, jamais résolus ici : cette fonction est appelée
+    depuis des boucles d'import et de correction de notes, et une requête de
+    confort y deviendrait une requête par ligne. `audit_values.subject_of`
+    tire le nom de l'objet que le service tient déjà, sans aller à la base.
     """
     # On ne recopie l'identite que si elle correspond bien a l'auteur declare :
     # un service qui audite au nom d'un autre (import, tache planifiee) ne doit
@@ -123,6 +139,8 @@ async def audit_log(
             new_values=new_values,
             ip_address=ip_address,
             notes=notes,
+            subject_label=subject_label[:255] if subject_label else None,
+            related_entities=related or None,
         )
         await db.execute(stmt)
         await db.flush()
