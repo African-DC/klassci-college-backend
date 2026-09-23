@@ -9,6 +9,11 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Le journal affiche un nom plutôt qu'un numéro pour les versements et les fiches qu'il modifie ou supprime, et le garde après suppression *(admin, directeur, comptable)*
+- Un versement mène à l'élève et à l'inscription concernés, et la recherche du journal accepte enfin un nom d'élève *(admin, directeur, comptable)*
+- Une suppression enregistre ce qui a disparu : treize des seize suppressions auditées n'en gardaient aucune trace, et une fiche effacée ne se retrouve plus *(admin, directeur)*
+- La modification d'un élève, d'un enseignant, d'un membre du personnel, d'un parent, d'une classe, d'une matière ou d'un frais enregistre l'état d'avant *(admin, directeur, comptable)*
+- Migration `0082` : les deux colonnes qui portent le nom du sujet et ses fiches liées. Les lignes déjà écrites gardent leur numéro, l'écran le dit. À jouer sur CHAQUE base d'établissement *(technique, déploiement)*
 - Une imputation posée sur le mauvais frais se déplace vers le bon, sans annuler ni ressaisir le versement *(comptable, caissier)*
 - Ce déplacement exige un motif écrit et ne touche ni au montant encaissé, ni à la caisse, ni à la clôture du jour *(comptable, caissier, directeur)*
 - Les articles qu'une inscription peut recevoir en dépôt se lisent sans le droit d'ouvrir la caisse : le nom et l'état, jamais un montant *(éducateur, secrétariat)*

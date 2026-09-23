@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import frozen
 from app.core.exceptions import NotFoundError
 from app.models.installment import FeeInstallmentKind
 from app.repositories import installment_repository as repo
@@ -193,6 +194,16 @@ async def clear_enrollment_plan(db: AsyncSession, enrollment_id: int, *, updated
     """
     await _assert_enrollment_exists(db, enrollment_id)
 
+    # Lu avant d'effacer : apres le DELETE, l'accord supprime n'existe plus
+    # nulle part, et une famille qui conteste son echeancier n'a plus rien a
+    # opposer.
+    accord = await repo.list_enrollment_plan(db, enrollment_id)
+    disparu = {
+        "installments": [
+            frozen(ligne, "name", "position", "percentage", "amount", "due_date")
+            for ligne in accord
+        ]
+    }
     async with db.begin_nested():
         removed = await repo.clear_enrollment_plan(db, enrollment_id)
         if removed:
@@ -202,5 +213,6 @@ async def clear_enrollment_plan(db: AsyncSession, enrollment_id: int, *, updated
                 action=AuditAction.DELETE,
                 user_id=updated_by,
                 entity_id=enrollment_id,
+                old_values=disparu,
             )
     await db.commit()

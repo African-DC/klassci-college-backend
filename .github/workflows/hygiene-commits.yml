@@ -1,0 +1,205 @@
+name: Hygiene des commits
+
+# La barriere qui ne se contourne pas.
+#
+# `.githooks/` donne un retour immediat au moment ou l'on se trompe, mais
+# `git commit --no-verify` le saute, et un agent presse le fera. Jusqu'ici,
+# rien cote serveur ne rejouait ces regles : le depot interdisait la signature
+# automatique et exigeait un message conventionnel, et ces deux regles ne
+# tenaient qu'a la bonne volonte de chaque poste.
+#
+# Ce controle-la ne lit que des messages de commit. Il ne depend d'aucune
+# installation, tourne en quelques secondes, et personne ne peut passer outre.
+#
+# Porte depuis KLASSCIv2 (.github/workflows/hygiene-commits.yml), adapte au
+# flux de College : branches develop / staging / main, marqueur de revue
+# thermo-nucleaire, et le changelog laisse a son propre workflow
+# (changelog-check.yml) plutot que duplique ici.
+
+# Sur pull request seulement, et chaque texte est juge la ou il s'ecrit encore.
+#
+# Une fusion ecrasee vers `develop` prend pour sujet le TITRE de la PR, suivi
+# de « (#NNN) ». Les commits de la branche, eux, ne partent que dans le corps.
+# Tenir propres les commits ne dit donc rien du sujet qui arrivera sur
+# `develop` : c'est le titre qu'il faut juger, avec la place de « (#NNN) ».
+#
+# Une PR de mise en production (tete `develop` ou `staging`) ne rejuge rien :
+# ses commits sont deja partages, et leur defaut ne se corrige plus qu'en
+# reecrivant une branche protegee. Les rejuger bloquait toute mise en
+# production : 78 des 300 derniers sujets du backend depassent 72 caracteres,
+# presque tous des titres de PR, qu'aucun hook local ne voit jamais.
+on:
+  pull_request:
+    branches: [develop, staging, main]
+    types: [opened, synchronize, reopened, edited]
+
+# Une execution annulee est une execution payee pour rien : quand une nouvelle
+# poussee arrive sur la meme reference, la precedente n'apprend plus rien.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  messages:
+    name: Messages de commit
+    # Une mise en production ne rejuge rien : ses commits et son titre sont
+    # deja partages. Un job saute compte comme reussi pour un controle requis.
+    # La seconde moitie ferme la faille d'un fork dont la branche
+    # s'appellerait `develop`.
+    if: ${{ !(contains(fromJSON('["develop", "staging"]'), github.head_ref) && github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Le titre devient le sujet de la fusion ecrasee : c'est lui qui entre
+      # dans l'historique de `develop`, pas les sujets des commits.
+      - name: Le titre de la PR fera un bon sujet de commit
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          TITRE: ${{ github.event.pull_request.title }}
+        run: |
+          set -uo pipefail
+          echec=0
+          types='feat|fix|refactor|test|docs|chore|perf|style|ci|build|revert'
+          if ! printf '%s\n' "$TITRE" | grep -qE "^($types)(\([a-z0-9:._/-]+\))?!?: .+"; then
+            echo "::error::Titre non conventionnel : $TITRE"
+            echo "::error::Il deviendra le sujet du commit sur develop. Attendu : type(portee): description"
+            echec=1
+          fi
+          # 72 moins la place de « (#NNN) » que GitHub ajoute a la fusion.
+          if [ "${#TITRE}" -gt 65 ]; then
+            echo "::error::Titre de ${#TITRE} caracteres, la limite est 65 : GitHub y ajoutera (#NNN) et depassera 72."
+            echec=1
+          fi
+          if printf '%s\n' "$TITRE" | grep -qiE 'Co-Authored-By|Generated with|🤖|Claude-Session'; then
+            echo "::error::Le titre porte une mention d'outil de generation."
+            echec=1
+          fi
+          exit $echec
+
+      - name: Relire chaque commit de la branche
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          plage="$(git merge-base "origin/$BASE_REF" HEAD)..HEAD"
+          echec=0
+          types='feat|fix|refactor|test|docs|chore|perf|style|ci|build|revert'
+
+          for sha in $(git rev-list "$plage" 2>/dev/null); do
+            message=$(git log -1 --format='%B' "$sha")
+            sujet=$(git log -1 --format='%s' "$sha")
+            court=$(git log -1 --format='%h' "$sha")
+
+            # Une fusion porte un sujet impose par GitHub, qui ne suit pas
+            # le format conventionnel et n'a pas a le suivre.
+            if [ "$(git rev-list --parents -n 1 "$sha" | wc -w)" -gt 2 ]; then
+              continue
+            fi
+            case "$sujet" in
+              "Merge "*|"Revert "*|"fixup! "*|"squash! "*) continue ;;
+            esac
+
+            # Ancre en debut de ligne : c'est la que ces mentions apparaissent
+            # reellement, en pied de message. Sans l'ancre, un commit qui se
+            # contente de PARLER de la regle, comme celui qui ajoute ce
+            # fichier, se ferait refuser, et la seule issue serait de
+            # contourner le garde-fou. Un garde-fou qu'on apprend a contourner
+            # ne garde plus rien.
+            if printf '%s\n' "$message" | grep -qiE '^[[:space:]]*(Co-Authored-By:|Generated with|🤖|Claude-Session:|Signed-off-by: Claude)'; then
+              echo "::error::$court — signature automatique dans le message. L'historique nomme l'auteur du travail, pas l'outil qui l'a tape."
+              echec=1
+            fi
+
+            if printf '%s\n' "$message" | grep -qiE 'noreply@anthropic\.com'; then
+              echo "::error::$court — adresse d'outil de generation dans le message."
+              echec=1
+            fi
+
+            if ! printf '%s\n' "$sujet" | grep -qE "^($types)(\([a-z0-9:._/-]+\))?!?: .+"; then
+              echo "::error::$court — message non conventionnel : $sujet"
+              echec=1
+            fi
+
+            if [ "${#sujet}" -gt 72 ]; then
+              echo "::error::$court — sujet de ${#sujet} caracteres, la limite est 72 : $sujet"
+              echec=1
+            fi
+
+            if printf '%s\n' "$sujet" | grep -qiE '^(wip|tmp|temp)'; then
+              echo "::error::$court — commit de travail en cours : $sujet"
+              echec=1
+            fi
+          done
+
+          if [ "$echec" -ne 0 ]; then
+            echo "::error::Regles : .claude/rules/git.md. Les hooks locaux disent la meme chose : sh scripts/install-hooks.sh"
+          fi
+          exit $echec
+
+  corps-pr:
+    name: Corps de la pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: La description ne porte pas de mention d'outil
+        env:
+          CORPS: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n' "$CORPS" | grep -qiE 'Generated with \[Claude Code\]|🤖 Generated|^[[:space:]]*Co-Authored-By:'; then
+            echo "::error::Le corps de la PR porte une mention d'outil de generation."
+            echo "::error::La description dit ce que change la PR et comment la tester, pas avec quoi elle a ete ecrite."
+            exit 1
+          fi
+          exit 0
+
+  revue:
+    name: Revue de qualite declaree
+    # Une mise en production ne rejuge rien : ses commits et son titre sont
+    # deja partages. Un job saute compte comme reussi pour un controle requis.
+    # La seconde moitie ferme la faille d'un fork dont la branche
+    # s'appellerait `develop`.
+    if: ${{ !(contains(fromJSON('["develop", "staging"]'), github.head_ref) && github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # Le hook `pre-push` reclame deja ce marqueur, et se contourne comme les
+      # autres. Le rejouer ici ferme la porte, avec la meme reserve qu'en
+      # local : le marqueur est une declaration, pas une preuve. Sa valeur est
+      # de transformer « j'ai oublie » en « j'ai decide de sauter », et de
+      # laisser cette decision lisible dans l'historique.
+      - name: Un changement de code declare sa revue
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          base=$(git merge-base "origin/$BASE_REF" HEAD)
+
+          code=$(git diff --name-only "$base"..HEAD \
+            | grep -vE '\.(md|json|ya?ml)$|^requirements[^/]*\.txt$|^docs/|^\.githooks/|^\.github/' || true)
+
+          if [ -z "$code" ]; then
+            echo "::notice::Aucun fichier de code dans ce diff : pas de revue a declarer."
+            exit 0
+          fi
+
+          if git log "$base"..HEAD --format='%B' | grep -qiE '^Review:'; then
+            echo "::notice::Revue declaree dans un commit de la branche."
+            exit 0
+          fi
+
+          echo "::error::Aucun commit de cette branche ne declare de revue de qualite."
+          echo "::error::Lancez /thermo-nuclear-code-quality-review sur le diff, puis declarez-la :"
+          echo "::error::  git commit --allow-empty -m 'chore(review): thermo-nuclear pass' -m 'Review: thermo-nuclear'"
+          exit 1

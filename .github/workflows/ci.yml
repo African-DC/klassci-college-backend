@@ -6,6 +6,12 @@ on:
   push:
     branches: [develop]
 
+# Une execution annulee est une execution payee pour rien : quand une nouvelle
+# poussee arrive sur la meme reference, la precedente n'apprend plus rien.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Lint & Type Check

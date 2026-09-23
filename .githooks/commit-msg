@@ -38,7 +38,16 @@ refus() {
 # --- 1. Aucune signature automatique -----------------------------------------
 # `git.md` l'interdit noir sur blanc. Ces mentions se glissent seules dans les
 # messages produits par un assistant, et polluent l'historique du depot.
-if printf '%s' "$message" | grep -qiE 'co-authored-by|generated with|claude-session|🤖'; then
+#
+# Ancre en debut de ligne, comme le job « Messages de commit » de
+# hygiene-commits.yml : c'est la que ces mentions apparaissent reellement, en
+# pied de message. Sans l'ancre, un commit qui se contente de PARLER de la
+# regle, celui qui la rejoue en CI par exemple, se faisait refuser, et la seule
+# issue etait `--no-verify`. Un garde-fou qu'on apprend a contourner ne garde
+# plus rien. L'adresse d'outil, elle, n'a aucune raison d'apparaitre ailleurs
+# qu'en signature : elle reste cherchee partout.
+if printf '%s\n' "$message" | grep -qiE '^[[:space:]]*(Co-Authored-By:|Generated with|🤖|Claude-Session:|Signed-off-by: Claude)' \
+  || printf '%s\n' "$message" | grep -qiE 'noreply@anthropic\.com'; then
   refus "le message porte une signature automatique." \
     "Retirez les lignes « Co-Authored-By », « Generated with », « Claude-Session »." \
     "L'historique nomme l'auteur du travail, pas l'outil qui l'a tape."

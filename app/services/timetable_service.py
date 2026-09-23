@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import frozen
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.timetable import TimetableSlot
 from app.repositories import timetable_repository as repo
@@ -304,6 +305,16 @@ async def delete_slot(
     if slot is None:
         raise NotFoundError("TimetableSlot", slot_id)
 
+    disparu = frozen(
+        slot,
+        "class_id",
+        "teacher_id",
+        "subject_id",
+        "room_id",
+        "day",
+        "start_time",
+        "end_time",
+    )
     await repo.delete_slot(db, slot)
     await db.commit()
 
@@ -313,6 +324,7 @@ async def delete_slot(
         action=AuditAction.DELETE,
         user_id=deleted_by,
         entity_id=slot_id,
+        old_values=disparu,
     )
     await db.commit()
 
