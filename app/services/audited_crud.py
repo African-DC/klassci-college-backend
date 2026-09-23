@@ -33,19 +33,14 @@ class Persisted(Protocol):
     id: int
 
 
-class Updater(Protocol):
-    """Le `repo.update_x` du domaine : il pose les champs et flush."""
-
-    def __call__(self, db: AsyncSession, obj: Any, **changes: Any) -> Awaitable[Any]: ...
-
-
 async def audited_update(
     db: AsyncSession,
     obj: Persisted,
     changes: dict[str, Any],
     *,
     entity_type: str,
-    updater: Updater | Callable[..., Awaitable[Any]],
+    # Le `repo.update_x` du domaine : il pose les champs et flush.
+    updater: Callable[..., Awaitable[Any]],
     actor: int | None,
 ) -> None:
     """Applique `changes` à `obj` et laisse au journal de quoi le relire.
