@@ -32,7 +32,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.archive_filter import INCLUDE_ARCHIVED
-from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
+from app.models.academic import (
+    AcademicYear,
+    Class,
+    Level,
+    Room,
+    SchoolSettings,
+    Series,
+    Subject,
+)
 from app.models.attendance import AttendanceContext, TeacherSessionAttendance
 from app.models.cash_session import CashSession
 from app.models.enrollment import Enrollment
@@ -150,6 +158,8 @@ LIBELLES: dict[str, Libelle] = {
     "fee_category": _colonne(FeeCategory),
     "optional_fee_option": _colonne(OptionalFeeOption),
     "role": _colonne(Role),
+    # Le singleton de l'établissement : son nom est celui de l'école.
+    "school_settings": _colonne(SchoolSettings, "school_name"),
     "cash_session": Libelle(
         requete=lambda ids: select(
             CashSession.id.label("id"), CashSession.business_date.label("jour")
@@ -246,6 +256,10 @@ LIBELLES: dict[str, Libelle] = {
     "parent": _personne(Parent),
     # Le lien parent-élève est journalisé sous l'identifiant du parent.
     "parent_student": _personne(Parent),
+    # Les documents d'un élève sont journalisés sous son identifiant.
+    "document_attestation": _personne(Student, matricule=True),
+    "document_certificat": _personne(Student, matricule=True),
+    "document_release_override": _personne(Student, matricule=True),
     "user": Libelle(
         requete=lambda ids: select(User.id.label("id"), User.email.label("courriel")).where(
             User.id.in_(ids)
