@@ -4,6 +4,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
+# Une execution annulee est une execution payee pour rien : quand une nouvelle
+# poussee arrive sur la meme reference, la precedente n'apprend plus rien.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check-branch-name:
     name: Validate Branch Name

@@ -8,6 +8,12 @@ on:
   push:
     branches: [main, develop]
 
+# Une execution annulee est une execution payee pour rien : quand une nouvelle
+# poussee arrive sur la meme reference, la precedente n'apprend plus rien.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verifier:
     name: Une route est gardee, un role n'autorise pas

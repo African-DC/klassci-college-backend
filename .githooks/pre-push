@@ -44,7 +44,9 @@ fi
 base=$(git merge-base HEAD origin/develop 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
 if [ -n "$base" ]; then
   # Ni documentation ni changelog : seul le code appelle une revue.
-  code=$(git diff --name-only "$base"..HEAD | grep -vE '\.(md|json|ya?ml)$|^docs/|^\.githooks/' || true)
+  # Meme filtre que le job « revue » de hygiene-commits.yml : deux listes
+  # pour une regle finissent par diverger, et c'est deja arrive.
+  code=$(git diff --name-only "$base"..HEAD | grep -vE '\.(md|json|ya?ml)$|^requirements[^/]*\.txt$|^docs/|^\.githooks/|^\.github/' || true)
   if [ -n "$code" ] && ! git log "$base"..HEAD --format='%B' | grep -qiE '^Review:'; then
     refus "aucun commit de cette branche ne declare de revue de qualite." \
       "Lancez /thermo-nuclear-code-quality-review sur le diff, puis declarez-la :" \
@@ -54,6 +56,53 @@ if [ -n "$base" ]; then
       "Ou ajoutez la ligne « Review: thermo-nuclear » au dernier commit." \
       "Le marqueur ne prouve rien ; il rend le saut delibere, et visible."
   fi
+fi
+
+# --- 4. Ce qui part vraiment ne porte pas de signature d'outil ----------------
+# Le hook `commit-msg` a deja dit la regle, et `--no-verify` l'a peut-etre
+# saute. Ici on relit les commits REELLEMENT sur le point de partir : c'est la
+# derniere fois qu'une correction ne coute qu'un `git rebase -i`. Ce qui est
+# sur origin, lui, ne se rattrape qu'en reecrivant l'historique partage.
+#
+# Porte depuis KLASSCIv2/.githooks/pre-push.
+signatures=0
+if ! git rev-parse --verify --quiet origin/develop >/dev/null \
+  || ! git rev-parse --verify --quiet origin/main >/dev/null; then
+  printf '\n\033[33mAvertissement\033[0m — origin/develop ou origin/main absent en local :\n' >&2
+  printf '  les signatures d outil ne peuvent pas etre verifiees. Lancez git fetch origin.\n\n' >&2
+fi
+while read -r _ sha_local _ sha_distant; do
+  [ -z "$sha_local" ] && continue
+  # Suppression de branche : rien a relire.
+  [ "$sha_local" = "0000000000000000000000000000000000000000" ] && continue
+
+  if [ "$sha_distant" = "0000000000000000000000000000000000000000" ]; then
+    # Branche neuve : on se limite a ce qui n'est pas deja sur develop,
+    # sinon on relit tout l'historique du depot.
+    plage="origin/develop..$sha_local"
+  else
+    plage="$sha_distant..$sha_local"
+  fi
+
+  # `--not origin/develop origin/main` : on ne juge que les commits qu'on
+  # AJOUTE. L'historique deja public porte deux signatures heritees d'avant ce
+  # controle ; les rejuger ici refuserait chaque poussee pour une faute qu'on
+  # ne peut plus corriger sans reecrire une branche partagee.
+  for sha in $(git rev-list "$plage" --not origin/develop origin/main 2>/dev/null); do
+    message=$(git log -1 --format='%B' "$sha")
+    court=$(git log -1 --format='%h %s' "$sha")
+    if printf '%s\n' "$message" | grep -qiE '^[[:space:]]*(Co-Authored-By:|Generated with|🤖|Claude-Session:)|noreply@anthropic\.com'; then
+      printf '\n\033[31mPush refuse\033[0m — signature d outil dans %s\n\n' "$court" >&2
+      printf '  Corrigez avant de pousser :\n' >&2
+      printf '    git rebase -i %s~1     (reword)\n\n' "$sha" >&2
+      signatures=1
+    fi
+  done
+done
+
+if [ "$signatures" -ne 0 ]; then
+  printf '  (Le controle serveur rejoue la meme regle sur la PR.)\n\n' >&2
+  exit 1
 fi
 
 exit 0
