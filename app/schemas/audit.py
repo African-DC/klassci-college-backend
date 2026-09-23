@@ -1,7 +1,7 @@
 """Schémas du journal d'audit."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -14,12 +14,19 @@ class AuditEntryResponse(BaseModel):
     action: str
     entity_type: str
     entity_id: int | None
-    # Nom du sujet, figé au moment de l'acte : l'écran dit « Aminata Traoré ·
-    # 6e B » au lieu de « #42 », et continue de le dire si la fiche est
-    # supprimée. Vide pour les lignes antérieures à la migration 0082.
+    # Nom du sujet : figé au moment de l'acte quand le service l'a fourni,
+    # sinon le nom actuel de la fiche, lu à l'affichage. Vide seulement quand
+    # la fiche n'existe plus et que rien ne l'avait nommée.
     subject_label: str | None = None
     #: `[{type, id, label}]` — les autres fiches touchées par l'action.
     related_entities: list[dict[str, Any]] | None = None
+    #: État de la fiche aujourd'hui ; `None` quand le type ne se cherche pas.
+    #: L'écran ne propose d'ouvrir que les fiches actives : une fiche archivée
+    #: n'a plus de page qui l'affiche.
+    subject_state: Literal["active", "archived", "deleted"] | None = None
+    #: `"clé:id"` → nom, pour les identifiants cités dans les valeurs :
+    #: `"level_id:3" → "6e"`, pour lire « Niveau : 6e » et non « Niveau : 3 ».
+    value_labels: dict[str, str] = {}
     user_id: int | None
     # Nom résolu à la lecture depuis les fiches ; e-mail et rôle figés à
     # l'écriture, donc toujours là même si le compte a disparu.

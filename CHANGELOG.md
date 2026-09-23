@@ -105,6 +105,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*
+- Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit *(admin, directeur, comptable)*
+- Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 » *(admin, directeur, comptable)*
 - Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû *(comptable, secrétariat, éducateur)*
 - Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille *(admin, secrétariat)*
 - Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur *(admin, secrétariat)*
