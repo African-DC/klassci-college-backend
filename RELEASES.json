@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-23T06:45:01Z",
+  "generated_at": "2026-09-23T14:04:44Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1666,6 +1666,24 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 »",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû",
             "audience": [

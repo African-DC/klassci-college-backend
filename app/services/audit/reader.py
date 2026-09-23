@@ -10,7 +10,7 @@ from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import AuditAction
+from app.core.audit import AuditAction, AuditLog
 from app.repositories import audit_repository as repo
 from app.repositories.audit_repository import AuditFilters
 from app.schemas.audit import (
@@ -20,6 +20,7 @@ from app.schemas.audit import (
     AuditListResponse,
 )
 from app.services.audit._scope import visible_entity_types
+from app.services.audit.labels import RowLabels, page_labels
 
 
 def _scope(full_access: bool, financial_access: bool) -> frozenset[str] | None:
@@ -67,31 +68,38 @@ async def list_journal(
     )
 
     names = await repo.actor_names(db, {r.user_id for r in rows if r.user_id is not None})
+    libelles = await page_labels(db, rows, allowed=allowed)
 
     return AuditListResponse(
         items=[
-            AuditEntryResponse(
-                id=row.id,
-                created_at=row.created_at,
-                action=str(row.action.value if hasattr(row.action, "value") else row.action),
-                entity_type=row.entity_type,
-                entity_id=row.entity_id,
-                subject_label=row.subject_label,
-                related_entities=row.related_entities,
-                user_id=row.user_id,
-                actor_name=names.get(row.user_id) if row.user_id is not None else None,
-                actor_email=row.actor_email,
-                actor_role=row.actor_role,
-                ip_address=row.ip_address,
-                notes=row.notes,
-                old_values=row.old_values,
-                new_values=row.new_values,
-            )
+            _entry(row, libelles.de(row), names.get(row.user_id) if row.user_id else None)
             for row in rows
         ],
         total=total,
         page=page,
         size=size,
+    )
+
+
+def _entry(row: AuditLog, libelles: RowLabels, actor_name: str | None) -> AuditEntryResponse:
+    return AuditEntryResponse(
+        id=row.id,
+        created_at=row.created_at,
+        action=str(row.action.value if hasattr(row.action, "value") else row.action),
+        entity_type=row.entity_type,
+        entity_id=row.entity_id,
+        subject_label=libelles.nom,
+        subject_state=libelles.etat,
+        related_entities=row.related_entities,
+        value_labels=libelles.valeurs,
+        user_id=row.user_id,
+        actor_name=actor_name,
+        actor_email=row.actor_email,
+        actor_role=row.actor_role,
+        ip_address=row.ip_address,
+        notes=row.notes,
+        old_values=row.old_values,
+        new_values=row.new_values,
     )
 
 
