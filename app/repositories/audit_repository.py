@@ -57,6 +57,9 @@ def _apply(stmt: Select, filters: AuditFilters) -> Select:
                 AuditLog.actor_email.like(like),
                 AuditLog.entity_type.like(like),
                 AuditLog.notes.like(like),
+                # Sans cette colonne, chercher « Traore » dans le journal ne
+                # rend rien : le nom de l'eleve n'etait nulle part.
+                AuditLog.subject_label.like(like),
             )
         )
     return stmt

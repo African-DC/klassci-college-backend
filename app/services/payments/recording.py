@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import ref, subject_of
 from app.core.dependencies import TokenData
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.payment_methods import DRAWER_METHODS
@@ -220,6 +221,21 @@ async def record_enrollment_payment(
 
         journal = _journal_versement(enrollment_id, data, splits, demandees)
 
+        # Nom et fiches liees pris sur l'inscription deja verrouillee et son
+        # eleve deja precharge (`get_enrollment_for_update`) : le journal dit
+        # « 50 000 FCFA, Aminata Traore » sans un aller-retour de plus au
+        # guichet, la ou la famille attend.
+        eleve = enrollment.student
+        nom_eleve = subject_of(eleve) if eleve is not None else None
+        fiches = [
+            r
+            for r in (
+                ref("student", eleve.id if eleve is not None else None, nom_eleve),
+                ref("enrollment", enrollment_id, nom_eleve),
+            )
+            if r
+        ]
+
         await audit_log(
             db,
             entity_type="payment",
@@ -227,6 +243,10 @@ async def record_enrollment_payment(
             user_id=received_by,
             entity_id=payment.id,
             new_values=journal,
+            subject_label=" · ".join(
+                p for p in (f"{data.amount:,.0f} FCFA".replace(",", " "), nom_eleve) if p
+            ),
+            related=fiches or None,
         )
 
     await db.commit()

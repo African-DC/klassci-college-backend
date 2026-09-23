@@ -30,6 +30,22 @@ async def test_audit_log_happy_path() -> None:
     db.flush.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_audit_log_ne_fait_jamais_de_requete_de_confort() -> None:
+    """Une seule requête : l'insertion. Jamais de lecture pour nommer le sujet.
+
+    Cette fonction est appelée dans des boucles — un import de huit cents
+    élèves, une levée de zéros d'office sur une classe entière. Une requête
+    ajoutée ici pour le confort d'affichage y devient une requête par ligne.
+    Le nom vient de l'objet que le service tient déjà.
+    """
+    db = _mock_db()
+    for entity_type in ("student", "payment", "grade", "enrollment"):
+        db.execute.reset_mock()
+        await audit_log(db, entity_type=entity_type, action=AuditAction.UPDATE, entity_id=1)
+        assert db.execute.await_count == 1, entity_type
+
+
 # ---------------------------------------------------------------------------
 # Résilience — erreurs DB swallowées
 # ---------------------------------------------------------------------------

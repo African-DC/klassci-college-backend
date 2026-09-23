@@ -5,6 +5,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import frozen
 from app.core.exceptions import NotFoundError
 from app.repositories import fee_repository as repo
 from app.schemas.fee import (
@@ -21,6 +22,7 @@ from app.schemas.fee import (
     OptionalFeeOptionResponse,
     OptionalFeeOptionUpdate,
 )
+from app.services.audited_crud import audited_update
 from app.services.deletion import DeletionPlan, Dependent, ensure_deletable
 
 logger = logging.getLogger(__name__)
@@ -88,16 +90,14 @@ async def update_fee_category(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _fee_category_to_response(category)
-    async with db.begin_nested():
-        await repo.update_fee_category(db, category, **changes)
-        await audit_log(
-            db,
-            entity_type="fee_category",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=category_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        category,
+        changes,
+        entity_type="fee_category",
+        updater=repo.update_fee_category,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_fee_category_by_id(db, category_id)
     if refreshed is None:
@@ -160,6 +160,7 @@ async def delete_fee_category(
             user_id=deleted_by,
             entity_id=category_id,
             old_values={"name": category.name},
+            subject_label=category.name,
             new_values={"cascade": bool(plan.collateral), "emporte": plan.as_payload()},
         )
     await db.commit()
@@ -244,16 +245,14 @@ async def update_fee_variant(
         del changes["amount"]
     if not changes:
         return _fee_variant_to_response(variant)
-    async with db.begin_nested():
-        await repo.update_fee_variant(db, variant, **changes)
-        await audit_log(
-            db,
-            entity_type="fee_variant",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=variant_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        variant,
+        changes,
+        entity_type="fee_variant",
+        updater=repo.update_fee_variant,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_fee_variant_by_id(db, variant_id)
     if refreshed is None:
@@ -265,6 +264,17 @@ async def delete_fee_variant(db: AsyncSession, variant_id: int, *, deleted_by: i
     variant = await repo.get_fee_variant_by_id(db, variant_id)
     if variant is None:
         raise NotFoundError("FeeVariant", variant_id)
+    disparu = frozen(
+        variant,
+        "fee_category_id",
+        "academic_year_id",
+        "amount",
+        "level_id",
+        "series_id",
+        "assignment_scope",
+        "enrollment_profile",
+        "description",
+    )
     async with db.begin_nested():
         await repo.delete_fee_variant(db, variant)
         await audit_log(
@@ -273,6 +283,7 @@ async def delete_fee_variant(db: AsyncSession, variant_id: int, *, deleted_by: i
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=variant_id,
+            old_values=disparu,
         )
     await db.commit()
 
@@ -345,16 +356,14 @@ async def update_optional_fee_option(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _fee_option_to_response(option)
-    async with db.begin_nested():
-        await repo.update_optional_fee_option(db, option, **changes)
-        await audit_log(
-            db,
-            entity_type="optional_fee_option",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=option_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        option,
+        changes,
+        entity_type="optional_fee_option",
+        updater=repo.update_optional_fee_option,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_optional_fee_option_by_id(db, option_id)
     if refreshed is None:
@@ -366,6 +375,7 @@ async def delete_optional_fee_option(db: AsyncSession, option_id: int, *, delete
     option = await repo.get_optional_fee_option_by_id(db, option_id)
     if option is None:
         raise NotFoundError("OptionalFeeOption", option_id)
+    disparu = frozen(option, "name", "fee_category_id", "academic_year_id", "amount", "description")
     async with db.begin_nested():
         await repo.delete_optional_fee_option(db, option)
         await audit_log(
@@ -374,5 +384,7 @@ async def delete_optional_fee_option(db: AsyncSession, option_id: int, *, delete
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=option_id,
+            old_values=disparu,
+            subject_label=option.name,
         )
     await db.commit()

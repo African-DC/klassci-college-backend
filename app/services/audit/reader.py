@@ -76,6 +76,8 @@ async def list_journal(
                 action=str(row.action.value if hasattr(row.action, "value") else row.action),
                 entity_type=row.entity_type,
                 entity_id=row.entity_id,
+                subject_label=row.subject_label,
+                related_entities=row.related_entities,
                 user_id=row.user_id,
                 actor_name=names.get(row.user_id) if row.user_id is not None else None,
                 actor_email=row.actor_email,

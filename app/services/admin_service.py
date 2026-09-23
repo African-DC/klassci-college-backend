@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
+from app.core.audit_values import frozen, frozen_changed, subject_of
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
@@ -85,6 +86,7 @@ from app.schemas.admin import (
 )
 from app.services import archive_service, fees_paid, photo_lifecycle
 from app.services import fee_entitlements as entitlements
+from app.services.audited_crud import audited_update
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
 
 logger = logging.getLogger(__name__)
@@ -224,16 +226,14 @@ async def update_student(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _student_to_response(student)
-    async with db.begin_nested():
-        await repo.update_student(db, student, **changes)
-        await audit_log(
-            db,
-            entity_type="student",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=student_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        student,
+        changes,
+        entity_type="student",
+        updater=repo.update_student,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_student_by_id(db, student_id)
     if refreshed is None:
@@ -743,16 +743,14 @@ async def update_teacher(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _teacher_to_response(teacher)
-    async with db.begin_nested():
-        await repo.update_teacher(db, teacher, **changes)
-        await audit_log(
-            db,
-            entity_type="teacher",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=teacher_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        teacher,
+        changes,
+        entity_type="teacher",
+        updater=repo.update_teacher,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_teacher_by_id(db, teacher_id)
     if refreshed is None:
@@ -1139,6 +1137,11 @@ async def update_staff(
         await _assert_staff_role_seeded(db, new_role)
     if not changes and new_role is None:
         return _staff_to_response(staff)
+    # Le rôle d'avant compte autant que le nouveau : « qui a retiré la caisse à
+    # untel, et quand » est exactement ce qu'on vient demander au journal.
+    ancien_role = _extract_staff_role(getattr(staff, "user", None))
+    avant = frozen_changed(staff, changes)
+    sujet = subject_of(staff)
     async with db.begin_nested():
         if changes:
             await repo.update_staff(db, staff, **changes)
@@ -1150,6 +1153,8 @@ async def update_staff(
             action=AuditAction.UPDATE,
             user_id=updated_by,
             entity_id=staff_id,
+            old_values={**avant, **({"role": ancien_role} if new_role else {})},
+            subject_label=sujet,
             new_values={**changes, **({"role": new_role} if new_role else {})},
         )
     await db.commit()
@@ -1446,16 +1451,14 @@ async def update_parent(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _parent_to_response(parent)
-    async with db.begin_nested():
-        await repo.update_parent(db, parent, **changes)
-        await audit_log(
-            db,
-            entity_type="parent",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=parent_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        parent,
+        changes,
+        entity_type="parent",
+        updater=repo.update_parent,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_parent_by_id(db, parent_id)
     if refreshed is None:
@@ -1557,6 +1560,7 @@ async def unlink_parent_from_student(
     if link is None:
         raise NotFoundError("ParentStudent link", parent_id)
 
+    disparu = frozen(link, "parent_id", "student_id", "relationship_type")
     async with db.begin_nested():
         await db.delete(link)
         await db.flush()
@@ -1566,10 +1570,7 @@ async def unlink_parent_from_student(
             action=AuditAction.DELETE,
             user_id=unlinked_by,
             entity_id=parent_id,
-            new_values={
-                "parent_id": parent_id,
-                "student_id": student_id,
-            },
+            old_values=disparu,
         )
     await db.commit()
 
@@ -1695,16 +1696,14 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
-    async with db.begin_nested():
-        await repo.update_class(db, cls, **changes)
-        await audit_log(
-            db,
-            entity_type="class",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=class_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        cls,
+        changes,
+        entity_type="class",
+        updater=repo.update_class,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:
@@ -1716,6 +1715,7 @@ async def delete_class(db: AsyncSession, class_id: int, *, deleted_by: int) -> N
     cls = await repo.get_class_by_id(db, class_id)
     if cls is None:
         raise NotFoundError("Class", class_id)
+    disparu = frozen(cls, "name", "level_id", "series_id", "room_id", "max_students")
     async with db.begin_nested():
         await repo.delete_class(db, cls)
         await audit_log(
@@ -1724,6 +1724,8 @@ async def delete_class(db: AsyncSession, class_id: int, *, deleted_by: int) -> N
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=class_id,
+            old_values=disparu,
+            subject_label=cls.name,
         )
     await db.commit()
 
@@ -1811,16 +1813,14 @@ async def update_subject(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _subject_to_response(subject)
-    async with db.begin_nested():
-        await repo.update_subject(db, subject, **changes)
-        await audit_log(
-            db,
-            entity_type="subject",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=subject_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        subject,
+        changes,
+        entity_type="subject",
+        updater=repo.update_subject,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_subject_by_id(db, subject_id)
     if refreshed is None:
@@ -1832,6 +1832,7 @@ async def delete_subject(db: AsyncSession, subject_id: int, *, deleted_by: int) 
     subject = await repo.get_subject_by_id(db, subject_id)
     if subject is None:
         raise NotFoundError("Subject", subject_id)
+    disparu = frozen(subject, "name", "level_id", "series_id", "coefficient", "hours_per_week")
     async with db.begin_nested():
         await repo.delete_subject(db, subject)
         await audit_log(
@@ -1840,6 +1841,8 @@ async def delete_subject(db: AsyncSession, subject_id: int, *, deleted_by: int) 
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=subject_id,
+            old_values=disparu,
+            subject_label=subject.name,
         )
     await db.commit()
 
@@ -1952,16 +1955,14 @@ async def update_academic_year(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _academic_year_to_response(year)
-    async with db.begin_nested():
-        await repo.update_academic_year(db, year, **changes)
-        await audit_log(
-            db,
-            entity_type="academic_year",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=year_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        year,
+        changes,
+        entity_type="academic_year",
+        updater=repo.update_academic_year,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_academic_year_by_id(db, year_id)
     if refreshed is None:
@@ -1973,6 +1974,7 @@ async def delete_academic_year(db: AsyncSession, year_id: int, *, deleted_by: in
     year = await repo.get_academic_year_by_id(db, year_id)
     if year is None:
         raise NotFoundError("AcademicYear", year_id)
+    disparu = frozen(year, "name", "start_date", "end_date", "is_current")
     async with db.begin_nested():
         await repo.delete_academic_year(db, year)
         await audit_log(
@@ -1981,6 +1983,8 @@ async def delete_academic_year(db: AsyncSession, year_id: int, *, deleted_by: in
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=year_id,
+            old_values=disparu,
+            subject_label=year.name,
         )
     await db.commit()
 
@@ -2087,16 +2091,14 @@ async def update_level(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _level_to_response(level)
-    async with db.begin_nested():
-        await repo.update_level(db, level, **changes)
-        await audit_log(
-            db,
-            entity_type="level",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=level_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        level,
+        changes,
+        entity_type="level",
+        updater=repo.update_level,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_level_by_id(db, level_id)
     if refreshed is None:
@@ -2108,6 +2110,7 @@ async def delete_level(db: AsyncSession, level_id: int, *, deleted_by: int) -> N
     level = await repo.get_level_by_id(db, level_id)
     if level is None:
         raise NotFoundError("Level", level_id)
+    disparu = frozen(level, "name", "order")
     async with db.begin_nested():
         await repo.delete_level(db, level)
         await audit_log(
@@ -2116,6 +2119,8 @@ async def delete_level(db: AsyncSession, level_id: int, *, deleted_by: int) -> N
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=level_id,
+            old_values=disparu,
+            subject_label=level.name,
         )
     await db.commit()
 
@@ -2632,16 +2637,14 @@ async def update_series(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _series_to_response(series)
-    async with db.begin_nested():
-        await repo.update_series(db, series, **changes)
-        await audit_log(
-            db,
-            entity_type="series",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=series_id,
-            new_values=changes,
-        )
+    await audited_update(
+        db,
+        series,
+        changes,
+        entity_type="series",
+        updater=repo.update_series,
+        actor=updated_by,
+    )
     await db.commit()
     refreshed = await repo.get_series_by_id(db, series_id)
     if refreshed is None:
@@ -2653,6 +2656,7 @@ async def delete_series(db: AsyncSession, series_id: int, *, deleted_by: int) ->
     series = await repo.get_series_by_id(db, series_id)
     if series is None:
         raise NotFoundError("Series", series_id)
+    disparu = frozen(series, "name", "level_id")
     async with db.begin_nested():
         await repo.delete_series(db, series)
         await audit_log(
@@ -2661,6 +2665,8 @@ async def delete_series(db: AsyncSession, series_id: int, *, deleted_by: int) ->
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=series_id,
+            old_values=disparu,
+            subject_label=series.name,
         )
     await db.commit()
 
@@ -2773,6 +2779,7 @@ async def delete_role(db: AsyncSession, role_id: int, *, deleted_by: int) -> Non
     role = await repo.get_role_by_id(db, role_id)
     if role is None:
         raise NotFoundError("Role", role_id)
+    disparu = frozen(role, "name", "description")
     async with db.begin_nested():
         await repo.delete_role(db, role)
         await audit_log(
@@ -2781,6 +2788,8 @@ async def delete_role(db: AsyncSession, role_id: int, *, deleted_by: int) -> Non
             action=AuditAction.DELETE,
             user_id=deleted_by,
             entity_id=role_id,
+            old_values=disparu,
+            subject_label=role.name,
         )
     await db.commit()
 
@@ -2910,6 +2919,7 @@ async def delete_room(db: AsyncSession, room_id: int, *, deleted_by: int | None 
     room = await repo.get_room_by_id(db, room_id)
     if not room:
         raise NotFoundError("Room", room_id)
+    disparu = frozen(room, "name", "capacity", "room_type")
     await repo.delete_room(db, room)
     await audit_log(
         db,
@@ -2917,6 +2927,8 @@ async def delete_room(db: AsyncSession, room_id: int, *, deleted_by: int | None 
         action=AuditAction.DELETE,
         user_id=deleted_by,
         entity_id=room_id,
+        old_values=disparu,
+        subject_label=room.name,
     )
     await db.commit()
 
