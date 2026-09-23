@@ -164,6 +164,16 @@ async def test_chaque_type_se_nomme_comme_on_le_dit_au_guichet(base: Any) -> Non
 
 
 @pytest.mark.asyncio
+async def test_un_document_se_nomme_par_l_eleve_sous_lequel_il_est_journalise(base: Any) -> None:
+    """Une attestation lue est journalisée sous l'identifiant de l'élève."""
+    db, _, _ = base
+    ligne = _ligne("document_attestation", 40)
+    libelles = await page_labels(db, [ligne], allowed=TOUT)
+    assert libelles.de(ligne).nom == "Aminata Traoré · CI-2026-0012"
+    assert libelles.de(ligne).etat == "active"
+
+
+@pytest.mark.asyncio
 async def test_une_page_coute_une_requete_par_type_pas_une_par_ligne(base: Any) -> None:
     db, _, _ = base
     lignes = [_ligne("class", 12) for _ in range(40)] + [_ligne("student", 40) for _ in range(40)]
@@ -203,7 +213,7 @@ async def test_l_etat_de_la_fiche_distingue_active_archivee_supprimee(base: Any)
     presente = _ligne("class", 12)
     archivee = _ligne("student", 41)
     disparue = _ligne("class", 999)
-    inconnue = _ligne("school_settings", 1)
+    inconnue = _ligne("export", 1)
     libelles = await page_labels(db, [presente, archivee, disparue, inconnue], allowed=TOUT)
     assert libelles.de(presente).etat == "active"
     assert libelles.de(archivee).etat == "archived"
