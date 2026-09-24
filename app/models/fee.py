@@ -14,6 +14,7 @@ from sqlalchemy import (
     Computed,
     DateTime,
     ForeignKey,
+    Index,
     Numeric,
     SmallInteger,
     String,
@@ -398,6 +399,10 @@ class Payment(Base, TimestampMixin):
     """
 
     __tablename__ = "payments"
+    __table_args__ = (
+        # Le nom de la migration 0083 : `alembic check` compare les deux.
+        Index("uq_payments_idempotency_key", "idempotency_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # Nullable : un versement orphelin est un versement dont l'élève a été
@@ -435,6 +440,10 @@ class Payment(Base, TimestampMixin):
         index=True,
     )
     reference: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    #: Tirée par l'écran à l'envoi et renvoyée telle quelle à chaque nouvelle
+    #: tentative : un renvoi rend le versement déjà écrit au lieu d'en écrire
+    #: un second (migration 0083).
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     received_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )

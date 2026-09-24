@@ -241,6 +241,7 @@ async def create_payment(
     received_by: int | None,
     notes: str | None,
     enrollment_fee_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> Payment:
     """Crée un Payment (acte caissier) et le flush pour obtenir l'ID.
 
@@ -256,10 +257,17 @@ async def create_payment(
         reference=reference,
         received_by=received_by,
         notes=notes,
+        idempotency_key=idempotency_key,
     )
     db.add(payment)
     await db.flush()
     return payment
+
+
+async def get_payment_id_by_idempotency_key(db: AsyncSession, key: str) -> int | None:
+    """L'identifiant du versement déjà écrit sous cette clé d'envoi, s'il existe."""
+    stmt = select(Payment.id).where(Payment.idempotency_key == key)
+    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def create_allocation(

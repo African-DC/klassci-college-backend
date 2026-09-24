@@ -9,6 +9,7 @@ Ils ne lisent pas le code : ils vérifient qui figure dans la liste des
 destinataires, et qui n'y figure pas.
 """
 
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -33,6 +34,7 @@ def envois(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
                 "action_url": kw.get("action_url"),
                 "entity_id": kw.get("entity_id"),
                 "title": context.get("title"),
+                "body": context.get("body"),
             }
         )
         return object()
@@ -46,6 +48,11 @@ def envois(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     monkeypatch.setattr(notification_dispatch_service, "dispatch_notification", _faux_dispatch)
     monkeypatch.setattr(
         notification_dispatch_service.permission_repository,
+        "list_user_ids_with_permission",
+        _faux_resolveur,
+    )
+    monkeypatch.setattr(
+        enrollment_notifications.permission_repository,
         "list_user_ids_with_permission",
         _faux_resolveur,
     )
@@ -76,13 +83,56 @@ async def test_ne_previent_pas_celui_qui_vient_d_agir(envois) -> None:
     assert [e["user_id"] for e in envois] == [DIRECTEUR]
 
 
+INSCRIPTEUR_SANS_DROIT = 5
+
+
+async def _versement(acteur_id: int | None = None, createur_id: int | None = None) -> None:
+    await enrollment_notifications.prevenir_du_versement(
+        None,
+        enrollment_id=42,
+        student_name="Traoré Aminata",
+        montant=Decimal("25000"),
+        moyen="cash",
+        reste=Decimal("30000"),
+        createur_id=createur_id,
+        acteur_id=acteur_id,
+    )
+
+
 @pytest.mark.asyncio
 async def test_le_versement_previent_qui_peut_valider(envois) -> None:
-    await enrollment_notifications.prevenir_qu_il_faut_valider(
-        None, enrollment_id=42, student_name="Traoré Aminata", acteur_id=None
-    )
+    await _versement()
     assert [e["user_id"] for e in envois] == [DIRECTEUR]
-    assert envois[0]["title"] == "Inscription à valider"
+    assert envois[0]["title"] == "Versement reçu, inscription à valider"
+
+
+@pytest.mark.asyncio
+async def test_le_versement_previent_celui_qui_a_ouvert_le_dossier(envois) -> None:
+    """Il n'a ni le droit de valider ni celui de voir les paiements, et il est
+    prévenu quand même : c'est lui qui attend ce versement pour avancer."""
+    await _versement(createur_id=INSCRIPTEUR_SANS_DROIT)
+    assert sorted(e["user_id"] for e in envois) == [DIRECTEUR, INSCRIPTEUR_SANS_DROIT]
+
+
+@pytest.mark.asyncio
+async def test_le_message_dit_le_montant_et_le_reste_sans_ouvrir_les_paiements(envois) -> None:
+    await _versement(createur_id=INSCRIPTEUR_SANS_DROIT)
+    corps = envois[0]["body"]
+    assert "25 000 FCFA" in corps
+    assert "Espèces" in corps
+    assert "Reste à payer : 30 000 FCFA" in corps
+
+
+@pytest.mark.asyncio
+async def test_le_createur_qui_peut_valider_n_est_prevenu_qu_une_fois(envois) -> None:
+    await _versement(createur_id=DIRECTEUR)
+    assert [e["user_id"] for e in envois] == [DIRECTEUR]
+
+
+@pytest.mark.asyncio
+async def test_la_caissiere_ne_se_previent_pas_elle_meme(envois) -> None:
+    await _versement(createur_id=SECRETAIRE, acteur_id=SECRETAIRE)
+    assert [e["user_id"] for e in envois] == [DIRECTEUR]
 
 
 @pytest.mark.asyncio
@@ -90,9 +140,7 @@ async def test_chaque_notification_mene_a_l_ecran_ou_l_on_agit(envois) -> None:
     await enrollment_notifications.prevenir_qu_il_faut_encaisser(
         None, enrollment_id=42, student_name="X", class_name="6ème A", acteur_id=None
     )
-    await enrollment_notifications.prevenir_qu_il_faut_valider(
-        None, enrollment_id=42, student_name="X", acteur_id=None
-    )
+    await _versement()
     liens = [e["action_url"] for e in envois]
     # Le lien porte l'action attendue, pas seulement la fiche : on arrive là
     # où l'on fait la chose, pas là où on la contemple.

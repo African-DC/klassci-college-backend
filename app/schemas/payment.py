@@ -52,6 +52,11 @@ class EnrollmentPaymentCreate(BaseModel):
     method: str
     reference: str | None = None
     notes: str | None = None
+    #: Tirée par l'écran au moment de l'envoi, renvoyée identique à chaque
+    #: nouvelle tentative. Une clé déjà vue rend le versement déjà enregistré.
+    idempotency_key: str | None = Field(
+        default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"
+    )
     #: Imputations nommées, facultatives. Absent ou vide : allocation en
     #: cascade par priorité, le comportement historique, inchangé. Renseigné :
     #: chaque montant va au frais désigné et le reliquat cascade sur le reste
@@ -215,6 +220,11 @@ class PaymentResponse(BaseModel):
     #: proposer « Valider » au hasard et laisser le serveur refuser, ce qui
     #: revient à annoncer une action qui n'existe pas.
     enrollment_awaiting_validation: bool = False
+    #: Reste à payer en argent sur l'inscription, versements réels déduits,
+    #: calculé par le serveur au moment de la réponse. Renseigné par
+    #: l'encaissement, y compris quand il rend un versement déjà écrit : l'écran
+    #: n'a jamais à le recalculer, donc jamais à le décompter deux fois.
+    enrollment_remaining_after: float | None = None
     # Nouveaux champs (refactor 2026-05-17)
     allocations: list[PaymentAllocationResponse] = []
 

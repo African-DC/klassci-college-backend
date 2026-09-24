@@ -138,6 +138,12 @@ class EnrollmentResponse(BaseModel):
     #: `None` = on n'a pas tranche. L'ecran doit l'afficher comme tel, pas
     #: comme « ancien » : c'est une case a cocher, pas une case decochee.
     is_new_student: bool | None = None
+    #: L'inscription attend-elle un versement pour être validée ? Aucun
+    #: versement reçu ET quelque chose reste dû en argent : la règle même de la
+    #: garde de validation. L'écran s'en sert tel quel pour proposer
+    #: « Encaisser » ou « Valider », sans la recalculer. `None` sur les
+    #: réponses qui ne la calculent pas.
+    awaiting_payment: bool | None = None
 
 
 class EnrollmentListResponse(BaseModel):

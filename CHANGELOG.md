@@ -9,6 +9,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Une inscription ne se valide plus sans versement reçu, y compris par la modification du dossier ; un dossier sans rien à régler en argent reste validable *(secrétariat, directeur)*
+- La personne qui a créé l'inscription est prévenue à chaque versement tant qu'elle n'est pas validée, avec le montant, le moyen et le reste à payer dans la notification même *(secrétariat, directeur)*
+- Un versement renvoyé après une coupure réseau n'est plus enregistré deux fois : le même envoi rend le même versement *(caissier)*
+- L'encaissement répond sans attendre l'envoi des messages WhatsApp et e-mail aux parents, qui partent juste après *(caissier)*
 - Le journal affiche un nom plutôt qu'un numéro pour les versements et les fiches qu'il modifie ou supprime, et le garde après suppression *(admin, directeur, comptable)*
 - Un versement mène à l'élève et à l'inscription concernés, et la recherche du journal accepte enfin un nom d'élève *(admin, directeur, comptable)*
 - Une suppression enregistre ce qui a disparu : treize des seize suppressions auditées n'en gardaient aucune trace, et une fiche effacée ne se retrouve plus *(admin, directeur)*
