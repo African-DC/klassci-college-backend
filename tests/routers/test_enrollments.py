@@ -395,3 +395,50 @@ def test_validate_enrollment_not_found() -> None:
         _clear_deps()
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PATCH /enrollments/{id} vers « valide » : c'est une validation
+# ---------------------------------------------------------------------------
+
+
+def test_l_edition_lit_le_droit_de_valider_quand_on_demande_valide() -> None:
+    """La route lit le droit et le transmet ; le service décide s'il s'agit
+    d'une transition et refuse sans ce droit (voir ses propres tests)."""
+    _override_deps()
+    service = AsyncMock(return_value=SAMPLE_ENROLLMENT)
+    try:
+        with (
+            patch(
+                "app.routers.enrollments.resolve_permission",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch("app.routers.enrollments.enrollment_service.update_enrollment", service),
+            TestClient(app) as client,
+        ):
+            resp = client.patch("/enrollments/1", json={"status": "valide"})
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 200
+    assert service.call_args.kwargs["peut_valider"] is False
+
+
+def test_modifier_les_notes_ne_lit_pas_le_droit_de_valider() -> None:
+    _override_deps()
+    service = AsyncMock(return_value=SAMPLE_ENROLLMENT)
+    droit = AsyncMock(return_value=True)
+    try:
+        with (
+            patch("app.routers.enrollments.resolve_permission", droit),
+            patch("app.routers.enrollments.enrollment_service.update_enrollment", service),
+            TestClient(app) as client,
+        ):
+            resp = client.patch("/enrollments/1", json={"notes": "dossier complet"})
+    finally:
+        _clear_deps()
+
+    assert resp.status_code == 200
+    droit.assert_not_called()
+    assert service.call_args.kwargs["peut_valider"] is False

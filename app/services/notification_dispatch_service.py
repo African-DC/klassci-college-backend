@@ -228,8 +228,39 @@ async def dispatch_to_permission(
         )
         return []
 
+    return await dispatch_to_users(
+        db,
+        destinataires,
+        notification_type,
+        context,
+        channels,
+        action_url=action_url,
+        entity_type=entity_type,
+        entity_id=entity_id,
+    )
+
+
+async def dispatch_to_users(
+    db: AsyncSession,
+    user_ids: list[int],
+    notification_type: str | NotificationType,
+    context: dict[str, str],
+    channels: list[str | NotificationChannel] | None = None,
+    *,
+    action_url: str | None = None,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+) -> list[Notification]:
+    """Écrit la même notification à chacune de ces personnes, puis commit.
+
+    Un destinataire injoignable ne prive pas les autres. Le commit est ici :
+    `dispatch_notification` ne fait que `flush`, et nos appelants s'exécutent
+    APRÈS le commit métier ; sans lui, la fermeture de la session annulerait
+    la transaction et la notification disparaîtrait sans qu'aucune erreur ne
+    soit levée.
+    """
     envoyees: list[Notification] = []
-    for uid in destinataires:
+    for uid in dict.fromkeys(user_ids):
         try:
             envoyees.append(
                 await dispatch_notification(
@@ -244,18 +275,12 @@ async def dispatch_to_permission(
                 )
             )
         except Exception:
-            # Un destinataire injoignable ne doit pas priver les autres : la
-            # notification est un effet de bord de l'acte metier, jamais sa
-            # condition. L'inscription reste creee meme si la cloche echoue.
+            # La notification est un effet de bord de l'acte metier, jamais sa
+            # condition : l'acte reste ecrit meme si la cloche echoue.
             logger.exception(
                 "Notification '%s' echouee pour l'utilisateur %d", notification_type, uid
             )
 
-    # Sans ce commit, rien n'est ecrit. `dispatch_notification` fait `add` puis
-    # `flush`, ce qui ouvre une transaction ; nos deux appelants s'executent
-    # APRES le commit metier, et la session est refermee par `get_db` sans
-    # jamais recommiter. La fermeture annule alors la transaction, et la
-    # notification disparait sans qu'aucune erreur ne soit levee.
     if envoyees:
         await db.commit()
 

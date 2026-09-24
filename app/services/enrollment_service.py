@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
 from app.core.audit_values import frozen
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import BusinessValidationError, NotFoundError, PermissionDeniedError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolSettings
-from app.models.enrollment import Enrollment, EnrollmentStatus, StudentOption
+from app.models.enrollment import EnrollmentStatus, StudentOption
 from app.models.fee import OptionalFeeOption
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
@@ -32,8 +32,14 @@ from app.services import (
     enrollment_fees,
     enrollment_history,
     enrollment_notifications,
+    enrollment_validation,
 )
 from app.services.enrollment_arrears import ArrearsClearance
+from app.services.enrollment_mapper import to_enrollment_response as _to_response
+from app.services.enrollment_validation import (  # noqa: F401 - renvois historiques
+    validate_enrollment,
+    validate_enrollments_in_bulk,
+)
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)
@@ -41,38 +47,6 @@ logger = logging.getLogger(__name__)
 _VALID_STATUSES = {s.value for s in EnrollmentStatus}
 #: Filtre d'écran « À valider » : prospect + en_validation, la queue du jour.
 _FILTRE_STATUTS = _VALID_STATUSES | {"a_valider"}
-
-
-def _to_response(enrollment: Enrollment) -> EnrollmentResponse:
-    """Convertit un Enrollment ORM en EnrollmentResponse."""
-    academic_year_name = (
-        enrollment.academic_year.name
-        if enrollment.academic_year
-        else str(enrollment.academic_year_id)
-    )
-    fee_variant_id: int | None = None
-    if enrollment.enrollment_fees:
-        fee_variant_id = enrollment.enrollment_fees[0].fee_variant_id
-
-    return EnrollmentResponse(
-        id=enrollment.id,
-        student_id=enrollment.student_id,
-        class_id=enrollment.class_id,
-        academic_year_id=enrollment.academic_year_id,
-        academic_year_name=academic_year_name,
-        status=enrollment.status,
-        fee_variant_id=fee_variant_id,
-        notes=enrollment.notes,
-        created_by=enrollment.created_by,
-        created_at=enrollment.created_at,
-        updated_at=enrollment.updated_at,
-        student_first_name=enrollment.student.first_name if enrollment.student else None,
-        student_last_name=enrollment.student.last_name if enrollment.student else None,
-        class_name=enrollment.class_.name if enrollment.class_ else None,
-        assignment_status=enrollment.assignment_status,
-        assignment_decision_number=enrollment.assignment_decision_number,
-        is_new_student=enrollment.is_new_student,
-    )
 
 
 async def _profil_a_retenir(
@@ -255,8 +229,9 @@ async def list_enrollments(
         page=page,
         size=size,
     )
+    en_attente = await enrollment_validation.awaiting_payment(db, (e.id for e in enrollments))
     return EnrollmentListResponse(
-        items=[_to_response(e) for e in enrollments],
+        items=[_to_response(e, awaiting_payment=e.id in en_attente) for e in enrollments],
         total=total,
         page=page,
         size=size,
@@ -268,7 +243,8 @@ async def get_enrollment(db: AsyncSession, enrollment_id: int) -> EnrollmentResp
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
-    return _to_response(enrollment)
+    en_attente = await enrollment_validation.awaiting_payment(db, [enrollment_id])
+    return _to_response(enrollment, awaiting_payment=enrollment_id in en_attente)
 
 
 async def update_enrollment(
@@ -276,11 +252,30 @@ async def update_enrollment(
     enrollment_id: int,
     data: EnrollmentUpdate,
     updated_by: int,
+    *,
+    peut_valider: bool = False,
 ) -> EnrollmentResponse:
-    """Met à jour une inscription (patch partiel). Classe, profil ou affectation : régénère les frais."""
+    """Met à jour une inscription (patch partiel). Classe, profil ou affectation : régénère les frais.
+
+    Passer le statut à « valide » est une validation, et passe par elle :
+    même droit (`peut_valider`, lu par la route), même garde de versement,
+    même refus des statuts terminaux, même trace au journal. Le formulaire
+    d'édition renvoie le statut à chaque enregistrement : un statut déjà
+    « valide » n'est pas une transition, et n'exige rien.
+    """
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
+
+    validation = (
+        data.status == EnrollmentStatus.VALIDE.value
+        and enrollment.status != EnrollmentStatus.VALIDE
+    )
+    if validation and not peut_valider:
+        raise PermissionDeniedError("enrollments:validate")
+    # Le statut, s'il valide, passe par la validation plus bas ; tout le reste
+    # s'écrit ici. Le journal de l'édition ne le compte donc pas deux fois.
+    champs = data.model_fields_set - ({"status"} if validation else set())
 
     old_values = {
         "status": enrollment.status,
@@ -319,7 +314,7 @@ async def update_enrollment(
         await repo.update_enrollment(
             db,
             enrollment,
-            status=data.status,
+            status=None if validation else data.status,
             notes=data.notes,
             class_id=data.class_id,
             is_new_student=(data.is_new_student if profil_envoye else repo.UNSET),
@@ -336,67 +331,30 @@ async def update_enrollment(
                 db, enrollment_id, regenerated_by=updated_by
             )
 
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=enrollment_id,
-            old_values=old_values,
-            # Ce que le client a REELLEMENT envoye, nuls compris. `exclude_none`
-            # ecartait les champs remis a null, or c'est precisement le geste
-            # qui remet le profil a « non tranche » et qui, quelques lignes plus
-            # haut, regenere toute la grille de frais de l'inscription. Le
-            # journal ne gardait donc aucune trace de la seule action qui
-            # explique pourquoi la dette d'une famille a change.
-            #
-            # `mode="json"` parce que la colonne d'audit est du JSON : un enum
-            # ou une date rendus en objets Python y lèvent une erreur illisible.
-            new_values=data.model_dump(include=data.model_fields_set, mode="json"),
-        )
+        # Après la régénération : la garde de versement lit la grille de frais
+        # que l'inscription aura réellement, pas celle d'avant la modification.
+        if validation:
+            await enrollment_validation.appliquer_validation(db, enrollment, updated_by)
 
-    await db.commit()
-
-    refreshed = await repo.get_enrollment_by_id(db, enrollment_id)
-    if refreshed is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-    return _to_response(refreshed)
-
-
-async def validate_enrollment(
-    db: AsyncSession,
-    enrollment_id: int,
-    validated_by: int,
-) -> EnrollmentResponse:
-    """Transitionne une inscription `prospect` ou `en_validation` vers `valide`.
-
-    Endpoint dédié (pas un PATCH générique) : audit log porte
-    `action=validate` plutôt que `update`, et le transition guard refuse
-    explicitement les autres statuts avec un message clair côté admin.
-    """
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
-
-    previous_status = enrollment.status
-    if previous_status == EnrollmentStatus.VALIDE:
-        raise BusinessValidationError("Cette inscription est déjà validée.")
-    if previous_status not in (EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION):
-        raise BusinessValidationError(
-            f"Impossible de valider une inscription au statut « {previous_status.value} »."
-        )
-
-    async with db.begin_nested():
-        await repo.update_enrollment(db, enrollment, status=EnrollmentStatus.VALIDE)
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.UPDATE,
-            user_id=validated_by,
-            entity_id=enrollment_id,
-            old_values={"status": previous_status.value},
-            new_values={"status": EnrollmentStatus.VALIDE.value, "transition": "validate"},
-        )
+        if champs:
+            await audit_log(
+                db,
+                entity_type="enrollment",
+                action=AuditAction.UPDATE,
+                user_id=updated_by,
+                entity_id=enrollment_id,
+                old_values=old_values,
+                # Ce que le client a REELLEMENT envoye, nuls compris. `exclude_none`
+                # ecartait les champs remis a null, or c'est precisement le geste
+                # qui remet le profil a « non tranche » et qui, quelques lignes plus
+                # haut, regenere toute la grille de frais de l'inscription. Le
+                # journal ne gardait donc aucune trace de la seule action qui
+                # explique pourquoi la dette d'une famille a change.
+                #
+                # `mode="json"` parce que la colonne d'audit est du JSON : un enum
+                # ou une date rendus en objets Python y lèvent une erreur illisible.
+                new_values=data.model_dump(include=champs, mode="json"),
+            )
 
     await db.commit()
 
@@ -753,35 +711,3 @@ async def unsubscribe_optional_fee(
         entity_id=option_id_for_audit,
         old_values=disparu,
     )
-
-
-async def validate_enrollments_in_bulk(
-    db: AsyncSession,
-    enrollment_ids: list[int],
-    validated_by: int,
-) -> dict[str, object]:
-    """Valide plusieurs inscriptions, et dit ce qui a échoué.
-
-    Une école valide une cohorte entière à la rentrée. Le faire dossier par
-    dossier prend l'après-midi, et rien dans le geste ne le justifie : la
-    décision a été prise en conseil, l'écran ne fait que l'enregistrer.
-
-    Une inscription qui refuse la transition n'arrête pas les autres. Un lot
-    qui s'interrompt à la troisième ligne laisse le secrétariat sans savoir
-    ce qui est passé, et l'oblige à tout reprendre pour le découvrir. Chaque
-    échec est donc rendu avec son motif, en face de son identifiant.
-
-    Chaque validation garde son audit propre : le lot est une commodité de
-    l'écran, pas une opération à part que l'historique ne saurait pas relire.
-    """
-    validees: list[int] = []
-    echecs: list[dict[str, object]] = []
-
-    for enrollment_id in enrollment_ids:
-        try:
-            await validate_enrollment(db, enrollment_id, validated_by)
-            validees.append(enrollment_id)
-        except (BusinessValidationError, NotFoundError) as exc:
-            echecs.append({"enrollment_id": enrollment_id, "reason": str(exc.detail)})
-
-    return {"validated": validees, "failed": echecs}

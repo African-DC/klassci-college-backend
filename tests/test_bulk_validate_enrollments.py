@@ -12,7 +12,7 @@ passé, et l'oblige à tout reprendre pour le découvrir.
 import pytest
 
 from app.core.exceptions import BusinessValidationError, NotFoundError
-from app.services import enrollment_service
+from app.services import enrollment_service, enrollment_validation
 
 
 @pytest.fixture()
@@ -28,7 +28,7 @@ def validations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
         faites.append(enrollment_id)
         return object()
 
-    monkeypatch.setattr(enrollment_service, "validate_enrollment", _valider)
+    monkeypatch.setattr(enrollment_validation, "validate_enrollment", _valider)
     return faites
 
 

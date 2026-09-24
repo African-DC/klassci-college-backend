@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-23T14:16:06Z",
+  "generated_at": "2026-09-24T12:21:48Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,36 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Une inscription ne se valide plus sans versement reçu, y compris par la modification du dossier ; un dossier sans rien à régler en argent reste validable",
+            "audience": [
+              "secrétariat",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La personne qui a créé l'inscription est prévenue à chaque versement tant qu'elle n'est pas validée, avec le montant, le moyen et le reste à payer dans la notification même",
+            "audience": [
+              "secrétariat",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un versement renvoyé après une coupure réseau n'est plus enregistré deux fois : le même envoi rend le même versement",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'encaissement répond sans attendre l'envoi des messages WhatsApp et e-mail aux parents, qui partent juste après",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Le journal affiche un nom plutôt qu'un numéro pour les versements et les fiches qu'il modifie ou supprime, et le garde après suppression",
             "audience": [

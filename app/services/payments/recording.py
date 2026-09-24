@@ -7,10 +7,12 @@ granulaire) — il log un warning et crée également 1 PaymentAllocation 1:1
 pour rester cohérent avec la nouvelle source de vérité.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import AuditAction, audit_log
@@ -34,10 +36,12 @@ from app.services.payments._allocation import (
     recompute_fee_status,
     resolve_allocation,
 )
-from app.services.payments._notification import dispatch_payment_notification
+from app.services.payments._notification import Differer, dispatch_payment_notification
+from app.services.payments._replay import avec_reste, versement_deja_ecrit
 from app.services.payments._response import payment_to_response
 from app.services.payments._state import logger
 from app.services.payments.allocation_invariant import verifier as verifier_invariant
+from app.services.payments.remaining import remaining_cash
 
 
 async def _guard_method_and_drawer(
@@ -93,12 +97,21 @@ def _journal_versement(
     return journal
 
 
+@dataclass(frozen=True, slots=True)
+class _Ecrit:
+    """Ce qu'il faut savoir du versement écrit pour prévenir ensuite."""
+
+    payment_id: int
+
+
 async def record_enrollment_payment(
     db: AsyncSession,
     enrollment_id: int,
     data: EnrollmentPaymentCreate,
     *,
     actor: TokenData,
+    differer: Differer | None = None,
+    tenant_id: str | None = None,
 ) -> PaymentResponse:
     """Enregistre un versement à la caisse, alloué par priorité ou à la main.
 
@@ -114,10 +127,70 @@ async def record_enrollment_payment(
     aussi la répartition manuelle : jamais plus que le reste dû d'un frais,
     jamais sur un frais exonéré ou déposé en nature, jamais sur le frais d'une
     autre inscription.
+
+    `data.idempotency_key` rend un renvoi inoffensif : la même clé rend le
+    versement déjà écrit. Deux envois simultanés sous la même clé se
+    départagent sur la contrainte d'unicité, et le perdant rend le gagnant.
+
+    `differer` fait partir le message aux parents après la réponse.
     """
-    received_by = actor.user_id
+    rejoue = await versement_deja_ecrit(db, enrollment_id, data)
+    if rejoue is not None:
+        return rejoue
     await _guard_method_and_drawer(db, actor, data.method, when=datetime.now())
 
+    try:
+        ecrit = await _ecrire_versement(db, enrollment_id, data, actor)
+    except IntegrityError:
+        await db.rollback()
+        rejoue = await versement_deja_ecrit(db, enrollment_id, data)
+        if rejoue is None:
+            raise
+        return rejoue
+
+    refreshed = await repo.get_payment_with_allocations(db, ecrit.payment_id)
+    if refreshed is None:
+        raise NotFoundError("Payment", ecrit.payment_id)
+    reste = await remaining_cash(db, enrollment_id)
+
+    await dispatch_payment_notification(
+        db, refreshed, kind="received", differer=differer, tenant_id=tenant_id
+    )
+
+    # Le versement est passe : l'inscription attend sa validation. On ne
+    # previent que tant qu'elle ne l'est pas : une famille qui paie en
+    # plusieurs fois declencherait sinon une alerte par versement, et c'est
+    # ainsi qu'un compteur cesse d'etre lu.
+    inscription = getattr(refreshed, "enrollment", None)
+    if inscription is not None and inscription.status in (
+        EnrollmentStatus.PROSPECT,
+        EnrollmentStatus.EN_VALIDATION,
+    ):
+        eleve = getattr(inscription, "student", None)
+        nom = " ".join(
+            p for p in (getattr(eleve, "last_name", ""), getattr(eleve, "first_name", "")) if p
+        ).strip()
+        await enrollment_notifications.prevenir_du_versement(
+            db,
+            enrollment_id=inscription.id,
+            student_name=nom or "Un élève",
+            montant=data.amount,
+            moyen=data.method,
+            reste=reste,
+            createur_id=inscription.created_by,
+            acteur_id=actor.user_id,
+        )
+    return avec_reste(payment_to_response(refreshed), reste)
+
+
+async def _ecrire_versement(
+    db: AsyncSession,
+    enrollment_id: int,
+    data: EnrollmentPaymentCreate,
+    actor: TokenData,
+) -> _Ecrit:
+    """Écrit le versement et ses imputations, en une transaction, puis commit."""
+    received_by = actor.user_id
     async with db.begin_nested():
         enrollment = await repo.get_enrollment_for_update(db, enrollment_id)
         if enrollment is None:
@@ -199,6 +272,7 @@ async def record_enrollment_payment(
             reference=data.reference,
             received_by=received_by,
             notes=data.notes,
+            idempotency_key=data.idempotency_key,
         )
 
         for fee, allocated in splits:
@@ -250,33 +324,7 @@ async def record_enrollment_payment(
         )
 
     await db.commit()
-
-    refreshed = await repo.get_payment_with_allocations(db, payment.id)
-    if refreshed is None:
-        raise NotFoundError("Payment", payment.id)
-
-    await dispatch_payment_notification(db, refreshed, kind="received")
-
-    # Le versement est passe : l'inscription attend sa validation. On ne
-    # previent que tant qu'elle ne l'est pas — une famille qui paie en
-    # plusieurs fois declencherait sinon une alerte par versement, et c'est
-    # ainsi qu'un compteur cesse d'etre lu.
-    inscription = getattr(refreshed, "enrollment", None)
-    if inscription is not None and inscription.status in (
-        EnrollmentStatus.PROSPECT,
-        EnrollmentStatus.EN_VALIDATION,
-    ):
-        eleve = getattr(inscription, "student", None)
-        nom = " ".join(
-            p for p in (getattr(eleve, "last_name", ""), getattr(eleve, "first_name", "")) if p
-        ).strip()
-        await enrollment_notifications.prevenir_qu_il_faut_valider(
-            db,
-            enrollment_id=inscription.id,
-            student_name=nom or "Un élève",
-            acteur_id=received_by,
-        )
-    return payment_to_response(refreshed)
+    return _Ecrit(payment_id=payment.id)
 
 
 async def create_payment(

@@ -121,9 +121,19 @@ async def test_validate_enrollment_blocked_for_terminal_statuses(
     [EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION],
 )
 async def test_validate_enrollment_happy_path_transitions(
-    from_status: EnrollmentStatus,
+    from_status: EnrollmentStatus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """prospect / en_validation → valide : audit log enregistré + commit."""
+    """prospect / en_validation → valide : audit log enregistré + commit.
+
+    Le versement est supposé reçu : la garde a ses propres tests, sur une
+    vraie base (`test_enrollment_validation_guard.py`).
+    """
+    from app.services import enrollment_validation
+
+    async def versement_recu(db, enrollment_id):
+        return None
+
+    monkeypatch.setattr(enrollment_validation, "ensure_payment_received", versement_recu)
     from app.repositories import enrollment_repository
 
     enrollment = _make_enrollment(from_status)
@@ -148,16 +158,16 @@ async def test_validate_enrollment_happy_path_transitions(
 
     original_get = enrollment_repository.get_enrollment_by_id
     original_update = enrollment_repository.update_enrollment
-    original_audit = enrollment_service.audit_log
+    original_audit = enrollment_validation.audit_log
     enrollment_repository.get_enrollment_by_id = fake_get
     enrollment_repository.update_enrollment = fake_update
-    enrollment_service.audit_log = fake_audit_log
+    enrollment_validation.audit_log = fake_audit_log
     try:
         result = await enrollment_service.validate_enrollment(db, 1, validated_by=7)
     finally:
         enrollment_repository.get_enrollment_by_id = original_get
         enrollment_repository.update_enrollment = original_update
-        enrollment_service.audit_log = original_audit
+        enrollment_validation.audit_log = original_audit
 
     assert result.status == EnrollmentStatus.VALIDE
     assert captured_audit["entity_type"] == "enrollment"
