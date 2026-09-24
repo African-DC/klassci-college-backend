@@ -36,10 +36,6 @@ from app.services import (
 )
 from app.services.enrollment_arrears import ArrearsClearance
 from app.services.enrollment_mapper import to_enrollment_response as _to_response
-from app.services.enrollment_validation import (  # noqa: F401 - renvois historiques
-    validate_enrollment,
-    validate_enrollments_in_bulk,
-)
 from app.services.matricule_service import generate_enrollment_number
 
 logger = logging.getLogger(__name__)

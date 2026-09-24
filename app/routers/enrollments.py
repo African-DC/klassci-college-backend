@@ -47,6 +47,7 @@ from app.services import (
     enrollment_fees,
     enrollment_history,
     enrollment_service,
+    enrollment_validation,
     fees_paid,
 )
 from app.services.enrollment_archive import ENROLLMENT_KIND
@@ -519,7 +520,7 @@ async def validate_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
     """Valide une inscription (transition prospect/en_validation → valide)."""
-    return await enrollment_service.validate_enrollment(
+    return await enrollment_validation.validate_enrollment(
         db, enrollment_id, validated_by=current_user.user_id
     )
 
@@ -541,7 +542,7 @@ async def bulk_validate_enrollments(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> BulkValidateResponse:
     """Valide une cohorte en une fois, plutôt que dossier par dossier."""
-    resultat = await enrollment_service.validate_enrollments_in_bulk(
+    resultat = await enrollment_validation.validate_enrollments_in_bulk(
         db, payload.enrollment_ids, validated_by=current_user.user_id
     )
     return BulkValidateResponse(**resultat)

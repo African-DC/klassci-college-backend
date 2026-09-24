@@ -24,7 +24,7 @@ from app.core.exceptions import BusinessValidationError
 from app.models.enrollment import AssignmentStatus, Enrollment, EnrollmentStatus
 from app.models.user import Parent, Student
 from app.schemas.enrollment import EnrollmentUpdate, EnrollmentWithStudentCreate, ParentInput
-from app.services import admin_service, enrollment_service
+from app.services import admin_service, enrollment_service, enrollment_validation
 from app.services.enrollment_arrears import ArrearsClearance
 
 #: Répartition de l'affectation. Un privé ivoirien accueille une part
@@ -124,7 +124,7 @@ async def _apply_status(ctx: SeedContext, enrollment_id: int, status: Enrollment
         # La démo valide ses dossiers avant de passer à la caisse, qui vient
         # plus tard dans le jeu : seule exception à « pas de validation sans
         # versement », et elle ne passe par aucun chemin HTTP.
-        await enrollment_service.validate_enrollment(
+        await enrollment_validation.validate_enrollment(
             ctx.db, enrollment_id, ctx.actor_id, exiger_versement=False
         )
     elif status is EnrollmentStatus.EN_VALIDATION:
