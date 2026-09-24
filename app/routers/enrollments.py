@@ -20,7 +20,9 @@ from app.core.dependencies import (
     get_tenant_db,
     has_permission,
     require_permission,
+    resolve_permission,
 )
+from app.models.enrollment import EnrollmentStatus
 from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
     BulkValidateRequest,
@@ -45,6 +47,7 @@ from app.services import (
     enrollment_fees,
     enrollment_history,
     enrollment_service,
+    enrollment_validation,
     fees_paid,
 )
 from app.services.enrollment_archive import ENROLLMENT_KIND
@@ -431,9 +434,18 @@ async def update_enrollment(
     _: None = require_permission("enrollments:update"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
-    """Met à jour le statut ou les notes d'une inscription (patch partiel)."""
+    """Met à jour le statut ou les notes d'une inscription (patch partiel).
+
+    Passer le statut à « valide » par ici est une validation : elle exige le
+    même droit que `POST /{id}/validate`, faute de quoi le droit de modifier
+    un dossier suffisait à le valider. Le droit n'est lu que si le statut
+    demandé est « valide » ; le service décide s'il s'agit d'une transition.
+    """
+    peut_valider = data.status == EnrollmentStatus.VALIDE.value and await resolve_permission(
+        current_user, db, "enrollments:validate"
+    )
     return await enrollment_service.update_enrollment(
-        db, enrollment_id, data, updated_by=current_user.user_id
+        db, enrollment_id, data, updated_by=current_user.user_id, peut_valider=peut_valider
     )
 
 
@@ -508,7 +520,7 @@ async def validate_enrollment(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> EnrollmentResponse:
     """Valide une inscription (transition prospect/en_validation → valide)."""
-    return await enrollment_service.validate_enrollment(
+    return await enrollment_validation.validate_enrollment(
         db, enrollment_id, validated_by=current_user.user_id
     )
 
@@ -530,7 +542,7 @@ async def bulk_validate_enrollments(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> BulkValidateResponse:
     """Valide une cohorte en une fois, plutôt que dossier par dossier."""
-    resultat = await enrollment_service.validate_enrollments_in_bulk(
+    resultat = await enrollment_validation.validate_enrollments_in_bulk(
         db, payload.enrollment_ids, validated_by=current_user.user_id
     )
     return BulkValidateResponse(**resultat)

@@ -5,10 +5,11 @@ limite no-god-code et garder le sous-domaine paiement-caissier
 identifiable au premier coup d'oeil.
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import current_tenant_id
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.routers._pdf_helpers import pdf_response
 from app.schemas.payment import (
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/enrollments", tags=["enrollments", "payments"])
 async def record_enrollment_payment(
     enrollment_id: int,
     data: EnrollmentPaymentCreate,
+    background_tasks: BackgroundTasks,
     current_user: TokenData = Depends(get_current_user),
     _: None = require_permission("payments:create"),
     db: AsyncSession = Depends(get_tenant_db),
@@ -51,9 +53,18 @@ async def record_enrollment_payment(
     le profil de l'appelant (`payments:method:*`) ; sinon 403 avec le détail de
     ce qu'il peut faire et de qui contacter. Seules les espèces exigent une
     journée de caisse ouverte.
+
+    `idempotency_key` est facultatif : renvoyé identique après une coupure, il
+    rend le versement déjà écrit au lieu d'en écrire un second. Le message aux
+    parents part après la réponse, jamais pendant.
     """
     return await payment_service.record_enrollment_payment(
-        db, enrollment_id, data, actor=current_user
+        db,
+        enrollment_id,
+        data,
+        actor=current_user,
+        differer=background_tasks.add_task,
+        tenant_id=current_tenant_id.get(),
     )
 
 

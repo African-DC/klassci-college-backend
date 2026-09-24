@@ -150,6 +150,10 @@ class Caisse:
         monkeypatch.setattr(recording, "audit_log", _audit)
         monkeypatch.setattr(recording, "dispatch_payment_notification", AsyncMock())
         monkeypatch.setattr(recording, "payment_to_response", lambda payment: payment)
+        # Le reste à payer se relit après le commit, sans verrou : ce n'est pas
+        # le chemin d'écriture que ce harnais observe.
+        monkeypatch.setattr(recording, "remaining_cash", AsyncMock(return_value=Decimal("0")))
+        monkeypatch.setattr(recording, "avec_reste", lambda payment, _reste: payment)
 
         self.db = MagicMock()
         self.db.begin_nested = MagicMock(return_value=_Transaction())
