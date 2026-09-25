@@ -31,6 +31,18 @@ college.klassci.com, http://94.72.96.119 {
 	}
 }
 
+# --- Evolution API (passerelle WhatsApp), sur son propre sous-domaine ---
+# Ne pas la ranger sous college.klassci.com/evolution : ce domaine a déménagé
+# sur le serveur de production (Dokploy), alors qu'Evolution tourne ici, sur
+# 127.0.0.1:8080. Le port 8080 ne doit jamais être ouvert : seul Caddy l'expose,
+# en HTTPS, parce que la clé d'API circule dans chaque requête.
+evolution.klassci.com {
+	encode gzip zstd
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
+
 # Sous-domaines tenants : *.college.klassci.com, cert on-demand
 *.college.klassci.com {
 	tls {

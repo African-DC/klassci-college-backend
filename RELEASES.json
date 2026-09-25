@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-24T12:21:48Z",
+  "generated_at": "2026-09-25T17:05:17Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1696,6 +1696,13 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "La passerelle WhatsApp répond de nouveau après le déménagement de college.klassci.com : elle a sa propre adresse, que les déploiements ne suppriment plus",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement",
             "audience": [
