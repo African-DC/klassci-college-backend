@@ -109,6 +109,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- La passerelle WhatsApp répond de nouveau après le déménagement de college.klassci.com : elle a sa propre adresse, que les déploiements ne suppriment plus *(devops)*
 - Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*
 - Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit *(admin, directeur, comptable)*
 - Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 » *(admin, directeur, comptable)*
