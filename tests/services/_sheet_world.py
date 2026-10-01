@@ -1,6 +1,6 @@
 """Une petite école sur SQLite, pour les tests de la fiche de renseignements.
 
-Deux années (2025-2026 révolue, 2026-2027 courante), cinq niveaux nommés
+Trois années (2024-2025 et 2025-2026 révolues, 2026-2027 courante), cinq niveaux nommés
 comme les écoles les nomment, une classe par niveau. Les services tournent
 dessus avec leur vrai SQL, via une façade d'`AsyncSession` posée sur une
 session synchrone.
@@ -23,6 +23,7 @@ from app.models.user import Student, User
 ACTEUR = 1
 AN_PASSE = 1
 AN_COURANT = 2
+AN_AVANT_DERNIER = 3
 
 CLASSE_6E = 10
 CLASSE_5E = 11
@@ -97,6 +98,13 @@ def build_school(*, history_reliable: bool = False) -> Iterator[Session]:
                     name="2025-2026",
                     start_date=date(2025, 9, 1),
                     end_date=date(2026, 7, 31),
+                    is_current=False,
+                ),
+                AcademicYear(
+                    id=AN_AVANT_DERNIER,
+                    name="2024-2025",
+                    start_date=date(2024, 9, 1),
+                    end_date=date(2025, 7, 31),
                     is_current=False,
                 ),
                 AcademicYear(

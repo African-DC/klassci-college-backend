@@ -12,13 +12,24 @@ journal nomme, et c'est d'elle qu'on parle quand une famille conteste.
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.archive_filter import INCLUDE_ARCHIVED
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.deep_report import Scholarship
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, is_closed
 from app.schemas.enrollment_profile import ScholarshipSummary, ScholarshipUpsert
+
+CLOSED_ENROLLMENT_MESSAGE = (
+    "Cette inscription est refusée, annulée ou à la corbeille : on ne peut pas lui "
+    "accorder de bourse."
+)
+CONCURRENT_WRITE_MESSAGE = (
+    "La bourse de cette inscription vient d'être modifiée par quelqu'un d'autre. "
+    "Rechargez la fiche puis recommencez."
+)
 
 _AUDITED = ("kind", "provider", "decision_number", "amount", "granted_on")
 
@@ -32,10 +43,24 @@ def _snapshot(scholarship: Scholarship) -> dict[str, Any]:
     return values
 
 
-async def _ensure_enrollment(db: AsyncSession, enrollment_id: int) -> None:
-    stmt = select(Enrollment.id).where(Enrollment.id == enrollment_id)
-    if (await db.execute(stmt)).scalar_one_or_none() is None:
+async def _ensure_enrollment(db: AsyncSession, enrollment_id: int) -> Enrollment:
+    # La corbeille est lue aussi : une inscription archivée doit répondre
+    # « dossier fermé » (422), pas « introuvable ».
+    stmt = (
+        select(Enrollment)
+        .where(Enrollment.id == enrollment_id)
+        .execution_options(**{INCLUDE_ARCHIVED: True})
+    )
+    enrollment = (await db.execute(stmt)).scalar_one_or_none()
+    if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
+    return enrollment
+
+
+def _ensure_open(enrollment: Enrollment) -> None:
+    """Pas de bourse sur un dossier refusé, annulé ou à la corbeille : l'élève n'est pas là."""
+    if is_closed(enrollment.status) or enrollment.archived_at is not None:
+        raise BusinessValidationError(CLOSED_ENROLLMENT_MESSAGE)
 
 
 async def _current(db: AsyncSession, enrollment_id: int) -> Scholarship | None:
@@ -61,11 +86,8 @@ async def _audit(
     )
 
 
-async def upsert_scholarship(
-    db: AsyncSession, enrollment_id: int, data: ScholarshipUpsert, *, actor: int
-) -> ScholarshipSummary:
-    """Pose la bourse, ou remplace celle qui existe (PUT : le corps fait foi)."""
-    await _ensure_enrollment(db, enrollment_id)
+async def _write(db: AsyncSession, enrollment_id: int, data: ScholarshipUpsert, actor: int) -> None:
+    """Une tentative d'écriture, dans son propre point de sauvegarde."""
     async with db.begin_nested():
         scholarship = await _current(db, enrollment_id)
         old = _snapshot(scholarship) if scholarship is not None else None
@@ -76,6 +98,25 @@ async def upsert_scholarship(
             setattr(scholarship, name, value)
         await db.flush()
         await _audit(db, enrollment_id, actor, old, _snapshot(scholarship))
+
+
+async def upsert_scholarship(
+    db: AsyncSession, enrollment_id: int, data: ScholarshipUpsert, *, actor: int
+) -> ScholarshipSummary:
+    """Pose la bourse, ou remplace celle qui existe (PUT : le corps fait foi).
+
+    Deux guichets qui posent la bourse au même instant : le second bute sur
+    l'index unique. On rejoue alors une fois, et la seconde lecture trouve la
+    bourse du premier, qu'elle remplace. Un second échec rend un 409.
+    """
+    _ensure_open(await _ensure_enrollment(db, enrollment_id))
+    for attempt in range(2):
+        try:
+            await _write(db, enrollment_id, data, actor)
+            break
+        except IntegrityError as exc:
+            if attempt == 1:
+                raise ConflictError(CONCURRENT_WRITE_MESSAGE) from exc
     await db.commit()
     return ScholarshipSummary(
         kind=data.kind, provider=data.provider, decision_number=data.decision_number

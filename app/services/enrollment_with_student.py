@@ -132,6 +132,7 @@ async def create_enrollment_with_student(
                 "with_student": True,
                 "class_id": data.class_id,
                 "academic_year_id": academic_year_id,
+                **enrollment_profile.profile_values(enrollment),
             },
         )
 

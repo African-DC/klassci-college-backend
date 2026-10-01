@@ -152,7 +152,12 @@ async def create_enrollment(
             action=AuditAction.CREATE,
             user_id=created_by,
             entity_id=enrollment.id,
-            new_values=data.model_dump(),
+            # La fiche finale, complétée par la réinscription : le journal doit
+            # dire ce qui a été enregistré, pas seulement ce qui a été tapé.
+            new_values={
+                **data.model_dump(mode="json"),
+                **enrollment_profile.profile_values(enrollment),
+            },
         )
 
     await db.commit()
@@ -299,6 +304,8 @@ async def update_enrollment(
             await enrollment_fees.regenerate_enrollment_fees(
                 db, enrollment_id, regenerated_by=updated_by
             )
+        if class_changed:
+            await enrollment_profile.clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
 
         # Après la régénération : la garde de versement lit la grille de frais
         # que l'inscription aura réellement, pas celle d'avant la modification.

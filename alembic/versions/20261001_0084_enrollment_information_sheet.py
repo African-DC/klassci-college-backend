@@ -13,8 +13,9 @@ faux dès le premier dossier ressaisi.
 L'index unique sur `scholarships.enrollment_id` borne la bourse à une par
 inscription, ce que la fiche suppose (une seule case « régime »). La table
 était vide en production au moment de l'écrire. Si une base portait déjà deux
-bourses sur une même inscription, la création de l'index échouerait : c'est
-voulu, il faut alors trancher à la main laquelle garder.
+bourses sur une même inscription, la migration s'arrête AVANT toute écriture
+en nommant les inscriptions en cause : il faut alors trancher à la main
+laquelle garder.
 
 Le droit `scholarships:manage` est semé aux rôles `admin` et `director`,
 comme `performance:read` l'a été par la migration 0034.
@@ -72,11 +73,38 @@ def _enrollment_columns() -> tuple[sa.Column, ...]:
     )
 
 
+def _refuse_duplicate_scholarships() -> None:
+    """S'arrêter AVANT toute écriture si une inscription porte deux bourses.
+
+    MySQL valide chaque DDL : un index refusé après les `ADD COLUMN` laisserait
+    une base à moitié migrée, que la révision suivante ne saurait pas reprendre.
+    """
+    rows = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT enrollment_id FROM scholarships "
+                "GROUP BY enrollment_id HAVING COUNT(*) > 1 ORDER BY enrollment_id"
+            )
+        )
+        .fetchall()
+    )
+    if rows:
+        ids = ", ".join(str(row[0]) for row in rows)
+        raise RuntimeError(
+            "Migration 0084 arrêtée, rien n'a été modifié : ces inscriptions portent "
+            f"plusieurs bourses ({ids}). Gardez-en une par inscription, puis relancez."
+        )
+
+
 def upgrade() -> None:
+    _refuse_duplicate_scholarships()
+    # L'index d'abord : s'il échoue malgré la vérification, aucune colonne n'a
+    # encore été ajoutée.
+    op.create_index(_SCHOLARSHIP_INDEX, "scholarships", ["enrollment_id"], unique=True)
     for column in _enrollment_columns():
         op.add_column("enrollments", column)
     op.add_column("students", sa.Column("nationality", sa.String(60), nullable=True))
-    op.create_index(_SCHOLARSHIP_INDEX, "scholarships", ["enrollment_id"], unique=True)
     _seed_permissions()
 
 

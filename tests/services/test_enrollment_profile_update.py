@@ -1,14 +1,16 @@
 """Corriger la fiche (une inscription, un lot) et poser ou retirer une bourse."""
 
 from collections.abc import Iterator
+from datetime import datetime
 
 import pytest
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditLog
-from app.core.exceptions import BusinessValidationError
+from app.core.exceptions import BusinessValidationError, ConflictError
 from app.models.deep_report import Scholarship
-from app.models.enrollment import Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.schemas.enrollment import EnrollmentUpdate
 from app.schemas.enrollment_profile import (
     EnrollmentProfileBatchRequest,
     EnrollmentProfileUpdate,
@@ -18,6 +20,7 @@ from app.services import enrollment_profile_update, enrollment_scholarship, enro
 from tests.services._sheet_world import (
     ACTEUR,
     AN_COURANT,
+    CLASSE_3E,
     CLASSE_4E,
     CLASSE_6E,
     AsyncBridge,
@@ -171,3 +174,131 @@ async def test_la_bourse_se_pose_se_remplace_et_se_retire(db: Session) -> None:
     vue = await enrollment_service.get_enrollment(bridge, 2)  # type: ignore[arg-type]
     assert vue.scholarship is None
     assert db.query(AuditLog).filter_by(entity_id=2).count() == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fermeture",
+    [
+        {"status": EnrollmentStatus.ANNULE},
+        {"status": EnrollmentStatus.REJETE},
+        {"archived_at": datetime(2026, 9, 9)},
+    ],
+)
+async def test_pas_de_bourse_sur_un_dossier_ferme(
+    db: Session, fermeture: dict[str, object]
+) -> None:
+    inscription = db.get(Enrollment, 2)
+    assert inscription is not None
+    for champ, valeur in fermeture.items():
+        setattr(inscription, champ, valeur)
+    db.commit()
+
+    with pytest.raises(BusinessValidationError) as refus:
+        await enrollment_scholarship.upsert_scholarship(
+            _bridge(db),  # type: ignore[arg-type]
+            2,
+            ScholarshipUpsert(kind="demi_bourse"),
+            actor=ACTEUR,
+        )
+
+    assert refus.value.status_code == 422
+    assert "bourse" in refus.value.detail
+    assert db.query(Scholarship).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_une_bourse_posee_entre_lecture_et_ecriture_est_remplacee(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le second guichet bute sur l'index unique, relit, et remplace."""
+    db.add(Scholarship(enrollment_id=2, kind="demi_bourse", provider="Premier guichet"))
+    db.commit()
+    lecture_reelle = enrollment_scholarship._current
+    lectures: list[int] = []
+
+    async def lecture_en_retard(session: object, enrollment_id: int) -> object:
+        lectures.append(enrollment_id)
+        if len(lectures) == 1:
+            return None  # n'a pas encore vu la bourse de l'autre guichet
+        return await lecture_reelle(session, enrollment_id)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(enrollment_scholarship, "_current", lecture_en_retard)
+
+    await enrollment_scholarship.upsert_scholarship(
+        _bridge(db),  # type: ignore[arg-type]
+        2,
+        ScholarshipUpsert(kind="bourse_entiere"),
+        actor=ACTEUR,
+    )
+
+    assert len(lectures) == 2
+    bourses = db.query(Scholarship).filter_by(enrollment_id=2).all()
+    assert [(b.kind, b.provider) for b in bourses] == [("bourse_entiere", None)]
+
+
+@pytest.mark.asyncio
+async def test_deux_conflits_de_suite_rendent_un_409(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db.add(Scholarship(enrollment_id=2, kind="demi_bourse"))
+    db.commit()
+
+    async def ne_voit_jamais_rien(*_a: object) -> None:
+        return None
+
+    monkeypatch.setattr(enrollment_scholarship, "_current", ne_voit_jamais_rien)
+
+    with pytest.raises(ConflictError) as refus:
+        await enrollment_scholarship.upsert_scholarship(
+            _bridge(db),  # type: ignore[arg-type]
+            2,
+            ScholarshipUpsert(kind="bourse_entiere"),
+            actor=ACTEUR,
+        )
+
+    assert refus.value.status_code == 409
+    assert db.query(Scholarship).filter_by(enrollment_id=2).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_passer_en_6e_retire_la_lv2_et_le_journalise(db: Session) -> None:
+    inscription = db.get(Enrollment, 1)
+    assert inscription is not None
+    inscription.lv2 = "allemand"
+    db.commit()
+
+    reponse = await enrollment_service.update_enrollment(
+        _bridge(db),  # type: ignore[arg-type]
+        1,
+        EnrollmentUpdate(class_id=CLASSE_6E),
+        updated_by=ACTEUR,
+    )
+
+    assert reponse.class_id == CLASSE_6E
+    assert reponse.lv2 is None
+    retrait = (
+        db.query(AuditLog)
+        .filter_by(entity_type="enrollment", entity_id=1)
+        .filter(AuditLog.notes.is_not(None))
+        .one()
+    )
+    assert retrait.old_values == {"lv2": "allemand"}
+    assert retrait.new_values == {"lv2": None}
+
+
+@pytest.mark.asyncio
+async def test_changer_pour_une_classe_qui_l_enseigne_garde_la_lv2(db: Session) -> None:
+    inscription = db.get(Enrollment, 2)
+    assert inscription is not None
+    inscription.lv2 = "espagnol"
+    db.commit()
+
+    reponse = await enrollment_service.update_enrollment(
+        _bridge(db),  # type: ignore[arg-type]
+        2,
+        EnrollmentUpdate(class_id=CLASSE_3E),
+        updated_by=ACTEUR,
+    )
+
+    assert reponse.lv2 == "espagnol"
