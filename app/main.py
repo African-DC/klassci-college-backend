@@ -28,6 +28,8 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.deep_report import router as deep_report_router
 from app.routers.dren_stats import router as dren_stats_router
 from app.routers.duplicates import router as duplicates_router
+from app.routers.enrollment_in_kind import router as enrollment_in_kind_router
+from app.routers.enrollment_options import router as enrollment_options_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollments import router as enrollments_router
 from app.routers.fees import router as fees_router
@@ -122,7 +124,11 @@ app.include_router(attendance_router)
 app.include_router(accounts_router)
 app.include_router(auth_router)
 app.include_router(dashboard_router)
+# Avant `enrollments_router` : ses chemins littéraux (`/in-kind-roster`,
+# `/fee-variants`) doivent passer avant `/enrollments/{enrollment_id}`.
+app.include_router(enrollment_in_kind_router)
 app.include_router(enrollments_router)
+app.include_router(enrollment_options_router)
 app.include_router(enrollment_payments_router)
 app.include_router(cash_sessions_router)
 app.include_router(installments_router)
