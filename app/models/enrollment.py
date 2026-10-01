@@ -22,6 +22,7 @@ from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.academic import AcademicYear, Class
+    from app.models.deep_report import Scholarship
     from app.models.fee import EnrollmentFee, OptionalFeeOption, Payment
     from app.models.user import Student
 
@@ -76,6 +77,38 @@ class AssignmentStatus(str, enum.Enum):
         return self in (AssignmentStatus.AFFECTE, AssignmentStatus.REAFFECTE)
 
 
+class PreviousLevel(str, enum.Enum):
+    """Niveau national de l'année précédente, tel que la fiche de renseignements le demande.
+
+    Codes nationaux, pas les libellés de l'école : un établissement écrit
+    « 6ème », un autre « Sixième », et la fiche du comptable doit dire la même
+    chose pour les deux.
+    """
+
+    CM2 = "CM2"
+    SIXIEME = "6E"
+    CINQUIEME = "5E"
+    QUATRIEME = "4E"
+    TROISIEME = "3E"
+    SECONDE = "2NDE"
+    PREMIERE = "1RE"
+    TERMINALE = "TLE"
+
+
+class SecondLanguage(str, enum.Enum):
+    """LV2, choisie à partir de la 4ème."""
+
+    ALLEMAND = "allemand"
+    ESPAGNOL = "espagnol"
+
+
+class ArtisticDiscipline(str, enum.Enum):
+    """Discipline artistique suivie par l'élève."""
+
+    ARTS_PLASTIQUES = "arts_plastiques"
+    MUSIQUE = "musique"
+
+
 class Enrollment(Base, TimestampMixin, ArchivableMixin):
     """Inscription d'un élève dans une classe pour une année scolaire."""
 
@@ -122,6 +155,19 @@ class Enrollment(Base, TimestampMixin, ArchivableMixin):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Fiche de renseignements. Tous facultatifs, et `None` veut dire « pas
+    # renseigné » : rien n'est deviné. Une réinscription les reprend de
+    # l'inscription précédente, voir `enrollment_profile`.
+    previous_level: Mapped[str | None] = mapped_column(
+        ValueEnum(PreviousLevel, name="previous_level"), nullable=True
+    )
+    previous_series: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Qualité : `True` redoublant, `False` non redoublant, `None` inconnu.
+    is_repeater: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    lv2: Mapped[str | None] = mapped_column(ValueEnum(SecondLanguage, name="lv2"), nullable=True)
+    artistic_discipline: Mapped[str | None] = mapped_column(
+        ValueEnum(ArtisticDiscipline, name="artistic_discipline"), nullable=True
+    )
 
     student: Mapped[Student] = relationship(back_populates="enrollments")
     class_: Mapped[Class] = relationship(back_populates="enrollments")
@@ -136,6 +182,10 @@ class Enrollment(Base, TimestampMixin, ArchivableMixin):
     payments: Mapped[list[Payment]] = relationship(
         back_populates="enrollment", passive_deletes=True
     )
+    # Une bourse au plus par inscription (index unique, migration 0084).
+    # `viewonly` : la bourse s'écrit par son propre service, jamais en
+    # passant par l'inscription.
+    scholarship: Mapped[Scholarship | None] = relationship(uselist=False, viewonly=True)
 
 
 class Document(Base, TimestampMixin):

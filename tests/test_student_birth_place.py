@@ -300,6 +300,7 @@ async def test_student_full_projection_includes_the_birth_place() -> None:
         last_name="Koffi",
         birth_date=date(2010, 5, 15),
         birth_place="Bouaké",
+        nationality="Ivoirienne",
         genre="F",
         enrollment_number="2024-001",
         photo_url=None,
@@ -331,6 +332,7 @@ async def test_student_full_projection_includes_the_birth_place() -> None:
         )
 
     assert result["birth_place"] == "Bouaké"
+    assert result["nationality"] == "Ivoirienne"
 
 
 # ---------------------------------------------------------------------------

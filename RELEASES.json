@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-09-24T12:21:48Z",
+  "generated_at": "2026-10-01T21:21:10Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,54 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité",
+            "audience": [
+              "secrétariat",
+              "comptable"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "Une réinscription reprend d'elle-même le niveau antérieur, la série, la LV2 et la discipline de l'an passé, et en déduit la qualité",
+            "audience": [
+              "secrétariat",
+              "éducateur"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "La fiche se corrige pour une inscription ou pour une classe entière d'un coup, en entier ou pas du tout",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "La bourse d'une inscription se pose, se remplace ou se retire, avec un droit réservé à la direction",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "Migration `0084` : les colonnes de la fiche, toutes vides au départ, une bourse au plus par inscription et le droit de gérer les bourses. À jouer sur CHAQUE base d'établissement",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Une inscription ne se valide plus sans versement reçu, y compris par la modification du dossier ; un dossier sans rien à régler en argent reste validable",
             "audience": [
@@ -1696,6 +1744,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription",
+            "audience": [
+              "directeur",
+              "secrétariat"
+            ],
+            "pull_request": 469
+          },
           {
             "text": "Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement",
             "audience": [

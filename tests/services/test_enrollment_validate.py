@@ -45,6 +45,13 @@ def _make_enrollment(status: EnrollmentStatus, enrollment_id: int = 1) -> Simple
         # `None` est la valeur d'une inscription dont le profil n'a pas été
         # tranché, et c'est celle de toutes les inscriptions déjà en base.
         is_new_student=None,
+        # Fiche de renseignements : tout reste « pas renseigné ».
+        previous_level=None,
+        previous_series=None,
+        is_repeater=None,
+        lv2=None,
+        artistic_discipline=None,
+        scholarship=None,
         created_at=now,
         updated_at=now,
     )

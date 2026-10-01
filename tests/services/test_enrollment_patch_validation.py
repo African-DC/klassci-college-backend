@@ -40,6 +40,13 @@ def _inscription(status: EnrollmentStatus) -> SimpleNamespace:
         assignment_status=None,
         assignment_decision_number=None,
         is_new_student=None,
+        # Fiche de renseignements : tout reste « pas renseigné ».
+        previous_level=None,
+        previous_series=None,
+        is_repeater=None,
+        lv2=None,
+        artistic_discipline=None,
+        scholarship=None,
         created_at=now,
         updated_at=now,
     )
