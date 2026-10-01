@@ -21,22 +21,9 @@ async def subscribe_optional_fee(
 
     Crée un StudentOption. Idempotent : si déjà souscrit, retourne l'existant.
     """
-    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
-    if enrollment is None:
-        raise NotFoundError("Enrollment", enrollment_id)
+    await _ensure_option_matches_enrollment(db, enrollment_id, optional_fee_option_id)
 
-    # Vérifier que l'option existe et appartient à la même année scolaire
-    stmt = select(OptionalFeeOption).where(OptionalFeeOption.id == optional_fee_option_id)
-    option = (await db.execute(stmt)).scalar_one_or_none()
-    if option is None:
-        raise NotFoundError("OptionalFeeOption", optional_fee_option_id)
-
-    if option.academic_year_id != enrollment.academic_year_id:
-        raise BusinessValidationError(
-            "L'option de frais n'appartient pas à la même année scolaire que l'inscription"
-        )
-
-    # Vérifier si déjà souscrit (idempotent)
+    # Idempotent : une souscription existante est rendue telle quelle.
     existing_stmt = select(StudentOption).where(
         StudentOption.enrollment_id == enrollment_id,
         StudentOption.optional_fee_option_id == optional_fee_option_id,
@@ -52,7 +39,6 @@ async def subscribe_optional_fee(
     )
     db.add(student_option)
     await db.flush()
-
     await audit_log(
         db,
         entity_type="student_option",
@@ -64,8 +50,24 @@ async def subscribe_optional_fee(
             "optional_fee_option_id": optional_fee_option_id,
         },
     )
-
     return {"id": student_option.id, "already_subscribed": False}
+
+
+async def _ensure_option_matches_enrollment(
+    db: AsyncSession, enrollment_id: int, optional_fee_option_id: int
+) -> None:
+    """L'inscription et l'option existent, et l'option vaut pour la même année."""
+    enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
+    if enrollment is None:
+        raise NotFoundError("Enrollment", enrollment_id)
+    stmt = select(OptionalFeeOption).where(OptionalFeeOption.id == optional_fee_option_id)
+    option = (await db.execute(stmt)).scalar_one_or_none()
+    if option is None:
+        raise NotFoundError("OptionalFeeOption", optional_fee_option_id)
+    if option.academic_year_id != enrollment.academic_year_id:
+        raise BusinessValidationError(
+            "L'option de frais n'appartient pas à la même année scolaire que l'inscription"
+        )
 
 
 async def unsubscribe_optional_fee(

@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-01T21:21:10Z",
+  "generated_at": "2026-10-01T23:29:35Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1744,6 +1744,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": 472
+          },
           {
             "text": "La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription",
             "audience": [

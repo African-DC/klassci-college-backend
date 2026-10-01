@@ -7,26 +7,16 @@ C'est le chemin du formulaire « Nouvelle inscription ». Il vivait dans
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError, NotFoundError
+from app.core.exceptions import BusinessValidationError
 from app.core.security import hash_password
 from app.models.academic import Class, SchoolSettings
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
-from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import EnrollmentResponse, EnrollmentWithStudentCreate, ParentInput
 from app.services import (
     enrollment_arrears,
-    enrollment_fees,
-    enrollment_notifications,
-    enrollment_profile,
 )
+from app.services import enrollment_creation_steps as steps
 from app.services.enrollment_arrears import ArrearsClearance
-from app.services.enrollment_creation_helpers import (
-    get_current_academic_year,
-    nom_eleve,
-    profil_a_retenir,
-)
-from app.services.enrollment_mapper import to_enrollment_response as _to_response
 from app.services.matricule_service import generate_enrollment_number
 
 
@@ -46,14 +36,7 @@ async def create_enrollment_with_student(
     est en train de le créer — il lui passe donc le matricule, seul point de
     rapprochement sûr avec un dossier déjà en base.
     """
-    # Resolve academic year
-    if data.academic_year_id is None:
-        academic_year = await get_current_academic_year(db)
-    else:
-        academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
-        if academic_year is None:
-            raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
-    academic_year_id = academic_year.id
+    academic_year = await steps.resolve_academic_year(db, data.academic_year_id)
 
     # Même porte que dans `create_enrollment`, et à la même place : avant toute
     # écriture, hors transaction.
@@ -66,94 +49,36 @@ async def create_enrollment_with_student(
     )
 
     async with db.begin_nested():
-        # Capacity guard
-        class_ = await repo.get_class_by_id_for_update(db, data.class_id)
-        if class_ is None:
-            raise BusinessValidationError(f"Class {data.class_id} not found")
-        enrolled_count = await repo.count_active_enrollments_for_class(
-            db, data.class_id, academic_year_id
-        )
-        if enrolled_count >= class_.max_students:
-            raise BusinessValidationError(
-                f"Class {data.class_id} is full ({class_.max_students} students max)"
-            )
-
+        class_ = await steps.ensure_class_has_room(db, data.class_id, academic_year.id)
         student = await _create_student(db, data, class_)
-
-        # 2. Create parent if provided
         if data.parent:
             await _create_parent(db, data.parent, student.id)
-
-        # 3. Create enrollment (reuses capacity check done above)
-        enrollment = await repo.create_enrollment(
+        enrollment = await steps.insert_enrollment(
+            db, data, student_id=student.id, year=academic_year, created_by=created_by
+        )
+        await steps.attach_fees(
             db,
-            student_id=student.id,
-            class_id=data.class_id,
-            academic_year_id=academic_year_id,
+            enrollment,
+            fee_variant_id=data.fee_variant_id,
+            in_kind_deposits=data.in_kind_deposits,
             created_by=created_by,
-            notes=data.notes,
-            assignment_status=data.assignment_status,
-            assignment_decision_number=data.assignment_decision_number,
-            is_new_student=await profil_a_retenir(db, data, student.id, academic_year_id),
         )
-        await enrollment_profile.apply_initial_profile(db, enrollment, data, academic_year)
-
-        # 4. Create enrollment fee if variant provided (rétrocompat).
-        # Même garde qu'à l'autre création : le tarif nommé doit viser cette
-        # inscription, profil compris.
-        if data.fee_variant_id is not None:
-            await enrollment_fees.create_explicit_enrollment_fee(
-                db,
-                enrollment=enrollment,
-                fee_variant_id=data.fee_variant_id,
-            )
-
-        # 5. Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await enrollment_fees.create_mandatory_enrollment_fees(
-            db,
-            enrollment.id,
-            data.class_id,
-            academic_year_id,
-            enrollment.assignment_status,
-            enrollment.is_new_student,
-        )
-        await enrollment_fees.apply_in_kind_deposits(
-            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        await steps.audit_creation(
+            db, enrollment, _summary(data, academic_year.id), created_by=created_by
         )
 
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.CREATE,
-            user_id=created_by,
-            entity_id=enrollment.id,
-            new_values={
-                "student_name": f"{data.first_name} {data.last_name}",
-                "with_student": True,
-                "class_id": data.class_id,
-                "academic_year_id": academic_year_id,
-                **enrollment_profile.profile_values(enrollment),
-            },
-        )
+    # Prévient la caisse, comme l'autre création : c'est le chemin du formulaire.
+    return await steps.finish_creation(db, enrollment.id, created_by=created_by)
 
-    await db.commit()
 
-    refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
-    if refreshed is None:
-        raise NotFoundError("Enrollment", enrollment.id)
-
-    # Même avertissement que dans `create_enrollment`, et pour la même raison :
-    # c'est ce chemin-ci que le formulaire « Nouvelle inscription » emprunte,
-    # celui où la secrétaire saisit l'élève et son inscription d'un seul geste.
-    # Sans cet appel, la chaîne restait muette précisément là où elle sert.
-    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
-        db,
-        enrollment_id=refreshed.id,
-        student_name=nom_eleve(refreshed),
-        class_name=refreshed.class_.name if refreshed.class_ else "",
-        acteur_id=created_by,
-    )
-    return _to_response(refreshed)
+def _summary(data: EnrollmentWithStudentCreate, academic_year_id: int) -> dict[str, object]:
+    """Ce que le journal garde du formulaire, en plus de la fiche finale."""
+    return {
+        "student_name": f"{data.first_name} {data.last_name}",
+        "with_student": True,
+        "class_id": data.class_id,
+        "academic_year_id": academic_year_id,
+    }
 
 
 async def _create_student(
