@@ -69,6 +69,11 @@ def _normalise(label: str) -> str:
     return "".join(char for char in lowered if char.isalnum())
 
 
+#: Nom public du même repliage, pour les modules hors du rapport qui comparent
+#: des noms de niveau (`level_codes`) : une seule règle de normalisation.
+normalise_level_label = _normalise
+
+
 def cycle_of_level(level_name: str, level_order: int) -> Cycle:
     """Cycle d'un niveau, déduit de son nom puis, à défaut, de son rang.
 

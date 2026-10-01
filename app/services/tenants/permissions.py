@@ -72,6 +72,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # la retenue d'un document — debloquer un bulletin et inscrire un debiteur
     # sont deux gestes, et l'un ne doit pas emporter l'autre.
     {"slug": "enrollments:arrears:override", "name": "Enrol a student despite arrears"},
+    # Bourse d'une inscription : seul le régime boursier de la fiche de
+    # renseignements. Semée par la migration 0084 aux mêmes rôles que
+    # `performance:read` (direction).
+    {"slug": "scholarships:manage", "name": "Grant or remove a scholarship"},
     {"slug": "grades:read", "name": "View grades"},
     {"slug": "grades:write", "name": "Write grades"},
     {"slug": "grades:edit", "name": "Modify already-recorded grades"},

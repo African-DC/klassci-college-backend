@@ -206,6 +206,9 @@ class Student(Base, TimestampMixin, ArchivableMixin):
     # pas « ne a Cocody ». Facultatif, les anciens dossiers ne le portent pas.
     birth_place: Mapped[str | None] = mapped_column(String(150), nullable=True)
     genre: Mapped[str | None] = mapped_column(ValueEnum(Genre, name="genre"), nullable=True)
+    # Nationalité en clair (« Ivoirienne »), demandée par la fiche de
+    # renseignements. Facultative : les anciens dossiers ne la portent pas.
+    nationality: Mapped[str | None] = mapped_column(String(60), nullable=True)
     # `NOCASE` sur SQLite seulement : MySQL applique deja la collation de la
     # table, `utf8mb4_unicode_ci`, qui compare sans tenir compte de la casse
     # (verifie sur la production). La variante rend la base de test fidele a
