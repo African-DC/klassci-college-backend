@@ -7,6 +7,8 @@ sans rapport, et plus personne ne le relisait en entier.
 """
 
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,16 +27,16 @@ from app.schemas.enrollment_profile import PROFILE_FIELDS
 from app.services import (
     enrollment_arrears,
     enrollment_fees,
-    enrollment_notifications,
     enrollment_profile,
     enrollment_validation,
 )
+from app.services import enrollment_creation_steps as steps
+
+# Réexporté : la cloche de la caisse sonne désormais depuis
+# `enrollment_creation_steps`, mais les tests la remplacent par ce chemin-ci.
+# C'est le même module, donc le même remplacement.
+from app.services import enrollment_notifications as enrollment_notifications
 from app.services.enrollment_arrears import ArrearsClearance
-from app.services.enrollment_creation_helpers import (
-    get_current_academic_year,
-    nom_eleve,
-    profil_a_retenir,
-)
 from app.services.enrollment_mapper import to_enrollment_response as _to_response
 
 # Réexportée : l'inscription couplée vit dans son module, mais le seed de démo
@@ -72,14 +74,12 @@ async def create_enrollment(
     ni rôle ni slug, et un garde dont l'oubli est permissif n'est pas un garde.
     """
     # Valider que l'année scolaire existe (hors transaction — lecture seule)
-    academic_year = await repo.get_academic_year_by_id(db, data.academic_year_id)
-    if academic_year is None:
-        raise BusinessValidationError(f"AcademicYear {data.academic_year_id} not found")
+    academic_year = await steps.resolve_academic_year(db, data.academic_year_id)
 
     # Porte de paiement — AVANT la transaction, et ce n'est pas un détail : le
     # garde n'a pas le droit de commettre au milieu d'un `begin_nested()`, il
     # validerait la moitié d'une inscription. Il lit, et laisse sa ligne de
-    # journal au commit ci-dessous.
+    # journal au commit de `finish_creation`.
     await enrollment_arrears.ensure_enrollable(
         db,
         student_id=data.student_id,
@@ -88,93 +88,37 @@ async def create_enrollment(
         clearance=arrears,
     )
 
-    # Tout dans une seule transaction avec FOR UPDATE pour éviter les race conditions
+    # Tout dans une seule transaction, classe verrouillée (FOR UPDATE) contre
+    # les inscriptions concurrentes.
     async with db.begin_nested():
-        # Garde capacité classe — FOR UPDATE verrouille la ligne pour éviter la race condition
-        class_ = await repo.get_class_by_id_for_update(db, data.class_id)
-        if class_ is None:
-            raise BusinessValidationError(f"Class {data.class_id} not found")
-        enrolled_count = await repo.count_active_enrollments_for_class(
-            db, data.class_id, data.academic_year_id
+        await steps.ensure_class_has_room(db, data.class_id, data.academic_year_id)
+        await _ensure_no_active_enrollment(db, data.student_id, data.academic_year_id)
+        enrollment = await steps.insert_enrollment(
+            db, data, student_id=data.student_id, year=academic_year, created_by=created_by
         )
-        if enrolled_count >= class_.max_students:
-            raise BusinessValidationError(
-                f"Class {data.class_id} is full ({class_.max_students} students max)"
-            )
-
-        # Garde doublon dans la transaction
-        existing = await repo.get_active_enrollment(db, data.student_id, data.academic_year_id)
-        if existing is not None:
-            raise BusinessValidationError(
-                f"Student {data.student_id} already has an active enrollment for this academic year"
-            )
-
-        enrollment = await repo.create_enrollment(
+        await steps.attach_fees(
             db,
-            student_id=data.student_id,
-            class_id=data.class_id,
-            academic_year_id=data.academic_year_id,
+            enrollment,
+            fee_variant_id=data.fee_variant_id,
+            in_kind_deposits=data.in_kind_deposits,
             created_by=created_by,
-            notes=data.notes,
-            assignment_status=data.assignment_status,
-            assignment_decision_number=data.assignment_decision_number,
-            is_new_student=await profil_a_retenir(db, data, data.student_id, data.academic_year_id),
         )
-        await enrollment_profile.apply_initial_profile(db, enrollment, data, academic_year)
-
-        # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat).
-        # Le garde vit dans `enrollment_fees` : un tarif nommé par le client
-        # doit viser cette inscription, sans quoi ce chemin poserait un montant
-        # à profil sur une inscription dont le profil n'est pas tranché.
-        if data.fee_variant_id is not None:
-            await enrollment_fees.create_explicit_enrollment_fee(
-                db,
-                enrollment=enrollment,
-                fee_variant_id=data.fee_variant_id,
-            )
-
-        # Auto-créer les enrollment_fees pour tous les frais obligatoires
-        await enrollment_fees.create_mandatory_enrollment_fees(
-            db,
-            enrollment.id,
-            data.class_id,
-            data.academic_year_id,
-            enrollment.assignment_status,
-            enrollment.is_new_student,
-        )
-        await enrollment_fees.apply_in_kind_deposits(
-            db, enrollment.id, data.in_kind_deposits, deposited_by=created_by
+        await steps.audit_creation(
+            db, enrollment, data.model_dump(mode="json"), created_by=created_by
         )
 
-        await audit_log(
-            db,
-            entity_type="enrollment",
-            action=AuditAction.CREATE,
-            user_id=created_by,
-            entity_id=enrollment.id,
-            # La fiche finale, complétée par la réinscription : le journal doit
-            # dire ce qui a été enregistré, pas seulement ce qui a été tapé.
-            new_values={
-                **data.model_dump(mode="json"),
-                **enrollment_profile.profile_values(enrollment),
-            },
+    return await steps.finish_creation(db, enrollment.id, created_by=created_by)
+
+
+async def _ensure_no_active_enrollment(
+    db: AsyncSession, student_id: int, academic_year_id: int
+) -> None:
+    """Garde doublon, dans la transaction : une inscription vivante par élève et par année."""
+    existing = await repo.get_active_enrollment(db, student_id, academic_year_id)
+    if existing is not None:
+        raise BusinessValidationError(
+            f"Student {student_id} already has an active enrollment for this academic year"
         )
-
-    await db.commit()
-
-    refreshed = await repo.get_enrollment_by_id(db, enrollment.id)
-    if refreshed is None:
-        raise NotFoundError("Enrollment", enrollment.id)
-
-    # Apres le commit : le dossier existe, quel que soit le sort de la cloche.
-    await enrollment_notifications.prevenir_qu_il_faut_encaisser(
-        db,
-        enrollment_id=refreshed.id,
-        student_name=nom_eleve(refreshed),
-        class_name=refreshed.class_.name if refreshed.class_ else "",
-        acteur_id=created_by,
-    )
-    return _to_response(refreshed)
 
 
 async def list_enrollments(
@@ -240,97 +184,29 @@ async def update_enrollment(
     enrollment = await repo.get_enrollment_by_id(db, enrollment_id)
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
-
-    validation = (
-        data.status == EnrollmentStatus.VALIDE.value
-        and enrollment.status != EnrollmentStatus.VALIDE
-    )
-    if validation and not peut_valider:
-        raise PermissionDeniedError("enrollments:validate")
-    # Le statut, s'il valide, passe par la validation plus bas ; tout le reste
-    # s'écrit ici. Le journal de l'édition ne le compte donc pas deux fois.
-    champs = data.model_fields_set - ({"status"} if validation else set())
-
-    old_values = {
-        "status": enrollment.status,
-        "notes": enrollment.notes,
-        "class_id": enrollment.class_id,
-        "is_new_student": enrollment.is_new_student,
-        "assignment_status": enrollment.assignment_status,
-        "assignment_decision_number": enrollment.assignment_decision_number,
-    }
-    class_changed = data.class_id is not None and data.class_id != enrollment.class_id
-    # `None` est une valeur ici, pas une absence : on regarde donc ce que le
-    # client a réellement envoyé. Corriger le profil doit rejouer la grille,
-    # sinon la case change et la facture reste celle de l'autre profil.
-    profil_envoye = "is_new_student" in data.model_fields_set
-    profil_change = profil_envoye and data.is_new_student != enrollment.is_new_student
-    affectation_envoyee = "assignment_status" in data.model_fields_set
-    decision_envoyee = "assignment_decision_number" in data.model_fields_set
-    affectation_change = (
-        affectation_envoyee and data.assignment_status != enrollment.assignment_status
-    )
+    plan = _plan_edit(enrollment, data, peut_valider=peut_valider)
 
     async with db.begin_nested():
-        # Si changement de classe, vérifier existence et capacité
-        if class_changed:
-            new_class = await repo.get_class_by_id_for_update(db, data.class_id)
-            if new_class is None:
-                raise BusinessValidationError(f"Class {data.class_id} not found")
-            enrolled_count = await repo.count_active_enrollments_for_class(
-                db, data.class_id, enrollment.academic_year_id
-            )
-            if enrolled_count >= new_class.max_students:
-                raise BusinessValidationError(
-                    f"Class {data.class_id} is full ({new_class.max_students} students max)"
-                )
-
-        await repo.update_enrollment(
-            db,
-            enrollment,
-            status=None if validation else data.status,
-            notes=data.notes,
-            class_id=data.class_id,
-            is_new_student=(data.is_new_student if profil_envoye else repo.UNSET),
-            assignment_status=(data.assignment_status if affectation_envoyee else repo.UNSET),
-            assignment_decision_number=(
-                data.assignment_decision_number if decision_envoyee else repo.UNSET
-            ),
-        )
+        if plan.class_changed:
+            await steps.ensure_class_has_room(db, data.class_id, enrollment.academic_year_id)
+        await _write_edit(db, enrollment, data, plan)
 
         # Régénérer les frais obligatoires si la classe, le profil ou
         # l'affectation a changé : chacun décide du tarif appliqué.
-        if class_changed or profil_change or affectation_change:
+        if plan.regenerates_fees:
             await enrollment_fees.regenerate_enrollment_fees(
                 db, enrollment_id, regenerated_by=updated_by
             )
-        if class_changed:
+        if plan.class_changed:
             await enrollment_profile.clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
 
         # Après la régénération : la garde de versement lit la grille de frais
         # que l'inscription aura réellement, pas celle d'avant la modification.
-        if validation:
+        if plan.validation:
             await enrollment_validation.appliquer_validation(db, enrollment, updated_by)
 
-        if champs:
-            await audit_log(
-                db,
-                entity_type="enrollment",
-                action=AuditAction.UPDATE,
-                user_id=updated_by,
-                entity_id=enrollment_id,
-                old_values=old_values,
-                # Ce que le client a REELLEMENT envoye, nuls compris. `exclude_none`
-                # ecartait les champs remis a null, or c'est precisement le geste
-                # qui remet le profil a « non tranche » et qui, quelques lignes plus
-                # haut, regenere toute la grille de frais de l'inscription. Le
-                # journal ne gardait donc aucune trace de la seule action qui
-                # explique pourquoi la dette d'une famille a change.
-                #
-                # `mode="json"` parce que la colonne d'audit est du JSON : un enum
-                # ou une date rendus en objets Python y lèvent une erreur illisible.
-                new_values=data.model_dump(include=champs, mode="json"),
-            )
+        if plan.champs:
+            await _audit_edit(db, enrollment_id, data, plan, updated_by)
 
     await db.commit()
 
@@ -338,6 +214,106 @@ async def update_enrollment(
     if refreshed is None:
         raise NotFoundError("Enrollment", enrollment_id)
     return _to_response(refreshed)
+
+
+@dataclass(frozen=True, slots=True)
+class _EditPlan:
+    """Ce qu'une édition touche, décidé avant toute écriture."""
+
+    #: Passer à « valide » est une validation, qui passe par la sienne.
+    validation: bool
+    #: Les champs à journaliser : le statut n'y est pas s'il valide.
+    champs: frozenset[str]
+    old_values: dict[str, Any]
+    class_changed: bool
+    profil_envoye: bool
+    affectation_envoyee: bool
+    decision_envoyee: bool
+    regenerates_fees: bool
+
+
+def _plan_edit(enrollment: Any, data: EnrollmentUpdate, *, peut_valider: bool) -> _EditPlan:
+    """Lit ce que le client a réellement envoyé, `None` compris.
+
+    `None` est une valeur ici, pas une absence : corriger le profil doit
+    rejouer la grille, sinon la case change et la facture reste celle de
+    l'autre profil. D'où `model_fields_set` et non un test sur la valeur.
+    """
+    validation = (
+        data.status == EnrollmentStatus.VALIDE.value
+        and enrollment.status != EnrollmentStatus.VALIDE
+    )
+    if validation and not peut_valider:
+        raise PermissionDeniedError("enrollments:validate")
+    sent = data.model_fields_set
+    class_changed = data.class_id is not None and data.class_id != enrollment.class_id
+    profil_envoye = "is_new_student" in sent
+    affectation_envoyee = "assignment_status" in sent
+    profil_change = profil_envoye and data.is_new_student != enrollment.is_new_student
+    affectation_change = (
+        affectation_envoyee and data.assignment_status != enrollment.assignment_status
+    )
+    return _EditPlan(
+        validation=validation,
+        champs=frozenset(sent - ({"status"} if validation else set())),
+        old_values={name: getattr(enrollment, name) for name in _EDIT_AUDITED},
+        class_changed=class_changed,
+        profil_envoye=profil_envoye,
+        affectation_envoyee=affectation_envoyee,
+        decision_envoyee="assignment_decision_number" in sent,
+        regenerates_fees=class_changed or profil_change or affectation_change,
+    )
+
+
+#: L'état d'avant que le journal d'une édition garde.
+_EDIT_AUDITED = (
+    "status",
+    "notes",
+    "class_id",
+    "is_new_student",
+    "assignment_status",
+    "assignment_decision_number",
+)
+
+
+async def _write_edit(
+    db: AsyncSession, enrollment: Any, data: EnrollmentUpdate, plan: _EditPlan
+) -> None:
+    """Écrit les champs envoyés ; un champ absent reste intact (`repo.UNSET`)."""
+    await repo.update_enrollment(
+        db,
+        enrollment,
+        status=None if plan.validation else data.status,
+        notes=data.notes,
+        class_id=data.class_id,
+        is_new_student=(data.is_new_student if plan.profil_envoye else repo.UNSET),
+        assignment_status=(data.assignment_status if plan.affectation_envoyee else repo.UNSET),
+        assignment_decision_number=(
+            data.assignment_decision_number if plan.decision_envoyee else repo.UNSET
+        ),
+    )
+
+
+async def _audit_edit(
+    db: AsyncSession, enrollment_id: int, data: EnrollmentUpdate, plan: _EditPlan, actor: int
+) -> None:
+    """Journalise ce que le client a REELLEMENT envoyé, nuls compris.
+
+    `exclude_none` écartait les champs remis à null, or c'est précisément le
+    geste qui remet le profil à « non tranché » et régénère toute la grille de
+    frais : le journal ne gardait aucune trace de la seule action qui explique
+    pourquoi la dette d'une famille a changé. `mode="json"` parce que la
+    colonne d'audit est du JSON.
+    """
+    await audit_log(
+        db,
+        entity_type="enrollment",
+        action=AuditAction.UPDATE,
+        user_id=actor,
+        entity_id=enrollment_id,
+        old_values=plan.old_values,
+        new_values=data.model_dump(include=set(plan.champs), mode="json"),
+    )
 
 
 async def re_enroll_student(
@@ -352,15 +328,7 @@ async def re_enroll_student(
     Aucun garde ici : ce chemin délègue à `create_enrollment`, qui le porte. Il
     se contente de lui transmettre ce que le routeur a résolu.
     """
-    # Resolve academic year
-    academic_year_id = data.academic_year_id
-    if academic_year_id is None:
-        current = await get_current_academic_year(db)
-        academic_year_id = current.id
-    else:
-        ay = await repo.get_academic_year_by_id(db, academic_year_id)
-        if ay is None:
-            raise BusinessValidationError(f"AcademicYear {academic_year_id} not found")
+    academic_year_id = (await steps.resolve_academic_year(db, data.academic_year_id)).id
 
     # Use existing create_enrollment logic (handles capacity + duplicate guard)
     enrollment_data = EnrollmentCreate(
