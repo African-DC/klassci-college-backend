@@ -6,6 +6,7 @@ dessus avec leur vrai SQL, via une façade d'`AsyncSession` posée sur une
 session synchrone.
 """
 
+import importlib
 from collections.abc import Iterator
 from datetime import date
 from typing import Any
@@ -14,11 +15,13 @@ from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
-import app.models  # noqa: F401  (enregistre toutes les tables dans les métadonnées)
 from app.core.database import Base
 from app.models.academic import AcademicYear, Class, Level, SchoolSettings, Series
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student, User
+
+# Enregistre toutes les tables dans les métadonnées avant `create_all`.
+importlib.import_module("app.models")
 
 ACTEUR = 1
 AN_PASSE = 1
