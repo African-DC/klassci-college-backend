@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models.enrollment import ArtisticDiscipline, PreviousLevel, SecondLanguage
+from app.schemas.enrollment_profile import EnrollmentProfileFields, ScholarshipSummary
 from app.schemas.fee import ArrearsOutsideYear, FeeEntitlement
 
 
@@ -22,7 +24,7 @@ class InKindDeposit(BaseModel):
         return v
 
 
-class EnrollmentCreate(BaseModel):
+class EnrollmentCreate(EnrollmentProfileFields):
     student_id: int
     class_id: int
     academic_year_id: int
@@ -144,6 +146,13 @@ class EnrollmentResponse(BaseModel):
     #: « Encaisser » ou « Valider », sans la recalculer. `None` sur les
     #: réponses qui ne la calculent pas.
     awaiting_payment: bool | None = None
+    # Fiche de renseignements : `None` = pas renseigné.
+    previous_level: PreviousLevel | None = None
+    previous_series: str | None = None
+    is_repeater: bool | None = None
+    lv2: SecondLanguage | None = None
+    artistic_discipline: ArtisticDiscipline | None = None
+    scholarship: ScholarshipSummary | None = None
 
 
 class EnrollmentListResponse(BaseModel):
@@ -188,7 +197,7 @@ class ParentInput(BaseModel):
         return v
 
 
-class EnrollmentWithStudentCreate(BaseModel):
+class EnrollmentWithStudentCreate(EnrollmentProfileFields):
     """Creates a Student + optional Parent + Enrollment in one transaction."""
 
     # Student info
@@ -197,6 +206,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     birth_date: date | None = None
     birth_place: str | None = None
     genre: str | None = None
+    nationality: str | None = Field(default=None, max_length=60)
     enrollment_number: str | None = None
     city: str | None = None
     commune: str | None = None
@@ -240,7 +250,7 @@ class EnrollmentWithStudentCreate(BaseModel):
     override_reason: str | None = Field(default=None, max_length=500)
 
 
-class ReEnrollmentCreate(BaseModel):
+class ReEnrollmentCreate(EnrollmentProfileFields):
     """Re-enrolls an existing student for a new year/class."""
 
     student_id: int

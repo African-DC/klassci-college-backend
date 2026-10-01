@@ -21,10 +21,12 @@ from app.schemas.enrollment import (
     EnrollmentUpdate,
     ReEnrollmentCreate,
 )
+from app.schemas.enrollment_profile import PROFILE_FIELDS
 from app.services import (
     enrollment_arrears,
     enrollment_fees,
     enrollment_notifications,
+    enrollment_profile,
     enrollment_validation,
 )
 from app.services.enrollment_arrears import ArrearsClearance
@@ -118,6 +120,7 @@ async def create_enrollment(
             assignment_decision_number=data.assignment_decision_number,
             is_new_student=await profil_a_retenir(db, data, data.student_id, data.academic_year_id),
         )
+        await enrollment_profile.apply_initial_profile(db, enrollment, data, academic_year)
 
         # Créer un enrollment_fee explicite si fee_variant_id fourni (rétrocompat).
         # Le garde vit dans `enrollment_fees` : un tarif nommé par le client
@@ -360,5 +363,6 @@ async def re_enroll_student(
         fee_variant_id=data.fee_variant_id,
         notes=data.notes,
         in_kind_deposits=data.in_kind_deposits,
+        **data.model_dump(include=set(PROFILE_FIELDS)),
     )
     return await create_enrollment(db, enrollment_data, created_by=created_by, arrears=arrears)

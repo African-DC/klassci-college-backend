@@ -7,12 +7,17 @@ l'un de l'autre, pour une fonction qui ne dépend d'aucun des deux.
 
 from app.models.enrollment import Enrollment
 from app.schemas.enrollment import EnrollmentResponse
+from app.schemas.enrollment_profile import ScholarshipSummary
 
 
 def to_enrollment_response(
     enrollment: Enrollment, *, awaiting_payment: bool | None = None
 ) -> EnrollmentResponse:
-    """Convertit un Enrollment ORM en EnrollmentResponse."""
+    """Convertit un Enrollment ORM en EnrollmentResponse.
+
+    `scholarship` doit être chargé par l'appelant (`selectinload`) : lu après
+    un commit, il déclencherait un chargement paresseux hors contexte async.
+    """
     academic_year_name = (
         enrollment.academic_year.name
         if enrollment.academic_year
@@ -41,4 +46,14 @@ def to_enrollment_response(
         assignment_decision_number=enrollment.assignment_decision_number,
         is_new_student=enrollment.is_new_student,
         awaiting_payment=awaiting_payment,
+        previous_level=enrollment.previous_level,
+        previous_series=enrollment.previous_series,
+        is_repeater=enrollment.is_repeater,
+        lv2=enrollment.lv2,
+        artistic_discipline=enrollment.artistic_discipline,
+        scholarship=(
+            ScholarshipSummary.model_validate(enrollment.scholarship)
+            if enrollment.scholarship is not None
+            else None
+        ),
     )

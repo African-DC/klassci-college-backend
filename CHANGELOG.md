@@ -9,6 +9,12 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
+- L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité *(secrétariat, comptable)* (#469)
+- Une réinscription reprend d'elle-même le niveau antérieur, la série, la LV2 et la discipline de l'an passé, et en déduit la qualité *(secrétariat, éducateur)* (#469)
+- La fiche se corrige pour une inscription ou pour une classe entière d'un coup, en entier ou pas du tout *(comptable, secrétariat)* (#469)
+- La bourse d'une inscription se pose, se remplace ou se retire, avec un droit réservé à la direction *(admin, directeur)* (#469)
+- Migration `0084` : les colonnes de la fiche, toutes vides au départ, une bourse au plus par inscription et le droit de gérer les bourses. À jouer sur CHAQUE base d'établissement *(technique, déploiement)*
 - Une inscription ne se valide plus sans versement reçu, y compris par la modification du dossier ; un dossier sans rien à régler en argent reste validable *(secrétariat, directeur)*
 - La personne qui a créé l'inscription est prévenue à chaque versement tant qu'elle n'est pas validée, avec le montant, le moyen et le reste à payer dans la notification même *(secrétariat, directeur)*
 - Un versement renvoyé après une coupure réseau n'est plus enregistré deux fois : le même envoi rend le même versement *(caissier)*
@@ -109,6 +115,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription *(directeur, secrétariat)* (#469)
 - Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*
 - Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit *(admin, directeur, comptable)*
 - Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 » *(admin, directeur, comptable)*

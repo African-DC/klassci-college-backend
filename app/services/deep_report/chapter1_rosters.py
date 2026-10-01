@@ -29,8 +29,9 @@ _CIVIL_NOTE = (
     "un dossier élève à compléter, pas une limite de l'outil."
 )
 _HISTORY_NOTE = (
-    "Colonne « Qualité » : aucune année scolaire antérieure n'est enregistrée, "
-    f"le redoublement ne peut pas être établi — {PENDING_NOTE.lower()}."
+    "Colonne « Qualité » : l'historique des années antérieures n'est pas déclaré "
+    "exploitable, le redoublement n'est établi que là où il a été saisi. "
+    f"Ailleurs : {PENDING_NOTE.lower()}."
 )
 
 

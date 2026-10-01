@@ -26,6 +26,7 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
             selectinload(Enrollment.student),
             selectinload(Enrollment.class_),
             selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
+            selectinload(Enrollment.scholarship),
             # Pas de `EnrollmentFee.payments` ici : la relation est dépréciée
             # depuis la migration 0028 et plus personne ne la lit. La charger
             # coûtait une requête par appel pour un résultat toujours vide.
@@ -52,6 +53,7 @@ async def list_enrollments(
         selectinload(Enrollment.student),
         selectinload(Enrollment.class_),
         selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
+        selectinload(Enrollment.scholarship),
     )
     if class_id is not None:
         base = base.where(Enrollment.class_id == class_id)

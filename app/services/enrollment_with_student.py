@@ -14,7 +14,12 @@ from app.models.academic import Class, SchoolSettings
 from app.models.user import Parent, ParentStudent, Student, User, UserRoleEnum
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import EnrollmentResponse, EnrollmentWithStudentCreate, ParentInput
-from app.services import enrollment_arrears, enrollment_fees, enrollment_notifications
+from app.services import (
+    enrollment_arrears,
+    enrollment_fees,
+    enrollment_notifications,
+    enrollment_profile,
+)
 from app.services.enrollment_arrears import ArrearsClearance
 from app.services.enrollment_creation_helpers import (
     get_current_academic_year,
@@ -91,6 +96,7 @@ async def create_enrollment_with_student(
             assignment_decision_number=data.assignment_decision_number,
             is_new_student=await profil_a_retenir(db, data, student.id, academic_year_id),
         )
+        await enrollment_profile.apply_initial_profile(db, enrollment, data, academic_year)
 
         # 4. Create enrollment fee if variant provided (rétrocompat).
         # Même garde qu'à l'autre création : le tarif nommé doit viser cette
@@ -160,6 +166,7 @@ async def _create_student(
         birth_date=data.birth_date,
         birth_place=data.birth_place,
         genre=data.genre,
+        nationality=data.nationality,
         enrollment_number=data.enrollment_number,
     )
     db.add(student)

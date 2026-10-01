@@ -20,7 +20,7 @@ from datetime import date
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, ForeignKey, Numeric, String, Text
+from sqlalchemy import BigInteger, Date, ForeignKey, Index, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -159,6 +159,9 @@ class Scholarship(Base, TimestampMixin):
     """
 
     __tablename__ = "scholarships"
+    # Une bourse au plus par inscription : la fiche de renseignements n'a
+    # qu'une case « régime », et le guichet la remplace plutôt que d'empiler.
+    __table_args__ = (Index("uq_scholarships_enrollment_id", "enrollment_id", unique=True),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     enrollment_id: Mapped[int] = mapped_column(

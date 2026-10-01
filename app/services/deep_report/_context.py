@@ -177,9 +177,6 @@ async def load_context(db: AsyncSession, academic_year_id: int, trimester: int) 
         level = class_.level
         levels.setdefault(level.id, level)
         student = enrollment.student
-        is_repeater: bool | None = None
-        if has_history:
-            is_repeater = (student.id, level.id) in repeated_levels
         lines.append(
             StudentLine(
                 enrollment=enrollment,
@@ -188,7 +185,9 @@ async def load_context(db: AsyncSession, academic_year_id: int, trimester: int) 
                 level=level,
                 cycle=cycle_of_level(level.name, level.order),
                 bulletin=bulletins.get(student.id),
-                is_repeater=is_repeater,
+                is_repeater=_quality(
+                    enrollment, (student.id, level.id), repeated_levels, has_history
+                ),
             )
         )
 
@@ -246,20 +245,44 @@ async def _load_bulletins(
     return {bulletin.student_id: bulletin for bulletin in result.scalars().all()}
 
 
+def _quality(
+    enrollment: Enrollment,
+    student_level: tuple[int, int],
+    repeated_levels: set[tuple[int, int]],
+    has_history: bool,
+) -> bool | None:
+    """Colonne « Qualité » : la valeur saisie d'abord, la déduction ensuite.
+
+    Ce que le guichet a enregistré sur l'inscription (ou ce que la
+    réinscription a repris de l'an passé) fait foi. À défaut, on ne déduit
+    que si l'historique est exploitable ; sinon la case reste vide.
+    """
+    if enrollment.is_repeater is not None:
+        return enrollment.is_repeater
+    if not has_history:
+        return None
+    return student_level in repeated_levels
+
+
 async def _load_history(
     db: AsyncSession, academic_year: AcademicYear
 ) -> tuple[set[tuple[int, int]], bool]:
     """Couples (élève, niveau) déjà fréquentés lors d'une année antérieure.
 
-    Sert la colonne « Qualité (Red / Non Red) ». Si l'établissement n'a aucune
-    année antérieure en base, on ne peut rien affirmer : `has_history` vaut
-    False et la colonne restera vide plutôt que d'annoncer « Non Red » pour
-    tout le monde, ce qui serait faux dès le premier redoublant.
+    Sert la colonne « Qualité (Red / Non Red) ». La déduction n'est permise
+    que si l'établissement a DÉCLARÉ son historique exploitable
+    (`SchoolSettings.enrollment_history_is_reliable`) et qu'une année
+    antérieure existe en base. Quelques lignes ressaisies ne suffisent pas :
+    tous les autres élèves passeraient pour « Non Red », ce qui serait faux
+    dès le premier redoublant. Sinon `has_history` vaut False et la colonne
+    reste vide.
 
     La requête vit dans `enrollment_history` : la case « nouvel élève » du
     formulaire d'inscription pose la même question, et une facture se
     construit dessus.
     """
+    if not await enrollment_history.history_is_declared_reliable(db):
+        return set(), False
     return await enrollment_history.levels_attended_before(db, academic_year.start_date)
 
 
