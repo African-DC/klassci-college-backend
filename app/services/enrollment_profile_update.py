@@ -46,13 +46,16 @@ def _sent_fields(data: EnrollmentProfileUpdate) -> set[str]:
 def _targets(data: EnrollmentProfileUpdate, class_code: PreviousLevel | None) -> dict[str, object]:
     """Les valeurs à écrire : les champs envoyés, plus la qualité qui en découle.
 
-    Corriger le niveau antérieur sans dire la qualité la recalcule, comme à
-    la création : la laisser telle quelle ferait mentir la fiche dès qu'on
-    corrige une saisie. Une qualité envoyée l'emporte toujours.
+    Corriger le niveau antérieur (vers une valeur) sans dire la qualité la
+    recalcule, comme à la création : la laisser telle quelle ferait mentir la
+    fiche dès qu'on corrige une saisie. Effacer le niveau ne la touche pas.
+    Une qualité envoyée l'emporte toujours.
     """
     sent = _sent_fields(data)
     targets: dict[str, object] = {name: getattr(data, name) for name in sent}
-    if "previous_level" in sent and "is_repeater" not in sent:
+    # Un niveau effacé ne dit rien de la qualité : elle reste telle quelle,
+    # pour ne pas perdre en silence une valeur posée à la main.
+    if "previous_level" in sent and data.previous_level is not None and "is_repeater" not in sent:
         targets["is_repeater"] = repeater_status(data.previous_level, class_code)
     return targets
 

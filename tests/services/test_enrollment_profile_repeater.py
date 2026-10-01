@@ -80,10 +80,15 @@ async def test_un_autre_niveau_donne_non_redoublant(db: Session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_effacer_le_niveau_efface_la_qualite(db: Session) -> None:
+async def test_effacer_le_niveau_laisse_la_qualite_intacte(db: Session) -> None:
+    """Une qualité posée à la main ne se perd pas parce qu'on efface le niveau."""
+    enrollment = await _patch(db, 1, {"previous_level": "5E", "is_repeater": True})
+    assert enrollment.is_repeater is True
+
     enrollment = await _patch(db, 1, {"previous_level": None})
 
-    assert enrollment.is_repeater is None
+    assert enrollment.previous_level is None
+    assert enrollment.is_repeater is True
 
 
 @pytest.mark.asyncio
@@ -126,4 +131,5 @@ async def test_le_lot_suit_les_memes_regles(db: Session) -> None:
     db.expire_all()
     assert db.get(Enrollment, 1).is_repeater is True  # type: ignore[union-attr]
     assert db.get(Enrollment, 2).is_repeater is False  # type: ignore[union-attr]
-    assert db.get(Enrollment, 3).is_repeater is None  # type: ignore[union-attr]
+    # Niveau effacé : la qualité posée reste.
+    assert db.get(Enrollment, 3).is_repeater is True  # type: ignore[union-attr]
