@@ -115,6 +115,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps *(comptable, secrétariat)* (#472)
 - La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription *(directeur, secrétariat)* (#469)
 - Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*
 - Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit *(admin, directeur, comptable)*

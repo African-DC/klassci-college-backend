@@ -137,10 +137,21 @@ def _with_prior(
             values["lv2"] = prior.lv2
         if typed.artistic_discipline is None:
             values["artistic_discipline"] = prior.artistic_discipline
-    final_level = values["previous_level"]
-    if typed.is_repeater is None and final_level is not None and new_code is not None:
-        values["is_repeater"] = final_level == new_code
+    if typed.is_repeater is None:
+        values["is_repeater"] = repeater_status(values["previous_level"], new_code)
     return values
+
+
+def repeater_status(previous_level: object, class_code: PreviousLevel | None) -> bool | None:
+    """Qualité déduite : même niveau que l'an passé = redoublant.
+
+    `None` quand l'un des deux manque : un niveau antérieur non renseigné ou
+    une classe dont le nom ne correspond à aucun code national ne permettent
+    rien d'affirmer. Une seule règle, à la création comme à la correction.
+    """
+    if previous_level is None or class_code is None:
+        return None
+    return str(getattr(previous_level, "value", previous_level)) == class_code.value
 
 
 async def apply_initial_profile(
