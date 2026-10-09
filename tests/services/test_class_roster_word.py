@@ -26,8 +26,8 @@ def test_word_roster_has_requested_columns_and_values():
     }
     document = Document(BytesIO(_word_roster_document(payload)))
     assert document.sections[0].page_width > document.sections[0].page_height
-    assert len(document.tables) == 1
-    table = document.tables[0]
+    assert len(document.tables) == 2
+    table = document.tables[1]
     assert [c.text for c in table.rows[0].cells] == [
         "N°", "Matricule", "Nom", "Prénoms", "Sexe", "Date de naissance",
         "Lieu de naissance", "Nationalité", "Qualité", "Statut",
@@ -54,7 +54,7 @@ def test_word_roster_leaves_missing_fields_blank():
             "assignment_status": None,
         }],
     }
-    row = Document(BytesIO(_word_roster_document(data))).tables[0].rows[1]
+    row = Document(BytesIO(_word_roster_document(data))).tables[1].rows[1]
     assert [c.text for c in row.cells][4:] == ["", "", "", "", "", ""]
 
 def test_word_roster_uses_tenant_identity():
