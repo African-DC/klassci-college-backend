@@ -132,7 +132,9 @@ def _word_roster_document(data: dict) -> bytes:
     from docx.enum.section import WD_ORIENT
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.shared import Cm, Pt
+    from docx.shared import Cm, Pt, RGBColor
+    from app.services.pdf._helpers import image_bytes
+    from app.services.pdf.theme import PDFTheme
 
     doc = Document()
     section = doc.sections[0]
@@ -141,8 +143,47 @@ def _word_roster_document(data: dict) -> bytes:
     section.left_margin = section.right_margin = Cm(1.1)
     section.top_margin = section.bottom_margin = Cm(1.5)
 
+    school = data.get("school_settings") or {}
+    theme = PDFTheme.from_school(school)
+    primary = RGBColor.from_string(theme.primary.lstrip("#").upper())
+    accent = RGBColor.from_string(theme.accent.lstrip("#").upper())
+    identity = doc.add_table(rows=1, cols=2)
+    identity.autofit = False
+    identity.columns[0].width = Cm(3)
+    identity.columns[1].width = Cm(23)
+    logo = image_bytes(school.get("logo_url"))
+    if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
+        try:
+            identity.cell(0, 0).paragraphs[0].add_run().add_picture(
+                BytesIO(logo[0]), width=Cm(2.4)
+            )
+        except (ValueError, OSError):
+            pass
+    details_cell = identity.cell(0, 1)
+    p = details_cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    name = p.add_run(school.get("school_name") or "Établissement")
+    name.bold = True
+    name.font.size = Pt(16)
+    name.font.color.rgb = primary
+    settings_lines = [
+        school.get("drena_name"),
+        "Code établissement : " + str(school["ministry_code"]) if school.get("ministry_code") else None,
+        school.get("address"),
+        " · ".join(str(x) for x in (school.get("phone"), school.get("email")) if x),
+        school.get("website"),
+        school.get("motto"),
+    ]
+    for detail in filter(None, settings_lines):
+        p = details_cell.add_paragraph(str(detail))
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        for run in p.runs:
+            run.font.size = Pt(8)
+
     title = doc.add_heading("LISTE DE CLASSE", 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for run in title.runs:
+        run.font.color.rgb = primary
     doc.add_paragraph(
         f"Classe : {data['class_name']}  |  Année scolaire : {data['academic_year_name']}  |  Effectif : {len(data['students'])}"
     )
@@ -159,6 +200,7 @@ def _word_roster_document(data: dict) -> bytes:
         for run in cell.paragraphs[0].runs:
             run.bold = True
             run.font.size = Pt(8)
+            run.font.color.rgb = accent
 
     qualities = {True: "Redoublant", False: "Non redoublant"}
     statuses = {
@@ -202,8 +244,10 @@ async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
     students = await _load_students(db, class_id, ay.id)
+    school = await _get_school_settings_dict(db)
     return _word_roster_document({
         "class_name": klass.name,
         "academic_year_name": ay.name,
         "students": students,
+        "school_settings": school,
     })
