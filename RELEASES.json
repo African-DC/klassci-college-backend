@@ -1745,6 +1745,14 @@
         ],
         "Fixed": [
           {
+            "text": "L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 475
+          },
+          {
             "text": "Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps",
             "audience": [
               "comptable",

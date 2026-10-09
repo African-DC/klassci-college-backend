@@ -8,6 +8,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+- L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF *(direction, secrétariat)* (#475)
+
 ### Added
 - Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
 - L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité *(secrétariat, comptable)* (#469)
