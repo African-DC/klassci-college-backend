@@ -56,3 +56,29 @@ def test_word_roster_leaves_missing_fields_blank():
     }
     row = Document(BytesIO(_word_roster_document(data))).tables[0].rows[1]
     assert [c.text for c in row.cells][4:] == ["", "", "", "", "", ""]
+
+def test_word_roster_uses_tenant_identity():
+    payload = {
+        "class_name": "4ème A",
+        "academic_year_name": "2026-2027",
+        "students": [],
+        "school_settings": {
+            "school_name": "COLLÈGE EXEMPLE",
+            "drena_name": "DRENA BOUAKÉ",
+            "ministry_code": "CI-123",
+            "address": "Quartier administratif",
+            "phone": "0102030405",
+            "email": "secretariat@example.org",
+            "website": "https://example.org",
+            "motto": "Travail et réussite",
+            "primary_color": "#0453CB",
+            "accent_color": "#F58220",
+        },
+    }
+    document = Document(BytesIO(_word_roster_document(payload)))
+    text = " ".join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
+    for expected in ("COLLÈGE EXEMPLE", "DRENA BOUAKÉ", "CI-123",
+                     "Quartier administratif", "0102030405", "secretariat@example.org",
+                     "Travail et réussite"):
+        assert expected in text
+    assert document.tables[0].cell(0, 1).paragraphs[0].runs[0].font.color.rgb is not None
