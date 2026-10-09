@@ -23,7 +23,7 @@ def test_word_roster_has_requested_columns_and_values():
                 "nationality": "Ivoirienne",
                 "is_repeater": False,
                 "assignment_status": "affecte",
-            }
+            },
         ],
     }
     document = Document(BytesIO(_word_roster_document(payload)))
@@ -71,7 +71,7 @@ def test_word_roster_leaves_missing_fields_blank():
                 "nationality": None,
                 "is_repeater": None,
                 "assignment_status": None,
-            }
+            },
         ],
     }
     row = Document(BytesIO(_word_roster_document(data))).tables[1].rows[1]
@@ -97,7 +97,9 @@ def test_word_roster_uses_tenant_identity():
         },
     }
     document = Document(BytesIO(_word_roster_document(payload)))
-    text = " ".join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
+    text = " ".join(
+        cell.text for table in document.tables for row in table.rows for cell in row.cells
+    )
     for expected in (
         "COLLÈGE EXEMPLE",
         "DRENA BOUAKÉ",
