@@ -1620,17 +1620,25 @@ def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
 
 
 async def _get_enrolled_counts(db: AsyncSession, class_ids: list[int]) -> dict[int, int]:
-    """Retourne le nombre d'inscriptions actives par classe."""
+    """Effectifs des élèves validés dans chaque classe pour l'année courante.
+
+    Même périmètre que la liste nominative et la liste PDF : ne pas inclure
+    les prospects, dossiers en validation ou inscriptions des années passées.
+    """
     if not class_ids:
         return {}
     from app.models.enrollment import Enrollment
 
-    active_statuses = ("prospect", "en_validation", "valide")
+    current_ay_id = await repo.get_current_academic_year_id(db)
+    if current_ay_id is None:
+        return {}
+
     stmt = (
         select(Enrollment.class_id, func.count(Enrollment.id))
         .where(
             Enrollment.class_id.in_(class_ids),
-            Enrollment.status.in_(active_statuses),
+            Enrollment.academic_year_id == current_ay_id,
+            Enrollment.status == EnrollmentStatus.VALIDE,
         )
         .group_by(Enrollment.class_id)
     )
