@@ -8,6 +8,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+- La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
+
 ### Fixed
 - L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF *(direction, secrétariat)* (#475)
 
