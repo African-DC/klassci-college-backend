@@ -241,7 +241,9 @@ def _word_roster_document(data: dict) -> bytes:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
                     run.font.size = Pt(7)
-    doc.add_paragraph("Liste établie à partir des inscriptions validées de l'année scolaire courante.")
+    doc.add_paragraph(
+        "Liste établie à partir des inscriptions validées de l'année scolaire courante."
+    )
     stream = BytesIO()
     doc.save(stream)
     return stream.getvalue()
