@@ -125,7 +125,6 @@ async def get_class_roster_pdf(db: AsyncSession, class_id: int) -> bytes:
     return generate_class_roster_pdf(data, school)
 
 
-
 def _word_roster_document(data: dict) -> bytes:
     """Construire une véritable liste de classe éditable au format DOCX."""
     from docx import Document
