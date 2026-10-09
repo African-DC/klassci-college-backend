@@ -169,7 +169,11 @@ def _word_roster_document(data: dict) -> bytes:
     name.font.color.rgb = primary
     settings_lines = [
         school.get("drena_name"),
-        "Code établissement : " + str(school["ministry_code"]) if school.get("ministry_code") else None,
+        (
+            "Code établissement : " + str(school["ministry_code"])
+            if school.get("ministry_code")
+            else None
+        ),
         school.get("address"),
         " · ".join(str(x) for x in (school.get("phone"), school.get("email")) if x),
         school.get("website"),
@@ -189,8 +193,16 @@ def _word_roster_document(data: dict) -> bytes:
         f"Classe : {data['class_name']}  |  Année scolaire : {data['academic_year_name']}  |  Effectif : {len(data['students'])}"
     )
     headers = [
-        "N°", "Matricule", "Nom", "Prénoms", "Sexe", "Date de naissance",
-        "Lieu de naissance", "Nationalité", "Qualité", "Statut",
+        "N°",
+        "Matricule",
+        "Nom",
+        "Prénoms",
+        "Sexe",
+        "Date de naissance",
+        "Lieu de naissance",
+        "Nationalité",
+        "Qualité",
+        "Statut",
     ]
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
@@ -246,9 +258,11 @@ async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
         raise NotFoundError("AcademicYear (current)", 0)
     students = await _load_students(db, class_id, ay.id)
     school = await _get_school_settings_dict(db)
-    return _word_roster_document({
-        "class_name": klass.name,
-        "academic_year_name": ay.name,
-        "students": students,
-        "school_settings": school,
-    })
+    return _word_roster_document(
+        {
+            "class_name": klass.name,
+            "academic_year_name": ay.name,
+            "students": students,
+            "school_settings": school,
+        }
+    )
