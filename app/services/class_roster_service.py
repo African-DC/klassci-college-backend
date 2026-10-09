@@ -130,7 +130,7 @@ def _word_roster_document(data: dict) -> bytes:
     """Construire une véritable liste de classe éditable au format DOCX."""
     from docx import Document
     from docx.enum.section import WD_ORIENT
-    from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt
 
@@ -153,7 +153,7 @@ def _word_roster_document(data: dict) -> bytes:
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    for cell, label in zip(table.rows[0].cells, headers):
+    for cell, label in zip(table.rows[0].cells, headers, strict=True):
         cell.text = label
         cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         for run in cell.paragraphs[0].runs:
@@ -183,7 +183,7 @@ def _word_roster_document(data: dict) -> bytes:
             statuses.get(student.get("assignment_status"), ""),
         ]
         cells = table.add_row().cells
-        for cell, value in zip(cells, values):
+        for cell, value in zip(cells, values, strict=True):
             cell.text = str(value)
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             for paragraph in cell.paragraphs:
