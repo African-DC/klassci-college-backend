@@ -31,7 +31,8 @@ jobs:
         run: ruff check app/ tests/
 
       - name: Ruff format check
-        run: ruff format --check app/ tests/
+        run: ruff format --diff app/services/class_roster_service.py || true
+          ruff format --check app/ tests/
 
       - name: Mypy type check (P0a strict modules — dette legacy en TODO P1)
         run: |
