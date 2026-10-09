@@ -10,6 +10,14 @@
       "sections": {
         "Added": [
           {
+            "text": "La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur",
             "audience": [
               "comptable",
