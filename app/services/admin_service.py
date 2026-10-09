@@ -1627,7 +1627,7 @@ async def _get_enrolled_counts(db: AsyncSession, class_ids: list[int]) -> dict[i
     """
     if not class_ids:
         return {}
-    from app.models.enrollment import Enrollment
+    from app.models.enrollment import Enrollment, EnrollmentStatus
 
     current_ay_id = await repo.get_current_academic_year_id(db)
     if current_ay_id is None:
