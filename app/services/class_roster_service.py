@@ -154,9 +154,7 @@ def _word_roster_document(data: dict) -> bytes:
     logo = image_bytes(school.get("logo_url"))
     if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
         try:
-            identity.cell(0, 0).paragraphs[0].add_run().add_picture(
-                BytesIO(logo[0]), width=Cm(2.4)
-            )
+            identity.cell(0, 0).paragraphs[0].add_run().add_picture(BytesIO(logo[0]), width=Cm(2.4))
         except (ValueError, OSError):
             pass
     details_cell = identity.cell(0, 1)
