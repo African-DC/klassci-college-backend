@@ -133,6 +133,7 @@ def _word_roster_document(data: dict) -> bytes:
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Cm, Pt, RGBColor
+
     from app.services.pdf._helpers import image_bytes
     from app.services.pdf.theme import PDFTheme
 
