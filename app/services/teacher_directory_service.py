@@ -166,12 +166,12 @@ async def build_directory(
             if key in seen:
                 continue
             seen.add(key)
-            covered_by_timetable.add((int(teacher_id), int(subject_id)))
             if (options.class_ids and class_id not in options.class_ids
                 or options.level_ids and level_id not in options.level_ids
                 or options.series_ids and series_id not in options.series_ids
                 or options.subject_ids and subject_id not in options.subject_ids):
                 continue
+            covered_by_timetable.add((int(teacher_id), int(subject_id)))
             item = dict(teacher_base[teacher_id])
             item.update({
                 "subject": subject, "class": klass, "level": level,
