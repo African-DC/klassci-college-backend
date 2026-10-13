@@ -8,7 +8,6 @@ Deux provenances complémentaires, jamais déduites l'une de l'autre :
 
 from __future__ import annotations
 
-from collections import OrderedDict
 from typing import Any
 
 from fastapi import HTTPException
@@ -55,7 +54,7 @@ def compose_groups(
     rows: list[dict[str, str]], options: TeacherExportOptions
 ) -> list[dict[str, Any]]:
     """OR dans chaque filtre, AND entre filtres ; aucune fusion de matière homonyme."""
-    grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    grouped: dict[str, dict[str, Any]] = {}
     for row in rows:
         field = options.group_by
         label = ("Enseignants sélectionnés" if field == "none" else row.get(field, "—")) or "—"
