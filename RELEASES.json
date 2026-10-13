@@ -1769,7 +1769,7 @@
         ],
         "Fixed": [
           {
-            "text": "Les fiches de renseignements des classes ne retiennent que les inscriptions validées de l'année sélectionnée, sans mélanger dossiers en attente, années passées et effectifs courants",
+            "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
             "audience": [
               "scolarité",
               "direction"
