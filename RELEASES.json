@@ -1769,6 +1769,14 @@
         ],
         "Fixed": [
           {
+            "text": "Les fiches de renseignements des classes ne retiennent que les inscriptions validées de l'année sélectionnée, sans mélanger dossiers en attente, années passées et effectifs courants",
+            "audience": [
+              "scolarité",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF",
             "audience": [
               "direction",
