@@ -81,8 +81,10 @@ async def export_teacher_directory_word(
 ) -> Response:
     return await binary_response(
         lambda: _generate(db, options, "word"),
-        filename="liste-enseignants.docx", media_type=_WORD,
-        error_context="liste des enseignants Word", disposition="attachment",
+        filename="liste-enseignants.docx",
+        media_type=_WORD,
+        error_context="liste des enseignants Word",
+        disposition="attachment",
     )
 
 
@@ -94,6 +96,8 @@ async def export_teacher_directory_excel(
 ) -> Response:
     return await binary_response(
         lambda: _generate(db, options, "excel"),
-        filename="liste-enseignants.xlsx", media_type=_EXCEL,
-        error_context="liste des enseignants Excel", disposition="attachment",
+        filename="liste-enseignants.xlsx",
+        media_type=_EXCEL,
+        error_context="liste des enseignants Excel",
+        disposition="attachment",
     )

@@ -29,10 +29,19 @@ GROUPS: dict[str, str] = {
 DEFAULT_COLUMNS = ["name", "subject", "class", "level"]
 # Largeurs minimales indicatives en mm : le PDF utilise la même heuristique.
 COLUMN_WIDTHS = {
-    "name": 58, "speciality": 42, "subject": 44, "class": 31,
-    "level": 27, "series": 20, "contract": 25, "gender": 14,
-    "phone": 35, "email": 48, "source": 40,
-    "cnps": 35, "authorization": 42,
+    "name": 58,
+    "speciality": 42,
+    "subject": 44,
+    "class": 31,
+    "level": 27,
+    "series": 20,
+    "contract": 25,
+    "gender": 14,
+    "phone": 35,
+    "email": 48,
+    "source": 40,
+    "cnps": 35,
+    "authorization": 42,
 }
 
 
@@ -46,10 +55,10 @@ class TeacherExportOptions(BaseModel):
     series_ids: list[int] = Field(default_factory=list, max_length=100)
     subject_ids: list[int] = Field(default_factory=list, max_length=100)
     teacher_ids: list[int] = Field(default_factory=list, max_length=100)
-    contract_types: list[str] = Field(
-        default_factory=list
+    contract_types: list[str] = Field(default_factory=list)
+    columns: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_COLUMNS), min_length=1, max_length=13
     )
-    columns: list[str] = Field(default_factory=lambda: list(DEFAULT_COLUMNS), min_length=1, max_length=13)
     group_by: str = "subject"
     orientation: str = "auto"
     # Les enseignants sans affectation peuvent figurer uniquement si la demande
@@ -62,9 +71,14 @@ class TeacherExportOptions(BaseModel):
     def valid_selection(self) -> "TeacherExportOptions":
         if self.group_by not in GROUPS or self.orientation not in {"auto", "portrait", "landscape"}:
             raise ValueError("Regroupement ou orientation inconnue.")
-        if any(value not in {"permanent", "vacataire", "fonctionnaire"} for value in self.contract_types):
+        if any(
+            value not in {"permanent", "vacataire", "fonctionnaire"}
+            for value in self.contract_types
+        ):
             raise ValueError("Type de contrat inconnu.")
-        if len(set(self.columns)) != len(self.columns) or any(c not in COLUMNS for c in self.columns):
+        if len(set(self.columns)) != len(self.columns) or any(
+            c not in COLUMNS for c in self.columns
+        ):
             raise ValueError("Choisissez uniquement des colonnes connues, sans doublon.")
         for name in ("class_ids", "level_ids", "series_ids", "subject_ids", "teacher_ids"):
             values = getattr(self, name)

@@ -20,7 +20,9 @@ from app.models.user import TeacherProfile, User
 from app.schemas.teacher_directory import COLUMNS, GROUPS, TeacherExportOptions
 
 CONTRACT_LABELS = {
-    "permanent": "Permanent", "vacataire": "Vacataire", "fonctionnaire": "Fonctionnaire"
+    "permanent": "Permanent",
+    "vacataire": "Vacataire",
+    "fonctionnaire": "Fonctionnaire",
 }
 
 
@@ -45,7 +47,10 @@ def teacher_row(teacher: TeacherProfile, email: str | None) -> dict[str, str]:
         "cnps": teacher.cnps_number or "—",
         "authorization": teacher.teaching_authorization_number or "—",
         "_teacher_id": str(teacher.id),
-        "_subject_id": "", "_class_id": "", "_level_id": "", "_series_id": "",
+        "_subject_id": "",
+        "_class_id": "",
+        "_level_id": "",
+        "_series_id": "",
     }
 
 
@@ -57,10 +62,15 @@ def compose_groups(
     for row in rows:
         field = options.group_by
         label = ("Enseignants sélectionnés" if field == "none" else row.get(field, "—")) or "—"
-        identity = row.get({
-            "subject": "_subject_id", "class": "_class_id",
-            "level": "_level_id", "series": "_series_id",
-        }.get(field, ""), "")
+        identity = row.get(
+            {
+                "subject": "_subject_id",
+                "class": "_class_id",
+                "level": "_level_id",
+                "series": "_series_id",
+            }.get(field, ""),
+            "",
+        )
         key = f"{field}|{identity}|{normalize(label)}"
         if key not in grouped:
             grouped[key] = {"title": label, "identity": identity, "rows": [], "_seen": set()}
@@ -96,32 +106,45 @@ async def export_choices(db: AsyncSession) -> dict[str, Any]:
     classes = await items(Class, "id", "name", "level_id", "series_id")
     subjects = await items(Subject, "id", "name", "level_id", "series_id")
     return {
-        "years": years, "levels": levels, "series": series,
-        "classes": classes, "subjects": subjects,
-        "columns": COLUMNS, "groups": GROUPS,
+        "years": years,
+        "levels": levels,
+        "series": series,
+        "classes": classes,
+        "subjects": subjects,
+        "columns": COLUMNS,
+        "groups": GROUPS,
         "default_columns": ["name", "subject", "class", "level"],
     }
 
 
-async def build_directory(
-    db: AsyncSession, options: TeacherExportOptions
-) -> dict[str, Any]:
+async def build_directory(db: AsyncSession, options: TeacherExportOptions) -> dict[str, Any]:
     year_id = options.academic_year_id
     if year_id is not None:
-        year = (await db.execute(select(AcademicYear).where(AcademicYear.id == year_id))).scalar_one_or_none()
+        year = (
+            await db.execute(select(AcademicYear).where(AcademicYear.id == year_id))
+        ).scalar_one_or_none()
         if not year:
             raise HTTPException(status_code=422, detail="Année scolaire inconnue.")
     else:
-        year = (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))).scalars().first()
+        year = (
+            (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True))))
+            .scalars()
+            .first()
+        )
     # On n'affirme jamais que Subject.teacher_id est daté de cette année.
     if year is None and (options.class_ids or not options.include_catalog):
-        raise HTTPException(status_code=422, detail="Sélectionnez une année scolaire pour les affectations de classes.")
+        raise HTTPException(
+            status_code=422,
+            detail="Sélectionnez une année scolaire pour les affectations de classes.",
+        )
 
-    teachers = (await db.execute(
-        select(TeacherProfile, User.email)
-        .outerjoin(User, User.id == TeacherProfile.user_id)
-        .order_by(TeacherProfile.last_name, TeacherProfile.first_name, TeacherProfile.id)
-    )).all()
+    teachers = (
+        await db.execute(
+            select(TeacherProfile, User.email)
+            .outerjoin(User, User.id == TeacherProfile.user_id)
+            .order_by(TeacherProfile.last_name, TeacherProfile.first_name, TeacherProfile.id)
+        )
+    ).all()
     search = normalize(options.search)
     teacher_base: dict[int, dict[str, str]] = {}
     for teacher, email in teachers:
@@ -129,7 +152,7 @@ async def build_directory(
         if options.contract_types and contract not in options.contract_types:
             continue
         data = teacher_row(teacher, email)
-        if search and search not in normalize(data["name"]+" "+data["speciality"]):
+        if search and search not in normalize(data["name"] + " " + data["speciality"]):
             continue
         if options.teacher_ids and teacher.id not in options.teacher_ids:
             continue
@@ -142,9 +165,15 @@ async def build_directory(
     if year:
         statement = (
             select(
-                TimetableSlot.teacher_id, TimetableSlot.subject_id, TimetableSlot.class_id,
-                Subject.name, Class.name, Level.name, Series.name,
-                Class.level_id, Class.series_id,
+                TimetableSlot.teacher_id,
+                TimetableSlot.subject_id,
+                TimetableSlot.class_id,
+                Subject.name,
+                Class.name,
+                Level.name,
+                Series.name,
+                Class.level_id,
+                Class.series_id,
             )
             .join(Class, Class.id == TimetableSlot.class_id)
             .join(Subject, Subject.id == TimetableSlot.subject_id)
@@ -159,66 +188,106 @@ async def build_directory(
             statement = statement.where(TimetableSlot.teacher_id.in_(teacher_base.keys()))
         else:
             statement = statement.where(TimetableSlot.teacher_id == -1)
-        for teacher_id, subject_id, class_id, subject, klass, level, series, level_id, series_id in (await db.execute(statement)).all():
+        for (
+            teacher_id,
+            subject_id,
+            class_id,
+            subject,
+            klass,
+            level,
+            series,
+            level_id,
+            series_id,
+        ) in (await db.execute(statement)).all():
             key = (int(teacher_id), int(subject_id), int(class_id), int(year.id))
             if key in seen:
                 continue
             seen.add(key)
-            if (options.class_ids and class_id not in options.class_ids
-                or options.level_ids and level_id not in options.level_ids
-                or options.series_ids and series_id not in options.series_ids
-                or options.subject_ids and subject_id not in options.subject_ids):
+            if (
+                options.class_ids
+                and class_id not in options.class_ids
+                or options.level_ids
+                and level_id not in options.level_ids
+                or options.series_ids
+                and series_id not in options.series_ids
+                or options.subject_ids
+                and subject_id not in options.subject_ids
+            ):
                 continue
             covered_by_timetable.add((int(teacher_id), int(subject_id)))
             item = dict(teacher_base[teacher_id])
-            item.update({
-                "subject": subject, "class": klass, "level": level,
-                "series": series or "—", "source": f"Emploi du temps {year.name}",
-                "_subject_id": str(subject_id), "_class_id": str(class_id),
-                "_level_id": str(level_id), "_series_id": str(series_id or ""),
-            })
+            item.update(
+                {
+                    "subject": subject,
+                    "class": klass,
+                    "level": level,
+                    "series": series or "—",
+                    "source": f"Emploi du temps {year.name}",
+                    "_subject_id": str(subject_id),
+                    "_class_id": str(class_id),
+                    "_level_id": str(level_id),
+                    "_series_id": str(series_id or ""),
+                }
+            )
             rows.append(item)
 
     # Le catalogue n'est PAS la liste des classes : il documente seulement
     # l'enseignant déclaré sur Subject pour un niveau / une série.
     if options.include_catalog and not options.class_ids:
-        subjects = (await db.execute(
-            select(Subject, Level.name, Series.name)
-            .outerjoin(Level, Level.id == Subject.level_id)
-            .outerjoin(Series, Series.id == Subject.series_id)
-            .where(Subject.teacher_id.is_not(None))
-            .order_by(Subject.id)
-        )).all()
+        subjects = (
+            await db.execute(
+                select(Subject, Level.name, Series.name)
+                .outerjoin(Level, Level.id == Subject.level_id)
+                .outerjoin(Series, Series.id == Subject.series_id)
+                .where(Subject.teacher_id.is_not(None))
+                .order_by(Subject.id)
+            )
+        ).all()
         for subject, level_name, series_name in subjects:
             tid = subject.teacher_id
             if tid not in teacher_base or (tid, subject.id) in covered_by_timetable:
                 continue
-            if (options.level_ids and subject.level_id not in options.level_ids
-                or options.series_ids and subject.series_id not in options.series_ids
-                or options.subject_ids and subject.id not in options.subject_ids):
+            if (
+                options.level_ids
+                and subject.level_id not in options.level_ids
+                or options.series_ids
+                and subject.series_id not in options.series_ids
+                or options.subject_ids
+                and subject.id not in options.subject_ids
+            ):
                 continue
             item = dict(teacher_base[tid])
-            item.update({
-                "subject": subject.name, "class": "—",
-                "level": level_name or "—", "series": series_name or "—",
-                "source": "Référentiel (hors année)",
-                "_subject_id": str(subject.id), "_level_id": str(subject.level_id or ""),
-                "_series_id": str(subject.series_id or ""),
-            })
+            item.update(
+                {
+                    "subject": subject.name,
+                    "class": "—",
+                    "level": level_name or "—",
+                    "series": series_name or "—",
+                    "source": "Référentiel (hors année)",
+                    "_subject_id": str(subject.id),
+                    "_level_id": str(subject.level_id or ""),
+                    "_series_id": str(subject.series_id or ""),
+                }
+            )
             rows.append(item)
 
-    pedagogical = any((options.class_ids, options.level_ids, options.series_ids, options.subject_ids))
+    pedagogical = any(
+        (options.class_ids, options.level_ids, options.series_ids, options.subject_ids)
+    )
     if options.include_unassigned and not pedagogical:
         assigned_ids = {int(item["_teacher_id"]) for item in rows}
         rows.extend(teacher_base[tid] for tid in teacher_base if tid not in assigned_ids)
 
     if len(rows) > 10000:
-        raise HTTPException(status_code=422, detail="Plus de 10 000 affectations. Affinez vos filtres.")
+        raise HTTPException(
+            status_code=422, detail="Plus de 10 000 affectations. Affinez vos filtres."
+        )
 
     groups = compose_groups(rows, options)
     return {
         "year": year.name if year else "Non définie",
-        "groups": groups, "columns": options.columns,
+        "groups": groups,
+        "columns": options.columns,
         "headers": [COLUMNS[key] for key in options.columns],
         "count": sum(len(g["rows"]) for g in groups),
         "teachers_count": len({r["_teacher_id"] for r in rows}),

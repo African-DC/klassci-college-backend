@@ -15,7 +15,9 @@ from app.services.pdf._helpers import image_bytes
 from app.services.pdf.theme import PDFTheme
 
 
-def render_pdf(directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions) -> bytes:
+def render_pdf(
+    directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions
+) -> bytes:
     from weasyprint import HTML
 
     theme = PDFTheme.from_school(school)
@@ -25,7 +27,9 @@ def render_pdf(directory: dict[str, Any], school: dict[str, Any], opts: TeacherE
     for group in directory["groups"]:
         # Une rubrique est une donnée documentaire, pas du HTML de confiance.
         title = ui.esc(group["title"])
-        section = f'<div class="teacher-group"><h2>{title} <small>({len(group["rows"])})</small></h2>'
+        section = (
+            f'<div class="teacher-group"><h2>{title} <small>({len(group["rows"])})</small></h2>'
+        )
         section += ui.premium_table(
             headers=directory["headers"],
             rows=group["rows"],
@@ -35,10 +39,12 @@ def render_pdf(directory: dict[str, Any], school: dict[str, Any], opts: TeacherE
         sections.append(section + "</div>")
 
     if not sections:
-        sections = ['<p class="no-results">Aucun enseignant ne correspond aux critères sélectionnés.</p>']
+        sections = [
+            '<p class="no-results">Aucun enseignant ne correspond aux critères sélectionnés.</p>'
+        ]
 
     year = ui.esc(directory["year"])
-    summary = f'{directory["teachers_count"]} enseignant(s) · {directory["count"]} ligne(s) · {len(directory["groups"])} rubrique(s)'
+    summary = f"{directory['teachers_count']} enseignant(s) · {directory['count']} ligne(s) · {len(directory['groups'])} rubrique(s)"
     html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
     {ui.base_styles(theme, page_size=page, margin="13mm 13mm", paginate=True)}
     <style>
@@ -51,23 +57,36 @@ def render_pdf(directory: dict[str, Any], school: dict[str, Any], opts: TeacherE
        .teacher-group tr {{ break-inside: avoid; }}
        .no-results {{ color: var(--muted); text-align: center; padding: 30px 0; }}
     </style></head><body>
-    {ui.premium_header(
-        school, theme=theme, doc_type="LISTE DES ENSEIGNANTS",
-        doc_subtitle=f"Année scolaire : {directory['year']} — {directory['group_by']}",
-    )}
-    {ui.meta_banner(
-        f"<strong>Année scolaire :</strong> {year}",
-        f"<strong>Effectif :</strong> {summary}",
-        theme=theme,
-    )}
-    {''.join(sections)}
-    {ui.premium_footer(school, theme=theme,
-        note="Répertoire administratif — les affectations au référentiel ne présument pas d'une classe enseignée.")}
+    {
+        ui.premium_header(
+            school,
+            theme=theme,
+            doc_type="LISTE DES ENSEIGNANTS",
+            doc_subtitle=f"Année scolaire : {directory['year']} — {directory['group_by']}",
+        )
+    }
+    {
+        ui.meta_banner(
+            f"<strong>Année scolaire :</strong> {year}",
+            f"<strong>Effectif :</strong> {summary}",
+            theme=theme,
+        )
+    }
+    {"".join(sections)}
+    {
+        ui.premium_footer(
+            school,
+            theme=theme,
+            note="Répertoire administratif — les affectations au référentiel ne présument pas d'une classe enseignée.",
+        )
+    }
     </body></html>"""
     return HTML(string=html).write_pdf()
 
 
-def render_word(directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions) -> bytes:
+def render_word(
+    directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions
+) -> bytes:
     from docx import Document
     from docx.enum.section import WD_ORIENT
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
@@ -97,9 +116,7 @@ def render_word(directory: dict[str, Any], school: dict[str, Any], opts: Teacher
     logo = image_bytes(school.get("logo_url"))
     if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
         try:
-            identity.cell(0, 0).paragraphs[0].add_run().add_picture(
-                BytesIO(logo[0]), width=Cm(2.0)
-            )
+            identity.cell(0, 0).paragraphs[0].add_run().add_picture(BytesIO(logo[0]), width=Cm(2.0))
         except (ValueError, OSError):
             pass
     details = identity.cell(0, 1)
@@ -168,7 +185,9 @@ def _safe_excel(value: object) -> str:
     return text
 
 
-def render_excel(directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions) -> bytes:
+def render_excel(
+    directory: dict[str, Any], school: dict[str, Any], opts: TeacherExportOptions
+) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font
     from openpyxl.utils import get_column_letter
@@ -186,7 +205,9 @@ def render_excel(directory: dict[str, Any], school: dict[str, Any], opts: Teache
     ws.title = "Enseignants"
     headers = directory["headers"]
     row_index = write_header(
-        ws, school, title="LISTE DES ENSEIGNANTS",
+        ws,
+        school,
+        title="LISTE DES ENSEIGNANTS",
         subtitle=f"Année {directory['year']} — {directory['group_by']}",
         meta_lines=[
             f"{directory['teachers_count']} enseignants · {directory['count']} lignes",
@@ -200,9 +221,12 @@ def render_excel(directory: dict[str, Any], school: dict[str, Any], opts: Teache
     style_table_header(ws, row_index, len(headers), school)
     row_index += 1
     for group in directory["groups"]:
-        ws.merge_cells(start_row=row_index, start_column=1,
-                       end_row=row_index, end_column=max(1, len(headers)))
-        group_cell = ws.cell(row_index, 1, _safe_excel(f"{group['title']} — {len(group['rows'])} ligne(s)"))
+        ws.merge_cells(
+            start_row=row_index, start_column=1, end_row=row_index, end_column=max(1, len(headers))
+        )
+        group_cell = ws.cell(
+            row_index, 1, _safe_excel(f"{group['title']} — {len(group['rows'])} ligne(s)")
+        )
         group_cell.font = Font(bold=True, color=primary_argb(school))
         row_index += 1
         for values in group["rows"]:
@@ -214,7 +238,11 @@ def render_excel(directory: dict[str, Any], school: dict[str, Any], opts: Teache
         ws.cell(row_index, 1, "Aucun enseignant ne correspond aux critères.")
     set_widths(ws, [min(62, max(18, len(label) + 10)) for label in headers])
     ws.freeze_panes = f"A{header_row + 1}"
-    ws.auto_filter.ref = f"A{header_row}:{get_column_letter(len(headers))}{max(header_row, row_index - 1)}" if not directory["groups"] else None
+    ws.auto_filter.ref = (
+        f"A{header_row}:{get_column_letter(len(headers))}{max(header_row, row_index - 1)}"
+        if not directory["groups"]
+        else None
+    )
     setup_printing(ws, header_row=header_row, landscape=page_orientation(opts) == "landscape")
     output = BytesIO()
     wb.save(output)
