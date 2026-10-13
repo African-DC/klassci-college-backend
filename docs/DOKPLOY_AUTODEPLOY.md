@@ -23,15 +23,16 @@ NE doit jamais apparaître dans des logs ou captures.
 `.github/workflows/production-release.yml`:
 
 1. valide la présence du Dockerfile sur les PR vers develop, staging et main ;
-2. après un push vers main, construit et publie l'image de ce dépôt avec un
-   identifiant immuable `git-<SHA>` dans GHCR ;
+2. après un déclenchement **manuel** sur `main` avec `publish_image=true`, construit
+   et publie l'image de ce dépôt avec un identifiant immuable `git-<SHA>` dans GHCR ;
+   l'option est désactivée par défaut et un push sur `main` ne publie aucune image ;
 3. sur déclenchement manuel (workflow_dispatch, main seulement), effectue
    un **GET en lecture seule** de `compose.one` avec la clé API Dokploy stockée
    dans GitHub Environment production ;
 4. n'exécute PAS `compose.deploy`, `compose.redeploy`,
    `compose.saveEnvironment`, de migration ni de redémarrage de service.
 
-Tags publiés (après que la PR a traversé develop, staging et main) :
+Tags publiés **uniquement sur déclenchement manuel depuis `main`** :
 
 - frontend : `ghcr.io/african-dc/klassci-college-frontend:git-<SHA>`
 - backend : `ghcr.io/african-dc/klassci-college-backend:git-<SHA>`
@@ -39,6 +40,10 @@ Tags publiés (après que la PR a traversé develop, staging et main) :
 Les packages GHCR peuvent être **privés par défaut** : leur visibilité et le
 droit de pull sur Contabo doivent être vérifiés avant de changer le Compose
 de production. Ne jamais publier un token GitHub dans un fichier Compose.
+
+La vérification Docker sur les PR (`docker-preflight.yml`) construit l'image
+avec `push: false` et n'envoie rien au registre. **Ne pas confondre réussite
+CI, publication GHCR et déploiement de production.**
 
 ## Pourquoi l'API ne suffit pas encore
 
@@ -79,8 +84,13 @@ Chaque dépôt : `Settings > Environments > production` :
 - limiter l'environnement aux branches `main` ;
 - pas besoin de SSH GitHub Actions dans cette phase.
 
-Actions > `KLASSCI College release preparation` sur main > Run workflow :
-le job `dokploy-readonly-check` interroge seulement les métadonnées de la
+Actions > `KLASSCI College release preparation` sur `main` > Run workflow :
+- `publish_image=false` (par défaut) : ne publie aucune image ; le job de
+  vérification Dokploy en lecture seule peut être exécuté ;
+- `publish_image=true` : publie une image immuable GHCR, **sans déploiement** ;
+  nécessite une décision explicite de livraison.
+
+Le job `dokploy-readonly-check` interroge seulement les métadonnées de la
 stack. Ne pas copier sa réponse brute, car elle pourrait inclure des variables
 d'environnement.
 
