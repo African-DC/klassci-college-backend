@@ -374,6 +374,7 @@ def render_docx(s: Selection, school: dict, rows: list[dict]) -> bytes:
         try:
             doc.add_paragraph().add_run().add_picture(BytesIO(logo[0]), width=Cm(2))
         except (OSError, ValueError):
+            # Un logo illisible ne doit pas bloquer l'export Word de l'annuaire.
             pass
     title = doc.add_heading(school.get("school_name") or "Établissement", 0)
     title.runs[0].font.color.rgb = RGBColor.from_string(theme.primary.lstrip("#").upper())
