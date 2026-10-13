@@ -5,7 +5,11 @@ import pytest
 from fastapi import HTTPException
 
 from app.services.teacher_export_documents import (
-    compose, generate_excel, generate_word, page_landscape, validate_options,
+    compose,
+    generate_excel,
+    generate_word,
+    page_landscape,
+    validate_options,
 )
 
 
@@ -62,8 +66,8 @@ def test_excel_word_sont_de_vrais_office_files_et_identite_est_conservee():
     word = generate_word(groups, ["name", "subject"], school, "2026-2027", False)
     assert excel[:2] == b"PK"
     assert word[:2] == b"PK"
-    from openpyxl import load_workbook
     from docx import Document
+    from openpyxl import load_workbook
     ws = load_workbook(io.BytesIO(excel)).active
     assert ws["A1"].value == "COLLEGE TEST"
     doc = Document(io.BytesIO(word))
