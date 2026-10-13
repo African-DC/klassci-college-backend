@@ -181,3 +181,12 @@ async def test_week_collections_include_previous_year_arrears(db: Session) -> No
     summary = await query.get_payments_summary(_Pont(db), received_by=CAISSIERE, filters=week)
     assert summary.payment_count == 2
     assert summary.total_collected == 90000.0
+
+
+@pytest.mark.asyncio
+async def test_global_history_without_school_year_has_cash_kpi_not_debt(db: Session) -> None:
+    summary = await query.get_payments_summary(_Pont(db), filters=PaymentFilters())
+    assert summary.total_expected is None
+    assert summary.completion_rate is None
+    assert summary.total_collected == 91000.0
+    assert summary.payment_count == 3
