@@ -62,6 +62,7 @@ from app.routers.super_admin import router as super_admin_router
 from app.routers.teacher_attendance import admin_router as teacher_attendance_admin_router
 from app.routers.teacher_attendance import teacher_router as teacher_attendance_teacher_router
 from app.routers.teacher_portal import router as teacher_portal_router
+from app.routers.teacher_directory import router as teacher_directory_router
 from app.routers.timetable import availability_router, teachers_router
 from app.routers.timetable import router as timetable_router
 from app.routers.upload_handoff import router as upload_handoff_router
@@ -120,6 +121,7 @@ register_archive_filter()
 # --- Routers ---
 app.include_router(duplicates_router)
 app.include_router(admin_router)
+app.include_router(teacher_directory_router)
 app.include_router(archive_router)
 app.include_router(attachments_router)
 app.include_router(attendance_router)
