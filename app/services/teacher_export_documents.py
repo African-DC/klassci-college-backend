@@ -167,7 +167,7 @@ def generate_pdf(rows: list[dict], columns: list[str], groups: list[tuple[str, l
     blocks = []
     for title, lines in groups:
         blocks.append(f"<h2 class='group-title'>{escape(title)}</h2>")
-        data = [[escape(str(row.get(k, "—"))) for k in columns] for row in lines]
+        data = [[str(row.get(k, "—")) for k in columns] for row in lines]
         blocks.append(ui.premium_table(
             headers=[COLUMNS[k] for k in columns],
             rows=data, theme=theme, empty_message="Aucun enseignant pour cette sélection.",
@@ -198,11 +198,7 @@ def generate_excel(groups: list[tuple[str, list[dict]]], columns: list[str],
     idx = write_header(ws, school, title="LISTE DES ENSEIGNANTS",
                        subtitle=f"Année scolaire : {year}", meta_lines=[], width=len(columns))
     primary = argb(school.get("primary_color"), "#0F3F8C")
-    ws.append([]) if idx > ws.max_row + 1 else None
     row_index = max(idx, ws.max_row + 1)
-    ws.cell(row_index, 1, value=" · ".join(COLUMNS[c] for c in columns))
-    row_index += 1
-    ws.append([]) if row_index > ws.max_row + 1 else None
     for title, lines in groups:
         ws.cell(row_index, 1, value=title).font = Font(bold=True, color=primary)
         row_index += 1
@@ -242,9 +238,9 @@ def generate_word(groups: list[tuple[str, list[dict]]], columns: list[str],
     logo = school.get("logo_url")
     if logo:
         try:
-            content = image_bytes(logo)
-            if content:
-                doc.add_picture(BytesIO(content), width=Inches(.8))
+            image = image_bytes(logo)
+            if image:
+                doc.add_picture(BytesIO(image[0]), width=Inches(.8))
         except (OSError, ValueError, TypeError):
             pass
     school_title = doc.add_paragraph()
@@ -252,12 +248,24 @@ def generate_word(groups: list[tuple[str, list[dict]]], columns: list[str],
     for value in ("ministry_code", "address", "phone", "email", "motto"):
         if school.get(value):
             doc.add_paragraph(str(school[value]), style="Normal")
+    primary = (school.get("primary_color") or "#0F3F8C").lstrip("#")
+    try:
+        rgb = RGBColor.from_string(primary)
+        school_title.runs[0].font.color.rgb = rgb
+    except ValueError:
+        rgb = RGBColor(15, 63, 140)
     doc.add_heading("LISTE DES ENSEIGNANTS", 0)
     doc.add_paragraph(f"Année scolaire : {year}")
     for title, lines in groups:
         doc.add_heading(title, level=2)
         table = doc.add_table(rows=1, cols=len(columns))
-        table.style = "Light Shading Accent 1"
+        table.style = "Table Grid"
+        for cell in table.rows[0].cells:
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
+            shading = OxmlElement("w:shd")
+            shading.set(qn("w:fill"), primary.upper() if len(primary) == 6 else "0F3F8C")
+            cell._tc.get_or_add_tcPr().append(shading)
         for i, col in enumerate(columns):
             table.rows[0].cells[i].text = COLUMNS[col]
         for line in lines:
