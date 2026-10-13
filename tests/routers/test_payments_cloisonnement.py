@@ -423,7 +423,8 @@ def test_l_export_reprend_les_filtres_de_l_ecran(comptable: TestClient) -> None:
     ) as export:
         reponse = comptable.get(
             "/payments/export"
-            "?status=completed&method=cash"
+            "?status=completed&method=cash&academic_year_id=8&linked_year_only=true"
+            "&search=KOUASSI&fee_category_id=12"
             "&date_from=2026-09-01T00:00:00&date_to=2026-09-30T23:59:59"
         )
 
@@ -431,6 +432,10 @@ def test_l_export_reprend_les_filtres_de_l_ecran(comptable: TestClient) -> None:
     filtres = _filtres_de(export)
     assert filtres.status == "completed"
     assert filtres.method == "cash"
+    assert filtres.academic_year_id == 8
+    assert filtres.linked_year_only is True
+    assert filtres.search == "KOUASSI"
+    assert filtres.fee_category_id == 12
     assert filtres.date_from == datetime(2026, 9, 1, 0, 0, 0)
     assert filtres.date_to == datetime(2026, 9, 30, 23, 59, 59)
 
