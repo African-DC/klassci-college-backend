@@ -9,7 +9,7 @@ from app.services.teacher_exports import Selection, choose_orientation, compose,
 
 
 def choice(**kwargs):
-    return Selection(year_id=None, class_ids=[], level_ids=[], series_ids=[],
+    return Selection(year_id=kwargs.pop("year_id", None), class_ids=kwargs.pop("class_ids", []), level_ids=[], series_ids=[],
         subject_ids=[], columns=kwargs.pop("columns", ["name"]),
         group=kwargs.pop("group", "speciality"),
         orientation=kwargs.pop("orientation", "auto"),
