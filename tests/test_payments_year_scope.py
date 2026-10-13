@@ -196,7 +196,9 @@ async def test_global_history_cash_kpi_preserves_legacy_recovery(db: Session) ->
 async def test_strict_year_only_counts_linked_enrollments(db: Session) -> None:
     """Daily cash keeps arrears and orphan payments; school-year cash does not."""
     period = PaymentFilters(academic_year_id=ANNEE_COURANTE, linked_year_only=True)
-    payments, count = await repo.list_payments(_Pont(db), filters=period, page=1, size=20)
+    payments, count = await repo.list_payments(
+        _Pont(db), filters=period, page=1, size=20
+    )
     summary = await query.get_payments_summary(
         _Pont(db), received_by=CAISSIERE, filters=period
     )
@@ -208,6 +210,8 @@ async def test_strict_year_only_counts_linked_enrollments(db: Session) -> None:
 @pytest.mark.asyncio
 async def test_strict_year_does_not_claim_an_orphan(db: Session) -> None:
     previous = PaymentFilters(academic_year_id=ANNEE_PRECEDENTE, linked_year_only=True)
-    payments, count = await repo.list_payments(_Pont(db), filters=previous, page=1, size=20)
+    payments, count = await repo.list_payments(
+        _Pont(db), filters=previous, page=1, size=20
+    )
     assert count == 1
     assert {payment.id for payment in payments} == {2}
