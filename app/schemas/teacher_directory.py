@@ -2,7 +2,6 @@
 
 from pydantic import BaseModel, Field, model_validator
 
-
 COLUMNS: dict[str, str] = {
     "name": "Nom et prénoms",
     "speciality": "Spécialité déclarée",
