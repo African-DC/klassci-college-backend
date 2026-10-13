@@ -97,7 +97,7 @@ def test_pas_de_colonne_inconnue_ou_doublon():
 
 
 def test_portrait_trop_large_refuse():
-    s = choice(columns=["name", "speciality", "phone", "email"], orientation="portrait")
+    s = choice(columns=["name", "speciality", "subject", "phone", "email"], orientation="portrait")
     with pytest.raises(HTTPException):
         choose_orientation(s)
 
