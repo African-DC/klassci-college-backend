@@ -23,7 +23,6 @@ from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.cash_sessions import router as cash_sessions_router
 from app.routers.class_documents import router as class_documents_router
-from app.routers.teacher_documents import router as teacher_documents_router
 from app.routers.class_information_sheet import router as class_information_sheet_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
@@ -60,6 +59,7 @@ from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.summons import router as summons_router
 from app.routers.super_admin import router as super_admin_router
+from app.routers.teacher_documents import router as teacher_documents_router
 from app.routers.teacher_attendance import admin_router as teacher_attendance_admin_router
 from app.routers.teacher_attendance import teacher_router as teacher_attendance_teacher_router
 from app.routers.teacher_portal import router as teacher_portal_router
