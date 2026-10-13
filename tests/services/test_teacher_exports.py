@@ -1,11 +1,18 @@
 """Couverture de la composition, sans nécessiter une base de données."""
+
 from io import BytesIO
 
 import pytest
 from fastapi import HTTPException
 from openpyxl import load_workbook
 
-from app.services.teacher_exports import Selection, choose_orientation, compose, render_docx, render_xlsx
+from app.services.teacher_exports import (
+    Selection,
+    choose_orientation,
+    compose,
+    render_docx,
+    render_xlsx,
+)
 
 
 def choice(**kwargs):
