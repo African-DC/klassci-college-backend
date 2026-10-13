@@ -69,7 +69,7 @@ def db() -> Iterator[Session]:
 
 
 @pytest.mark.asyncio
-async def test_une_classe_triee_par_nom_puis_prenom_sans_annule_ni_corbeille(db: Session) -> None:
+async def test_une_classe_triee_par_nom_puis_prenom_valides_uniquement(db: Session) -> None:
     fiche = await class_information_sheet.class_sheet(
         AsyncBridge(db),  # type: ignore[arg-type]
         CLASSE_4E,
@@ -79,7 +79,10 @@ async def test_une_classe_triee_par_nom_puis_prenom_sans_annule_ni_corbeille(db:
     assert len(fiche.classes) == 1
     classe = fiche.classes[0]
     assert (classe.id, classe.name, classe.level_name) == (CLASSE_4E, "4ème 1", "4eme")
-    assert [r.enrollment_id for r in classe.rows] == [3, 2, 1]
+    assert [r.enrollment_id for r in classe.rows] == [3, 1]
+    # A previous-year enrollment and a pending current-year enrollment cannot inflate the roster.
+    assert 2 not in [r.enrollment_id for r in classe.rows]
+    assert 7 not in [r.enrollment_id for r in classe.rows]
 
 
 @pytest.mark.asyncio
@@ -142,7 +145,7 @@ async def test_toute_l_ecole_classes_par_niveau_en_nombre_fixe_de_requetes(db: S
     fiche = await class_information_sheet.school_sheet(AsyncBridge(db))  # type: ignore[arg-type]
 
     assert [c.id for c in fiche.classes] == [CLASSE_6E, CLASSE_4E]
-    assert [len(c.rows) for c in fiche.classes] == [1, 3]
+    assert [len(c.rows) for c in fiche.classes] == [1, 2]
     # Année, inscriptions, puis une requête par relation chargée : élève,
     # classe, niveau, bourse. Le nombre ne dépend pas du nombre d'élèves.
     assert len(requetes) == 6
