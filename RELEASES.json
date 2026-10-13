@@ -18,6 +18,14 @@
             "pull_request": null
           },
           {
+            "text": "Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 485
+          },
+          {
             "text": "Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur",
             "audience": [
               "comptable",
