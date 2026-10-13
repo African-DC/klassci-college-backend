@@ -269,6 +269,9 @@ class PaymentSummaryResponse(BaseModel):
     total_cancelled: float
     payment_count: int
     completion_rate: float | None
+    # Montant effectivement encaissé parmi les versements du périmètre visible,
+    # indépendamment du recouvrement annuel des frais obligatoires.
+    total_collected: float = 0.0
 
 
 # ---------------------------------------------------------------------------
