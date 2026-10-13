@@ -147,3 +147,37 @@ async def test_l_orphelin_hors_bornes_ne_passe_pas_par_la_date(db: Session) -> N
     )
     assert recap.payment_count == 1
     assert recap.total_paid == 40000.0
+
+
+@pytest.mark.asyncio
+async def test_arrears_are_included_in_daily_collections_regardless_of_year(db: Session) -> None:
+    period = PaymentFilters(
+        date_from=datetime(2026, 10, 1, 0, 0),
+        date_to=datetime(2026, 10, 1, 23, 59, 59),
+    )
+    entries, count = await repo.list_payments(_Pont(db), filters=period, page=1, size=20)
+    summary = await query.get_payments_summary(_Pont(db), received_by=CAISSIERE, filters=period)
+    assert count == summary.payment_count == 2
+    assert {payment.id for payment in entries} == {1, 2}
+    assert summary.total_collected == 90000.0
+
+
+@pytest.mark.asyncio
+async def test_collected_total_obeys_school_year_and_history_scope(db: Session) -> None:
+    current = await query.get_payments_summary(
+        _Pont(db), received_by=CAISSIERE, filters=PaymentFilters(academic_year_id=ANNEE_COURANTE)
+    )
+    history = await query.get_payments_summary(_Pont(db), received_by=CAISSIERE)
+    assert current.total_collected == 51000.0
+    assert history.total_collected == 91000.0
+
+
+@pytest.mark.asyncio
+async def test_week_collections_include_previous_year_arrears(db: Session) -> None:
+    week = PaymentFilters(
+        date_from=datetime(2026, 9, 28, 0, 0),
+        date_to=datetime(2026, 10, 4, 23, 59, 59),
+    )
+    summary = await query.get_payments_summary(_Pont(db), received_by=CAISSIERE, filters=week)
+    assert summary.payment_count == 2
+    assert summary.total_collected == 90000.0
