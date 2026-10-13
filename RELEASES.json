@@ -10,6 +10,15 @@
       "sections": {
         "Added": [
           {
+            "text": "Les statistiques de caisse exposent un total des versements validés sur le même périmètre que le journal, sans confondre encaissement et recouvrement annuel",
+            "audience": [
+              "comptable",
+              "caisse",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation",
             "audience": [
               "direction",
