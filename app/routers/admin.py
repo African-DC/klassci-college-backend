@@ -325,6 +325,96 @@ async def list_teachers(
     return await admin_service.list_teachers(db, page=page, size=size, search=search)
 
 
+@router.get("/teachers/export/options")
+async def teacher_export_options(
+    _: None = require_permission("admin:teachers:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> dict:
+    """Listes déroulantes pour construire le périmètre académique."""
+    from app.services.teacher_export_documents import fetch_options
+
+    return await fetch_options(db)
+
+
+@router.get("/teachers/export/{format}")
+async def teacher_export(
+    format: str,
+    view: str = Query("directory"),
+    grouping: str = Query("speciality"),
+    orientation: str = Query("auto"),
+    columns: list[str] | None = Query(None),
+    class_ids: list[int] = Query([]),
+    level_ids: list[int] = Query([]),
+    series_ids: list[int] = Query([]),
+    subject_ids: list[int] = Query([]),
+    academic_year_id: int | None = Query(None),
+    search: str | None = Query(None, max_length=150),
+    download: bool = Query(False),
+    _: None = require_permission("admin:teachers:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Aperçu PDF inline et téléchargements PDF, Word, Excel aux réglages tenant."""
+    from fastapi import HTTPException
+
+    from app.routers._pdf_helpers import binary_response
+    from app.services._school_settings_helper import load_school_settings_for_pdf
+    from app.services.teacher_export_documents import (
+        compose,
+        generate_excel,
+        generate_pdf,
+        generate_word,
+        load_export,
+        page_landscape,
+        validate_options,
+    )
+
+    if format not in ("pdf", "docx", "xlsx"):
+        raise HTTPException(422, "Format de document non pris en charge.")
+    cols = validate_options(
+        view=view,
+        columns=columns,
+        grouping=grouping,
+        orientation=orientation,
+        class_ids=class_ids,
+        level_ids=level_ids,
+        subject_ids=subject_ids,
+        series_ids=series_ids,
+    )
+    landscape = page_landscape(cols, orientation)
+    rows, year = await load_export(
+        db,
+        view=view,
+        year_id=academic_year_id,
+        class_ids=class_ids,
+        level_ids=level_ids,
+        series_ids=series_ids,
+        subject_ids=subject_ids,
+        search=search,
+    )
+    groups = compose(rows, cols, grouping, view)
+    school = await load_school_settings_for_pdf(db)
+
+    async def make() -> bytes:
+        if format == "pdf":
+            return generate_pdf(rows, cols, groups, school, year, landscape)
+        if format == "xlsx":
+            return generate_excel(groups, cols, school, year)
+        return generate_word(groups, cols, school, year, landscape)
+
+    mime = {
+        "pdf": "application/pdf",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    return await binary_response(
+        make,
+        filename=f"liste_enseignants.{format}",
+        media_type=mime[format],
+        error_context="export enseignants",
+        disposition="inline" if format == "pdf" and not download else "attachment",
+    )
+
+
 @router.post("/teachers", response_model=TeacherResponse, status_code=status.HTTP_201_CREATED)
 async def create_teacher(
     data: TeacherCreate,
