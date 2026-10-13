@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#483)
 - La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
 
 ### Fixed
