@@ -65,6 +65,7 @@ async def list_payments(
         None,
         description="Ne garder que les versements d'inscriptions de cette annee scolaire.",
     ),
+    linked_year_only: bool = Query(False),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     current_user: TokenData = Depends(get_current_user),
@@ -89,6 +90,7 @@ async def list_payments(
             search=search,
             fee_category_id=fee_category_id,
             academic_year_id=academic_year_id,
+            linked_year_only=linked_year_only,
             received_by=cashier_scope(
                 requested_received_by=received_by,
                 can_read_all=can_read_all,
@@ -139,6 +141,7 @@ async def list_my_payment_methods(
 @router.get("/summary", response_model=PaymentSummaryResponse)
 async def get_payments_summary(
     academic_year_id: int | None = Query(None),
+    linked_year_only: bool = Query(False),
     status_filter: str | None = Query(None, alias="status"),
     method: str | None = Query(None),
     date_from: datetime | None = Query(None),
@@ -188,6 +191,7 @@ async def get_payments_summary(
             search=search,
             fee_category_id=fee_category_id,
             academic_year_id=academic_year_id,
+            linked_year_only=linked_year_only,
         ),
         received_by=cashier_scope(
             requested_received_by=received_by,
@@ -226,8 +230,11 @@ async def export_payments(
     method: str | None = Query(None),
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
+    search: str | None = Query(None),
+    fee_category_id: int | None = Query(None),
     received_by: int | None = Query(None),
     academic_year_id: int | None = Query(None),
+    linked_year_only: bool = Query(False),
     export_format: str = Query("pdf", alias="format", pattern="^(pdf|xlsx)$"),
     current_user: TokenData = Depends(get_current_user),
     can_read_all: bool = has_permission("payments:read:all"),
@@ -246,7 +253,10 @@ async def export_payments(
         method=method,
         date_from=date_from,
         date_to=date_to,
+        search=search,
+        fee_category_id=fee_category_id,
         academic_year_id=academic_year_id,
+        linked_year_only=linked_year_only,
         received_by=cashier_scope(
             requested_received_by=received_by,
             can_read_all=can_read_all,

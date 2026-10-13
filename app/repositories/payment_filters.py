@@ -48,6 +48,9 @@ class PaymentFilters:
     #: Annee scolaire de l'inscription creditee. Sans elle, le journal
     #: melange les encaissements de toutes les annees et le collecté gonfle.
     academic_year_id: int | None = None
+    # Strict financial scope: require a linked enrollment of the requested year.
+    # Legacy annual clients retain orphan-date fallback when this is False.
+    linked_year_only: bool = False
 
 
 def apply_payment_filters[S: Select](stmt: S, filters: PaymentFilters) -> S:
@@ -163,7 +166,16 @@ async def apply_payment_scope[S: Select](db: AsyncSession, stmt: S, filters: Pay
     """
     stmt = apply_payment_filters(stmt, filters)
     if filters.academic_year_id is not None:
-        stmt = stmt.where(await belongs_to_year(db, filters.academic_year_id))
+        if filters.linked_year_only:
+            stmt = stmt.where(
+                Payment.enrollment_id.in_(
+                    select(Enrollment.id).where(
+                        Enrollment.academic_year_id == filters.academic_year_id
+                    )
+                )
+            )
+        else:
+            stmt = stmt.where(await belongs_to_year(db, filters.academic_year_id))
     return stmt
 
 

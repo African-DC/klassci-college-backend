@@ -12,6 +12,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
 ### Added
+- Les statistiques de caisse exposent un total des versements validés sur le même périmètre que le journal, sans confondre encaissement et recouvrement annuel *(comptable, caisse, direction)*
 - La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
 - Workflow GitHub de préparation des images FastAPI et Celery dans GHCR et vérification Dokploy en lecture seule ; les migrations multi-établissements restent soumises à une validation avant déploiement *(technique, déploiement)*
 - Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#485)
