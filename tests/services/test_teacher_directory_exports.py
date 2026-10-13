@@ -71,7 +71,7 @@ def test_colonnes_invalides_et_choix_trop_larges_sont_refuses():
     with pytest.raises(ValidationError):
         TeacherExportOptions(columns=["name", "name"])
     with pytest.raises(ValueError):
-        page_orientation(TeacherExportOptions(columns=["name", "subject", "email"], orientation="portrait"))
+        page_orientation(TeacherExportOptions(columns=["name", "subject", "email", "speciality"], orientation="portrait"))
 
 
 def test_excel_identite_tenant_et_formule_ne_sexecutent_pas():
