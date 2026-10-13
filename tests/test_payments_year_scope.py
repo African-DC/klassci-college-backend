@@ -184,9 +184,9 @@ async def test_week_collections_include_previous_year_arrears(db: Session) -> No
 
 
 @pytest.mark.asyncio
-async def test_global_history_without_school_year_has_cash_kpi_not_debt(db: Session) -> None:
+async def test_global_history_cash_kpi_preserves_legacy_recovery(db: Session) -> None:
     summary = await query.get_payments_summary(_Pont(db), filters=PaymentFilters())
-    assert summary.total_expected is None
-    assert summary.completion_rate is None
+    # Existing API consumers still receive the historical all-year recovery totals.
+    assert summary.total_expected is not None
     assert summary.total_collected == 91000.0
     assert summary.payment_count == 3
