@@ -1,0 +1,86 @@
+name: KLASSCI College release preparation
+
+on:
+  pull_request:
+    branches: [develop, staging, main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Validate release configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check Dockerfile is present
+        run: test -f Dockerfile
+
+  publish-image:
+    name: Build and publish backend to GHCR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: klassci-college-backend-ghcr-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish immutable image (no deployment)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/african-dc/klassci-college-backend:git-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  dokploy-readonly-check:
+    name: Verify Dokploy API connection (read-only)
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+    steps:
+      - name: Verify existing KLASSCI Compose is accessible
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$DOKPLOY_API_KEY" ]]; then
+            echo "::error::DOKPLOY_API_KEY is missing from GitHub environment production"
+            exit 1
+          fi
+          output="$(mktemp)"
+          trap 'rm -f "$output"' EXIT
+          status="$(curl -sS --max-time 20 --output "$output" --write-out '%{http_code}' \
+            --header "x-api-key: $DOKPLOY_API_KEY" \
+            'https://dokploy.africandigitconsulting.com/api/compose.one?composeId=TAOkd341U3KSlNL49VI1o')"
+          if [[ "$status" != 200 ]] || ! jq -e 'type == "object" and (.code? != "UNAUTHORIZED")' "$output" >/dev/null; then
+            echo "::error::Dokploy read-only compose.one failed (HTTP $status)"
+            exit 1
+          fi
+          echo "Dokploy API responded successfully; no deployment or environment change attempted."
+
+# Intentionally NO compose.deploy/compose.redeploy/saveEnvironment:
+# The production stack still references LOCAL ':prod' Docker images.
+# API-triggered Compose deployment alone cannot build those images and may
+# recreate stateful services. Backend also needs an isolated multi-tenant
+# Alembic migration and verified restore first.

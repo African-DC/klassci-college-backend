@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Workflow GitHub de préparation des images FastAPI et Celery dans GHCR et vérification Dokploy en lecture seule ; les migrations multi-établissements restent soumises à une validation avant déploiement *(technique, déploiement)*
 - Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#485)
 - Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
 - L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité *(secrétariat, comptable)* (#469)

@@ -10,6 +10,14 @@
       "sections": {
         "Added": [
           {
+            "text": "Workflow GitHub de préparation des images FastAPI et Celery dans GHCR et vérification Dokploy en lecture seule ; les migrations multi-établissements restent soumises à une validation avant déploiement",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres",
             "audience": [
               "direction",
