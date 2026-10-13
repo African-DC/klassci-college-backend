@@ -95,7 +95,8 @@ fi
 # the next Dokploy compose redeployment could silently restore the old image.
 backup="$(mktemp -p "$stack" .klassci-release-env.XXXXXX)"
 chmod 600 "$backup"
-cp -p .env "$backup"
+cp -- .env "$backup"
+chmod 600 "$backup"
 changed=0
 rollback() {
   rc=$?
@@ -144,7 +145,7 @@ docker compose -p "$project" up -d --no-deps --force-recreate "${services[@]}"
 healthy=0
 for attempt in $(seq 1 30); do
   container="$(docker compose -p "$project" ps -q "$component")"
-  if [[ -n "$container" ]] && [[ "$(docker inspect -f '${.State.Running}' "$container")" == true ]] &&
+  if [[ -n "$container" ]] && [[ "$(docker inspect -f '{{.State.Running}}' "$container")" == true ]] &&
      curl -fsS --max-time 6 "$public/svc/health" >/dev/null 2>&1 &&
      curl -fsS --max-time 6 "$public/login" >/dev/null 2>&1; then
     healthy=1
@@ -153,6 +154,12 @@ for attempt in $(seq 1 30); do
   sleep 3
 done
 [[ "$healthy" == 1 ]] || { echo "Post-release health probes failed"; false; }
+for service in "${services[@]}"; do
+  id="$(docker compose -p "$project" ps -q "$service")"
+  [[ -n "$id" ]] && [[ "$(docker inspect -f '{{.State.Running}}' "$id")" == true ]] || {
+    echo "Service $service is not running"; false;
+  }
+done
 
 changed=0
 trap - ERR
