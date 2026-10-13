@@ -174,7 +174,11 @@ def render_excel(directory: dict[str, Any], school: dict[str, Any], opts: Teache
     from openpyxl.utils import get_column_letter
 
     from app.services.exports._workbook_branding import (
-        primary_argb, set_widths, setup_printing, style_table_header, write_header,
+        primary_argb,
+        set_widths,
+        setup_printing,
+        style_table_header,
+        write_header,
     )
 
     wb = Workbook()
