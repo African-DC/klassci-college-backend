@@ -10,6 +10,14 @@
       "sections": {
         "Added": [
           {
+            "text": "Workflow de livraison FastAPI sur Dokploy, inactif avant validation des sauvegardes et migrations Alembic multi-établissements ; backend, Celery worker et beat déployés ensemble",
+            "audience": [
+              "technique",
+              "déploiement"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur",
             "audience": [
               "comptable",
