@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Workflow de livraison FastAPI sur Dokploy, inactif avant validation des sauvegardes et migrations Alembic multi-établissements ; backend, Celery worker et beat déployés ensemble *(technique, déploiement)*
 - Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
 - L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité *(secrétariat, comptable)* (#469)
 - Une réinscription reprend d'elle-même le niveau antérieur, la série, la LV2 et la discipline de l'an passé, et en déduit la qualité *(secrétariat, éducateur)* (#469)
