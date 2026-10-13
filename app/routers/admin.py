@@ -332,6 +332,7 @@ async def teacher_export_options(
 ) -> dict:
     """Listes déroulantes pour construire le périmètre académique."""
     from app.services.teacher_export_documents import fetch_options
+
     return await fetch_options(db)
 
 
@@ -366,16 +367,28 @@ async def teacher_export(
         page_landscape,
         validate_options,
     )
+
     if format not in ("pdf", "docx", "xlsx"):
         raise HTTPException(422, "Format de document non pris en charge.")
     cols = validate_options(
-        view=view, columns=columns, grouping=grouping, orientation=orientation,
-        class_ids=class_ids, level_ids=level_ids, subject_ids=subject_ids, series_ids=series_ids,
+        view=view,
+        columns=columns,
+        grouping=grouping,
+        orientation=orientation,
+        class_ids=class_ids,
+        level_ids=level_ids,
+        subject_ids=subject_ids,
+        series_ids=series_ids,
     )
     landscape = page_landscape(cols, orientation)
     rows, year = await load_export(
-        db, view=view, year_id=academic_year_id, class_ids=class_ids,
-        level_ids=level_ids, series_ids=series_ids, subject_ids=subject_ids,
+        db,
+        view=view,
+        year_id=academic_year_id,
+        class_ids=class_ids,
+        level_ids=level_ids,
+        series_ids=series_ids,
+        subject_ids=subject_ids,
         search=search,
     )
     groups = compose(rows, cols, grouping, view)
@@ -394,8 +407,10 @@ async def teacher_export(
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }
     return await binary_response(
-        make, filename=f"liste_enseignants.{format}",
-        media_type=mime[format], error_context="export enseignants",
+        make,
+        filename=f"liste_enseignants.{format}",
+        media_type=mime[format],
+        error_context="export enseignants",
         disposition="inline" if format == "pdf" and not download else "attachment",
     )
 
