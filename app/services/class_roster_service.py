@@ -156,6 +156,7 @@ def _word_roster_document(data: dict) -> bytes:
         try:
             identity.cell(0, 0).paragraphs[0].add_run().add_picture(BytesIO(logo[0]), width=Cm(2.4))
         except (ValueError, OSError):
+            # Le logo peut être corrompu : conserver l'export Word sans image.
             pass
     details_cell = identity.cell(0, 1)
     p = details_cell.paragraphs[0]
