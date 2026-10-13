@@ -112,10 +112,10 @@ async def get_payments_summary(
 
     total_expected: float | None = None
     completion_rate: float | None = None
-    if not cloisonne:
+    if not cloisonne and annee is not None:
         total_expected = float(await installment_repository.mandatory_total_for_year(db, annee))
         total_paid = float(await fees_paid.paid_on_mandatory_for_year(db, annee))
-    else:
+    elif cloisonne:
         encaisse_stmt = select(
             func.coalesce(
                 func.sum(
@@ -173,6 +173,9 @@ async def get_payments_summary(
     pay_stmt = await apply_payment_scope(db, pay_stmt, filtres)
 
     pay_row = (await db.execute(pay_stmt)).one()
+    # Sans année scolaire, seule la caisse est pertinente, pas le recouvrement.
+    if not cloisonne and annee is None:
+        total_paid = float(pay_row.total_collected)
 
     total_pending = float(pay_row.total_pending)
     total_cancelled = float(pay_row.total_cancelled)
