@@ -133,10 +133,12 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             .where(TimetableSlot.academic_year_id == s.year_id))
         if s.class_ids:
             query = query.where(Class.id.in_(s.class_ids))
-        if s.level_ids: query = query.where(Class.level_id.in_(s.level_ids))
+        if s.level_ids:
+            query = query.where(Class.level_id.in_(s.level_ids))
         if s.series_ids:
             query = query.where(Class.series_id.in_(s.series_ids))
-        if s.subject_ids: query = query.where(Subject.id.in_(s.subject_ids))
+        if s.subject_ids:
+            query = query.where(Subject.id.in_(s.subject_ids))
         seen = set()
         for tid, sid, cid, cn, ln, sn, sub in (await db.execute(query)).all():
             if tid not in by_id:
@@ -155,10 +157,12 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
         for sub in subjects:
             if sub.teacher_id not in by_id:
                 continue
-            if s.subject_ids and sub.id not in s.subject_ids: continue
+            if s.subject_ids and sub.id not in s.subject_ids:
+                continue
             if s.level_ids and sub.level_id not in s.level_ids:
                 continue
-            if s.series_ids and sub.series_id not in s.series_ids: continue
+            if s.series_ids and sub.series_id not in s.series_ids:
+                continue
             if s.class_ids:
                 continue  # une fiche matière n'identifie aucune classe
             key = (sub.teacher_id, sub.id, None)
