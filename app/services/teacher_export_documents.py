@@ -140,8 +140,32 @@ def compose(rows: list[dict], columns: list[str], grouping: str, view: str) -> l
         return [("Enseignants" if view == "directory" else "Affectations", rows)]
     grouped = defaultdict(list)
     for row in rows:
-        grouped[str(row.get(grouping) or "Non renseigné")].append(row)
-    return sorted(grouped.items(), key=lambda item: item[0].casefold())
+        label = str(row.get(grouping) or "Non renseigné")
+        # Deux matières homonymes de niveaux/séries différents peuvent être
+        # deux entrées du référentiel : l'ID empêche leur fusion accidentelle.
+        key = (label, row.get("subject_id")) if grouping == "subject" else (label, None)
+        grouped[key].append(row)
+
+    labels = {}
+    for label, _identifier in grouped:
+        labels[label.casefold()] = labels.get(label.casefold(), 0) + 1
+
+    output = []
+    for (label, identifier), lines in grouped.items():
+        title = f"{label} · Réf. #{identifier}" if identifier and labels[label.casefold()] > 1 else label
+        # Dans une rubrique, le texte affiché est une liste : si la classe
+        # n'est pas une colonne, ne pas répéter un enseignant pour chaque classe.
+        # Le détail des affectations est conservé avec "Sans regroupement".
+        unique_lines = []
+        seen = set()
+        for line in lines:
+            identity = tuple(str(line.get(key, "")) for key in columns)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            unique_lines.append(line)
+        output.append((title, unique_lines))
+    return sorted(output, key=lambda item: item[0].casefold())
 
 
 def page_landscape(columns: list[str], orientation: str) -> bool:
