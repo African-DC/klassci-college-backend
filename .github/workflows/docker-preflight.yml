@@ -1,0 +1,29 @@
+name: Docker image preflight (no publish)
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-only:
+    name: Build Docker image without publishing
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Build immutable Docker image locally only
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: false
+          tags: klassci-preflight:ci
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+# No registry login, no packages:write, no Dokploy API, no production secrets.
