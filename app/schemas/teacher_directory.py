@@ -1,9 +1,6 @@
 """Options et validation commune à tous les exports d'enseignants du Collège."""
 
-from typing import Literal
-
 from pydantic import BaseModel, Field, model_validator
-
 
 
 COLUMNS: dict[str, str] = {
@@ -50,12 +47,12 @@ class TeacherExportOptions(BaseModel):
     series_ids: list[int] = Field(default_factory=list, max_length=100)
     subject_ids: list[int] = Field(default_factory=list, max_length=100)
     teacher_ids: list[int] = Field(default_factory=list, max_length=100)
-    contract_types: list[Literal["permanent", "vacataire", "fonctionnaire"]] = Field(
+    contract_types: list[str] = Field(
         default_factory=list
     )
     columns: list[str] = Field(default_factory=lambda: list(DEFAULT_COLUMNS), min_length=1, max_length=13)
-    group_by: Literal["subject", "speciality", "class", "level", "series", "contract", "none"] = "subject"
-    orientation: Literal["auto", "portrait", "landscape"] = "auto"
+    group_by: str = "subject"
+    orientation: str = "auto"
     # Les enseignants sans affectation peuvent figurer uniquement si la demande
     # ne requiert pas de portée pédagogique particulière.
     include_unassigned: bool = True
@@ -64,6 +61,10 @@ class TeacherExportOptions(BaseModel):
 
     @model_validator(mode="after")
     def valid_selection(self) -> "TeacherExportOptions":
+        if self.group_by not in GROUPS or self.orientation not in {"auto", "portrait", "landscape"}:
+            raise ValueError("Regroupement ou orientation inconnue.")
+        if any(value not in {"permanent", "vacataire", "fonctionnaire"} for value in self.contract_types):
+            raise ValueError("Type de contrat inconnu.")
         if len(set(self.columns)) != len(self.columns) or any(c not in COLUMNS for c in self.columns):
             raise ValueError("Choisissez uniquement des colonnes connues, sans doublon.")
         for name in ("class_ids", "level_ids", "series_ids", "subject_ids", "teacher_ids"):
