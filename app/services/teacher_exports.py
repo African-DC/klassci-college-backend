@@ -131,15 +131,19 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             .outerjoin(Series, Series.id == Class.series_id)
             .join(Subject, Subject.id == TimetableSlot.subject_id)
             .where(TimetableSlot.academic_year_id == s.year_id))
-        if s.class_ids: query = query.where(Class.id.in_(s.class_ids))
+        if s.class_ids:
+            query = query.where(Class.id.in_(s.class_ids))
         if s.level_ids: query = query.where(Class.level_id.in_(s.level_ids))
-        if s.series_ids: query = query.where(Class.series_id.in_(s.series_ids))
+        if s.series_ids:
+            query = query.where(Class.series_id.in_(s.series_ids))
         if s.subject_ids: query = query.where(Subject.id.in_(s.subject_ids))
         seen = set()
         for tid, sid, cid, cn, ln, sn, sub in (await db.execute(query)).all():
-            if tid not in by_id: continue
+            if tid not in by_id:
+                continue
             key = (tid, sid, cid)
-            if key in seen: continue
+            if key in seen:
+                continue
             seen.add(key)
             rows.append({**by_id[tid], "_id": str(tid),
                 "_subject_id": str(sid), "_class_id": str(cid),
@@ -149,13 +153,17 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
         # restent visibles au niveau de la matière : pas de classe inventée.
         subjects = (await db.execute(select(Subject).where(Subject.teacher_id.is_not(None)))).scalars().all()
         for sub in subjects:
-            if sub.teacher_id not in by_id: continue
+            if sub.teacher_id not in by_id:
+                continue
             if s.subject_ids and sub.id not in s.subject_ids: continue
-            if s.level_ids and sub.level_id not in s.level_ids: continue
+            if s.level_ids and sub.level_id not in s.level_ids:
+                continue
             if s.series_ids and sub.series_id not in s.series_ids: continue
-            if s.class_ids: continue  # une fiche matière n'identifie aucune classe
+            if s.class_ids:
+                continue  # une fiche matière n'identifie aucune classe
             key = (sub.teacher_id, sub.id, None)
-            if key in seen: continue
+            if key in seen:
+                continue
             seen.add(key)
             rows.append({**by_id[sub.teacher_id], "_id": str(sub.teacher_id),
                 "_subject_id": str(sub.id), "_class_id": "",
@@ -179,7 +187,8 @@ def compose(rows: list[dict], s: Selection) -> list[tuple[str, list[list[str]]]]
         if s.group == "class":
             title += f" · classe #{row.get('_class_id', '')}"
         values = tuple(str(row[c]) for c in s.columns)
-        if values in duplicates[title]: continue
+        if values in duplicates[title]:
+            continue
         duplicates[title].add(values)
         groups[title].append(list(values))
     return sorted(groups.items(), key=lambda x: x[0].casefold())
@@ -197,8 +206,9 @@ def render_pdf(s: Selection, school: dict, rows: list[dict]) -> bytes:
     for title, records in groups:
         sections.append(f'<h2 style="font-size:12px;color:var(--primary);margin:14px 0 6px">{ui.esc(title)}</h2>')
         sections.append(ui.premium_table(headers=headers, rows=records, theme=theme, empty_message="Aucun enseignant"))
-    if not sections: sections = ['<p>Aucun enseignant pour les critères choisis.</p>']
-    html = (f'<html lang="fr"><head><meta charset="UTF-8">'
+    if not sections:
+        sections = ['<p>Aucun enseignant pour les critères choisis.</p>']
+    html = ('<html lang="fr"><head><meta charset="UTF-8">'
         + ui.base_styles(theme, page_size="A4 "+orientation, margin="15mm", paginate=True)
         + '</head><body>' + ui.page_decoration(theme=theme, watermark_text=school.get("school_name") or "")
         + '<div class="pdf-page-body">'
@@ -229,7 +239,8 @@ def render_docx(s: Selection, school: dict, rows: list[dict]) -> bytes:
     logo = image_bytes(school.get("logo_url"))
     if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
         try: doc.add_paragraph().add_run().add_picture(BytesIO(logo[0]), width=Cm(2))
-        except (OSError, ValueError): pass
+        except (OSError, ValueError):
+            pass
     title = doc.add_heading(school.get("school_name") or "Établissement", 0)
     title.runs[0].font.color.rgb = RGBColor.from_string(theme.primary.lstrip("#").upper())
     doc.add_heading("LISTE DES ENSEIGNANTS", 1)
@@ -238,10 +249,12 @@ def render_docx(s: Selection, school: dict, rows: list[dict]) -> bytes:
         doc.add_heading(label, 2)
         table = doc.add_table(rows=1, cols=len(s.columns))
         table.style = "Light Shading Accent 1"
-        for i, col in enumerate(s.columns): table.rows[0].cells[i].text = COLUMNS[col]
+        for i, col in enumerate(s.columns):
+            table.rows[0].cells[i].text = COLUMNS[col]
         for row in lines:
             cells = table.add_row().cells
-            for i, val in enumerate(row): cells[i].text = val
+            for i, val in enumerate(row):
+                cells[i].text = val
     out = BytesIO()
     doc.save(out)
     return out.getvalue()
@@ -250,9 +263,8 @@ def render_docx(s: Selection, school: dict, rows: list[dict]) -> bytes:
 def render_xlsx(s: Selection, school: dict, rows: list[dict]) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Font
-    from app.services.exports._workbook_branding import write_header, style_table_header, setup_printing
-    from app.services.pdf.theme import PDFTheme
     from openpyxl.utils import get_column_letter
+    from app.services.exports._workbook_branding import setup_printing, style_table_header, write_header
     wb = Workbook()
     ws = wb.active
     ws.title = "Enseignants"
@@ -260,7 +272,8 @@ def render_xlsx(s: Selection, school: dict, rows: list[dict]) -> bytes:
         subtitle="Annuaire" if s.mode == "directory" else "Affectations pédagogiques",
         meta_lines=[f"{len(rows)} entrée(s)"], width=len(s.columns))
     ws.append([]) if ws.max_row < start else None
-    for idx, col in enumerate(s.columns, 1): ws.cell(start, idx, COLUMNS[col])
+    for idx, col in enumerate(s.columns, 1):
+        ws.cell(start, idx, COLUMNS[col])
     style_table_header(ws, start, len(s.columns), school)
     line = start + 1
     for title, records in compose(rows, s):
