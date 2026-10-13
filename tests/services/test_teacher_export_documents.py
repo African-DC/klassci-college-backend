@@ -51,10 +51,22 @@ def test_portrait_choisi_explicitement_refuse_le_debordement():
     assert exc.value.status_code == 422
 
 
-def test_noms_homonymes_de_matiere_dans_classes_distinctes_ne_sont_pas_supprimes():
+def test_liste_nom_seul_evite_les_repetitions_mais_le_detail_conserve_les_affectations():
     rows = [teacher(), dict(teacher(), **{"class": "6e B"})]
     groups = compose(rows, ["name"], "subject", "assignments")
-    assert len(groups[0][1]) == 2
+    assert len(groups[0][1]) == 1
+    detail = compose(rows, ["name", "class"], "subject", "assignments")
+    assert len(detail[0][1]) == 2
+    brut = compose(rows, ["name"], "none", "assignments")
+    assert len(brut[0][1]) == 2
+
+
+def test_deux_matieres_homonymes_ne_sont_pas_fusionnees():
+    first = dict(teacher(), subject_id=12)
+    second = dict(teacher(), subject_id=22)
+    groups = compose([first, second], ["name"], "subject", "assignments")
+    assert len(groups) == 2
+    assert {g[0] for g in groups} == {"Mathématiques · Réf. #12", "Mathématiques · Réf. #22"}
 
 
 def test_excel_word_sont_de_vrais_office_files_et_identite_est_conservee():
