@@ -50,8 +50,10 @@ async def export_teachers(
     )
     async def build() -> bytes:
         school, rows = await exports.load(db, selection)
-        if format == "pdf": return exports.render_pdf(selection, school, rows)
-        if format == "docx": return exports.render_docx(selection, school, rows)
+        if format == "pdf":
+            return exports.render_pdf(selection, school, rows)
+        if format == "docx":
+            return exports.render_docx(selection, school, rows)
         return exports.render_xlsx(selection, school, rows)
 
     return await binary_response(
