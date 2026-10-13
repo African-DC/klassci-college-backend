@@ -10,7 +10,7 @@ pydantic-settings==2.14.2
 bcrypt==4.2.1
 PyJWT==2.13.0
 cryptography==50.0.0
-redis==5.2.1
+redis==8.1.0
 celery==5.4.0
 httpx==0.28.1
 python-multipart==0.0.32
