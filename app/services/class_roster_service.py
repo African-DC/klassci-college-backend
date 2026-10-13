@@ -49,6 +49,7 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
             Enrollment.class_id == class_id,
             Enrollment.academic_year_id == academic_year_id,
             Enrollment.status == EnrollmentStatus.VALIDE.value,
+            Enrollment.archived_at.is_(None),
         )
         .options(selectinload(Enrollment.student))
         .order_by(Enrollment.id.asc())
