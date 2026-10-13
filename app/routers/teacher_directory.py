@@ -4,7 +4,7 @@ Le RBAC et la session de base passent par les dépendances admin existantes.
 Aucune route publique ; aucun ID de tenant choisi par le client.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,10 @@ async def teacher_export_options(
 
 async def _generate(db: AsyncSession, options: TeacherExportOptions, fmt: str) -> bytes:
     # Vérifier la pagination avant de déclencher les lectures et le rendu coûteux.
-    page_orientation(options)
+    try:
+        page_orientation(options)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     directory = await build_directory(db, options)
     school = await load_school_settings_for_pdf(db)
     if fmt == "pdf":
