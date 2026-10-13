@@ -11,5 +11,5 @@ httpx==0.28.1
 ruff==0.15.12
 
 # Type checking
-mypy==1.13.0
+mypy==2.3.1
 sqlalchemy[mypy]==2.0.49
