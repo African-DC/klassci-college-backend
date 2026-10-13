@@ -7,7 +7,6 @@ Lecture seule sur la base du tenant, permissions de l'annuaire enseignant.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
 from html import escape
 from io import BytesIO
 
@@ -15,10 +14,9 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.academic import AcademicYear, Class, Level, SchoolSettings, Series, Subject
+from app.models.academic import AcademicYear, Class, Level, Series, Subject
 from app.models.timetable import TimetableSlot
 from app.models.user import TeacherProfile, User
-from app.services._school_settings_helper import load_school_settings_for_pdf
 
 COLUMNS = {
     "name": "Nom et prénoms", "speciality": "Spécialité déclarée",
@@ -160,9 +158,9 @@ def page_landscape(columns: list[str], orientation: str) -> bool:
 
 def generate_pdf(rows: list[dict], columns: list[str], groups: list[tuple[str, list[dict]]],
                  school: dict, year: str, landscape: bool) -> bytes:
-    from weasyprint import HTML
     from app.services.pdf import components as ui
     from app.services.pdf.theme import PDFTheme
+    from weasyprint import HTML
     theme = PDFTheme.from_school(school)
     blocks = []
     for title, lines in groups:
@@ -191,7 +189,8 @@ def generate_excel(groups: list[tuple[str, list[dict]]], columns: list[str],
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
     from openpyxl.utils import get_column_letter
-    from app.services.exports._workbook_branding import write_header, argb
+
+    from app.services.exports._workbook_branding import argb, write_header
     wb = Workbook()
     ws = wb.active
     ws.title = "Enseignants"
@@ -226,7 +225,8 @@ def generate_word(groups: list[tuple[str, list[dict]]], columns: list[str],
                   school: dict, year: str, landscape: bool) -> bytes:
     from docx import Document
     from docx.enum.section import WD_ORIENT
-    from docx.shared import Inches, Pt, RGBColor
+    from docx.shared import Inches, RGBColor
+
     from app.services.pdf._helpers import image_bytes
     doc = Document()
     sec = doc.sections[0]
