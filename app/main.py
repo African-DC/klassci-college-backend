@@ -23,6 +23,7 @@ from app.routers.audit import router as audit_router
 from app.routers.auth import router as auth_router
 from app.routers.cash_sessions import router as cash_sessions_router
 from app.routers.class_documents import router as class_documents_router
+from app.routers.teacher_documents import router as teacher_documents_router
 from app.routers.class_information_sheet import router as class_information_sheet_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
@@ -137,6 +138,7 @@ app.include_router(enrollment_payments_router)
 app.include_router(cash_sessions_router)
 app.include_router(installments_router)
 app.include_router(class_documents_router)
+app.include_router(teacher_documents_router)
 app.include_router(fees_router)
 app.include_router(grades_router)
 app.include_router(leave_self_router)
