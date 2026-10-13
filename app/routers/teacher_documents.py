@@ -1,4 +1,5 @@
 """Exports enseignants — filtre et génération centralisés, droits read uniquement."""
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -20,7 +21,9 @@ class TeacherExportRequest(BaseModel):
     level_ids: list[int] = Field(default_factory=list, max_length=100)
     series_ids: list[int] = Field(default_factory=list, max_length=100)
     subject_ids: list[int] = Field(default_factory=list, max_length=100)
-    columns: list[str] = Field(default_factory=lambda: exports.DEFAULTS.copy(), min_length=1, max_length=11)
+    columns: list[str] = Field(
+        default_factory=lambda: exports.DEFAULTS.copy(), min_length=1, max_length=11
+    )
     group: str = "none"
     orientation: Literal["auto", "portrait", "landscape"] = "auto"
 
@@ -43,11 +46,17 @@ async def export_teachers(
 ) -> Response:
     """POST pour éviter les URL à 100 IDs. PDF preview inline, autres formats attachment."""
     selection = exports.Selection(
-        year_id=payload.academic_year_id, class_ids=payload.class_ids,
-        level_ids=payload.level_ids, series_ids=payload.series_ids,
-        subject_ids=payload.subject_ids, columns=payload.columns,
-        group=payload.group, orientation=payload.orientation, mode=payload.mode,
+        year_id=payload.academic_year_id,
+        class_ids=payload.class_ids,
+        level_ids=payload.level_ids,
+        series_ids=payload.series_ids,
+        subject_ids=payload.subject_ids,
+        columns=payload.columns,
+        group=payload.group,
+        orientation=payload.orientation,
+        mode=payload.mode,
     )
+
     async def build() -> bytes:
         school, rows = await exports.load(db, selection)
         if format == "pdf":
@@ -57,7 +66,8 @@ async def export_teachers(
         return exports.render_xlsx(selection, school, rows)
 
     return await binary_response(
-        build, filename=f"liste-enseignants.{format}",
+        build,
+        filename=f"liste-enseignants.{format}",
         media_type=exports.MIME[format],
         error_context="export des enseignants",
         disposition="inline" if preview and format == "pdf" else "attachment",

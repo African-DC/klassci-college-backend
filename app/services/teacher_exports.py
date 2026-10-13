@@ -5,6 +5,7 @@ Deux sources sans rapprochement heuristique :
 - matières déclarées, et affectations de l'emploi du temps pour l'année
   sélectionnée. Une matière homonyme garde son ID/niveau/série.
 """
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -22,14 +23,27 @@ from app.models.user import TeacherProfile, User
 from app.services._school_settings_helper import load_school_settings_for_pdf
 
 COLUMNS = {
-    "name": "Nom et prénoms", "speciality": "Spécialité",
-    "subject": "Matière", "class": "Classe", "level": "Niveau",
-    "series": "Série", "contract": "Contrat", "genre": "Sexe",
-    "phone": "Téléphone", "email": "Email", "source": "Origine",
+    "name": "Nom et prénoms",
+    "speciality": "Spécialité",
+    "subject": "Matière",
+    "class": "Classe",
+    "level": "Niveau",
+    "series": "Série",
+    "contract": "Contrat",
+    "genre": "Sexe",
+    "phone": "Téléphone",
+    "email": "Email",
+    "source": "Origine",
 }
-GROUPS = {"none": "Sans regroupement", "subject": "Par matière",
-          "class": "Par classe", "level": "Par niveau", "series": "Par série",
-          "speciality": "Par spécialité", "contract": "Par contrat"}
+GROUPS = {
+    "none": "Sans regroupement",
+    "subject": "Par matière",
+    "class": "Par classe",
+    "level": "Par niveau",
+    "series": "Par série",
+    "speciality": "Par spécialité",
+    "contract": "Par contrat",
+}
 DEFAULTS = ["name", "speciality", "contract", "phone"]
 MIME = {
     "pdf": "application/pdf",
@@ -51,7 +65,11 @@ class Selection:
     mode: Literal["directory", "assignments"]
 
     def validate(self) -> None:
-        if not self.columns or len(set(self.columns)) != len(self.columns) or any(c not in COLUMNS for c in self.columns):
+        if (
+            not self.columns
+            or len(set(self.columns)) != len(self.columns)
+            or any(c not in COLUMNS for c in self.columns)
+        ):
             raise HTTPException(422, "Choisissez au moins une colonne valide et sans doublon.")
         if self.group not in GROUPS:
             raise HTTPException(422, "Regroupement inconnu.")
@@ -59,60 +77,121 @@ class Selection:
             raise HTTPException(422, "Document inconnu.")
         if self.mode == "assignments" and self.year_id is None:
             raise HTTPException(422, "Sélectionnez une année scolaire pour les affectations.")
-        if self.mode == "directory" and (self.class_ids or self.level_ids or self.series_ids or self.subject_ids or self.group in ("subject", "class", "level", "series")):
-            raise HTTPException(422, "Pour filtrer par classe, matière ou niveau, sélectionnez « Enseignants par affectation ».")
+        if self.mode == "directory" and (
+            self.class_ids
+            or self.level_ids
+            or self.series_ids
+            or self.subject_ids
+            or self.group in ("subject", "class", "level", "series")
+        ):
+            raise HTTPException(
+                422,
+                "Pour filtrer par classe, matière ou niveau, sélectionnez « Enseignants par affectation ».",
+            )
         if self.group != "none" and self.group not in self.columns and self.mode == "assignments":
             pass  # le titre du groupe remplace sa colonne
-        if self.group == "none" and self.mode == "assignments" and not any(
-            c in self.columns for c in ("subject", "class", "level")
-        ) and len(self.columns) == 1:
-            raise HTTPException(422, "Sans regroupement, ajoutez une colonne de contexte pour les affectations.")
+        if (
+            self.group == "none"
+            and self.mode == "assignments"
+            and not any(c in self.columns for c in ("subject", "class", "level"))
+            and len(self.columns) == 1
+        ):
+            raise HTTPException(
+                422, "Sans regroupement, ajoutez une colonne de contexte pour les affectations."
+            )
 
 
 def choose_orientation(selection: Selection) -> str:
-    weights = {"name": 54, "speciality": 40, "subject": 41, "class": 28,
-               "level": 27, "series": 18, "contract": 24, "genre": 15,
-               "phone": 33, "email": 45, "source": 32}
+    weights = {
+        "name": 54,
+        "speciality": 40,
+        "subject": 41,
+        "class": 28,
+        "level": 27,
+        "series": 18,
+        "contract": 24,
+        "genre": 15,
+        "phone": 33,
+        "email": 45,
+        "source": 32,
+    }
     width = sum(weights[c] for c in selection.columns)
     if width > 265 or (selection.orientation == "portrait" and width > 180):
-        raise HTTPException(422, "Trop de colonnes pour ce format A4 : retirez-en ou utilisez le paysage.")
-    return ("landscape" if width > 180 else "portrait") if selection.orientation == "auto" else selection.orientation
+        raise HTTPException(
+            422, "Trop de colonnes pour ce format A4 : retirez-en ou utilisez le paysage."
+        )
+    return (
+        ("landscape" if width > 180 else "portrait")
+        if selection.orientation == "auto"
+        else selection.orientation
+    )
 
 
 def _contract(t: TeacherProfile) -> str:
     v = getattr(t.contract_type, "value", t.contract_type)
-    return {"permanent": "Permanent", "vacataire": "Vacataire", "fonctionnaire": "Fonctionnaire"}.get(v, "—")
+    return {
+        "permanent": "Permanent",
+        "vacataire": "Vacataire",
+        "fonctionnaire": "Fonctionnaire",
+    }.get(v, "—")
 
 
 def _teacher(t: TeacherProfile, user: User | None) -> dict[str, str]:
-    return {"name": " ".join(x for x in (t.last_name, t.first_name) if x).strip(),
-            "speciality": t.speciality or "—", "contract": _contract(t),
-            "genre": t.genre or "—", "phone": t.phone or "—",
-            "email": user.email if user else "—",
-            "subject": "—", "class": "—", "level": "—",
-            "series": "—", "source": "Fiche enseignant"}
+    return {
+        "name": " ".join(x for x in (t.last_name, t.first_name) if x).strip(),
+        "speciality": t.speciality or "—",
+        "contract": _contract(t),
+        "genre": t.genre or "—",
+        "phone": t.phone or "—",
+        "email": user.email if user else "—",
+        "subject": "—",
+        "class": "—",
+        "level": "—",
+        "series": "—",
+        "source": "Fiche enseignant",
+    }
 
 
 async def filters(db: AsyncSession) -> dict:
-    years = (await db.execute(select(AcademicYear).order_by(AcademicYear.id.desc()))).scalars().all()
+    years = (
+        (await db.execute(select(AcademicYear).order_by(AcademicYear.id.desc()))).scalars().all()
+    )
     classes = (await db.execute(select(Class).order_by(Class.name))).scalars().all()
     levels = (await db.execute(select(Level).order_by(Level.order, Level.name))).scalars().all()
     series = (await db.execute(select(Series).order_by(Series.name))).scalars().all()
     subjects = (await db.execute(select(Subject).order_by(Subject.name))).scalars().all()
     return {
         "years": [{"id": a.id, "name": a.name, "current": bool(a.is_current)} for a in years],
-        "classes": [{"id": c.id, "name": c.name, "level_id": c.level_id, "series_id": c.series_id} for c in classes],
+        "classes": [
+            {"id": c.id, "name": c.name, "level_id": c.level_id, "series_id": c.series_id}
+            for c in classes
+        ],
         "levels": [{"id": a.id, "name": a.name} for a in levels],
         "series": [{"id": a.id, "name": a.name, "level_id": a.level_id} for a in series],
-        "subjects": [{"id": a.id, "name": a.name, "level_id": a.level_id, "series_id": a.series_id} for a in subjects],
-        "columns": COLUMNS, "groups": GROUPS,
+        "subjects": [
+            {"id": a.id, "name": a.name, "level_id": a.level_id, "series_id": a.series_id}
+            for a in subjects
+        ],
+        "columns": COLUMNS,
+        "groups": GROUPS,
     }
 
 
 async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
     s.validate()
     teachers = (await db.execute(select(TeacherProfile))).scalars().all()
-    users = {u.id: u for u in (await db.execute(select(User).where(User.id.in_([t.user_id for t in teachers])))).scalars().all()} if teachers else {}
+    users = (
+        {
+            u.id: u
+            for u in (
+                await db.execute(select(User).where(User.id.in_([t.user_id for t in teachers])))
+            )
+            .scalars()
+            .all()
+        }
+        if teachers
+        else {}
+    )
     by_id = {t.id: _teacher(t, users.get(t.user_id)) for t in teachers}
     school = await load_school_settings_for_pdf(db)
     if s.mode == "directory":
@@ -124,13 +203,22 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             raise HTTPException(422, "Année scolaire obligatoire.")
         rows = []
         # Créneaux : relation classe-matière-enseignant explicite et datée.
-        query = (select(TimetableSlot.teacher_id, TimetableSlot.subject_id, TimetableSlot.class_id,
-                        Class.name, Level.name, Series.name, Subject.name)
+        query = (
+            select(
+                TimetableSlot.teacher_id,
+                TimetableSlot.subject_id,
+                TimetableSlot.class_id,
+                Class.name,
+                Level.name,
+                Series.name,
+                Subject.name,
+            )
             .join(Class, Class.id == TimetableSlot.class_id)
             .join(Level, Level.id == Class.level_id)
             .outerjoin(Series, Series.id == Class.series_id)
             .join(Subject, Subject.id == TimetableSlot.subject_id)
-            .where(TimetableSlot.academic_year_id == s.year_id))
+            .where(TimetableSlot.academic_year_id == s.year_id)
+        )
         if s.class_ids:
             query = query.where(Class.id.in_(s.class_ids))
         if s.level_ids:
@@ -147,13 +235,26 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             if key in seen:
                 continue
             seen.add(key)
-            rows.append({**by_id[tid], "_id": str(tid),
-                "_subject_id": str(sid), "_class_id": str(cid),
-                "subject": sub, "class": cn, "level": ln,
-                "series": sn or "Sans série", "source": "Emploi du temps"})
+            rows.append(
+                {
+                    **by_id[tid],
+                    "_id": str(tid),
+                    "_subject_id": str(sid),
+                    "_class_id": str(cid),
+                    "subject": sub,
+                    "class": cn,
+                    "level": ln,
+                    "series": sn or "Sans série",
+                    "source": "Emploi du temps",
+                }
+            )
         # Les enseignants affectés seulement sur la fiche matière, sans créneau,
         # restent visibles au niveau de la matière : pas de classe inventée.
-        subjects = (await db.execute(select(Subject).where(Subject.teacher_id.is_not(None)))).scalars().all()
+        subjects = (
+            (await db.execute(select(Subject).where(Subject.teacher_id.is_not(None))))
+            .scalars()
+            .all()
+        )
         for sub in subjects:
             if sub.teacher_id not in by_id:
                 continue
@@ -169,11 +270,19 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             if key in seen:
                 continue
             seen.add(key)
-            rows.append({**by_id[sub.teacher_id], "_id": str(sub.teacher_id),
-                "_subject_id": str(sub.id), "_class_id": "",
-                "subject": sub.name, "class": "Non précisée",
-                "level": "Non précisé", "series": "Non précisée",
-                "source": "Fiche matière"})
+            rows.append(
+                {
+                    **by_id[sub.teacher_id],
+                    "_id": str(sub.teacher_id),
+                    "_subject_id": str(sub.id),
+                    "_class_id": "",
+                    "subject": sub.name,
+                    "class": "Non précisée",
+                    "level": "Non précisé",
+                    "series": "Non précisée",
+                    "source": "Fiche matière",
+                }
+            )
     if len(rows) > 12000:
         raise HTTPException(422, "Sélection trop large : réduisez les critères.")
     rows.sort(key=lambda x: (x["name"].casefold(), x["subject"].casefold(), x["class"].casefold()))
@@ -203,27 +312,44 @@ def render_pdf(s: Selection, school: dict, rows: list[dict]) -> bytes:
 
     from app.services.pdf import components as ui
     from app.services.pdf.theme import PDFTheme
+
     theme = PDFTheme.from_school(school)
     orientation = choose_orientation(s)
     headers = [{"label": COLUMNS[c]} for c in s.columns]
     groups = compose(rows, s)
     sections = []
     for title, records in groups:
-        sections.append(f'<h2 style="font-size:12px;color:var(--primary);margin:14px 0 6px">{ui.esc(title)}</h2>')
-        sections.append(ui.premium_table(headers=headers, rows=records, theme=theme, empty_message="Aucun enseignant"))
+        sections.append(
+            f'<h2 style="font-size:12px;color:var(--primary);margin:14px 0 6px">{ui.esc(title)}</h2>'
+        )
+        sections.append(
+            ui.premium_table(
+                headers=headers, rows=records, theme=theme, empty_message="Aucun enseignant"
+            )
+        )
     if not sections:
-        sections = ['<p>Aucun enseignant pour les critères choisis.</p>']
-    html = ('<html lang="fr"><head><meta charset="UTF-8">'
-        + ui.base_styles(theme, page_size="A4 "+orientation, margin="15mm", paginate=True)
-        + '</head><body>' + ui.page_decoration(theme=theme, watermark_text=school.get("school_name") or "")
+        sections = ["<p>Aucun enseignant pour les critères choisis.</p>"]
+    html = (
+        '<html lang="fr"><head><meta charset="UTF-8">'
+        + ui.base_styles(theme, page_size="A4 " + orientation, margin="15mm", paginate=True)
+        + "</head><body>"
+        + ui.page_decoration(theme=theme, watermark_text=school.get("school_name") or "")
         + '<div class="pdf-page-body">'
-        + ui.premium_header(school, theme=theme, doc_type="LISTE DES ENSEIGNANTS",
-            doc_subtitle="Annuaire" if s.mode == "directory" else "Affectations pédagogiques")
-        + ui.meta_banner(f"<strong>{len(rows)} entrée(s)</strong>",
-            "<span>Liste générée depuis KLASSCI Collège</span>", theme=theme)
+        + ui.premium_header(
+            school,
+            theme=theme,
+            doc_type="LISTE DES ENSEIGNANTS",
+            doc_subtitle="Annuaire" if s.mode == "directory" else "Affectations pédagogiques",
+        )
+        + ui.meta_banner(
+            f"<strong>{len(rows)} entrée(s)</strong>",
+            "<span>Liste générée depuis KLASSCI Collège</span>",
+            theme=theme,
+        )
         + "".join(sections)
         + ui.premium_footer(school, theme=theme, note="Document administratif interne.")
-        + "</div></body></html>")
+        + "</div></body></html>"
+    )
     return HTML(string=html).write_pdf()
 
 
@@ -234,6 +360,7 @@ def render_docx(s: Selection, school: dict, rows: list[dict]) -> bytes:
 
     from app.services.pdf._helpers import image_bytes
     from app.services.pdf.theme import PDFTheme
+
     theme = PDFTheme.from_school(school)
     orient = choose_orientation(s)
     doc = Document()
@@ -277,12 +404,18 @@ def render_xlsx(s: Selection, school: dict, rows: list[dict]) -> bytes:
         style_table_header,
         write_header,
     )
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Enseignants"
-    start = write_header(ws, school, title="LISTE DES ENSEIGNANTS",
+    start = write_header(
+        ws,
+        school,
+        title="LISTE DES ENSEIGNANTS",
         subtitle="Annuaire" if s.mode == "directory" else "Affectations pédagogiques",
-        meta_lines=[f"{len(rows)} entrée(s)"], width=len(s.columns))
+        meta_lines=[f"{len(rows)} entrée(s)"],
+        width=len(s.columns),
+    )
     ws.append([]) if ws.max_row < start else None
     for idx, col in enumerate(s.columns, 1):
         ws.cell(start, idx, COLUMNS[col])
@@ -300,7 +433,7 @@ def render_xlsx(s: Selection, school: dict, rows: list[dict]) -> bytes:
             line += 1
     for idx, col in enumerate(s.columns, 1):
         ws.column_dimensions[get_column_letter(idx)].width = min(45, max(14, len(COLUMNS[col]) + 9))
-    ws.freeze_panes = f"A{start+1}"
+    ws.freeze_panes = f"A{start + 1}"
     setup_printing(ws, header_row=start, landscape=choose_orientation(s) == "landscape")
     out = BytesIO()
     wb.save(out)
