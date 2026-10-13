@@ -19,7 +19,6 @@ from app.models.timetable import Timetable, TimetableSlot
 from app.models.user import TeacherProfile, User
 from app.schemas.teacher_directory import COLUMNS, GROUPS, TeacherExportOptions
 
-
 CONTRACT_LABELS = {
     "permanent": "Permanent", "vacataire": "Vacataire", "fonctionnaire": "Fonctionnaire"
 }
