@@ -104,6 +104,7 @@ async def list_students(
                 and_(
                     Enrollment.academic_year_id == current_ay_id,
                     Enrollment.status == EnrollmentStatus.VALIDE,
+                    Enrollment.archived_at.is_(None),
                     Enrollment.class_id == class_id,
                 )
             )
@@ -187,6 +188,7 @@ async def get_students_filters(db: AsyncSession) -> dict:
         .where(
             Enrollment.academic_year_id == current_ay_id,
             Enrollment.status == EnrollmentStatus.VALIDE,
+                    Enrollment.archived_at.is_(None),
         )
         .group_by(Class.id, Class.name)
         .order_by(Class.name.asc())
