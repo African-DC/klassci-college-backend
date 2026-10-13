@@ -139,6 +139,15 @@ async def get_payments_summary(
         func.coalesce(
             func.sum(
                 case(
+                    (Payment.status == PaymentStatus.COMPLETED.value, Payment.amount),
+                    else_=0,
+                )
+            ),
+            0,
+        ).label("total_collected"),
+        func.coalesce(
+            func.sum(
+                case(
                     (Payment.status == PaymentStatus.PENDING.value, Payment.amount),
                     else_=0,
                 )
@@ -178,4 +187,5 @@ async def get_payments_summary(
         total_cancelled=total_cancelled,
         payment_count=payment_count,
         completion_rate=completion_rate,
+        total_collected=float(pay_row.total_collected),
     )
