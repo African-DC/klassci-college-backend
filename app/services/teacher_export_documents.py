@@ -158,9 +158,10 @@ def page_landscape(columns: list[str], orientation: str) -> bool:
 
 def generate_pdf(rows: list[dict], columns: list[str], groups: list[tuple[str, list[dict]]],
                  school: dict, year: str, landscape: bool) -> bytes:
+    from weasyprint import HTML
+
     from app.services.pdf import components as ui
     from app.services.pdf.theme import PDFTheme
-    from weasyprint import HTML
     theme = PDFTheme.from_school(school)
     blocks = []
     for title, lines in groups:
