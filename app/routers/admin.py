@@ -354,11 +354,17 @@ async def teacher_export(
 ):
     """Aperçu PDF inline et téléchargements PDF, Word, Excel aux réglages tenant."""
     from fastapi import HTTPException
+
     from app.routers._pdf_helpers import binary_response
     from app.services._school_settings_helper import load_school_settings_for_pdf
     from app.services.teacher_export_documents import (
-        validate_options, load_export, compose, page_landscape,
-        generate_pdf, generate_word, generate_excel,
+        compose,
+        generate_excel,
+        generate_pdf,
+        generate_word,
+        load_export,
+        page_landscape,
+        validate_options,
     )
     if format not in ("pdf", "docx", "xlsx"):
         raise HTTPException(422, "Format de document non pris en charge.")
