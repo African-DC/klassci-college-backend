@@ -1,0 +1,32 @@
+name: Temporary Ruff formatter for teacher exports
+on:
+  push:
+    branches:
+      - feature/483-teacher-exports
+    paths:
+      - .github/workflows/temp-format-teacher-exports.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: "--version"
+      - name: Format teacher exports
+        run: |
+          ruff format app/routers/teacher_documents.py app/services/teacher_exports.py tests/services/test_teacher_exports.py
+          git diff --check
+      - name: Commit formatted files
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app/routers/teacher_documents.py app/services/teacher_exports.py tests/services/test_teacher_exports.py
+            git commit -m "style(teachers): apply Ruff formatting to exports"
+            git push
+          fi
