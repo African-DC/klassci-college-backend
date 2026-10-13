@@ -39,6 +39,24 @@ async def get_class_roster_pdf(
 
 
 @router.get(
+    "/{class_id}/roster.docx",
+    summary="Liste de classe (Word) — identité, naissance, nationalité, qualité et affectation",
+)
+async def get_class_roster_word(
+    class_id: int,
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Exporter les élèves validés de l'année courante en document Word éditable."""
+    content = await class_roster_service.get_class_roster_docx(db, class_id)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="liste-classe-{class_id}.docx"'},
+    )
+
+
+@router.get(
     "/{class_id}/attendance-sheet",
     summary="Feuille d'appel vierge (PDF) — colonnes de présence à cocher à la main",
 )
