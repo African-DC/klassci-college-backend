@@ -104,7 +104,7 @@ async def list_students(
                 and_(
                     Enrollment.academic_year_id == current_ay_id,
                     Enrollment.status == EnrollmentStatus.VALIDE,
-                    Enrollment.archived_at.is_(None),
+            Enrollment.archived_at.is_(None),
                     Enrollment.class_id == class_id,
                 )
             )
