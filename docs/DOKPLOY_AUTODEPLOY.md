@@ -1,129 +1,94 @@
-# KLASSCI College — Controlled Dokploy deployment
+# KLASSCI Collège — Dokploy + GitHub Actions (sans SSH)
 
-## Status
+## État actuel
 
-This workflow is intentionally **OFF** until server preflight, restore drill, and
-GitHub secrets have been completed. It does not change production merely by
-merging the configuration PR. It runs on main only after the repository-level
-variable KLASSCI_AUTO_DEPLOY has the exact value enabled.
+La production existante est une stack Dokploy Docker Compose **Raw**, identifiant
+`TAOkd341U3KSlNL49VI1o`, avec les images locales :
 
-Two repositories use the SAME release protocol:
-- African-DC/klassci-college-frontend => service frontend only.
-- African-DC/klassci-college-backend => services backend, worker, beat.
+- `KLASSCI_FRONTEND_IMAGE=klassci-college-frontend:prod`
+- `KLASSCI_BACKEND_IMAGE=klassci-college-backend:prod` (également worker et beat)
 
-Production is the EXISTING Dokploy Compose klassci-college-prod, not a new
-Compose project. The compose file at
-/etc/dokploy/compose/klassci-college-prod/code/docker-compose.yml
-and .env are the source of truth. Never replace them blindly with the versioned
-deploy/linux/docker-compose.dokploy.yml without inventorying differences.
+Le Compose de production contient les volumes EXTERNES
+`linux_klassci_mysql`, `linux_klassci_redis`,
+`linux_klassci_uploads`. Ne jamais les remplacer, supprimer ou monter dans
+une stack de test. WOURI tourne aussi sur le VPS, hors du périmètre.
 
-No Docker Compose down, no down -v, no MySQL/Redis recreation, no WOURI changes.
+**Aucun compte Contabo ni clé SSH opérationnelle n'est disponible.** L'accès
+utilisateur passe par Dokploy et Portainer. Le secret `DOKPLOY_API_KEY` est
+présent dans l'environnement GitHub `production` des deux dépôts, mais
+NE doit jamais apparaître dans des logs ou captures.
 
-## 1. Before enabling: verify server
+## Phase préparée dans cette PR (aucune mutation en production)
 
-Access the existing Dokploy project and use the approved SSH account. On Contabo,
-read without changing anything:
+`.github/workflows/production-release.yml`:
 
-    cd /etc/dokploy/compose/klassci-college-prod/code
-    docker compose -p klassci-college-prod ps
-    docker compose -p klassci-college-prod config --services
-    docker compose -p klassci-college-prod config --images
-    grep -E '^KLASSCI_(BACKEND|FRONTEND)_IMAGE=' .env | cut -d= -f1
-    docker volume inspect linux_klassci_mysql linux_klassci_redis
-    test -f "$HOME/klassci-backup-mysql.sh"
+1. valide la présence du Dockerfile sur les PR vers develop, staging et main ;
+2. après un push vers main, construit et publie l'image de ce dépôt avec un
+   identifiant immuable `git-<SHA>` dans GHCR ;
+3. sur déclenchement manuel (workflow_dispatch, main seulement), effectue
+   un **GET en lecture seule** de `compose.one` avec la clé API Dokploy stockée
+   dans GitHub Environment production ;
+4. n'exécute PAS `compose.deploy`, `compose.redeploy`,
+   `compose.saveEnvironment`, de migration ni de redémarrage de service.
 
-Do NOT show/share .env content: it holds secrets. Both image variables must
-actually influence the compose images of all targeted services. The script
-checks this and refuses incompatible live infrastructure rather than guessing.
+Tags publiés (après que la PR a traversé develop, staging et main) :
 
-## 2. Verify recoverability (backend critical)
+- frontend : `ghcr.io/african-dc/klassci-college-frontend:git-<SHA>`
+- backend : `ghcr.io/african-dc/klassci-college-backend:git-<SHA>`
 
-Run an authenticated full MySQL backup for ALL real tenant databases.
-Verify that local and off-site copies exist, and test the restore with
-INDEPENDENT volumes/databases on staging. Never attach a test stack to the
-production linux_klassci_* volumes. Compare table counts, tenant list and
-alembic_version for local plus all schools. Verify uploaded files separately.
+Les packages GHCR peuvent être **privés par défaut** : leur visibilité et le
+droit de pull sur Contabo doivent être vérifiés avant de changer le Compose
+de production. Ne jamais publier un token GitHub dans un fichier Compose.
 
-Simulate any new Alembic revision using that restored copy and the exact
-release image. Some MySQL DDL cannot roll back. Make sure changes are
-backward-compatible before live backend/worker replacement; if not, plan a
-maintenance window and manual controlled rollout.
+## Pourquoi l'API ne suffit pas encore
 
-The existing server backup script is expected at
-$HOME/klassci-backup-mysql.sh; optionally set KLASSCI_BACKUP_SCRIPT in the
-remote SSH account environment to an approved alternative. The script is
-invoked BEFORE running python -m app.cli.migrate_all head in a one-off container
-built from the new backend image. A failed migration stops deployment and
-requires examination of possible partial schema changes. NO automatic DB
-downgrade is attempted.
+Dokploy sait lire / mettre à jour la configuration Compose, enregistrer son
+environnement et relancer la stack. Mais un redéploiement d'images locales
+`klassci-college-*:prod` **ne reconstruit pas** automatiquement le frontend
+ou backend depuis les deux dépôts GitHub indépendants.
 
-## 3. GitHub repository setup (both repositories)
+Déclencher `compose.deploy` directement sur cette stack Raw sans nouvelle image
+effectivement accessible ne ferait qu'utiliser l'ancienne version (ou relancer
+inutilement les services). Et une mise à jour de la configuration qui remplacerait
+le `.env` entier risquerait les secrets et les changements concurrents.
 
-Create GitHub Environment: production. Limit deployment branches to main,
-and preferably require manual approval for the first few releases.
+## Conditions requises avant livraison automatique
 
-Create repository-level variable:
-- KLASSCI_AUTO_DEPLOY = disabled (initially); change to enabled ONLY after dry-run.
+- Vérifier depuis Dokploy/Portainer que Contabo peut tirer les images GHCR,
+  notamment si elles restent privées : configurer une authentification registry
+  côté serveur sans mettre le token dans les dépôts.
+- Confirmer une stratégie pour mettre à jour **seulement** le frontend ou
+  `backend + worker + beat` dans le Compose actif sans redémarrer MySQL,
+  Redis ni le proxy et sans course entre les deux dépôts.
+- Prévoir un verrou partagé entre les deux dépôts au niveau d'un orchestrateur
+  unique ; les groupes GitHub concurrency des dépôts sont indépendants.
+- Sauvegarder toutes les bases de tous les établissements ; vérifier une
+  restauration sur des volumes et DBs **indépendants**.
+- Avant une livraison backend, exécuter
+  `python -m app.cli.migrate_all head` via la **nouvelle** image dans un
+  job/runner contrôlé, en prévoyant une revue pour les migrations destructives.
+  Certaines opérations DDL MySQL ne s'annulent pas par rollback.
+- Ajouter contrôle de santé et restauration de l'image précédente (le schéma
+  migré, lui, ne doit jamais être « downgradé » automatiquement).
+- Effectuer au moins une livraison de recette et documenter les résultats.
 
-Set GitHub Environment variables:
-- KLASSCI_DEPLOY_HOST = verified Contabo hostname/IP
-- KLASSCI_DEPLOY_USER = restricted SSH deployment account
-- Backend ONLY: KLASSCI_MIGRATIONS_APPROVED = yes after explicit approval
-- Backend ONLY: KLASSCI_RESTORE_VERIFIED = yes after restoring a full backup
+## Configuration GitHub
 
-Set GitHub Environment secrets:
-- KLASSCI_SSH_PRIVATE_KEY = dedicated private SSH deploy key (not copied into git)
-- KLASSCI_SSH_KNOWN_HOSTS = trusted pinned OpenSSH host-key entry.
+Chaque dépôt : `Settings > Environments > production` :
+- secret : `DOKPLOY_API_KEY` (déjà renseigné manuellement) ;
+- limiter l'environnement aux branches `main` ;
+- pas besoin de SSH GitHub Actions dans cette phase.
 
-Record the host's fingerprint from a separately verified trusted source; never
-accept the first host key from an unauthenticated network scan.
-SSH account must have Docker privileges and write permission to the live .env.
-Do not use an unrestricted root SSH account or put production DB passwords
-in GitHub Actions.
+Actions > `KLASSCI College release preparation` sur main > Run workflow :
+le job `dokploy-readonly-check` interroge seulement les métadonnées de la
+stack. Ne pas copier sa réponse brute, car elle pourrait inclure des variables
+d'environnement.
 
-If restrictions or required secrets are missing, workflow fails BEFORE
-the Docker image is built or deployment is attempted.
+Ne **pas** activer de redéploiement natif Dokploy en parallèle des futurs
+workflows GitHub Actions tant que l'orchestration n'est pas validée.
 
-## 4. Deployment sequence
+## Références
 
-PRs remain mandatory (feature/* -> develop -> staging -> main).
-Existing CI and branch protections remain the merge gates.
-A push to main with activation enabled triggers:
-
-1. syntax check of release script.
-2. Docker image build from this exact commit with git-SHA image tag.
-3. image delivery via encrypted SSH (docker save/load).
-4. shared Linux flock lock across frontend/backend repositories.
-5. validate real Dokploy Compose and persistent MySQL/Redis volumes.
-6. verify new tag overrides only the intended services.
-7. backend: fresh backup, then migrate all tenant databases with NEW image.
-8. atomically change matching image pointer in the active .env.
-9. docker compose up -d --no-deps --force-recreate (targeted services only).
-10. probe public /svc/health, /login and target container running states.
-
-An application failure restores previous image pointer and attempts a targeted
-service rollback; it NEVER rewinds database migrations or user writes.
-A simple Compose recreate may cause a brief interruption (not zero downtime).
-
-## 5. Release recovery
-
-On failure, inspect Actions logs and docker compose ps / service logs first.
-Do not retry Alembic blindly if a migration was interrupted. Confirm
-alembic_version and actual schema for EACH tenant. Roll back only the
-application image when the old application is compatible with the new schema.
-Restore databases only via a separately planned, audited operation;
-a DB restore overwrites school data written since the backup.
-
-The release script is run from its GitHub commit over SSH, not copied into
-the live Dokploy-managed project. Backend and frontend share one /tmp flock.
-If Docker Compose was independently changed in Dokploy, repeat the read-only
-preflight before re-enabling.
-
-## 6. Smoke test and observability
-
-Verify login and /svc/health plus an authenticated school scenario: Rostan
-Bouake enrollment, note lookup and saved student photo. Verify Celery worker
-and beat are running and that previously uploaded logos/files persist.
-Add Sentry alerting and routine restore-test checks before declaring full CD.
-
-**The current PRs do not deploy anything to production.**
+- https://docs.dokploy.com/docs/api/compose
+- https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
+- https://docs.dokploy.com/docs/core/docker-compose
