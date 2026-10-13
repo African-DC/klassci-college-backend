@@ -69,8 +69,8 @@ class TeacherExportOptions(BaseModel):
             values = getattr(self, name)
             if len(set(values)) != len(values) or any(v <= 0 for v in values):
                 raise ValueError(f"Filtre {name} invalide : doublons ou identifiants négatifs.")
-        if self.group_by == "none" and "subject" not in self.columns and self.subject_ids:
-            raise ValueError("Sans classement par matière, affichez la colonne Matière.")
+        # Les filtres ne sont pas des colonnes : « nom seul » est valide même
+        # avec plusieurs matières et sans rubrique explicite.
         return self
 
 
