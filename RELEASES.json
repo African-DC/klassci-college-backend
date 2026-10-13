@@ -1769,6 +1769,14 @@
         ],
         "Fixed": [
           {
+            "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
+            "audience": [
+              "scolarité",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF",
             "audience": [
               "direction",

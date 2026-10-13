@@ -931,6 +931,7 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
                     .where(Enrollment.class_id == class_id)
                     .where(Enrollment.academic_year_id == ay_id)
                     .where(Enrollment.status == EnrollmentStatus.VALIDE)
+                    .where(Enrollment.archived_at.is_(None))
                 )
             ).scalar() or 0
             classes_detail.append(
@@ -1639,6 +1640,7 @@ async def _get_enrolled_counts(db: AsyncSession, class_ids: list[int]) -> dict[i
             Enrollment.class_id.in_(class_ids),
             Enrollment.academic_year_id == current_ay_id,
             Enrollment.status == EnrollmentStatus.VALIDE,
+            Enrollment.archived_at.is_(None),
         )
         .group_by(Enrollment.class_id)
     )

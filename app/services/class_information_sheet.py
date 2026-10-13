@@ -14,7 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import CLOSED_STATUSES, Enrollment
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import Student
 from app.schemas.class_information_sheet import (
     InformationSheetClass,
@@ -45,13 +45,13 @@ async def _resolve_year(db: AsyncSession, academic_year_id: int | None) -> Acade
 async def _load_enrollments(
     db: AsyncSession, academic_year_id: int, class_id: int | None
 ) -> list[Enrollment]:
-    """Les inscriptions vivantes de l'année, triées comme la fiche les affiche."""
+    """Only validated, non-archived enrollments in the requested academic year."""
     stmt = (
         select(Enrollment)
         .join(Student, Student.id == Enrollment.student_id)
         .where(
             Enrollment.academic_year_id == academic_year_id,
-            Enrollment.status.not_in(CLOSED_STATUSES),
+            Enrollment.status == EnrollmentStatus.VALIDE.value,
             Enrollment.archived_at.is_(None),
         )
         .options(
