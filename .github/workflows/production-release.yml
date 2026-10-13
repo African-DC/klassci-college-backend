@@ -1,0 +1,90 @@
+name: KLASSCI College production release
+
+on:
+  pull_request:
+    branches: [develop, staging, main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-script-check:
+    name: Validate release script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check shell syntax
+        run: bash -n scripts/dokploy-release.sh
+
+  deploy:
+    name: Build and deploy backend
+    needs: release-script-check
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.KLASSCI_AUTO_DEPLOY == 'enabled' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    concurrency:
+      group: klassci-college-backend-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.KLASSCI_DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.KLASSCI_DEPLOY_USER }}
+      DEPLOY_KEY: ${{ secrets.KLASSCI_SSH_PRIVATE_KEY }}
+      KNOWN_HOSTS: ${{ secrets.KLASSCI_SSH_KNOWN_HOSTS }}
+      MIGRATIONS_APPROVED: ${{ vars.KLASSCI_MIGRATIONS_APPROVED }}
+      RESTORE_VERIFIED: ${{ vars.KLASSCI_RESTORE_VERIFIED }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check server setup and approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_KEY"
+          test -n "$KNOWN_HOSTS"
+          test "$MIGRATIONS_APPROVED" = yes
+          test "$RESTORE_VERIFIED" = yes
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/klassci_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 700 "$HOME/.ssh"
+          chmod 600 "$HOME/.ssh/klassci_deploy" "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/klassci_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" 'docker info >/dev/null'
+
+      - name: Build immutable backend image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="klassci-college-backend:git-$GITHUB_SHA"
+          docker build --pull --tag "$image" .
+          echo "IMAGE_TAG=$image" >> "$GITHUB_ENV"
+
+      - name: Transfer image to Contabo
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker save "$IMAGE_TAG" | gzip -1 |
+            ssh -i "$HOME/.ssh/klassci_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" "bash -o pipefail -c 'gzip -dc | docker load'"
+
+      - name: Safely update the active Dokploy Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$HOME/.ssh/klassci_deploy" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "KLASSCI_MIGRATIONS_APPROVED=yes KLASSCI_RESTORE_VERIFIED=yes bash -s -- backend $IMAGE_TAG" \
+            < scripts/dokploy-release.sh
+
+      - name: Verify public health after release
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 \
+            https://college.klassci.com/svc/health
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 \
+            -o /dev/null https://college.klassci.com/login
