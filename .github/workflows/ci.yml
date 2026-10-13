@@ -30,9 +30,6 @@ jobs:
       - name: Ruff lint
         run: ruff check app/ tests/
 
-      - name: Ruff formatting diagnostics (temporary)
-        run: ruff format --diff app/routers/teacher_directory.py app/schemas/teacher_directory.py app/services/teacher_directory_documents.py app/services/teacher_directory_service.py tests/services/test_teacher_directory_exports.py
-
       - name: Ruff format check
         run: ruff format --check app/ tests/
 
