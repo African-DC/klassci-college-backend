@@ -65,3 +65,69 @@ Sources :
 - https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments
 - https://docs.docker.com/compose/how-tos/startup-order/
 - https://docs.dokploy.com/docs/core/docker-compose
+
+
+## 8. Exécution manuelle vérifiable — stack Raw Compose *réellement en place*
+
+> **Ne pas exécuter cette section avant GO.** Ce n'est pas une automatisation et elle ne remplace pas la validation humaine des sauvegardes et des migrations.
+
+### 8.1 Préflight à lecture seule (VPS Contabo)
+
+Connecter avec la configuration SSH du dépôt : `ssh -F deploy/ssh_config klassci-prod`. La stack Dokploy Raw est stockée sous `/etc/dokploy/compose/klassci-college-prod/code` ; les sources backend et frontend sont respectivement sous `/opt/apps/klassci-college/src/backend` et `/opt/apps/klassci-college/src/frontend`.
+
+Avant toute action, vérifier le *véritable* projet et la configuration Compose effective : ne pas supposer que le nom du répertoire, la configuration du dépôt et celle du serveur sont identiques.
+
+```bash
+docker compose ls
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+docker volume inspect linux_klassci_mysql linux_klassci_redis linux_klassci_uploads
+docker image inspect klassci-college-backend:prod klassci-college-frontend:prod \
+  --format '{{.RepoTags}} {{.Id}} {{.Created}}'
+docker system df
+df -h
+cd /opt/apps/klassci-college/src/backend && git status --short && git rev-parse HEAD
+cd /opt/apps/klassci-college/src/frontend && git status --short && git rev-parse HEAD
+```
+
+Consigner les informations **sans recopier les secrets** et sans diffuser la sortie d'un `docker compose config` non masqué ; utiliser `docker compose config --quiet` après avoir repéré le fichier exact et les variables réellement chargées par Dokploy. Vérifier qu'aucun autre service n'écrit dans la DB partagée et que le webhook Dokploy exposé auparavant a été régénéré.
+
+### 8.2 Sauvegardes et modèle de récupération
+
+Une sauvegarde hors VPS a été déclarée par l'exploitant. Son existence n'est **pas** la preuve de sa restaurabilité. Confirmer sa date, ses journaux de succès, l'inventaire complet des bases tenant (notamment `local` et `rostan-bouake`), les uploads, la conservation, l'accès depuis une autre machine et un essai de restauration isolé. Une copie brute « à chaud » de `/var/lib/mysql` n'est pas assimilable automatiquement à un snapshot SQL cohérent. Pour les tables InnoDB, `mysqldump --single-transaction --quick` est une possibilité documentée par MySQL ; empêcher les DDL concurrents pendant l'opération.
+
+Les backups de volumes Dokploy pourront compléter la sauvegarde existante, mais la livraison ne dépend pas de la marque du logiciel utilisé : elle dépend d'une restauration indépendante réussie et des trois volumes `linux_klassci_*` préservés.
+
+### 8.3 Préparer et basculer **uniquement** les applications
+
+Après fusion des deux `main` en commits coordonnés et essais Windows réussis : relever la référence exacte actuellement exécutée, sauvegarder le Compose et le `.env` chiffrés hors du dossier public ; vérifier `git status --short`, puis `git pull --ff-only` sur les deux sources de `main` (ne pas forcer si divergence locale). Taguer **avant le build** les deux images actives en `:rollback-<timestamp>` (même timestamp).
+
+Élaborer les images applicatives à partir des commits figés. Vérifier que le frontend embarque `NEXT_PUBLIC_API_URL=/svc` **au build** (dans le Dockerfile actuel) ; les variables `NEXT_PUBLIC_*` sont incorporées dans le bundle Next.js, une variable runtime ne corrige pas un build erroné. Vérifier les image IDs résultants et ne modifier ni `MYSQL_*`, ni `REDIS_URL`, ni `UPLOAD_ROOT`, ni les définitions de volumes. Le Compose versionné comporte notamment un sas `HANDOFF_ROOT` qui doit être rapproché du Compose Raw effectivement utilisé : **ne pas remplacer intégralement le Compose Raw par le fichier Git**.
+
+Exécuter `python -m app.cli.migrate_all head` **uniquement si des révisions nouvelles l'exigent**, après test sur DB restaurées, pause des écritures et contrôle de tous les tenants attendus. Ne jamais invoquer `downgrade` automatiquement.
+
+Depuis le **bon dossier Compose** et avec le **même nom de projet** que les conteneurs existants, employer une opération ciblée telle que :
+
+```bash
+# EXEMPLAR : ne pas lancer sans vérifier la CLI, le projet et le fichier effectifs.
+docker compose -p klassci-college-prod up -d --no-deps --wait backend
+docker compose -p klassci-college-prod up -d --no-deps --wait worker beat
+docker compose -p klassci-college-prod up -d --no-deps --wait frontend
+```
+
+`--no-deps` évite le redémarrage des services dépendants ; `--wait` assure running/healthy suivant l'existence d'un healthcheck mais **pas** la bonne exécution métier. Aucune commande `compose down`, `-v`, `prune`, `--remove-orphans` ni remplacement global du `.env`.
+
+### 8.4 Validation et décision de retour arrière
+
+Contrôler `https://college.klassci.com/svc/health` et `https://college.klassci.com/login` puis, depuis le bon compte tenant, tester l'authentification, les permissions, une classe courante, l'export PDF/Word/Excel, une inscription passée payée aujourd'hui, le bordereau jour, l'export des versements avec recherche/catégorie, l'historique de paiements et le rapprochement des totaux. Vérifier worker via `celery -A app.core.celery_app inspect ping` **en lecture seule**, tâches actives/réservées, logs du beat et erreurs pendant la fenêtre de surveillance. Contrôler le statut des 7 conteneurs et les versions Alembic des tenants.
+
+Si les contrôles échouent : stopper la livraison, consigner l'incident et remettre **uniquement** les tags/digests applicatifs précédents si l'ancien code est compatible avec les migrations déjà exécutées. Un rollback des images ne restaure **jamais** automatiquement les lignes MySQL ni les documents supprimés.
+
+### 8.5 Démo Windows (distincte de la production Linux)
+
+La démo est un déploiement **natif Windows**, sans Docker Linux : `ssh -F deploy/ssh_config klassci`, serveur `94.72.96.119`, `https://college-demo.klassci.com`. Préparer archives des deux commits depuis le poste de build, sauvegarder puis copier/extraitre dans `C:\klassci\backend` et `C:\klassci\frontend`. Pour les scripts Python utiliser `py` (pas `python3`). N'exécuter des migrations que si requises et avec sauvegarde testée. Lancer `C:\klassci-deploy\frontend-build.ps1`, redémarrer les services NSSM `klassci-backend` et `klassci-frontend`, contrôler logs Windows et faire passer la matrice de tests métier avant autorisation Contabo.
+
+**Sources techniques** :
+- https://docs.docker.com/reference/cli/docker/compose/up/
+- https://docs.dokploy.com/docs/core/docker-compose
+- https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html
+- https://docs.celeryq.dev/en/stable/userguide/monitoring.html
