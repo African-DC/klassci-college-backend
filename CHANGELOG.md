@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
 - Workflow GitHub de préparation des images FastAPI et Celery dans GHCR et vérification Dokploy en lecture seule ; les migrations multi-établissements restent soumises à une validation avant déploiement *(technique, déploiement)*
 - Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#485)
 - Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
@@ -117,6 +118,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF *(direction, secrétariat)* (#475)
 - Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps *(comptable, secrétariat)* (#472)
 - La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription *(directeur, secrétariat)* (#469)
 - Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*
