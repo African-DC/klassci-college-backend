@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La direction personnalise les listes d'enseignants par matière, classe, niveau ou série et les exporte en PDF, Word ou Excel *(admin, secrétariat)* (#479)
 - La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
 
 ### Fixed
