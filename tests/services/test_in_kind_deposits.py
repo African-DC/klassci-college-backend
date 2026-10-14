@@ -48,6 +48,7 @@ FRAIS_POLO = 303
 _TABLES = (
     "enrollments",
     "enrollment_fees",
+    "enrollment_fee_discounts",
     "fee_categories",
     "fee_variants",
     "payments",

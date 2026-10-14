@@ -37,6 +37,7 @@ from app.models.fee import (
     FeeVariant,
     is_not_cash_due,
 )
+from app.models.fee_discount import EnrollmentFeeDiscount
 from app.models.user import Student
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import FeeVariantResponse, InKindDeposit
@@ -490,6 +491,17 @@ async def regenerate_enrollment_fees(
         raise NotFoundError("Enrollment", enrollment_id)
 
     protected_fee_ids = await fees_paid.fee_ids_with_allocations(db, enrollment_id)
+    discounted_fee_ids = set(
+        (
+            await db.execute(
+                select(EnrollmentFeeDiscount.enrollment_fee_id)
+                .join(EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id)
+                .where(EnrollmentFee.enrollment_id == enrollment_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     deleted_count = 0
     kept_count = 0
@@ -498,7 +510,7 @@ async def regenerate_enrollment_fees(
         # On ne détruit jamais un frais sur lequel de l'argent est imputé :
         # le versement perdrait sa contrepartie, et le journal d'audit ne
         # rattrape pas un trou comptable.
-        if ef.id in protected_fee_ids or is_not_cash_due(ef.status):
+        if ef.id in protected_fee_ids or ef.id in discounted_fee_ids or is_not_cash_due(ef.status):
             # Versement imputé, exonération, ou dépôt en nature : on ne
             # détruit pas. Un in_kind n'a pas d'allocation — sans ce garde
             # la régénération le recréerait en pending.
@@ -530,7 +542,8 @@ async def regenerate_enrollment_fees(
             "action": "regenerate_fees",
             "deleted": deleted_count,
             "created": created_count,
-            "kept_with_payments": kept_count,
+            "kept_with_payments_or_discounts": kept_count,
+            "kept_with_discounts": len(discounted_fee_ids),
         },
     )
 
@@ -539,8 +552,8 @@ async def regenerate_enrollment_fees(
     # place. Le dire, chiffré, plutôt que de le laisser deviner.
     supprimes = Dependent("frais remplacé", "frais remplacés", deleted_count)
     conserves = Dependent(
-        "frais conservé car un versement y est imputé",
-        "frais conservés car des versements y sont imputés",
+        "frais conservé car protégé par un versement ou une réduction",
+        "frais conservés car protégés par des versements ou réductions",
         kept_count,
     )
     crees = Dependent("frais créé", "frais créés", created_count)

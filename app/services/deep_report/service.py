@@ -32,9 +32,10 @@ logger = logging.getLogger(__name__)
 _CONCLUSION = (
     "Le présent rapport a été établi à partir des données enregistrées dans la "
     "plateforme de gestion de l'établissement à la date d'édition. Les tableaux "
-    "portant la mention « à compléter manuellement » appellent des informations que "
-    "la plateforme ne collecte pas : ils sont laissés vierges plutôt que remplis de "
-    "valeurs nulles, une valeur nulle valant constat."
+    "portant la mention « à compléter manuellement » concernent des informations "
+    "non collectées ou non encore saisies. Une valeur absente n'est ni un zéro, ni "
+    "la preuve qu'aucun événement n'a eu lieu. Les renseignements enregistrables "
+    "doivent être complétés dans KLASSCI avant une nouvelle édition du rapport."
 )
 
 

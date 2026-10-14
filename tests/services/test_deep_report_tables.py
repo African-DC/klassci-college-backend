@@ -7,11 +7,13 @@ l'inspection additionne, et les totaux doivent tomber.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
 from app.services.deep_report import (
     chapter1_recaps,
+    chapter1_rosters,
     chapter2_gender,
     chapter2_movements,
     chapter2_pyramids,
@@ -37,6 +39,7 @@ def _line(
     assignment: str | None = "affecte",
     decision: str | None = None,
     birth_year: int | None = 2010,
+    nationality: str | None = None,
 ) -> StudentLine:
     """Un élève inscrit, réduit à ce que les tableaux lisent de lui."""
     birth_date = SimpleNamespace(year=birth_year) if birth_year else None
@@ -47,6 +50,8 @@ def _line(
         genre=genre,
         birth_date=birth_date,
         enrollment_number=f"MAT{student_id}",
+        nationality=nationality,
+        birth_place="Bouaké",
         previous_school=None,
         transfer_decision_number=None,
     )
@@ -347,3 +352,26 @@ def test_annee_de_naissance_inconnue_reste_a_part():
     assert "Non renseignée" in labels
     assert labels[-1] == "Non renseignée"
     assert "sans date de naissance" in (table.note or "")
+
+
+# ---------------------------------------------------------------------------
+# Nationalité : le rapport doit reprendre la fiche, pas afficher un tiret fixe.
+# ---------------------------------------------------------------------------
+
+
+def test_nationalite_alimente_les_tableaux_nominatifs_et_majors() -> None:
+    a = _line(1, _SIXIEME_A, average="17.00", nationality="Ivoirienne")
+    a.student.birth_date = date(2011, 4, 2)
+    b = _line(2, _SIXIEME_A, average="12.00", nationality=None)
+    b.student.birth_date = date(2010, 6, 12)
+    context = _context([a, b])
+
+    general = chapter1_rosters.roster_tables(context)[0]
+    affected = chapter1_rosters.subsidised_roster_tables(context)[0]
+    majors = chapter1_rosters.top_students_table(context)
+
+    assert [row.cells[6] for row in general.rows] == ["Ivoirienne", MISSING]
+    assert [row.cells[6] for row in affected.rows] == ["Ivoirienne", MISSING]
+    assert majors.rows[0].cells[6] == "Ivoirienne"
+    assert "n'est pas collectée" not in (general.note or "")
+    assert "fiches élèves" in (general.note or "")

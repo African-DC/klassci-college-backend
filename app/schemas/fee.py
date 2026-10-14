@@ -216,6 +216,7 @@ class _FeePropagationImpact(BaseModel):
     enrollments_concerned: int
     fees_already_up_to_date: int
     fees_kept_with_payments: int
+    fees_kept_with_discounts: int = 0
     fees_waived: int
     #: Lignes reglees par un depot d'article. Comptees a part de `fees_waived`
     #: parce qu'un depot n'est pas une exoneration DRENA, mais comptees quand

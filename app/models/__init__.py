@@ -65,6 +65,7 @@ from app.models.fee import (  # noqa: F401
     PaymentMethod,
     PaymentStatus,
 )
+from app.models.fee_discount import EnrollmentFeeDiscount  # noqa: F401
 
 # Notes et bulletins
 from app.models.grade import (  # noqa: F401
