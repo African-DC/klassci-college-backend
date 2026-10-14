@@ -1151,6 +1151,14 @@
         ],
         "Added": [
           {
+            "text": "Le rapport DEEP reprend désormais la nationalité de chaque élève dans les listes de classe, des affectés et des majors ; la fiche d'inscription PDF l'affiche aussi. Les mentions de saisie manuelle distinguent les données absentes des données non collectées",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 509
+          },
+          {
             "text": "Les établissements accordent des réductions individuelles en francs ou pourcentage, avec motifs, autorisations et conservation des montants initiaux",
             "audience": [
               "direction",
