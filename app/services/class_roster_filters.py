@@ -1,5 +1,6 @@
 """Critères communs des listes de classe, sans modifier l'effectif officiel."""
 from datetime import date
+
 from pydantic import BaseModel, Field, model_validator
 
 class RosterFilters(BaseModel):
