@@ -279,6 +279,7 @@ async def get_class_roster_xlsx(
 ) -> bytes:
     """Export Excel de la meme population filtree que PDF et Word."""
     from openpyxl import Workbook
+    from openpyxl.drawing.image import Image
     from openpyxl.styles import Font, PatternFill
 
     klass = await _load_class_with_room(db, class_id)
@@ -286,11 +287,26 @@ async def get_class_roster_xlsx(
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
     students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
+    school = await _get_school_settings_dict(db)
     wb = Workbook()
     ws = wb.active
     ws.title = "Liste de classe"
+    ws.append(["", school.get("school_name") or "Établissement"])
+    ws.append(["", school.get("drena_name") or ""])
     ws.append([f"LISTE DE CLASSE — {klass.name} — {ay.name}"])
     ws.append([f"Effectif : {len(students)}"])
+    ws.merge_cells("B1:J1")
+    ws["B1"].font = Font(size=16, bold=True, color="0F3F8C")
+    ws.row_dimensions[1].height = 42
+    from app.services.pdf._helpers import image_bytes
+    logo = image_bytes(school.get("logo_url")) if school.get("logo_url") else None
+    if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
+        try:
+            image = Image(BytesIO(logo[0]))
+            image.width, image.height = 48, 48
+            ws.add_image(image, "A1")
+        except (OSError, ValueError):
+            pass
     ws.append(
         [
             "N°",
@@ -325,11 +341,11 @@ async def get_class_roster_xlsx(
                 ),
             ]
         )
-    for cell in ws[3]:
+    for cell in ws[5]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="0F3F8C")
-    ws.freeze_panes = "A4"
-    ws.auto_filter.ref = f"A3:J{max(3, ws.max_row)}"
+    ws.freeze_panes = "A6"
+    ws.auto_filter.ref = f"A5:J{max(5, ws.max_row)}"
     for col, width in {
         "A": 7,
         "B": 19,
