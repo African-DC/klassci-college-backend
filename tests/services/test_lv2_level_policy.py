@@ -80,3 +80,38 @@ def test_migration_initialise_les_anciens_libelles_une_seule_fois() -> None:
     assert mod._was_forbidden("Cinquième")
     assert not mod._was_forbidden("4ème")
     assert not mod._was_forbidden("Niveau personnalisé")
+
+
+@pytest.mark.asyncio
+async def test_deplacer_une_classe_retire_lv2_courante_et_journalise_sans_alterer_historique(
+    tenant: Session,
+) -> None:
+    from app.core.audit import AuditLog
+    from app.models.enrollment import Enrollment
+    from app.schemas.admin import ClassUpdate
+    from app.services import admin_service
+    from tests.services._sheet_world import (
+        ACTEUR, AN_COURANT, AN_PASSE, add_enrollment, add_student,
+    )
+
+    add_student(tenant, 90, "Traoré", "Awa")
+    add_student(tenant, 91, "Koné", "Paul")
+    add_enrollment(tenant, 90, 90, CLASSE_4E, AN_COURANT, lv2="espagnol")
+    add_enrollment(tenant, 91, 91, CLASSE_4E, AN_PASSE, lv2="allemand")
+    tenant.commit()
+
+    await admin_service.update_class(
+        AsyncBridge(tenant), CLASSE_4E, ClassUpdate(level_id=1), updated_by=ACTEUR,
+    )
+    tenant.expire_all()
+    assert tenant.get(Enrollment, 90).lv2 is None
+    assert tenant.get(Enrollment, 91).lv2 == "allemand"
+    retrait = [
+        a for a in tenant.query(AuditLog).filter_by(
+            entity_type="enrollment", entity_id=90
+        ).all()
+        if a.old_values and "lv2" in a.old_values
+    ]
+    assert len(retrait) == 1
+    assert retrait[0].old_values == {"lv2": "espagnol"}
+    assert retrait[0].new_values == {"lv2": None}
