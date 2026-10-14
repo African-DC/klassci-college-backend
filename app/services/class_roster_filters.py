@@ -4,6 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, Field, model_validator
 
+
 class RosterFilters(BaseModel):
     genre: str | None = None
     age_min: int | None = Field(None, ge=0, le=120)
