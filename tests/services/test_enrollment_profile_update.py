@@ -334,12 +334,14 @@ async def test_lot_refuse_niveau_4e_desactive_sans_mutation(db: Session) -> None
     with pytest.raises(BusinessValidationError):
         await enrollment_profile_update.update_profiles_in_batch(
             _bridge(db),  # type: ignore[arg-type]
-            EnrollmentProfileBatchRequest.model_validate({
-                "items": [
-                    {"enrollment_id": 1, "lv2": "espagnol"},
-                    {"enrollment_id": 2, "is_repeater": True},
-                ],
-            }),
+            EnrollmentProfileBatchRequest.model_validate(
+                {
+                    "items": [
+                        {"enrollment_id": 1, "lv2": "espagnol"},
+                        {"enrollment_id": 2, "is_repeater": True},
+                    ],
+                }
+            ),
             updated_by=ACTEUR,
         )
     db.expire_all()
