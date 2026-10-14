@@ -117,7 +117,9 @@ async def prior_snapshot(
 
 
 def _with_prior(
-    typed: EnrollmentProfileFields, prior: PriorSnapshot | None, new_code: PreviousLevel | None,
+    typed: EnrollmentProfileFields,
+    prior: PriorSnapshot | None,
+    new_code: PreviousLevel | None,
     lv2_enabled: bool,
 ) -> dict[str, object]:
     """Ce qui est tapé l'emporte ; un champ laissé vide se remplit de l'antécédent.
