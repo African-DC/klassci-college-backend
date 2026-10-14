@@ -14,7 +14,7 @@ from app.services.fee_discounts import compute_discount
     [
         ("150000", "fixed", "25000", "25000.00"),
         ("150000", "percent", "20", "30000.00"),
-        ("100001", "percent", "33.33", "33363.67"),
+        ("100001", "percent", "33.33", "33330.33"),
         ("150000", "percent", "100", "150000.00"),
     ],
 )
