@@ -302,12 +302,21 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
     lignes = list((await db.execute(stmt)).scalars().all())
 
     nouveau_montant = Decimal(str(variant.amount))
-    remise_ids = set((await db.execute(
-        select(EnrollmentFeeDiscount.enrollment_fee_id)
-        .where(EnrollmentFeeDiscount.enrollment_fee_id.in_([f.id for f in lignes]))
-    )).scalars().all())
+    remise_ids = set(
+        (
+            await db.execute(
+                select(EnrollmentFeeDiscount.enrollment_fee_id).where(
+                    EnrollmentFeeDiscount.enrollment_fee_id.in_([f.id for f in lignes])
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
     remisees = [f for f in lignes if f.id in remise_ids]
-    exonerees = [f for f in lignes if f.id not in remise_ids and f.status == EnrollmentFeeStatus.WAIVED]
+    exonerees = [
+        f for f in lignes if f.id not in remise_ids and f.status == EnrollmentFeeStatus.WAIVED
+    ]
     # Un dépôt en nature n'est pas une exonération DRENA : il ne gonfle ni
     # `fees_waived` ni la dette à répercuter. Il est compté à part, parce
     # qu'il reste une ligne touchée par ce tarif et que la partition doit
