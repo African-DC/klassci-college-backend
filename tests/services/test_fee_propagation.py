@@ -102,6 +102,7 @@ def _sqlite_schema() -> list[Table]:
         "fee_variants",
         "enrollments",
         "enrollment_fees",
+        "enrollment_fee_discounts",
         "payments",
         "payment_allocations",
         "audit_logs",
