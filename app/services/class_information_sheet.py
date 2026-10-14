@@ -106,7 +106,10 @@ def _group_by_class(enrollments: list[Enrollment]) -> list[InformationSheetClass
         key=lambda c: (c.level.order if c.level else 0, _level_name(c), c.name),
     )
     return [
-        InformationSheetClass(id=c.id, name=c.name, level_name=_level_name(c), rows=rows[c.id])
+        InformationSheetClass(
+            id=c.id, name=c.name, level_name=_level_name(c),
+            level_lv2_enabled=bool(c.level and c.level.lv2_enabled), rows=rows[c.id]
+        )
         for c in ordered
     ]
 
