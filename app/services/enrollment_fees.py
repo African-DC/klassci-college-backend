@@ -491,11 +491,19 @@ async def regenerate_enrollment_fees(
         raise NotFoundError("Enrollment", enrollment_id)
 
     protected_fee_ids = await fees_paid.fee_ids_with_allocations(db, enrollment_id)
-    discounted_fee_ids = set((await db.execute(
-        select(EnrollmentFeeDiscount.enrollment_fee_id)
-        .join(EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id)
-        .where(EnrollmentFee.enrollment_id == enrollment_id)
-    )).scalars().all())
+    discounted_fee_ids = set(
+        (
+            await db.execute(
+                select(EnrollmentFeeDiscount.enrollment_fee_id)
+                .join(
+                    EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id
+                )
+                .where(EnrollmentFee.enrollment_id == enrollment_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     deleted_count = 0
     kept_count = 0
