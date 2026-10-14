@@ -4,7 +4,7 @@ V1 volontairement conservatrice : les lignes avec allocations (y compris
 annulées pour préserver la traçabilité) sont immuables. Un avoir après
 encaissement exige un workflow distinct, pas une réécriture de la facture.
 """
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
