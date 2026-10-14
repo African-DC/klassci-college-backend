@@ -117,6 +117,7 @@ SAMPLE_LEVEL = LevelResponse(
     id=1,
     name="6eme",
     order=1,
+    lv2_enabled=False,
 )
 
 SVC = "app.routers.admin.admin_service"
