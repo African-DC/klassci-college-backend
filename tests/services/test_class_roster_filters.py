@@ -53,3 +53,8 @@ def test_multiple_assignment_selections():
 def test_invalid_age_range():
     with pytest.raises(ValidationError):
         RosterFilters(age_min=18, age_max=12)
+
+
+def test_empty_filters_leave_valid_roster_unchanged():
+    students = [{"genre": "M"}, {"genre": "F"}, {"genre": None}]
+    assert filter_roster(students, RosterFilters()) == students
