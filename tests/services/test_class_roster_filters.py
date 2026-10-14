@@ -76,18 +76,12 @@ def test_multi_nationality_ignores_case_and_accents():
 
 def test_assignment_and_nullable_flags_never_guess_unknown():
     filters = RosterFilters(assignment_statuses=("affecte", "reaffecte"))
-    assert [row["last_name"] for row in filter_roster_rows(ROWS, filters)] == [
-        "KONE",
-        "YAO",
-    ]
-    assert [
-        row["last_name"]
-        for row in filter_roster_rows(ROWS, RosterFilters(is_repeater=False))
-    ] == ["KONE"]
-    assert [
-        row["last_name"]
-        for row in filter_roster_rows(ROWS, RosterFilters(is_new_student=False))
-    ] == ["YAO"]
+    assigned = filter_roster_rows(ROWS, filters)
+    repeaters = filter_roster_rows(ROWS, RosterFilters(is_repeater=False))
+    newcomers = filter_roster_rows(ROWS, RosterFilters(is_new_student=False))
+    assert [row["last_name"] for row in assigned] == ["KONE", "YAO"]
+    assert [row["last_name"] for row in repeaters] == ["KONE"]
+    assert [row["last_name"] for row in newcomers] == ["YAO"]
 
 
 def test_unfiltered_roster_remains_unchanged_and_selection_is_printable():

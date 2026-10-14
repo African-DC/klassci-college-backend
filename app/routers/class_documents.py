@@ -30,10 +30,8 @@ def _roster_filters(
     """Critères partagés entre PDF, Word et source Excel ; validation sans ambiguïté."""
     if age_min is not None and age_max is not None and age_min > age_max:
         raise HTTPException(422, detail="L'âge minimum ne peut pas dépasser l'âge maximum")
-    if nationalities and (
-        len(nationalities) > 30
-        or any(not n.strip() or len(n) > 60 for n in nationalities)
-    ):
+    invalid_nationality = any(not n.strip() or len(n) > 60 for n in nationalities or ())
+    if nationalities and (len(nationalities) > 30 or invalid_nationality):
         raise HTTPException(422, detail="Sélectionnez au maximum 30 nationalités valides")
     allowed = {"affecte", "reaffecte", "non_affecte"}
     if assignment_statuses and (
@@ -63,7 +61,6 @@ async def get_class_roster_data(
 ) -> dict:
     """Ne retourne que les inscriptions validées et non archivées de l'année courante."""
     return await class_roster_service.get_class_roster_data(db, class_id, filters)
-
 
 
 @router.get(
