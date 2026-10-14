@@ -1600,9 +1600,11 @@ async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
 
 def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     level_name = None
+    level_lv2_enabled = False
     series_name = None
     if hasattr(c, "level") and c.level is not None:
         level_name = c.level.name
+        level_lv2_enabled = c.level.lv2_enabled
     if hasattr(c, "series") and c.series is not None:
         series_name = c.series.name
     return ClassResponse(
@@ -1613,6 +1615,7 @@ def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
         room_id=c.room_id,
         max_students=c.max_students,
         level_name=level_name,
+        level_lv2_enabled=level_lv2_enabled,
         series_name=series_name,
         enrolled_count=enrolled_count,
         created_at=c.created_at,
