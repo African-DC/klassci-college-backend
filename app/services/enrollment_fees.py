@@ -37,8 +37,8 @@ from app.models.fee import (
     FeeVariant,
     is_not_cash_due,
 )
-from app.models.user import Student
 from app.models.fee_discount import EnrollmentFeeDiscount
+from app.models.user import Student
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import FeeVariantResponse, InKindDeposit
 from app.services import fee_entitlements as entitlements
