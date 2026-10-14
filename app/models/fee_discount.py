@@ -17,8 +17,10 @@ class EnrollmentFeeDiscount(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     enrollment_fee_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("enrollment_fees.id", ondelete="CASCADE"),
-        nullable=False, index=True,
+        BigInteger,
+        ForeignKey("enrollment_fees.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # Montant avant remise, conservé même si la grille générale évolue.
     original_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
