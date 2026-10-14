@@ -1151,6 +1151,14 @@
         ],
         "Added": [
           {
+            "text": "Les listes de classe se personnalisent par sexe, âge, nationalités multiples, affectation, redoublement et profil, pour obtenir les mêmes élèves validés en PDF, Word ou Excel",
+            "audience": [
+              "scolarité",
+              "direction"
+            ],
+            "pull_request": 514
+          },
+          {
             "text": "Le rapport DEEP reprend désormais la nationalité de chaque élève dans les listes de classe, des affectés et des majors ; la fiche d'inscription PDF l'affiche aussi. Les mentions de saisie manuelle distinguent les données absentes des données non collectées",
             "audience": [
               "direction",

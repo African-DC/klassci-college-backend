@@ -111,3 +111,14 @@ def test_word_roster_uses_tenant_identity():
     ):
         assert expected in text
     assert document.tables[0].cell(0, 1).paragraphs[0].runs[0].font.color.rgb is not None
+
+
+def test_word_roster_prints_active_filters():
+    payload = {
+        "class_name": "6e A",
+        "academic_year_name": "2026-2027",
+        "students": [],
+        "filter_description": "Garçons · Âge ≥ 12 ans",
+    }
+    document = Document(BytesIO(_word_roster_document(payload)))
+    assert any("Sélection : Garçons · Âge ≥ 12 ans" in p.text for p in document.paragraphs)

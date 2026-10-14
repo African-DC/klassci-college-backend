@@ -67,6 +67,10 @@ def generate_class_roster_pdf(data: dict[str, Any], school_settings: dict[str, A
         f"<span style='color:var(--muted);'>Édité le {ui.esc(issued_str)}</span>"
     )
 
+    filter_description = data.get("filter_description") or ""
+    if filter_description:
+        meta_left += f"<br/><strong>Sélection :</strong> {ui.esc(filter_description)}"
+
     kpis = ui.kpis_row(cards=counter_kpis(counts), theme=theme)
 
     table_section = ui.premium_table(

@@ -16,6 +16,11 @@ from app.models.user import ParentStudent
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )
+from app.services.class_roster_filters import (
+    RosterFilters,
+    describe_roster_filters,
+    filter_roster_rows,
+)
 from app.services.pdf import generate_class_roster_pdf
 
 
@@ -92,6 +97,7 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
                 "birth_place": getattr(s, "birth_place", None),
                 "nationality": getattr(s, "nationality", None),
                 "is_repeater": e.is_repeater,
+                "is_new_student": e.is_new_student,
                 "assignment_status": getattr(e.assignment_status, "value", e.assignment_status),
             }
         )
@@ -101,14 +107,16 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
     return rows
 
 
-async def get_class_roster_pdf(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_pdf(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """Génère le PDF liste de classe pour une classe (AY courante)."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
 
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster_rows(await _load_students(db, class_id, ay.id), filters)
     boys = sum(1 for s in students if s.get("genre") == "M")
     girls = sum(1 for s in students if s.get("genre") == "F")
 
@@ -121,6 +129,7 @@ async def get_class_roster_pdf(db: AsyncSession, class_id: int) -> bytes:
         "students": students,
         "counts": {"total": len(students), "boys": boys, "girls": girls},
         "issued_at": datetime.utcnow(),
+        "filter_description": describe_roster_filters(filters),
     }
     school = await _get_school_settings_dict(db)
     return generate_class_roster_pdf(data, school)
@@ -191,6 +200,8 @@ def _word_roster_document(data: dict) -> bytes:
     doc.add_paragraph(
         f"Classe : {data['class_name']}  |  Année scolaire : {data['academic_year_name']}  |  Effectif : {len(data['students'])}"
     )
+    if data.get("filter_description"):
+        doc.add_paragraph(f"Sélection : {data['filter_description']}")
     headers = [
         "N°",
         "Matricule",
@@ -251,13 +262,15 @@ def _word_roster_document(data: dict) -> bytes:
     return stream.getvalue()
 
 
-async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_docx(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """La même population d'élèves que la liste de classe PDF, au format Word."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster_rows(await _load_students(db, class_id, ay.id), filters)
     school = await _get_school_settings_dict(db)
     return _word_roster_document(
         {
@@ -265,5 +278,23 @@ async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
             "academic_year_name": ay.name,
             "students": students,
             "school_settings": school,
+            "filter_description": describe_roster_filters(filters),
         }
     )
+
+
+async def get_class_roster_data(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> dict:
+    """Même population que les PDF et Word, sans plafond de pagination pour Excel."""
+    klass = await _load_class_with_room(db, class_id)
+    ay = await _current_academic_year(db)
+    if ay is None:
+        raise NotFoundError("AcademicYear (current)", 0)
+    rows = filter_roster_rows(await _load_students(db, class_id, ay.id), filters)
+    return {
+        "class_name": klass.name,
+        "academic_year_name": ay.name,
+        "students": rows,
+        "total": len(rows),
+    }
