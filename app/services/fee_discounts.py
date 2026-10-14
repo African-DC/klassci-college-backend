@@ -48,22 +48,31 @@ def compute_discount(original: Decimal, data: FeeDiscountUpsert) -> Decimal:
     return discount
 
 
-async def _ensure_enrollment(db: AsyncSession, enrollment_id: int, *, writing: bool) -> None:
+async def _ensure_enrollment(
+    db: AsyncSession, enrollment_id: int, *, writing: bool
+) -> None:
     enrollment = (
         await db.execute(select(Enrollment).where(Enrollment.id == enrollment_id))
     ).scalar_one_or_none()
     if enrollment is None:
         raise NotFoundError("Enrollment", enrollment_id)
     if writing and enrollment.status in CLOSED_STATUSES:
-        raise BusinessValidationError("Une inscription fermée ne peut recevoir de réduction.")
+        raise BusinessValidationError(
+            "Une inscription fermée ne peut recevoir de réduction."
+        )
 
 
-async def _locked_fee(db: AsyncSession, enrollment_id: int, fee_id: int) -> EnrollmentFee:
+async def _locked_fee(
+    db: AsyncSession, enrollment_id: int, fee_id: int
+) -> EnrollmentFee:
     # Verrou identique au guichet : la ligne et ses versements restent cohérents.
     fee = (
         await db.execute(
             select(EnrollmentFee)
-            .where(EnrollmentFee.id == fee_id, EnrollmentFee.enrollment_id == enrollment_id)
+            .where(
+                EnrollmentFee.id == fee_id,
+                EnrollmentFee.enrollment_id == enrollment_id,
+            )
             .with_for_update()
         )
     ).scalar_one_or_none()
@@ -100,12 +109,16 @@ def _response(discount: EnrollmentFeeDiscount, due: Decimal) -> FeeDiscountRespo
     )
 
 
-async def list_discounts(db: AsyncSession, enrollment_id: int) -> list[FeeDiscountResponse]:
+async def list_discounts(
+    db: AsyncSession, enrollment_id: int
+) -> list[FeeDiscountResponse]:
     await _ensure_enrollment(db, enrollment_id, writing=False)
     rows = (
         await db.execute(
             select(EnrollmentFeeDiscount, EnrollmentFee.amount)
-            .join(EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id)
+            .join(
+                EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id
+            )
             .where(EnrollmentFee.enrollment_id == enrollment_id)
             .order_by(EnrollmentFee.id)
         )
@@ -114,8 +127,12 @@ async def list_discounts(db: AsyncSession, enrollment_id: int) -> list[FeeDiscou
 
 
 async def set_discount(
-    db: AsyncSession, enrollment_id: int, fee_id: int,
-    data: FeeDiscountUpsert, *, actor: int,
+    db: AsyncSession,
+    enrollment_id: int,
+    fee_id: int,
+    data: FeeDiscountUpsert,
+    *,
+    actor: int,
 ) -> FeeDiscountResponse:
     await _ensure_enrollment(db, enrollment_id, writing=True)
     async with db.begin_nested():
@@ -126,7 +143,10 @@ async def set_discount(
                 .where(EnrollmentFeeDiscount.enrollment_fee_id == fee.id)
             )
         ).scalar_one_or_none()
-        if fee.status in (EnrollmentFeeStatus.WAIVED, EnrollmentFeeStatus.IN_KIND) and not existing:
+        if (
+            fee.status in (EnrollmentFeeStatus.WAIVED, EnrollmentFeeStatus.IN_KIND)
+            and not existing
+        ):
             raise BusinessValidationError(
                 "Ce frais est déjà exonéré ou déposé en nature : aucune remise ne peut y être posée."
             )
@@ -143,7 +163,8 @@ async def set_discount(
 
         old = (
             {"amount_due": str(fee.amount), "discount": str(existing.discount_amount)}
-            if existing else {"amount_due": str(fee.amount), "discount": None}
+            if existing
+            else {"amount_due": str(fee.amount), "discount": None}
         )
         if existing is None:
             existing = EnrollmentFeeDiscount(
@@ -170,12 +191,20 @@ async def set_discount(
         await db.flush()
         await db.refresh(existing)
         await audit_log(
-            db, entity_type="enrollment_fee", action=AuditAction.UPDATE,
-            entity_id=fee.id, user_id=actor, old_values=old,
+            db,
+            entity_type="enrollment_fee",
+            action=AuditAction.UPDATE,
+            entity_id=fee.id,
+            user_id=actor,
+            old_values=old,
             new_values={
-                "action": "set_discount", "nominal": str(nominal),
-                "discount": str(reduction), "amount_due": str(net),
-                "kind": data.kind, "value": str(data.value), "reason": data.reason,
+                "action": "set_discount",
+                "nominal": str(nominal),
+                "discount": str(reduction),
+                "amount_due": str(net),
+                "kind": data.kind,
+                "value": str(data.value),
+                "reason": data.reason,
                 "enrollment_id": enrollment_id,
             },
         )
@@ -185,7 +214,7 @@ async def set_discount(
 
 
 async def remove_discount(
-    db: AsyncSession, enrollment_id: int, fee_id: int, *, actor: int,
+    db: AsyncSession, enrollment_id: int, fee_id: int, *, actor: int
 ) -> None:
     await _ensure_enrollment(db, enrollment_id, writing=True)
     async with db.begin_nested():
@@ -213,10 +242,15 @@ async def remove_discount(
         await db.delete(discount)
         await db.flush()
         await audit_log(
-            db, entity_type="enrollment_fee", action=AuditAction.UPDATE,
-            entity_id=fee.id, user_id=actor, old_values=previous,
+            db,
+            entity_type="enrollment_fee",
+            action=AuditAction.UPDATE,
+            entity_id=fee.id,
+            user_id=actor,
+            old_values=previous,
             new_values={
-                "action": "remove_discount", "enrollment_id": enrollment_id,
+                "action": "remove_discount",
+                "enrollment_id": enrollment_id,
                 "amount_due": str(fee.amount),
             },
         )
