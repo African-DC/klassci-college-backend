@@ -24,10 +24,7 @@ from app.schemas.enrollment_profile import (
     EnrollmentProfileUpdate,
 )
 from app.services.enrollment_mapper import to_enrollment_response
-from app.services.enrollment_profile import (
-    level_name_of_class,
-    repeater_status,
-)
+from app.services.enrollment_profile import level_name_of_class, repeater_status
 from app.services.level_codes import national_level_code
 from app.services.lv2_policy import LV2_FORBIDDEN_MESSAGE, ensure_lv2_allowed
 
@@ -133,7 +130,11 @@ def _check_batch(request: EnrollmentProfileBatchRequest, found: dict[int, Enroll
     lv2_refused: list[int] = []
     for item in request.items:
         level = found[item.enrollment_id].class_.level
-        if "lv2" in item.model_fields_set and item.lv2 is not None and (level is None or not level.lv2_enabled):
+        if (
+            "lv2" in item.model_fields_set
+            and item.lv2 is not None
+            and (level is None or not level.lv2_enabled)
+        ):
             lv2_refused.append(item.enrollment_id)
     if lv2_refused:
         raise BusinessValidationError(
