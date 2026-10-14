@@ -1,4 +1,5 @@
 """Contrats des remises accordées à une inscription."""
+
 from decimal import Decimal
 from typing import Literal
 
