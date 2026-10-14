@@ -140,6 +140,7 @@ async def class_sheet(
         raise NotFoundError("Class", class_id)
     rows = [_row(e) for e in await _load_enrollments(db, year.id, class_id)]
     sheet_class = InformationSheetClass(
-        id=class_.id, name=class_.name, level_name=_level_name(class_), rows=rows
+        id=class_.id, name=class_.name, level_name=_level_name(class_),
+        level_lv2_enabled=bool(class_.level and class_.level.lv2_enabled), rows=rows
     )
     return InformationSheetResponse(academic_year=_year_ref(year), classes=[sheet_class])
