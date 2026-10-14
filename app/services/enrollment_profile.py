@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
-from app.core.exceptions import BusinessValidationError
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import CLOSED_STATUSES, Enrollment, PreviousLevel
 from app.schemas.enrollment_profile import PROFILE_FIELDS, EnrollmentProfileFields
