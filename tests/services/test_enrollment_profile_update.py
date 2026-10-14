@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditLog
 from app.core.exceptions import BusinessValidationError, ConflictError
+from app.models.academic import Level
 from app.models.deep_report import Scholarship
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.schemas.enrollment import EnrollmentUpdate
@@ -302,3 +303,40 @@ async def test_changer_pour_une_classe_qui_l_enseigne_garde_la_lv2(db: Session) 
     )
 
     assert reponse.lv2 == "espagnol"
+
+
+@pytest.mark.asyncio
+async def test_la_politique_de_lv2_est_configurable_sans_renommer_un_niveau(db: Session) -> None:
+    niveau = db.get(Level, 1)
+    assert niveau is not None
+    niveau.name = "Collège international A"
+    niveau.lv2_enabled = True
+    db.commit()
+    response = await enrollment_profile_update.update_profile(
+        _bridge(db), 3, EnrollmentProfileUpdate(lv2="espagnol"), updated_by=ACTEUR,
+    )  # type: ignore[arg-type]
+    assert response.lv2 == "espagnol"
+    niveau.lv2_enabled = False
+    db.commit()
+    with pytest.raises(BusinessValidationError):
+        await enrollment_profile_update.update_profile(
+            _bridge(db), 3, EnrollmentProfileUpdate(lv2="allemand"), updated_by=ACTEUR,
+        )  # type: ignore[arg-type]
+    db.refresh(db.get(Enrollment, 3))
+    assert db.get(Enrollment, 3).lv2 == "espagnol"  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+async def test_la_saisie_en_lot_suit_la_configuration_locale(db: Session) -> None:
+    niveau = db.get(Level, 1)
+    assert niveau is not None
+    niveau.lv2_enabled = True
+    db.commit()
+    result = await enrollment_profile_update.update_profiles_in_batch(
+        _bridge(db), EnrollmentProfileBatchRequest.model_validate(
+            {"items": [{"enrollment_id": 3, "lv2": "allemand"}]}
+        ), updated_by=ACTEUR,
+    )  # type: ignore[arg-type]
+    assert result == {"updated": 1}
+    db.refresh(db.get(Enrollment, 3))
+    assert db.get(Enrollment, 3).lv2 == "allemand"  # type: ignore[union-attr]
