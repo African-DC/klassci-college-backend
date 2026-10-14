@@ -34,8 +34,8 @@ from app.routers.enrollment_options import router as enrollment_options_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollment_profile import router as enrollment_profile_router
 from app.routers.enrollments import router as enrollments_router
-from app.routers.fees import router as fees_router
 from app.routers.fee_discounts import router as fee_discounts_router
+from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
 from app.routers.installments import router as installments_router
 from app.routers.leave import admin_router as leave_admin_router
