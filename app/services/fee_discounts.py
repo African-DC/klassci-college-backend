@@ -5,7 +5,7 @@ la remise et l'annulation. Les versements ne sont jamais modifiés. Une réducti
 qui créerait un trop-perçu, même avec un versement en attente, est refusée.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,11 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.enrollment import CLOSED_STATUSES, Enrollment
 from app.models.fee import (
-    EnrollmentFee, EnrollmentFeeStatus, Payment, PaymentAllocation, PaymentStatus,
+    EnrollmentFee,
+    EnrollmentFeeStatus,
+    Payment,
+    PaymentAllocation,
+    PaymentStatus,
 )
 from app.models.fee_discount import EnrollmentFeeDiscount
 from app.schemas.fee_discount import FeeDiscountResponse, FeeDiscountUpsert
