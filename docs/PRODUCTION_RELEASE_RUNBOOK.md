@@ -131,3 +131,33 @@ La démo est un déploiement **natif Windows**, sans Docker Linux : `ssh -F depl
 - https://docs.dokploy.com/docs/core/docker-compose
 - https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html
 - https://docs.celeryq.dev/en/stable/userguide/monitoring.html
+
+## Gate 0 bis — inventaire Docker sans modification (Contabo uniquement)
+
+Avant de livrer, exécuter **sur le VPS Linux** le diagnostic du dépôt. Il n'appelle
+que `docker ps`, `docker inspect`, `docker volume ls` et une lecture de
+l'espace disque ; aucun `docker exec`, build, migration, restart, `compose up`
+ou écriture de fichiers. Il masque les variables d'environnement et les secrets.
+
+```bash
+# Depuis la source backend à jour du commit à auditer (jamais depuis un ZIP inconnu).
+cd /opt/apps/klassci-college/src/backend
+python3 deploy/linux/preflight_readonly.py --project klassci-college-prod
+```
+
+Vérifier d'abord le vrai nom Docker Compose du projet via `docker compose ls` ;
+si différent, le fournir explicitement à `--project`. La sortie lisible signale
+les sept services, l'état des trois volumes externes, la cohérence des images
+backend/worker/beat, les mounts des uploads et le statut des healthchecks.
+`--json` produit un rapport structuré filtré pouvant être archivé dans un
+espace privé, **sans** y copier de `.env`, dump SQL ni logs sensibles.
+
+**Code retour non nul = NO-GO Docker. Code retour zéro ≠ GO de livraison.**
+Ce diagnostic ne démontre ni l'intégrité des données, ni la restauration des
+backups externes, ni la bonne configuration du webhook Dokploy, ni le succès
+des scénarios d'inscription/paiement/export. Ces étapes restent obligatoires.
+
+Sur la stack Raw fournie, le volume `klassci_handoff` n'est pas monté ;
+le diagnostic émet un avertissement non destructif. Examiner les fonctions
+de dépôt de photo et la copie effective du Compose avant d'ajouter un volume ;
+ne jamais copier intégralement `docker-compose.dokploy.yml` par-dessus le Raw.
