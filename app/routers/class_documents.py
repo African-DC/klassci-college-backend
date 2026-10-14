@@ -71,6 +71,30 @@ async def get_class_roster_word(
     )
 
 
+@router.get("/{class_id}/roster.xlsx", summary="Liste de classe (Excel) filtrable")
+async def get_class_roster_excel(
+    class_id: int,
+    genre: str | None = Query(None, pattern="^(M|F)$"),
+    age_min: int | None = Query(None, ge=0, le=120),
+    age_max: int | None = Query(None, ge=0, le=120),
+    nationalities: list[str] = Query(default=[]),
+    assignments: list[str] = Query(default=[]),
+    repeaters: bool | None = Query(None),
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    content = await class_roster_service.get_class_roster_xlsx(
+        db, class_id,
+        RosterFilters(genre=genre, age_min=age_min, age_max=age_max,
+                      nationalities=nationalities, assignments=assignments, repeaters=repeaters),
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="liste-classe-{class_id}.xlsx"'},
+    )
+
+
 @router.get(
     "/{class_id}/attendance-sheet",
     summary="Feuille d'appel vierge (PDF) — colonnes de présence à cocher à la main",
