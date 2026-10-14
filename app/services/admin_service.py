@@ -1710,14 +1710,36 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
-    await audited_update(
-        db,
-        cls,
-        changes,
-        entity_type="class",
-        updater=repo.update_class,
-        actor=updated_by,
-    )
+    async with db.begin_nested():
+        await audited_update(
+            db,
+            cls,
+            changes,
+            entity_type="class",
+            updater=repo.update_class,
+            actor=updated_by,
+        )
+        # Classes universelles : une réaffectation de niveau change le cursus
+        # courant. Ne pas modifier les inscriptions historiques/archivées.
+        if "level_id" in changes:
+            from app.models.academic import Level
+            from app.models.enrollment import Enrollment
+            from app.services.enrollment_profile import clear_lv2_if_class_forbids_it
+            from app.services.lv2_policy import lv2_allowed_for_class
+
+            if not await lv2_allowed_for_class(db, class_id):
+                current_year = await repo.get_current_academic_year_id(db)
+                if current_year is not None:
+                    stmt = select(Enrollment).where(
+                        Enrollment.class_id == class_id,
+                        Enrollment.academic_year_id == current_year,
+                        Enrollment.archived_at.is_(None),
+                        Enrollment.lv2.is_not(None),
+                    )
+                    for enrollment in (await db.execute(stmt)).scalars().all():
+                        await clear_lv2_if_class_forbids_it(
+                            db, enrollment, actor=updated_by,
+                        )
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:
