@@ -1,0 +1,30 @@
+name: Format class roster files
+on:
+  push:
+    paths:
+      - '.github/workflows/roster-format-once.yml'
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.ref == 'refs/heads/feature/514-roster-filters'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/514-roster-filters
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ruff==0.15.12
+      - name: Apply repository formatter
+        run: |
+          ruff check --fix app/services/class_roster_filters.py app/services/class_roster_service.py app/routers/class_documents.py tests/services/test_class_roster_filters.py
+          ruff format app/services/class_roster_filters.py app/services/class_roster_service.py app/routers/class_documents.py tests/services/test_class_roster_filters.py
+          rm .github/workflows/roster-format-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style(enrollments): format class roster modules" -m "Review: apply exact repository Ruff formatting"
+          git push origin HEAD:feature/514-roster-filters
