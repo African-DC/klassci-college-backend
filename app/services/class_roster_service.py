@@ -16,8 +16,8 @@ from app.models.user import ParentStudent
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )
-from app.services.pdf import generate_class_roster_pdf
 from app.services.class_roster_filters import RosterFilters, filter_roster
+from app.services.pdf import generate_class_roster_pdf
 
 
 async def _load_class_with_room(db: AsyncSession, class_id: int) -> Class:
