@@ -1151,6 +1151,14 @@
         ],
         "Added": [
           {
+            "text": "Filtrage combiné des listes de classe pour les exports PDF, Word et Excel, avec prise en charge de plusieurs nationalités et statuts d'affectation",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 515
+          },
+          {
             "text": "Le rapport DEEP reprend désormais la nationalité de chaque élève dans les listes de classe, des affectés et des majors ; la fiche d'inscription PDF l'affiche aussi. Les mentions de saisie manuelle distinguent les données absentes des données non collectées",
             "audience": [
               "direction",
