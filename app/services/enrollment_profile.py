@@ -97,8 +97,10 @@ async def prior_snapshot(
 
 
 def _with_prior(
-    typed: EnrollmentProfileFields, prior: PriorSnapshot | None,
-    new_code: PreviousLevel | None, lv2_allowed: bool,
+    typed: EnrollmentProfileFields,
+    prior: PriorSnapshot | None,
+    new_code: PreviousLevel | None,
+    lv2_allowed: bool,
 ) -> dict[str, object]:
     """Ce qui est tapé l'emporte ; un champ laissé vide se remplit de l'antécédent.
 
@@ -159,7 +161,9 @@ async def apply_initial_profile(
     await ensure_lv2_allowed(db, enrollment.class_id, typed.lv2)
     enabled = await lv2_allowed_for_class(db, enrollment.class_id)
     prior = await prior_snapshot(db, enrollment.student_id, year)
-    for name, value in _with_prior(typed, prior, national_level_code(level_name), enabled).items():
+    for name, value in _with_prior(
+        typed, prior, national_level_code(level_name), enabled
+    ).items():
         setattr(enrollment, name, value)
     await db.flush()
 
