@@ -25,12 +25,11 @@ from app.schemas.enrollment_profile import (
 )
 from app.services.enrollment_mapper import to_enrollment_response
 from app.services.enrollment_profile import (
-    LV2_FORBIDDEN_MESSAGE,
-    ensure_lv2_allowed,
     level_name_of_class,
     repeater_status,
 )
-from app.services.level_codes import LEVELS_WITHOUT_LV2, national_level_code
+from app.services.level_codes import national_level_code
+from app.services.lv2_policy import LV2_FORBIDDEN_MESSAGE, ensure_lv2_allowed
 
 
 def _plain(value: object) -> object:
@@ -97,7 +96,7 @@ async def update_profile(
         raise NotFoundError("Enrollment", enrollment_id)
     level_name = await level_name_of_class(db, enrollment.class_id)
     if "lv2" in data.model_fields_set:
-        ensure_lv2_allowed(level_name, data.lv2)
+        await ensure_lv2_allowed(db, enrollment.class_id, data.lv2)
 
     async with db.begin_nested():
         await _apply(db, enrollment, data, updated_by, national_level_code(level_name))
@@ -133,8 +132,8 @@ def _check_batch(request: EnrollmentProfileBatchRequest, found: dict[int, Enroll
         )
     lv2_refused: list[int] = []
     for item in request.items:
-        code = _class_code(found[item.enrollment_id])
-        if "lv2" in item.model_fields_set and item.lv2 is not None and code in LEVELS_WITHOUT_LV2:
+        level = found[item.enrollment_id].class_.level
+        if "lv2" in item.model_fields_set and item.lv2 is not None and (level is None or not level.lv2_enabled):
             lv2_refused.append(item.enrollment_id)
     if lv2_refused:
         raise BusinessValidationError(
