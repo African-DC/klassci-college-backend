@@ -64,8 +64,8 @@ def downgrade() -> None:
             "Downgrade 0085 refusé : annulez les réductions actives par l'API "
             "avant de revenir en arrière."
         )
-    op.drop_index("ix_enrollment_fee_discounts_enrollment_fee_id", table_name="enrollment_fee_discounts")
-    op.drop_index("uq_enrollment_fee_discount", table_name="enrollment_fee_discounts")
+    # MySQL utilise l’index unique pour la contrainte FK : il interdit de le
+    # retirer indépendamment. DROP TABLE supprime les deux index et la FK.
     op.drop_table("enrollment_fee_discounts")
     op.execute(
         """
