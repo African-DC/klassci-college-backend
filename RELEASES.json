@@ -1152,6 +1152,15 @@
         ],
         "Added": [
           {
+            "text": "Chaque établissement choisit les niveaux où la LV2 est disponible ; les inscriptions et la saisie de classe respectent ce réglage sans effacer les informations existantes",
+            "audience": [
+              "direction",
+              "secrétariat",
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel",
             "audience": [
               "direction",
