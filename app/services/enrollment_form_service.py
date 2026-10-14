@@ -86,6 +86,7 @@ def _student_dict(enrollment: Enrollment) -> dict:
         "genre": getattr(s, "genre", None),
         "birth_date": getattr(s, "birth_date", None),
         "birth_place": getattr(s, "birth_place", None),
+        "nationality": getattr(s, "nationality", None),
         "photo_url": getattr(s, "photo_url", None),
         "city": getattr(s, "city", None),
         "commune": getattr(s, "commune", None),
