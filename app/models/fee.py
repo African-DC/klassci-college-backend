@@ -350,6 +350,11 @@ class EnrollmentFee(Base, TimestampMixin):
         BigInteger, ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    # Montant d'origine sauvegardé lorsqu'une remise individualisée s'applique.
+    original_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    discount_kind: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    discount_value: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    discount_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         ValueEnum(EnrollmentFeeStatus, name="enrollment_fee_status"),
         nullable=False,
