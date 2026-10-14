@@ -1,5 +1,7 @@
 # Changelog
 
+- Ajout de listes de classe personnalisées : critères croisés (sexe, âge, nationalités, affectation, redoublement, profil nouveau) communs aux exports PDF, Word et Excel, sans inclure les dossiers non validés.
+
 Toutes les évolutions notables de KLASSCI College Backend (FastAPI) sont
 documentées dans ce fichier.
 
