@@ -16,7 +16,8 @@ from app.schemas.enrollment_profile import (
     ScholarshipSummary,
     ScholarshipUpsert,
 )
-from app.services import enrollment_profile_update, enrollment_scholarship
+from app.schemas.fee_discount import DiscountInput, DiscountLine
+from app.services import enrollment_profile_update, enrollment_scholarship, fee_discount
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
@@ -76,3 +77,36 @@ async def delete_scholarship(
 ) -> None:
     """Retire la bourse. Sans bourse, répond 204 sans rien écrire."""
     await enrollment_scholarship.delete_scholarship(db, enrollment_id, actor=current_user.user_id)
+
+
+@router.get("/{enrollment_id}/fee-discounts", response_model=list[DiscountLine])
+async def get_enrollment_fee_discounts(
+    enrollment_id: int,
+    _: None = require_permission("fees:discount:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> list[DiscountLine]:
+    return await fee_discount.list_discounts(db, enrollment_id)
+
+
+@router.put("/{enrollment_id}/fee-discounts/{fee_id}", response_model=DiscountLine)
+async def put_enrollment_fee_discount(
+    enrollment_id: int, fee_id: int, data: DiscountInput,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("fees:discount:manage"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> DiscountLine:
+    return await fee_discount.set_discount(
+        db, enrollment_id, fee_id, data, actor=current_user.user_id
+    )
+
+
+@router.delete("/{enrollment_id}/fee-discounts/{fee_id}", response_model=DiscountLine)
+async def delete_enrollment_fee_discount(
+    enrollment_id: int, fee_id: int,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("fees:discount:manage"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> DiscountLine:
+    return await fee_discount.set_discount(
+        db, enrollment_id, fee_id, None, actor=current_user.user_id
+    )
