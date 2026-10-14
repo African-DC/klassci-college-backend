@@ -8,6 +8,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Added
+- Réductions individuelles sur les frais impayés avec motif, contrôle d'accès et historique, sans modifier les paiements antérieurs *(admin)*
+
 ### Fixed
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
