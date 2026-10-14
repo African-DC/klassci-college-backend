@@ -1737,9 +1737,7 @@ async def update_class(
                         Enrollment.lv2.is_not(None),
                     )
                     for enrollment in (await db.execute(stmt)).scalars().all():
-                        await clear_lv2_if_class_forbids_it(
-                            db, enrollment, actor=updated_by
-                        )
+                        await clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:
