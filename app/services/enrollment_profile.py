@@ -161,9 +161,7 @@ async def apply_initial_profile(
     await ensure_lv2_allowed(db, enrollment.class_id, typed.lv2)
     enabled = await lv2_allowed_for_class(db, enrollment.class_id)
     prior = await prior_snapshot(db, enrollment.student_id, year)
-    for name, value in _with_prior(
-        typed, prior, national_level_code(level_name), enabled
-    ).items():
+    for name, value in _with_prior(typed, prior, national_level_code(level_name), enabled).items():
         setattr(enrollment, name, value)
     await db.flush()
 
