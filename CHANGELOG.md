@@ -8,14 +8,17 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-### Added
-- Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#485)
-- La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
-
 ### Fixed
-- L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF *(direction, secrétariat)* (#475)
+- Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
 ### Added
+- Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel *(direction, secrétariat)* (#515)
+- Le rapport DEEP reprend désormais la nationalité de chaque élève dans les listes de classe, des affectés et des majors ; la fiche d'inscription PDF l'affiche aussi. Les mentions de saisie manuelle distinguent les données absentes des données non collectées *(direction, secrétariat)* (#513)
+- Les établissements accordent des réductions individuelles en francs ou pourcentage, avec motifs, autorisations et conservation des montants initiaux *(direction, comptable)*
+- Les statistiques de caisse exposent un total des versements validés sur le même périmètre que le journal, sans confondre encaissement et recouvrement annuel *(comptable, caisse, direction)*
+- La liste nominative de classe se télécharge en Word éditable, avec matricule, nom, prénoms, sexe, date et lieu de naissance, nationalité, qualité et statut d'affectation *(direction, secrétariat)*
+- Workflow GitHub de préparation des images FastAPI et Celery dans GHCR et vérification Dokploy en lecture seule ; les migrations multi-établissements restent soumises à une validation avant déploiement *(technique, déploiement)*
+- Export des enseignants : annuaire et affectations par année, classes, niveaux, séries ou matières, colonnes et classifications choisies, aperçu PDF, PDF, Word et Excel avec logo, identité et couleurs de l'établissement depuis les paramètres *(direction, secrétariat)* (#485)
 - Fiche de renseignements par classe ou pour toute l'année : matricule, identité, affectation, régime boursier, qualité, LV2, discipline artistique, photo et niveau antérieur *(comptable, secrétariat)* (#469)
 - L'inscription porte le niveau et la série de l'an passé, la qualité (redoublant ou non), la LV2 et la discipline artistique ; l'élève porte sa nationalité *(secrétariat, comptable)* (#469)
 - Une réinscription reprend d'elle-même le niveau antérieur, la série, la LV2 et la discipline de l'an passé, et en déduit la qualité *(secrétariat, éducateur)* (#469)
@@ -122,6 +125,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû *(comptable, secrétariat)*
 
 ### Fixed
+- L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF *(direction, secrétariat)* (#475)
 - Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps *(comptable, secrétariat)* (#472)
 - La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription *(directeur, secrétariat)* (#469)
 - Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement *(admin, directeur)*

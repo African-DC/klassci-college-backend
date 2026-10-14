@@ -37,6 +37,7 @@ def student_identity_block(student: dict[str, Any]) -> str:
     birth_date = student.get("birth_date")
     birth_str = birth_date.strftime("%d/%m/%Y") if birth_date else "—"
     birthplace = student.get("birth_place") or "—"
+    nationality = student.get("nationality") or "—"
     city = student.get("city") or "—"
     commune = student.get("commune") or "—"
     address = student.get("address") or "—"
@@ -62,6 +63,7 @@ def student_identity_block(student: dict[str, Any]) -> str:
             ("Sexe", genre_label),
             ("Né(e) le", birth_str),
             ("À", birthplace),
+            ("Nationalité", nationality),
             ("Ville · Commune", f"{city} · {commune}"),
             ("Adresse", address),
         ],

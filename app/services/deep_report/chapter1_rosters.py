@@ -1,9 +1,8 @@
 """Chapitre I — B / Résultats scolaires : listes nominatives (tableaux 3, 4, 8).
 
 Le canevas veut une grille par classe, élève par élève, puis la liste des
-majors. Le lieu de naissance est saisi sur la fiche élève et sort tel quel ;
-la nationalité n'est collectée nulle part dans KLASSCI et sort en « — » avec
-un avertissement, plutôt qu'inventée.
+majors. Nationalité et lieu de naissance proviennent de la fiche élève ;
+les valeurs non renseignées restent manquantes, sans estimation.
 """
 
 from __future__ import annotations
@@ -24,9 +23,9 @@ from app.services.deep_report._types import (
 _SUBSIDISED = ("affecte", "reaffecte")
 
 _CIVIL_NOTE = (
-    "Colonne « Nationalité » : cette information n'est pas collectée par KLASSCI — "
-    f"{PENDING_NOTE.lower()} sur le document imprimé. Un lieu de naissance vide est "
-    "un dossier élève à compléter, pas une limite de l'outil."
+    "Nationalité et lieu de naissance sont repris des fiches élèves. "
+    "En cas de case vide, renseigner la fiche élève dans KLASSCI puis régénérer "
+    "le rapport ; aucune valeur n'est déduite du lieu de naissance."
 )
 _HISTORY_NOTE = (
     "Colonne « Qualité » : l'historique des années antérieures n'est pas déclaré "
@@ -138,7 +137,7 @@ def top_students_table(context: ReportContext) -> ReportTable:
                         fmt.sex(major.is_girl),
                         fmt.day(major.birth_date),
                         fmt.text(major.birth_place),
-                        MISSING,  # Nationalité — non collectée
+                        fmt.text(major.student.nationality),
                         fmt.assignment(major.assignment_status),
                         format_average(major.average),
                         str(major.rank) if major.rank is not None else MISSING,
@@ -191,7 +190,7 @@ def _student_row(index: int, line: StudentLine, *, with_status: bool) -> ReportR
         fmt.sex(line.is_girl),
         fmt.day(line.birth_date),
         fmt.text(line.birth_place),
-        MISSING,  # Nationalité — non collectée par KLASSCI
+        fmt.text(line.student.nationality),
         fmt.repeater(line.is_repeater),
     ]
     if with_status:

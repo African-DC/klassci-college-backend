@@ -16,6 +16,7 @@ from app.models.user import ParentStudent
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )
+from app.services.class_roster_filters import RosterFilters, filter_roster
 from app.services.pdf import generate_class_roster_pdf
 
 
@@ -49,6 +50,7 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
             Enrollment.class_id == class_id,
             Enrollment.academic_year_id == academic_year_id,
             Enrollment.status == EnrollmentStatus.VALIDE.value,
+            Enrollment.archived_at.is_(None),
         )
         .options(selectinload(Enrollment.student))
         .order_by(Enrollment.id.asc())
@@ -100,14 +102,16 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
     return rows
 
 
-async def get_class_roster_pdf(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_pdf(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """Génère le PDF liste de classe pour une classe (AY courante)."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
 
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
     boys = sum(1 for s in students if s.get("genre") == "M")
     girls = sum(1 for s in students if s.get("genre") == "F")
 
@@ -156,6 +160,7 @@ def _word_roster_document(data: dict) -> bytes:
         try:
             identity.cell(0, 0).paragraphs[0].add_run().add_picture(BytesIO(logo[0]), width=Cm(2.4))
         except (ValueError, OSError):
+            # Le logo peut être corrompu : conserver l'export Word sans image.
             pass
     details_cell = identity.cell(0, 1)
     p = details_cell.paragraphs[0]
@@ -249,13 +254,15 @@ def _word_roster_document(data: dict) -> bytes:
     return stream.getvalue()
 
 
-async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_docx(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """La même population d'élèves que la liste de classe PDF, au format Word."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
     school = await _get_school_settings_dict(db)
     return _word_roster_document(
         {
@@ -265,3 +272,94 @@ async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
             "school_settings": school,
         }
     )
+
+
+async def get_class_roster_xlsx(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
+    """Export Excel de la meme population filtree que PDF et Word."""
+    from openpyxl import Workbook
+    from openpyxl.drawing.image import Image
+    from openpyxl.styles import Font, PatternFill
+
+    klass = await _load_class_with_room(db, class_id)
+    ay = await _current_academic_year(db)
+    if ay is None:
+        raise NotFoundError("AcademicYear (current)", 0)
+    students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
+    school = await _get_school_settings_dict(db)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Liste de classe"
+    ws.append(["", school.get("school_name") or "Établissement"])
+    ws.append(["", school.get("drena_name") or ""])
+    ws.append([f"LISTE DE CLASSE — {klass.name} — {ay.name}"])
+    ws.append([f"Effectif : {len(students)}"])
+    ws.merge_cells("B1:J1")
+    ws["B1"].font = Font(size=16, bold=True, color="0F3F8C")
+    ws.row_dimensions[1].height = 42
+    from app.services.pdf._helpers import image_bytes
+
+    logo = image_bytes(school.get("logo_url")) if school.get("logo_url") else None
+    if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
+        try:
+            image = Image(BytesIO(logo[0]))
+            image.width, image.height = 48, 48
+            ws.add_image(image, "A1")
+        except (OSError, ValueError):
+            pass
+    ws.append(
+        [
+            "N°",
+            "Matricule",
+            "Nom",
+            "Prénoms",
+            "Sexe",
+            "Naissance",
+            "Lieu de naissance",
+            "Nationalité",
+            "Qualité",
+            "Affectation",
+        ]
+    )
+    for i, student in enumerate(students, 1):
+        born = student.get("birth_date")
+        ws.append(
+            [
+                i,
+                student.get("enrollment_number") or "",
+                student.get("last_name") or "",
+                student.get("first_name") or "",
+                student.get("genre") or "",
+                born.strftime("%d/%m/%Y") if born else "",
+                student.get("birth_place") or "",
+                student.get("nationality") or "",
+                "Redoublant"
+                if student.get("is_repeater") is True
+                else ("Non redoublant" if student.get("is_repeater") is False else ""),
+                {"affecte": "Affecté", "reaffecte": "Réaffecté", "non_affecte": "Non affecté"}.get(
+                    student.get("assignment_status"), ""
+                ),
+            ]
+        )
+    for cell in ws[5]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="0F3F8C")
+    ws.freeze_panes = "A6"
+    ws.auto_filter.ref = f"A5:J{max(5, ws.max_row)}"
+    for col, width in {
+        "A": 7,
+        "B": 19,
+        "C": 25,
+        "D": 28,
+        "E": 8,
+        "F": 18,
+        "G": 25,
+        "H": 20,
+        "I": 21,
+        "J": 19,
+    }.items():
+        ws.column_dimensions[col].width = width
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()

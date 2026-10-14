@@ -1,8 +1,8 @@
 """Les tableaux du rapport DEEP que la plateforme ne sait pas encore remplir.
 
 Quatre entités du canevas — visites de classe, formations, transferts et
-bourses — existent en base sans aucun écran de saisie. Leurs tableaux sortent
-donc systématiquement vides. Un tableau vide sans mention se lit à la DRENA
+bourses — disposent de données parfois absentes. Les bourses se renseignent
+maintenant depuis les inscriptions ; les tableaux ne doivent pas les inventer. Un tableau vide sans mention se lit à la DRENA
 comme un constat : « cet établissement n'a aucun boursier », « aucune visite
 de classe ce trimestre ». Ces tests vérifient que la mention d'attente est
 bien posée, et qu'elle disparaît dès qu'une donnée existe.
@@ -108,7 +108,7 @@ def test_aucune_bourse_saisie_nest_pas_aucun_boursier() -> None:
     table = chapter2_movements.scholarships_table(_context())
     assert table.rows == ()
     assert table.pending is True
-    assert "à compléter manuellement" in table.empty_message
+    assert "dans KLASSCI" in table.empty_message
 
 
 # ---------------------------------------------------------------------------

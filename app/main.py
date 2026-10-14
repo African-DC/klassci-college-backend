@@ -34,6 +34,7 @@ from app.routers.enrollment_options import router as enrollment_options_router
 from app.routers.enrollment_payments import router as enrollment_payments_router
 from app.routers.enrollment_profile import router as enrollment_profile_router
 from app.routers.enrollments import router as enrollments_router
+from app.routers.fee_discounts import router as fee_discounts_router
 from app.routers.fees import router as fees_router
 from app.routers.grades import router as grades_router
 from app.routers.installments import router as installments_router
@@ -132,6 +133,7 @@ app.include_router(dashboard_router)
 # `/fee-variants`) doivent passer avant `/enrollments/{enrollment_id}`.
 app.include_router(enrollment_in_kind_router)
 app.include_router(enrollment_profile_router)
+app.include_router(fee_discounts_router)
 app.include_router(enrollments_router)
 app.include_router(enrollment_options_router)
 app.include_router(class_information_sheet_router)

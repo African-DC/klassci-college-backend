@@ -6,13 +6,14 @@ sous la limite no-god-code. Pattern miroir de `student_documents.py`.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_tenant_db, require_permission
 from app.routers._pdf_helpers import pdf_response
 from app.services import cahier_texte_service, class_roster_service, class_sheets_service
+from app.services.class_roster_filters import RosterFilters
 
 router = APIRouter(prefix="/admin/classes", tags=["admin", "class-documents"])
 
@@ -23,6 +24,12 @@ router = APIRouter(prefix="/admin/classes", tags=["admin", "class-documents"])
 )
 async def get_class_roster_pdf(
     class_id: int,
+    genre: str | None = Query(None, pattern="^(M|F)$"),
+    age_min: int | None = Query(None, ge=0, le=120),
+    age_max: int | None = Query(None, ge=0, le=120),
+    nationalities: list[str] = Query(default=[]),
+    assignments: list[str] = Query(default=[]),
+    repeaters: bool | None = Query(None),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -31,8 +38,21 @@ async def get_class_roster_pdf(
     Usage : conseil de classe, sortie scolaire, appel papier secrétariat.
     Tri par nom de famille puis prénom. Photo miniature ou initiales.
     """
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
     return await pdf_response(
-        lambda: class_roster_service.get_class_roster_pdf(db, class_id),
+        lambda: class_roster_service.get_class_roster_pdf(
+            db,
+            class_id,
+            RosterFilters(
+                genre=genre,
+                age_min=age_min,
+                age_max=age_max,
+                nationalities=nationalities,
+                assignments=assignments,
+                repeaters=repeaters,
+            ),
+        ),
         filename=f"liste-classe-{class_id}.pdf",
         error_context=f"liste de classe {class_id}",
     )
@@ -44,15 +64,67 @@ async def get_class_roster_pdf(
 )
 async def get_class_roster_word(
     class_id: int,
+    genre: str | None = Query(None, pattern="^(M|F)$"),
+    age_min: int | None = Query(None, ge=0, le=120),
+    age_max: int | None = Query(None, ge=0, le=120),
+    nationalities: list[str] = Query(default=[]),
+    assignments: list[str] = Query(default=[]),
+    repeaters: bool | None = Query(None),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Exporter les élèves validés de l'année courante en document Word éditable."""
-    content = await class_roster_service.get_class_roster_docx(db, class_id)
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
+    content = await class_roster_service.get_class_roster_docx(
+        db,
+        class_id,
+        RosterFilters(
+            genre=genre,
+            age_min=age_min,
+            age_max=age_max,
+            nationalities=nationalities,
+            assignments=assignments,
+            repeaters=repeaters,
+        ),
+    )
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="liste-classe-{class_id}.docx"'},
+    )
+
+
+@router.get("/{class_id}/roster.xlsx", summary="Liste de classe (Excel) filtrable")
+async def get_class_roster_excel(
+    class_id: int,
+    genre: str | None = Query(None, pattern="^(M|F)$"),
+    age_min: int | None = Query(None, ge=0, le=120),
+    age_max: int | None = Query(None, ge=0, le=120),
+    nationalities: list[str] = Query(default=[]),
+    assignments: list[str] = Query(default=[]),
+    repeaters: bool | None = Query(None),
+    _: None = require_permission("admin:students:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
+    content = await class_roster_service.get_class_roster_xlsx(
+        db,
+        class_id,
+        RosterFilters(
+            genre=genre,
+            age_min=age_min,
+            age_max=age_max,
+            nationalities=nationalities,
+            assignments=assignments,
+            repeaters=repeaters,
+        ),
+    )
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="liste-classe-{class_id}.xlsx"'},
     )
 
 
