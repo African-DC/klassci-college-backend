@@ -1,6 +1,7 @@
 """Garde-fous des réductions : montants, pourcentages et payloads."""
 from decimal import Decimal
 from types import SimpleNamespace
+
 import pytest
 from pydantic import ValidationError
 
