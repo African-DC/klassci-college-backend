@@ -34,8 +34,7 @@ def container(
         "State": state,
         "Image": image,
         "Mounts": [
-            {"Type": "volume", "Name": volume, "Source": "/secret/source"}
-            for volume in mounts
+            {"Type": "volume", "Name": volume, "Source": "/secret/source"} for volume in mounts
         ],
         "RestartCount": 0,
     }
