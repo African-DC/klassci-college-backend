@@ -305,7 +305,7 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
     # qu'il reste une ligne touchée par ce tarif et que la partition doit
     # sommer juste.
     deposees = [f for f in lignes if is_in_kind(f.status)]
-    dues = [f for f in lignes if not is_not_cash_due(f.status)]
+    dues = [f for f in lignes if not is_not_cash_due(f.status) and f.discount_kind is None]
     deja_a_jour = [f for f in dues if Decimal(str(f.amount)) == nouveau_montant]
 
     a_examiner = [f for f in dues if Decimal(str(f.amount)) != nouveau_montant]
