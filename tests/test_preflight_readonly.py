@@ -82,8 +82,7 @@ def test_unhealthy_mysql_and_missing_backend_mount_are_blocking() -> None:
     result = probe.review(stack, set(probe.VOLUMES))
     assert any("mysql" in error and "healthcheck" in error for error in result["errors"])
     assert any(
-        "backend" in error and "linux_klassci_uploads" in error
-        for error in result["errors"]
+        "backend" in error and "linux_klassci_uploads" in error for error in result["errors"]
     )
 
 
