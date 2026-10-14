@@ -6,7 +6,7 @@ sous la limite no-god-code. Pattern miroir de `student_documents.py`.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,8 @@ async def get_class_roster_pdf(
     Usage : conseil de classe, sortie scolaire, appel papier secrétariat.
     Tri par nom de famille puis prénom. Photo miniature ou initiales.
     """
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
     return await pdf_response(
         lambda: class_roster_service.get_class_roster_pdf(
             db,
@@ -72,6 +74,8 @@ async def get_class_roster_word(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Exporter les élèves validés de l'année courante en document Word éditable."""
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
     content = await class_roster_service.get_class_roster_docx(
         db,
         class_id,
@@ -103,6 +107,8 @@ async def get_class_roster_excel(
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
+    if age_min is not None and age_max is not None and age_min > age_max:
+        raise HTTPException(status_code=422, detail="Âge minimum supérieur à l’âge maximum")
     content = await class_roster_service.get_class_roster_xlsx(
         db,
         class_id,
