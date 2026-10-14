@@ -11,9 +11,7 @@ from app.models.base import TimestampMixin
 
 class EnrollmentFeeDiscount(Base, TimestampMixin):
     __tablename__ = "enrollment_fee_discounts"
-    __table_args__ = (
-        Index("uq_enrollment_fee_discount", "enrollment_fee_id", unique=True),
-    )
+    __table_args__ = (Index("uq_enrollment_fee_discount", "enrollment_fee_id", unique=True),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     enrollment_fee_id: Mapped[int] = mapped_column(
@@ -29,5 +27,7 @@ class EnrollmentFeeDiscount(Base, TimestampMixin):
     value: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     granted_by: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
