@@ -1152,11 +1152,19 @@
         ],
         "Added": [
           {
-            "text": "Chaque établissement choisit les niveaux où la LV2 est disponible ; les inscriptions et la saisie de classe respectent ce réglage sans effacer les informations existantes",
+            "text": "Chaque établissement définit la disponibilité de la LV2 pour chaque niveau. La validation d'inscription, la réinscription et la saisie groupée appliquent la configuration de leur base, sans dépendre du nom du niveau ; les changements de classe retirant une LV2 sont journalisés",
             "audience": [
               "direction",
               "secrétariat",
               "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Migration `0086` : colonne `levels.lv2_enabled`, reprise du comportement historique pour les niveaux de 6ème et 5ème existants ; aucune LV2 déjà inscrite n'est effacée. À exécuter sur chaque base tenant avant le déploiement du backend puis du frontend",
+            "audience": [
+              "technique",
+              "déploiement"
             ],
             "pull_request": null
           },
