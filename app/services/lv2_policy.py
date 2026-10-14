@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BusinessValidationError
 from app.models.academic import Class, Level
 
-
 LV2_FORBIDDEN_MESSAGE = "La LV2 n'est pas autorisée dans ce niveau par votre établissement."
 
 
