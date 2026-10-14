@@ -495,9 +495,7 @@ async def regenerate_enrollment_fees(
         (
             await db.execute(
                 select(EnrollmentFeeDiscount.enrollment_fee_id)
-                .join(
-                    EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id
-                )
+                .join(EnrollmentFee, EnrollmentFee.id == EnrollmentFeeDiscount.enrollment_fee_id)
                 .where(EnrollmentFee.enrollment_id == enrollment_id)
             )
         )
