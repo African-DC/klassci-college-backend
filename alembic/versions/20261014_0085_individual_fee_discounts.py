@@ -52,9 +52,28 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Retirer une table de remises actives sans restaurer les dettes ferait
-    # mentir les soldes. Le retour en arrière se prépare manuellement.
-    raise RuntimeError(
-        "Downgrade 0085 bloqué : réconcilier et annuler les réductions "
-        "avant toute suppression de la table."
+    # Seule la migration à vide est réversible sans altérer la comptabilité.
+    # Une remise active doit d'abord être annulée via l'API et auditée.
+    from sqlalchemy import text
+
+    count = op.get_bind().execute(
+        text("SELECT COUNT(*) FROM enrollment_fee_discounts")
+    ).scalar_one()
+    if count:
+        raise RuntimeError(
+            "Downgrade 0085 refusé : annulez les réductions actives par l'API "
+            "avant de revenir en arrière."
+        )
+    op.drop_index("ix_enrollment_fee_discounts_enrollment_fee_id", table_name="enrollment_fee_discounts")
+    op.drop_index("uq_enrollment_fee_discount", table_name="enrollment_fee_discounts")
+    op.drop_table("enrollment_fee_discounts")
+    op.execute(
+        """
+        DELETE rp FROM role_permissions rp
+        JOIN permissions p ON p.id = rp.permission_id
+        WHERE p.slug IN ('discounts:read', 'discounts:manage')
+        """
+    )
+    op.execute(
+        "DELETE FROM permissions WHERE slug IN ('discounts:read', 'discounts:manage')"
     )
