@@ -498,7 +498,7 @@ async def regenerate_enrollment_fees(
         # On ne détruit jamais un frais sur lequel de l'argent est imputé :
         # le versement perdrait sa contrepartie, et le journal d'audit ne
         # rattrape pas un trou comptable.
-        if ef.id in protected_fee_ids or is_not_cash_due(ef.status):
+        if ef.id in protected_fee_ids or is_not_cash_due(ef.status) or ef.discount_kind is not None:
             # Versement imputé, exonération, ou dépôt en nature : on ne
             # détruit pas. Un in_kind n'a pas d'allocation — sans ce garde
             # la régénération le recréerait en pending.
