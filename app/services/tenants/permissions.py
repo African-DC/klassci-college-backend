@@ -76,6 +76,8 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # renseignements. Semée par la migration 0084 aux mêmes rôles que
     # `performance:read` (direction).
     {"slug": "scholarships:manage", "name": "Grant or remove a scholarship"},
+    {"slug": "discounts:read", "name": "View individual fee discounts"},
+    {"slug": "discounts:manage", "name": "Grant or cancel individual fee discounts"},
     {"slug": "grades:read", "name": "View grades"},
     {"slug": "grades:write", "name": "Write grades"},
     {"slug": "grades:edit", "name": "Modify already-recorded grades"},
@@ -329,6 +331,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             *_ALL_PAYMENT_METHODS,
             *_CAISSE_SUPERVISION,
             "audit:read:financial",
+            "discounts:read",
             "payments:cancel:any",
             "enrollments:read",
             "admin:students:read",
