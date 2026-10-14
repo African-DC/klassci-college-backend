@@ -9,7 +9,8 @@
 > volumes. Le volume `klassci_handoff` existe dans le Compose versionné mais
 > n'a pas été observé dans le Raw fourni : audit obligatoire avant modification.
 > La procédure de livraison actuelle est `docs/PRODUCTION_RELEASE_RUNBOOK.md`,
-> complétée par `deploy/linux/preflight_readonly.py`. Les constats transmis par
+> complétée par `deploy/linux/preflight_readonly.py`. Ni la disponibilité d'une
+> ancienne image, ni un retour arrière applicatif ne restaurent la base MySQL. Les constats transmis par
 > écran ne remplacent pas l'inspection du démon Docker et la restauration testée.
 
 > **Ce dossier est versionné depuis le 2026-08-25.** Il ne l'était nulle part
