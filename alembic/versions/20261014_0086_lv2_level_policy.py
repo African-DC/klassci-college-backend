@@ -28,7 +28,7 @@ def _was_forbidden(name: str) -> bool:
         c for c in unicodedata.normalize("NFKD", name.casefold().strip())
         if not unicodedata.combining(c)
     )
-    return bool(re.match(r"^(?:6(?:e|eme|em)?|5(?:e|eme|em)?|sixieme|cinquieme)(?:\\b|$)", normalized))
+    return bool(re.match(r"^(?:6(?:e|eme|em)?|5(?:e|eme|em)?|sixieme|cinquieme)(?:\b|$)", normalized))
 
 
 def upgrade() -> None:
