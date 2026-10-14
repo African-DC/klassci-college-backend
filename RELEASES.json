@@ -1152,6 +1152,14 @@
         ],
         "Added": [
           {
+            "text": "Chaque établissement choisit les niveaux autorisant la LV2, sans perdre les langues déjà enregistrées ; les modifications de classe sont tracées",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel",
             "audience": [
               "direction",
