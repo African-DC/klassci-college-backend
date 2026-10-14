@@ -1,5 +1,17 @@
 ﻿# KLASSCI College · Déploiement serveur (démo Windows)
 
+> **ÉTAT ACTUEL — 14 octobre 2026.** Ce document inclut un journal historique
+> et des commandes datées des 25–31 août 2026. **Ne pas exécuter les anciennes
+> procédures de restauration ou d'adoption des uploads ci-dessous en production.**
+> Le Compose **Raw effectif fourni par l'exploitant** déclare TROIS volumes
+> externes : `linux_klassci_mysql`, `linux_klassci_redis`,
+> `linux_klassci_uploads`. Aucun `up` global, `down -v` ou recréation de ces
+> volumes. Le volume `klassci_handoff` existe dans le Compose versionné mais
+> n'a pas été observé dans le Raw fourni : audit obligatoire avant modification.
+> La procédure de livraison actuelle est `docs/PRODUCTION_RELEASE_RUNBOOK.md`,
+> complétée par `deploy/linux/preflight_readonly.py`. Les constats transmis par
+> écran ne remplacent pas l'inspection du démon Docker et la restauration testée.
+
 > **Ce dossier est versionné depuis le 2026-08-25.** Il ne l'était nulle part
 > auparavant : la configuration de la production n'existait que sur un poste de
 > développement. Un incident sur cette machine aurait emporté le seul exemplaire
@@ -41,9 +53,8 @@ Stack Docker Compose geree par Dokploy (projet klassci-college, env production, 
 - IP brute : http://169.58.156.206/login
 - Caddy interne (/svc -> backend, reste -> frontend), labels Traefik sur le service proxy
 - Fichiers Dokploy : /etc/dokploy/compose/klassci-college-prod/code/
-- Volumes existants : linux_klassci_mysql, linux_klassci_redis (ne pas recreer, jamais down -v)
-- Volume des televersements : cree par le compose, donc nomme d'apres le projet
-  (klassci-college-prod_klassci_uploads). Ni external ni prefixe, voir plus bas.
+- **Trois volumes externes déclarés dans le Raw effectif fourni** : `linux_klassci_mysql`, `linux_klassci_redis`, `linux_klassci_uploads` ; ne pas les créer, renommer, remplacer ni supprimer. Confirmer leurs montages effectifs avec le diagnostic en lecture seule avant toute livraison.
+- Les sections historiques plus bas qui présentent `klassci_uploads` comme un volume créé automatiquement par Compose sont **obsolètes**.
 - Attention : la production n'execute PAS le compose versionne. Lire la section
   « La production ne monte pas ce fichier » avant toute intervention.
 - Superadmin plateforme : tenant local, email superadmin@klassci.com
@@ -267,7 +278,13 @@ ssh -F deploy/ssh_config klassci 'nssm restart klassci-frontend'
     Vérifier après écriture que les trois premiers octets ne sont pas
     `EF BB BF`.
 
-## Éprouver une restauration, sans toucher à la production
+## Éprouver une restauration, sans toucher à la production — archive du 25/08/2026
+
+> **Procédure ci-dessous ARCHIVÉE : NE PAS L'EXÉCUTER.** Elle crée seulement
+> `mysql` et `redis` alors que le Compose versionné exige aussi un volume
+> externe `uploads`. Elle n'atteste aucune restauration de SQL ou de fichiers,
+> et l'isolation du réseau/proxy doit être revalidée. Suivre le runbook actuel
+> et utiliser un Compose de recette indépendant après revue des mounts.
 
 Vérifier que ce dossier reconstruit un système qui marche demande de le monter
 pour de vrai. Deux pièges rendent l'exercice dangereux, et tous deux ont été
@@ -354,7 +371,12 @@ conteneur. Sans lui, la photo d'un élève et le logo de l'établissement vivent
 dans la couche jetable et disparaissent au redéploiement suivant, sans erreur,
 sans trace, jusqu'à ce qu'un bulletin sorte sans logo.
 
-### Ce qu'il faut reporter dans la production
+### Ce qu'il fallait reporter en 2026-08 — **instructions historiques à ne plus appliquer**
+
+> La production actuelle possède déjà `beat` et le volume externe
+> `linux_klassci_uploads` : **ne jamais remplacer la définition de volume par
+> un volume implicite sans `external`**. Ne pas reprendre les anciennes
+> commandes `docker cp` ci-dessous sans audit des données et de leurs chemins.
 
 Prendre le compose versionné comme source et remettre à niveau celui de
 Dokploy, **par l'interface Dokploy** (un `git pull` sur le serveur ne changera
