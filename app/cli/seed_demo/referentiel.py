@@ -197,8 +197,13 @@ async def ensure_levels(ctx: SeedContext) -> None:
     for canonical, order, _aliases in plan.LEVELS:
         found = next((by_key[key] for key in plan.level_aliases(canonical) if key in by_key), None)
         if found is None:
+            # L'initialisation du référentiel (pas une règle métier runtime)
+            # conserve le défaut historique : 6e/5e désactivées, 4e+ actives.
+            # Un niveau préexistant conserve toujours son choix d'établissement.
             response = await admin_service.create_level(
-                ctx.db, LevelCreate(name=canonical, order=order), created_by=ctx.actor_id
+                ctx.db,
+                LevelCreate(name=canonical, order=order, lv2_enabled=order > 2),
+                created_by=ctx.actor_id,
             )
             ctx.level_ids[canonical] = response.id
             ctx.tally("niveaux")

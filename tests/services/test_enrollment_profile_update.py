@@ -302,3 +302,48 @@ async def test_changer_pour_une_classe_qui_l_enseigne_garde_la_lv2(db: Session) 
     )
 
     assert reponse.lv2 == "espagnol"
+
+
+@pytest.mark.asyncio
+async def test_une_6e_personnalisee_accepte_la_lv2(db: Session) -> None:
+    from app.models.academic import Level
+
+    level = db.get(Level, 1)
+    assert level is not None
+    level.lv2_enabled = True
+    db.commit()
+
+    result = await enrollment_profile_update.update_profile(
+        _bridge(db),  # type: ignore[arg-type]
+        3,
+        EnrollmentProfileUpdate(lv2="allemand"),
+        updated_by=ACTEUR,
+    )
+    assert result.lv2 == "allemand"
+
+
+@pytest.mark.asyncio
+async def test_lot_refuse_niveau_4e_desactive_sans_mutation(db: Session) -> None:
+    from app.models.academic import Level
+
+    level = db.get(Level, 3)
+    assert level is not None
+    level.lv2_enabled = False
+    db.commit()
+
+    with pytest.raises(BusinessValidationError):
+        await enrollment_profile_update.update_profiles_in_batch(
+            _bridge(db),  # type: ignore[arg-type]
+            EnrollmentProfileBatchRequest.model_validate(
+                {
+                    "items": [
+                        {"enrollment_id": 1, "lv2": "espagnol"},
+                        {"enrollment_id": 2, "is_repeater": True},
+                    ],
+                }
+            ),
+            updated_by=ACTEUR,
+        )
+    db.expire_all()
+    assert db.get(Enrollment, 1).lv2 is None
+    assert db.get(Enrollment, 2).is_repeater is None
