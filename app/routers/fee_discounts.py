@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import (
-    TokenData, get_current_user, get_tenant_db, require_permission,
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    require_permission,
 )
 from app.schemas.fee_discount import FeeDiscountResponse, FeeDiscountUpsert
 from app.services import fee_discounts
