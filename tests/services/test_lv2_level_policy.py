@@ -73,7 +73,9 @@ async def test_aucune_fuite_entre_deux_etablissements(tenant: Session) -> None:
 
 
 def test_migration_initialise_les_anciens_libelles_une_seule_fois() -> None:
-    path = Path(__file__).resolve().parents[2] / "alembic/versions/20261014_0086_lv2_level_policy.py"
+    path = (
+        Path(__file__).resolve().parents[2] / "alembic/versions/20261014_0086_lv2_level_policy.py"
+    )
     spec = import_util.spec_from_file_location("migration_lv2_0086", path)
     assert spec is not None and spec.loader is not None
     mod = import_util.module_from_spec(spec)
@@ -109,17 +111,20 @@ async def test_deplacer_une_classe_retire_lv2_courante_et_journalise_sans_altere
     tenant.commit()
 
     await admin_service.update_class(
-        AsyncBridge(tenant), CLASSE_4E, ClassUpdate(level_id=1), updated_by=ACTEUR,
+        AsyncBridge(tenant),
+        CLASSE_4E,
+        ClassUpdate(level_id=1),
+        updated_by=ACTEUR,
     )
     tenant.expire_all()
     assert tenant.get(Enrollment, 90).lv2 is None
     assert tenant.get(Enrollment, 91).lv2 == "allemand"
-    retrait = [
-        a for a in tenant.query(AuditLog).filter_by(
-            entity_type="enrollment", entity_id=90
-        ).all()
-        if a.old_values and "lv2" in a.old_values
-    ]
+    journal = (
+        tenant.query(AuditLog)
+        .filter_by(entity_type="enrollment", entity_id=90)
+        .all()
+    )
+    retrait = [a for a in journal if a.old_values and "lv2" in a.old_values]
     assert len(retrait) == 1
     assert retrait[0].old_values == {"lv2": "espagnol"}
     assert retrait[0].new_values == {"lv2": None}
