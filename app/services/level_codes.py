@@ -34,6 +34,7 @@ _BARE_DIGITS = {
     "3": PreviousLevel.TROISIEME,
 }
 
+
 def national_level_code(level_name: str | None) -> PreviousLevel | None:
     """Le code national d'un nom de niveau, ou `None` s'il n'évoque rien de sûr."""
     if not level_name:
