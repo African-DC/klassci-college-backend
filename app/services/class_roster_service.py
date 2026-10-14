@@ -17,6 +17,7 @@ from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )
 from app.services.pdf import generate_class_roster_pdf
+from app.services.class_roster_filters import RosterFilters, filter_roster
 
 
 async def _load_class_with_room(db: AsyncSession, class_id: int) -> Class:
@@ -101,14 +102,14 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
     return rows
 
 
-async def get_class_roster_pdf(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_pdf(db: AsyncSession, class_id: int, filters: RosterFilters | None = None) -> bytes:
     """Génère le PDF liste de classe pour une classe (AY courante)."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
 
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
     boys = sum(1 for s in students if s.get("genre") == "M")
     girls = sum(1 for s in students if s.get("genre") == "F")
 
@@ -251,13 +252,13 @@ def _word_roster_document(data: dict) -> bytes:
     return stream.getvalue()
 
 
-async def get_class_roster_docx(db: AsyncSession, class_id: int) -> bytes:
+async def get_class_roster_docx(db: AsyncSession, class_id: int, filters: RosterFilters | None = None) -> bytes:
     """La même population d'élèves que la liste de classe PDF, au format Word."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
         raise NotFoundError("AcademicYear (current)", 0)
-    students = await _load_students(db, class_id, ay.id)
+    students = filter_roster(await _load_students(db, class_id, ay.id), filters or RosterFilters())
     school = await _get_school_settings_dict(db)
     return _word_roster_document(
         {
