@@ -1,5 +1,6 @@
 {
   "product": "klassci-college-backend",
+  "source": "CHANGELOG.md",
   "generated_at": "2026-10-01T23:29:35Z",
   "current_version": "0.1.0-alpha",
   "versions": [
@@ -1151,7 +1152,7 @@
         ],
         "Added": [
           {
-            "text": "Filtrage combiné des listes de classe pour les exports PDF, Word et Excel, avec prise en charge de plusieurs nationalités et statuts d'affectation",
+            "text": "Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel",
             "audience": [
               "direction",
               "secrétariat"
@@ -3327,6 +3328,5 @@
         ]
       }
     }
-  ],
-  "source": "CHANGELOG.md"
+  ]
 }
