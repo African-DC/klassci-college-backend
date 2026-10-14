@@ -1,0 +1,28 @@
+name: Format roster Excel branding
+on:
+  push:
+    paths:
+      - '.github/workflows/roster-format-once.yml'
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.ref == 'refs/heads/feature/514-roster-filters'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/514-roster-filters
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ruff==0.15.12
+      - run: |
+          ruff check --fix app/services/class_roster_service.py
+          ruff format app/services/class_roster_service.py
+          rm .github/workflows/roster-format-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "style(enrollments): format branded roster workbook" -m "Review: conform to Ruff formatter"
+          git push origin HEAD:feature/514-roster-filters
