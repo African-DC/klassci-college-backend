@@ -119,11 +119,7 @@ async def test_deplacer_une_classe_retire_lv2_courante_et_journalise_sans_altere
     tenant.expire_all()
     assert tenant.get(Enrollment, 90).lv2 is None
     assert tenant.get(Enrollment, 91).lv2 == "allemand"
-    journal = (
-        tenant.query(AuditLog)
-        .filter_by(entity_type="enrollment", entity_id=90)
-        .all()
-    )
+    journal = tenant.query(AuditLog).filter_by(entity_type="enrollment", entity_id=90).all()
     retrait = [a for a in journal if a.old_values and "lv2" in a.old_values]
     assert len(retrait) == 1
     assert retrait[0].old_values == {"lv2": "espagnol"}
