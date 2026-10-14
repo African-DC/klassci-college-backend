@@ -15,8 +15,12 @@ from app.core.exceptions import BusinessValidationError
 from app.models.academic import Level
 from app.services.lv2_policy import ensure_lv2_allowed, lv2_allowed_for_class
 from tests.services._sheet_world import (
-    CLASSE_3E, CLASSE_4E, CLASSE_5E, CLASSE_6E,
-    AsyncBridge, build_school,
+    CLASSE_3E,
+    CLASSE_4E,
+    CLASSE_5E,
+    CLASSE_6E,
+    AsyncBridge,
+    build_school,
 )
 
 
@@ -91,7 +95,11 @@ async def test_deplacer_une_classe_retire_lv2_courante_et_journalise_sans_altere
     from app.schemas.admin import ClassUpdate
     from app.services import admin_service
     from tests.services._sheet_world import (
-        ACTEUR, AN_COURANT, AN_PASSE, add_enrollment, add_student,
+        ACTEUR,
+        AN_COURANT,
+        AN_PASSE,
+        add_enrollment,
+        add_student,
     )
 
     add_student(tenant, 90, "Traoré", "Awa")
