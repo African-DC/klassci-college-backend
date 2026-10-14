@@ -13,7 +13,11 @@ from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.user import ParentStudent
-from app.services.class_roster_filters import RosterFilters, filter_roster_rows, describe_roster_filters
+from app.services.class_roster_filters import (
+    RosterFilters,
+    describe_roster_filters,
+    filter_roster_rows,
+)
 from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings_dict,
 )

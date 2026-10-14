@@ -30,7 +30,10 @@ def _roster_filters(
     """Critères partagés entre PDF, Word et source Excel ; validation sans ambiguïté."""
     if age_min is not None and age_max is not None and age_min > age_max:
         raise HTTPException(422, detail="L'âge minimum ne peut pas dépasser l'âge maximum")
-    if nationalities and (len(nationalities) > 30 or any(not n.strip() or len(n) > 60 for n in nationalities)):
+    if nationalities and (
+        len(nationalities) > 30
+        or any(not n.strip() or len(n) > 60 for n in nationalities)
+    ):
         raise HTTPException(422, detail="Sélectionnez au maximum 30 nationalités valides")
     allowed = {"affecte", "reaffecte", "non_affecte"}
     if assignment_statuses and (
