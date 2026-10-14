@@ -55,6 +55,7 @@ from app.models.enrollment import (  # noqa: F401
 )
 
 # Frais et paiements
+from app.models.fee_discount import EnrollmentFeeDiscount  # noqa: F401
 from app.models.fee import (  # noqa: F401
     EnrollmentFee,
     EnrollmentFeeStatus,
