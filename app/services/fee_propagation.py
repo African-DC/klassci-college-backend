@@ -56,6 +56,7 @@ from app.models.fee import (
     is_in_kind,
     is_not_cash_due,
 )
+from app.models.fee_discount import EnrollmentFeeDiscount
 from app.schemas.fee import FeePropagationPreview, FeePropagationResult
 from app.services import enrollment_fees
 from app.services.deletion import Dependent
@@ -91,6 +92,7 @@ class _Repartition:
     a_creer: tuple[Enrollment, ...]
     deja_a_jour: int
     conservees_car_payees: int
+    remisees: int
     exonerees: int
     #: Lignes reglees par un depot d'article. Elles ne doivent rien en argent,
     #: comme les exonerees, mais un depot n'est pas une exoneration DRENA et ne
@@ -111,6 +113,7 @@ class _Repartition:
             + len(self.a_creer)
             + self.deja_a_jour
             + self.conservees_car_payees
+            + self.remisees
             + self.exonerees
             + self.deposees_en_nature
         )
@@ -299,13 +302,18 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
     lignes = list((await db.execute(stmt)).scalars().all())
 
     nouveau_montant = Decimal(str(variant.amount))
-    exonerees = [f for f in lignes if f.status == EnrollmentFeeStatus.WAIVED]
+    remise_ids = set((await db.execute(
+        select(EnrollmentFeeDiscount.enrollment_fee_id)
+        .where(EnrollmentFeeDiscount.enrollment_fee_id.in_([f.id for f in lignes]))
+    )).scalars().all())
+    remisees = [f for f in lignes if f.id in remise_ids]
+    exonerees = [f for f in lignes if f.id not in remise_ids and f.status == EnrollmentFeeStatus.WAIVED]
     # Un dépôt en nature n'est pas une exonération DRENA : il ne gonfle ni
     # `fees_waived` ni la dette à répercuter. Il est compté à part, parce
     # qu'il reste une ligne touchée par ce tarif et que la partition doit
     # sommer juste.
-    deposees = [f for f in lignes if is_in_kind(f.status)]
-    dues = [f for f in lignes if not is_not_cash_due(f.status)]
+    deposees = [f for f in lignes if f.id not in remise_ids and is_in_kind(f.status)]
+    dues = [f for f in lignes if f.id not in remise_ids and not is_not_cash_due(f.status)]
     deja_a_jour = [f for f in dues if Decimal(str(f.amount)) == nouveau_montant]
 
     a_examiner = [f for f in dues if Decimal(str(f.amount)) != nouveau_montant]
@@ -320,6 +328,7 @@ async def _repartir(db: AsyncSession, variant: FeeVariant, *, creations: bool) -
         a_creer=tuple(a_creer),
         deja_a_jour=len(deja_a_jour),
         conservees_car_payees=len(conservees),
+        remisees=len(remisees),
         exonerees=len(exonerees),
         deposees_en_nature=len(deposees),
         ecart_des_reecritures=sum(
@@ -387,6 +396,11 @@ def _message(repartition: _Repartition, *, accompli: bool, ecart: Decimal) -> st
             repartition.conservees_car_payees,
         ),
         Dependent(
+            "ligne conservée car elle bénéficie d'une réduction individuelle",
+            "lignes conservées car elles bénéficient de réductions individuelles",
+            repartition.remisees,
+        ),
+        Dependent(
             "ligne déjà au bon montant",
             "lignes déjà au bon montant",
             repartition.deja_a_jour,
@@ -430,6 +444,7 @@ async def preview_variant_propagation(db: AsyncSession, variant_id: int) -> FeeP
         fees_to_create=len(repartition.a_creer),
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
+        fees_kept_with_discounts=repartition.remisees,
         fees_waived=repartition.exonerees,
         fees_in_kind=repartition.deposees_en_nature,
         debt_delta=repartition.ecart_des_reecritures,
@@ -493,6 +508,7 @@ async def apply_variant_propagation(
             "fees_created": len(repartition.a_creer),
             "fees_already_up_to_date": repartition.deja_a_jour,
             "fees_kept_with_payments": repartition.conservees_car_payees,
+            "fees_kept_with_discounts": repartition.remisees,
             "fees_waived": repartition.exonerees,
             "fees_in_kind": repartition.deposees_en_nature,
             "debt_delta": str(ecart),
@@ -510,6 +526,7 @@ async def apply_variant_propagation(
         fees_created=len(repartition.a_creer),
         fees_already_up_to_date=repartition.deja_a_jour,
         fees_kept_with_payments=repartition.conservees_car_payees,
+        fees_kept_with_discounts=repartition.remisees,
         fees_waived=repartition.exonerees,
         fees_in_kind=repartition.deposees_en_nature,
         debt_delta=ecart,
