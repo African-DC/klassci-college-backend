@@ -299,6 +299,7 @@ async def get_class_roster_xlsx(
     ws["B1"].font = Font(size=16, bold=True, color="0F3F8C")
     ws.row_dimensions[1].height = 42
     from app.services.pdf._helpers import image_bytes
+
     logo = image_bytes(school.get("logo_url")) if school.get("logo_url") else None
     if logo and logo[1] in ("image/png", "image/jpeg", "image/jpg"):
         try:
