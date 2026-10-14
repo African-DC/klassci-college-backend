@@ -1,6 +1,7 @@
 """Contrats des remises accordées à une inscription."""
 from decimal import Decimal
 from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 class DiscountInput(BaseModel):
