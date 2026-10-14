@@ -23,7 +23,7 @@ depends_on = None
 def _formerly_forbidden(name: str) -> bool:
     normalized = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().strip().lower()
     # Reproduit uniquement la classification historique de 6e / 5e.
-    return bool(re.match(r"^(?:6(?:e|eme)?|5(?:e|eme)?|sixieme|cinquieme)(?:\\b|[_\\s-])", normalized))
+    return bool(re.match(r"^(?:6(?:eme|e)?|5(?:eme|e)?|sixieme|cinquieme)($|[ _-])", normalized))
 
 
 def upgrade() -> None:
