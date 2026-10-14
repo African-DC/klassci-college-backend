@@ -1,5 +1,6 @@
 {
   "product": "klassci-college-backend",
+  "source": "CHANGELOG.md",
   "generated_at": "2026-10-01T23:29:35Z",
   "current_version": "0.1.0-alpha",
   "versions": [
@@ -1150,6 +1151,14 @@
           }
         ],
         "Added": [
+          {
+            "text": "Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 515
+          },
           {
             "text": "Le rapport DEEP reprend désormais la nationalité de chaque élève dans les listes de classe, des affectés et des majors ; la fiche d'inscription PDF l'affiche aussi. Les mentions de saisie manuelle distinguent les données absentes des données non collectées",
             "audience": [
@@ -3319,6 +3328,5 @@
         ]
       }
     }
-  ],
-  "source": "CHANGELOG.md"
+  ]
 }
