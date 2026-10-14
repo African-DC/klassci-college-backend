@@ -58,7 +58,7 @@ async def test_regle_personnalisable_independante_du_nom(tenant: Session) -> Non
 
 @pytest.mark.asyncio
 async def test_aucune_fuite_entre_deux_etablissements(tenant: Session) -> None:
-    with next(build_school()) as second_tenant:
+    for second_tenant in build_school():
         first = tenant.get(Level, 1)
         assert first is not None
         first.lv2_enabled = True
