@@ -1710,6 +1710,7 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
+    level_changed = "level_id" in changes and changes["level_id"] != cls.level_id
     async with db.begin_nested():
         await audited_update(
             db,
@@ -1721,8 +1722,7 @@ async def update_class(
         )
         # Classes universelles : une réaffectation de niveau change le cursus
         # courant. Ne pas modifier les inscriptions historiques/archivées.
-        if "level_id" in changes:
-            from app.models.academic import Level
+        if level_changed:
             from app.models.enrollment import Enrollment
             from app.services.enrollment_profile import clear_lv2_if_class_forbids_it
             from app.services.lv2_policy import lv2_allowed_for_class
