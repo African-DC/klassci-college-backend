@@ -10,6 +10,13 @@
       "sections": {
         "Added": [
           {
+            "text": "Réductions individuelles sur les frais impayés avec motif, contrôle d'accès et historique, sans modifier les paiements antérieurs",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Les statistiques de caisse exposent un total des versements validés sur le même périmètre que le journal, sans confondre encaissement et recouvrement annuel",
             "audience": [
               "comptable",
@@ -1252,530 +1259,6 @@
             "pull_request": 103
           }
         ],
-        "Changed": [
-          {
-            "text": "Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école",
-            "audience": [
-              "comptable",
-              "caissier",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre, à l'écran comme sur le document : ils disparaissaient en silence",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": 390
-          },
-          {
-            "text": "L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF)",
-            "audience": [
-              "sécurité"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bulletin porte l'en-tête administratif ivoirien : autorité à gauche, titre encadré au centre, année à droite, puis le bloc établissement",
-            "audience": [
-              "parent",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bulletin est refait sur le modèle officiel ivoirien : identité avec photo, points par discipline, total, progression d'un trimestre à l'autre, distinctions et sanctions à cocher",
-            "audience": [
-              "parent",
-              "élève",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bulletin porte la photo de l'élève, ou ses initiales, ainsi que son matricule, sa date et son lieu de naissance, comme le bulletin officiel ivoirien",
-            "audience": [
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bulletin affiche la colonne des points (moyenne × coefficient) et la ligne de total : le parent peut refaire le calcul de la moyenne générale",
-            "audience": [
-              "parent",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir",
-            "audience": [
-              "admin",
-              "directeur des études",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le « 12 / 35 » d'une évaluation est compté par la base et non plus en chargeant les 30 000 notes de l'école",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Seules les espèces exigent désormais une journée de caisse ouverte. Un comptable enregistre un virement ou un versement Wave sans qu'une caisse s'ouvre à son nom, alors qu'il n'a aucun tiroir à compter le soir",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les versements enregistrés autrefois en « Mobile Money » gardent ce libellé sur les reçus déjà remis et dans les états : personne ne peut deviner après coup quel opérateur c'était, et le réécrire ferait mentir un papier détenu par une famille",
-            "audience": [
-              "comptable",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler",
-            "audience": [
-              "élève",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes",
-            "audience": [
-              "élève",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû",
-            "audience": [
-              "comptable",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le registre des convocations et celui des billets d'annulation de zéro se consultent par pages : ils s'empilent d'une année sur l'autre et chargeaient jusqu'ici tout leur historique pour n'en montrer que le haut",
-            "audience": [
-              "éducateur",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Supprimer définitivement une inscription obéit aux mêmes règles que supprimer un élève : motif obligatoire, passage par la corbeille d'abord, courriel à la direction",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Encaisser sur une inscription qui porte plusieurs frais est plus rapide : la caisse interroge la base une fois au lieu d'une fois par frais",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Emploi du temps (PDF) refondu : tient désormais sur une seule page, avec une grille premium calée à la minute près (créneaux de 1h, 1h30, 2h ou débutant à la demi-heure placés exactement, comme à l'écran), des couleurs de matière claires et lisibles et une légende des matières .",
-            "audience": [
-              "admin",
-              "enseignant",
-              "élève",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Durée de connexion prolongée (jeton d'accès porté à 60 minutes) pour éviter les déconnexions intempestives d'un utilisateur pourtant actif ; la session reste limitée à 30 minutes d'inactivité .",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Relevé de notes (PDF) aligné sur le design institutionnel premium des autres documents : bandeau d'identité, titre de section, tableau soigné et synthèse en cartes clés (moyenne de classe, note min/max, taux de saisie) .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Cahier de texte fidèle au calendrier scolaire : il utilise l'emploi du temps de l'année scolaire à laquelle appartient la période demandée (plus seulement l'année courante) et ne génère plus de séances pendant les vacances (semaines hors trimestre) ; une semaine de congés affiche « Vacances scolaires » au lieu d'un planning trompeur .",
-            "audience": [
-              "enseignant",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Mise en page affinée document par document dans la ligne institutionnelle sobre : le bulletin présente la moyenne, le rang et la mention (point focal) dans une bande de chiffres-clés compacte plutôt qu'en grosses boîtes, avec les colonnes du tableau des matières calées et le nom du professeur en sous-ligne discrète ; la liste de classe, l'emploi du temps, l'état des frais et le reçu de versement ont leurs colonnes alignées, l'état des frais met le solde restant dû en évidence avec une ligne de total, et le reçu met en avant le montant versé .",
-            "audience": [
-              "admin",
-              "enseignant",
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Documents officiels et exports repensés en **design institutionnel sobre** : la typographie embarquée (Spectral pour le nom de l'établissement et les titres, Inter pour le corps et les tableaux) et la hiérarchie portent l'autorité à la place du décor. En-tête condensé (logo + identité + mention « République de Côte d'Ivoire » sur une ligne + filet aux couleurs de l'établissement), tableaux réalignés (colonnes calées, en-tête sobre), et allègement radical : suppression du double cadre, du filigrane et du sceau décoratif au profit du seul Cachet Électronique Visible comme élément de confiance. Les couleurs de l'établissement sont utilisées avec parcimonie : la primaire pour la structure, l'accent pour un seul point focal par document .",
-            "audience": [
-              "transverse"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Documents officiels repensés en documents premium aux couleurs de chaque établissement : certificat de scolarité, attestation de fréquentation, liste de classe, emploi du temps, bordereau de caisse, procès-verbal de conseil, reçu de paiement, état des frais et fiche d'inscription reçoivent désormais un cadre officiel, un filigrane discret au nom de l'école, un en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), un cachet et une zone de signature, un numéro de référence, et une mise en page qui remplit la page (le cadre se répète sur chaque page des documents qui en comptent plusieurs) .",
-            "audience": [
-              "admin",
-              "enseignant",
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Bulletin de notes habillé du cadre officiel aux couleurs de l'établissement, enrichi pour chaque matière du professeur, du rang de l'élève, de la moyenne de la classe et d'une appréciation (Excellent, Très bien, Bien, Assez bien, Passable, Insuffisant), plus un bandeau de synthèse (moyenne et écart de la classe, absences, retards) .",
-            "audience": [
-              "enseignant",
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Espacements des documents affinés : le logo (ou monogramme) de l'établissement n'est plus collé à son nom dans l'en-tête, et le bloc du Cachet Électronique Visible est aéré (texte espacé, code plus lisible). Le lien de vérification imprimé pointe vers le domaine de l'école plutôt qu'une adresse IP .",
-            "audience": [
-              "transverse"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Noms des matières seedés avec les accents officiels : Mathématiques, Français, Histoire-Géographie, Éducation Civique et Morale, Éducation Physique et Sportive. Affichage cohérent partout (bulletins, EDT, kanban, liste des notes). Un script SQL one-shot met à jour les tenants existants .",
-            "audience": [
-              "admin",
-              "enseignant",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Niveaux du tronc commun seedés avec les accents officiels : 6ème, 5ème, 4ème, 3ème et 1ère affichent désormais les bons accents partout (kanban, table, bulletins, EDT). Les anciens tenants gardent leur orthographe existante tant qu'une mise à jour explicite n'est pas appliquée .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Identité visuelle des PDFs personnalisable par école : chaque établissement peut configurer sa couleur principale, sa couleur d'accent, sa devise et son site web. Le logo et les couleurs apparaissent automatiquement sur tous les documents (reçus, état des frais, bordereaux, etc.). Migration `0029` .",
-            "audience": [
-              "admin",
-              "super-admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Tous les documents PDF officiels (bulletins, reçus, attestations, certificats, EDT, PV conseil, liste de classe, fiche d'inscription, bordereau journalier, état des frais) reprennent maintenant les couleurs et la devise de l'établissement. Composants visuels unifiés : entête République de Côte d'Ivoire avec logo, blocs signatures premium, tableaux zebra, pastilles de statut sémantiques, mentions cadrées .",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Création de tenant : les slugs réservés (`admin`, `api`, `auth`, `www`, `local`, `super-admin`, ...) sont désormais refusés à la création pour éviter toute collision avec un chemin plateforme .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 136
-          },
-          {
-            "text": "Lien de connexion configurable via `PUBLIC_LOGIN_URL_TEMPLATE` : par défaut `https://college.klassci.com/login?c=<slug>` (pattern single-domain), bascule vers sous-domaine sans changement de code .",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": 136
-          },
-          {
-            "text": "Provisionnement d'un nouvel établissement en libre-service : nouveau rôle « Super Administrateur », tableau de bord dédié et création de tenant en quelques clics, avec validation en direct du nom d'URL et progression visible des étapes .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Onboarding par ligne de commande pour les agents IA : le CLI `klassci` (`tenant create`, `tenant list`, `pat create`, `doctor`, `db query`, `logs`, `alembic`, etc.) permet de provisionner et opérer la plateforme sans passer par le navigateur ni SSH .",
-            "audience": [
-              "super-admin",
-              "devops"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Tokens d'accès personnels (PAT) : créer, lister, et révoquer ses propres tokens avec scopes (`super-admin:tenants:read`, `super-admin:db:execute`, …), expiration obligatoire (90 jours par défaut), et affichage du token clair une seule fois à la création .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Diagnostic de plateforme : vue temps réel de l'état du backend, de la base, de Redis et de la configuration SMTP avec rafraîchissement automatique toutes les 30 secondes .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Lecture des logs système avec masquage automatique des secrets : les en-têtes Authorization, mots de passe, tokens PAT, JWT et adresses email sont remplacés par `[REDACTED]` à la volée. Pause / reprise automatique toutes les 5 secondes .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Exécution de requêtes SQL ad-hoc sur n'importe quel tenant via une page dédiée ou en CLI, avec mode aperçu (`dry_run`) qui détecte les `DROP / TRUNCATE / DELETE sans WHERE` avant exécution et trace l'identité de l'exécutant dans les logs d'audit .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Navigation cross-tenant en lecture seule : `klassci student list --tenant=lycee-x`, `klassci teacher list`, `klassci class list` listent les entités d'une école depuis n'importe quel poste .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Re-provisionner un tenant déjà bootstrapped renvoie maintenant une erreur claire (HTTP 409) au lieu de planter avec une duplicate-email — l'admin existant garde son mot de passe et n'est jamais écrasé silencieusement .",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": 134
-          },
-          {
-            "text": "Tableau de bord parent : un seul appel retourne pour chaque enfant la classe, la moyenne générale, le nombre d'absences et le solde restant à payer, sans avoir à ouvrir chaque fiche .",
-            "audience": [
-              "parent"
-            ],
-            "pull_request": 120
-          },
-          {
-            "text": "**Attestation de fréquentation officielle** : PDF République de Côte d'Ivoire signé par le chef d'établissement avec un tableau des statistiques de présence (présent / retard / absence excusée / absence non excusée) et un taux de fréquentation calculé sur l'année scolaire en cours. Endpoint `GET /students/{id}/documents/attestation-frequentation.pdf` avec les mêmes gardes d'accès que le certificat .",
-            "audience": [
-              "admin",
-              "parent",
-              "élève"
-            ],
-            "pull_request": 109
-          },
-          {
-            "text": "**Certificat de scolarité officiel** : l'admin (et le parent en self-service) peut télécharger un PDF République de Côte d'Ivoire signé par le chef d'établissement, avec corps formel \"Le soussigné certifie que [élève], né(e) le ... à ..., est régulièrement inscrit(e) en classe de [...] au titre de l'année scolaire [...]\". Endpoint `GET /students/{id}/documents/certificat-scolarite.pdf` avec garde d'accès parent (lien parent_student) et étudiant (compte propre) .",
-            "audience": [
-              "admin",
-              "parent",
-              "élève"
-            ],
-            "pull_request": 107
-          },
-          {
-            "text": "Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 105
-          },
-          {
-            "text": "Le logo de l'établissement et la signature officielle sont désormais embarqués dans tous les PDFs (bulletin, PV de conseil, reçu de paiement, emploi du temps) lorsqu'ils sont configurés. L'absence de configuration ne casse rien, le PDF se génère sans logo .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 105
-          },
-          {
-            "text": "Promotion en masse de fin d'année : l'admin choisit la classe de destination de chaque classe source et obtient en un appel un aperçu des élèves promus, des avertissements de capacité, et un rapport de promotions appliquées avec les exceptions .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 95
-          },
-          {
-            "text": "Validation d'inscription en un appel dédié : l'admin peut désormais passer un prospect ou une inscription en attente directement à l'état validé, avec audit traçable et message clair si la transition est refusée .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 93
-          },
-          {
-            "text": "Liste des élèves côté admin enrichie de la classe et du statut d'inscription pour l'année courante : un seul appel API au lieu de cliquer chaque fiche pour savoir où l'élève est .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 82
-          },
-          {
-            "text": "Filtres par classe et liste des élèves « à inscrire » exposés en un endpoint dédié, prêt à alimenter les chips de la liste élèves .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 82
-          },
-          {
-            "text": "Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées .",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève / parent des scénarios E2E. Le compte parent est lié à un élève seedé pour exercer les flows portail parent .",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": 118
-          },
-          {
-            "text": "Tableau de bord élève : nom, classe, prochain cours, moyenne générale, frais restants et total d'absences, en un seul appel .",
-            "audience": [
-              "élève"
-            ],
-            "pull_request": 75
-          },
-          {
-            "text": "Liste exhaustive des évaluations de l'enseignant connecté pour alimenter la page « Mes évaluations » côté portail .",
-            "audience": [
-              "enseignant"
-            ],
-            "pull_request": 75
-          },
-          {
-            "text": "Les classes (6ème A, Terminale C, …) deviennent permanentes : on ne crée plus une nouvelle classe à chaque rentrée. À chaque changement d'année, la classe reste, on réinscrit ou on promeut les élèves, et la promotion devient un simple choix de destination .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 97
-          },
-          {
-            "text": "Audit des changements de permissions de rôle : on garde désormais l'état avant et après pour reconstruire le diff de chaque modification .",
-            "audience": [
-              "admin",
-              "super-admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Tableau de bord enseignant repensé : nom, prochain cours, totaux et liste des évaluations à venir avec progression de saisie, en cohérence avec ce qu'affiche le portail .",
-            "audience": [
-              "enseignant"
-            ],
-            "pull_request": 75
-          },
-          {
-            "text": "Création d'évaluation : la matière doit être enseignée dans la classe sélectionnée. Toute combinaison incohérente est refusée avec un message clair en français .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": 76
-          },
-          {
-            "text": "Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 76
-          },
-          {
-            "text": "Publication des bulletins : la réponse expose désormais un message lisible et un compteur (`{message, count}`) au lieu d'un objet brut, pour cohérence avec le contrat utilisé côté front .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 103
-          }
-        ],
         "Fixed": [
           {
             "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
@@ -2915,6 +2398,530 @@
               "devops"
             ],
             "pull_request": null
+          }
+        ],
+        "Changed": [
+          {
+            "text": "Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie se signe selon ce qu'il couvre : la caissière arrête sa caisse, la comptabilité et la direction arrêtent le point de l'école",
+            "audience": [
+              "comptable",
+              "caissier",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie annonce l'effectif du périmètre et le nombre d'élèves qu'aucune ligne de frais ne couvre, à l'écran comme sur le document : ils disparaissaient en silence",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le tableau « soldes par classe » laisse la place au point par catégorie : on choisit d'abord le frais, la classe ne fait plus que réduire la lecture",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La suggestion « nouvel élève » se lit désormais sous les inscriptions et non sous l'administration, comme le reste de leur contrat",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": 390
+          },
+          {
+            "text": "L'aperçu d'un versement calcule aussi la répartition choisie par le caissier, au lieu de la laisser recalculer par l'écran",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "WeasyPrint 62.3 vers 69.0 (CVE-2026-49452, injection CSS à la génération de PDF)",
+            "audience": [
+              "sécurité"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Montées de dépendances de `main` reportées sur `develop` : SQLAlchemy 2.0.49, alembic 1.18.4, pytest-asyncio 1.3",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'en-tête des documents devient une carte à coins arrondis portant le logo et les coordonnées de l'établissement",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bulletin porte l'en-tête administratif ivoirien : autorité à gauche, titre encadré au centre, année à droite, puis le bloc établissement",
+            "audience": [
+              "parent",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bulletin est refait sur le modèle officiel ivoirien : identité avec photo, points par discipline, total, progression d'un trimestre à l'autre, distinctions et sanctions à cocher",
+            "audience": [
+              "parent",
+              "élève",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bulletin porte la photo de l'élève, ou ses initiales, ainsi que son matricule, sa date et son lieu de naissance, comme le bulletin officiel ivoirien",
+            "audience": [
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bulletin affiche la colonne des points (moyenne × coefficient) et la ligne de total : le parent peut refaire le calcul de la moyenne générale",
+            "audience": [
+              "parent",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La liste des évaluations et celle des bulletins s'affichent par pages : elles rapatriaient toute l'année scolaire pour n'en montrer que vingt lignes, et mettaient plus de quatre secondes à s'ouvrir",
+            "audience": [
+              "admin",
+              "directeur des études",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le « 12 / 35 » d'une évaluation est compté par la base et non plus en chargeant les 30 000 notes de l'école",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Seules les espèces exigent désormais une journée de caisse ouverte. Un comptable enregistre un virement ou un versement Wave sans qu'une caisse s'ouvre à son nom, alors qu'il n'a aucun tiroir à compter le soir",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les versements enregistrés autrefois en « Mobile Money » gardent ce libellé sur les reçus déjà remis et dans les états : personne ne peut deviner après coup quel opérateur c'était, et le réécrire ferait mentir un papier détenu par une famille",
+            "audience": [
+              "comptable",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une famille en retard sur son échéancier ne consulte plus le contenu du bulletin : moyenne, rang et mention sont retenus comme l'était déjà le PDF. Le bulletin reste annoncé à l'écran, avec le motif et le montant à régler",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les notes publiées restent consultables même en cas d'impayé : la retenue porte sur le bulletin, pas sur le relevé des notes",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les pourcentages d'une grille portent désormais sur ce qui reste après les montants fermes, jamais sur le total. Une école qui n'utilise que des pourcentages retrouve exactement les mêmes échéances qu'avant",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'échéancier annonce la part des frais qu'aucune tranche ne planifie, au lieu de laisser un écart inexpliqué entre les échéances et le total dû",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le registre des convocations et celui des billets d'annulation de zéro se consultent par pages : ils s'empilent d'une année sur l'autre et chargeaient jusqu'ici tout leur historique pour n'en montrer que le haut",
+            "audience": [
+              "éducateur",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le motif d'une suppression définitive ne circule plus dans l'adresse de la page : il n'apparaît donc plus dans les journaux techniques du serveur",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Supprimer définitivement une inscription obéit aux mêmes règles que supprimer un élève : motif obligatoire, passage par la corbeille d'abord, courriel à la direction",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Encaisser sur une inscription qui porte plusieurs frais est plus rapide : la caisse interroge la base une fois au lieu d'une fois par frais",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Emploi du temps (PDF) refondu : tient désormais sur une seule page, avec une grille premium calée à la minute près (créneaux de 1h, 1h30, 2h ou débutant à la demi-heure placés exactement, comme à l'écran), des couleurs de matière claires et lisibles et une légende des matières .",
+            "audience": [
+              "admin",
+              "enseignant",
+              "élève",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Durée de connexion prolongée (jeton d'accès porté à 60 minutes) pour éviter les déconnexions intempestives d'un utilisateur pourtant actif ; la session reste limitée à 30 minutes d'inactivité .",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Relevé de notes (PDF) aligné sur le design institutionnel premium des autres documents : bandeau d'identité, titre de section, tableau soigné et synthèse en cartes clés (moyenne de classe, note min/max, taux de saisie) .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Cahier de texte fidèle au calendrier scolaire : il utilise l'emploi du temps de l'année scolaire à laquelle appartient la période demandée (plus seulement l'année courante) et ne génère plus de séances pendant les vacances (semaines hors trimestre) ; une semaine de congés affiche « Vacances scolaires » au lieu d'un planning trompeur .",
+            "audience": [
+              "enseignant",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Mise en page affinée document par document dans la ligne institutionnelle sobre : le bulletin présente la moyenne, le rang et la mention (point focal) dans une bande de chiffres-clés compacte plutôt qu'en grosses boîtes, avec les colonnes du tableau des matières calées et le nom du professeur en sous-ligne discrète ; la liste de classe, l'emploi du temps, l'état des frais et le reçu de versement ont leurs colonnes alignées, l'état des frais met le solde restant dû en évidence avec une ligne de total, et le reçu met en avant le montant versé .",
+            "audience": [
+              "admin",
+              "enseignant",
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Documents officiels et exports repensés en **design institutionnel sobre** : la typographie embarquée (Spectral pour le nom de l'établissement et les titres, Inter pour le corps et les tableaux) et la hiérarchie portent l'autorité à la place du décor. En-tête condensé (logo + identité + mention « République de Côte d'Ivoire » sur une ligne + filet aux couleurs de l'établissement), tableaux réalignés (colonnes calées, en-tête sobre), et allègement radical : suppression du double cadre, du filigrane et du sceau décoratif au profit du seul Cachet Électronique Visible comme élément de confiance. Les couleurs de l'établissement sont utilisées avec parcimonie : la primaire pour la structure, l'accent pour un seul point focal par document .",
+            "audience": [
+              "transverse"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Documents officiels repensés en documents premium aux couleurs de chaque établissement : certificat de scolarité, attestation de fréquentation, liste de classe, emploi du temps, bordereau de caisse, procès-verbal de conseil, reçu de paiement, état des frais et fiche d'inscription reçoivent désormais un cadre officiel, un filigrane discret au nom de l'école, un en-tête d'identité complet (logo ou monogramme, code MENA, contacts, devise), un cachet et une zone de signature, un numéro de référence, et une mise en page qui remplit la page (le cadre se répète sur chaque page des documents qui en comptent plusieurs) .",
+            "audience": [
+              "admin",
+              "enseignant",
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Bulletin de notes habillé du cadre officiel aux couleurs de l'établissement, enrichi pour chaque matière du professeur, du rang de l'élève, de la moyenne de la classe et d'une appréciation (Excellent, Très bien, Bien, Assez bien, Passable, Insuffisant), plus un bandeau de synthèse (moyenne et écart de la classe, absences, retards) .",
+            "audience": [
+              "enseignant",
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Espacements des documents affinés : le logo (ou monogramme) de l'établissement n'est plus collé à son nom dans l'en-tête, et le bloc du Cachet Électronique Visible est aéré (texte espacé, code plus lisible). Le lien de vérification imprimé pointe vers le domaine de l'école plutôt qu'une adresse IP .",
+            "audience": [
+              "transverse"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Noms des matières seedés avec les accents officiels : Mathématiques, Français, Histoire-Géographie, Éducation Civique et Morale, Éducation Physique et Sportive. Affichage cohérent partout (bulletins, EDT, kanban, liste des notes). Un script SQL one-shot met à jour les tenants existants .",
+            "audience": [
+              "admin",
+              "enseignant",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Niveaux du tronc commun seedés avec les accents officiels : 6ème, 5ème, 4ème, 3ème et 1ère affichent désormais les bons accents partout (kanban, table, bulletins, EDT). Les anciens tenants gardent leur orthographe existante tant qu'une mise à jour explicite n'est pas appliquée .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Identité visuelle des PDFs personnalisable par école : chaque établissement peut configurer sa couleur principale, sa couleur d'accent, sa devise et son site web. Le logo et les couleurs apparaissent automatiquement sur tous les documents (reçus, état des frais, bordereaux, etc.). Migration `0029` .",
+            "audience": [
+              "admin",
+              "super-admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Tous les documents PDF officiels (bulletins, reçus, attestations, certificats, EDT, PV conseil, liste de classe, fiche d'inscription, bordereau journalier, état des frais) reprennent maintenant les couleurs et la devise de l'établissement. Composants visuels unifiés : entête République de Côte d'Ivoire avec logo, blocs signatures premium, tableaux zebra, pastilles de statut sémantiques, mentions cadrées .",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Création de tenant : les slugs réservés (`admin`, `api`, `auth`, `www`, `local`, `super-admin`, ...) sont désormais refusés à la création pour éviter toute collision avec un chemin plateforme .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 136
+          },
+          {
+            "text": "Lien de connexion configurable via `PUBLIC_LOGIN_URL_TEMPLATE` : par défaut `https://college.klassci.com/login?c=<slug>` (pattern single-domain), bascule vers sous-domaine sans changement de code .",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": 136
+          },
+          {
+            "text": "Provisionnement d'un nouvel établissement en libre-service : nouveau rôle « Super Administrateur », tableau de bord dédié et création de tenant en quelques clics, avec validation en direct du nom d'URL et progression visible des étapes .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Onboarding par ligne de commande pour les agents IA : le CLI `klassci` (`tenant create`, `tenant list`, `pat create`, `doctor`, `db query`, `logs`, `alembic`, etc.) permet de provisionner et opérer la plateforme sans passer par le navigateur ni SSH .",
+            "audience": [
+              "super-admin",
+              "devops"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Tokens d'accès personnels (PAT) : créer, lister, et révoquer ses propres tokens avec scopes (`super-admin:tenants:read`, `super-admin:db:execute`, …), expiration obligatoire (90 jours par défaut), et affichage du token clair une seule fois à la création .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Diagnostic de plateforme : vue temps réel de l'état du backend, de la base, de Redis et de la configuration SMTP avec rafraîchissement automatique toutes les 30 secondes .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Lecture des logs système avec masquage automatique des secrets : les en-têtes Authorization, mots de passe, tokens PAT, JWT et adresses email sont remplacés par `[REDACTED]` à la volée. Pause / reprise automatique toutes les 5 secondes .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Exécution de requêtes SQL ad-hoc sur n'importe quel tenant via une page dédiée ou en CLI, avec mode aperçu (`dry_run`) qui détecte les `DROP / TRUNCATE / DELETE sans WHERE` avant exécution et trace l'identité de l'exécutant dans les logs d'audit .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Navigation cross-tenant en lecture seule : `klassci student list --tenant=lycee-x`, `klassci teacher list`, `klassci class list` listent les entités d'une école depuis n'importe quel poste .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Re-provisionner un tenant déjà bootstrapped renvoie maintenant une erreur claire (HTTP 409) au lieu de planter avec une duplicate-email — l'admin existant garde son mot de passe et n'est jamais écrasé silencieusement .",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": 134
+          },
+          {
+            "text": "Tableau de bord parent : un seul appel retourne pour chaque enfant la classe, la moyenne générale, le nombre d'absences et le solde restant à payer, sans avoir à ouvrir chaque fiche .",
+            "audience": [
+              "parent"
+            ],
+            "pull_request": 120
+          },
+          {
+            "text": "**Attestation de fréquentation officielle** : PDF République de Côte d'Ivoire signé par le chef d'établissement avec un tableau des statistiques de présence (présent / retard / absence excusée / absence non excusée) et un taux de fréquentation calculé sur l'année scolaire en cours. Endpoint `GET /students/{id}/documents/attestation-frequentation.pdf` avec les mêmes gardes d'accès que le certificat .",
+            "audience": [
+              "admin",
+              "parent",
+              "élève"
+            ],
+            "pull_request": 109
+          },
+          {
+            "text": "**Certificat de scolarité officiel** : l'admin (et le parent en self-service) peut télécharger un PDF République de Côte d'Ivoire signé par le chef d'établissement, avec corps formel \"Le soussigné certifie que [élève], né(e) le ... à ..., est régulièrement inscrit(e) en classe de [...] au titre de l'année scolaire [...]\". Endpoint `GET /students/{id}/documents/certificat-scolarite.pdf` avec garde d'accès parent (lien parent_student) et étudiant (compte propre) .",
+            "audience": [
+              "admin",
+              "parent",
+              "élève"
+            ],
+            "pull_request": 107
+          },
+          {
+            "text": "Trois champs sur les paramètres de l'établissement pour signer officiellement les documents administratifs : signature/tampon (image), nom du chef d'établissement, et son titre. Endpoint d'upload dédié pour la signature et permissions seedées pour les futurs documents .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 105
+          },
+          {
+            "text": "Le logo de l'établissement et la signature officielle sont désormais embarqués dans tous les PDFs (bulletin, PV de conseil, reçu de paiement, emploi du temps) lorsqu'ils sont configurés. L'absence de configuration ne casse rien, le PDF se génère sans logo .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 105
+          },
+          {
+            "text": "Promotion en masse de fin d'année : l'admin choisit la classe de destination de chaque classe source et obtient en un appel un aperçu des élèves promus, des avertissements de capacité, et un rapport de promotions appliquées avec les exceptions .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 95
+          },
+          {
+            "text": "Validation d'inscription en un appel dédié : l'admin peut désormais passer un prospect ou une inscription en attente directement à l'état validé, avec audit traçable et message clair si la transition est refusée .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 93
+          },
+          {
+            "text": "Liste des élèves côté admin enrichie de la classe et du statut d'inscription pour l'année courante : un seul appel API au lieu de cliquer chaque fiche pour savoir où l'élève est .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 82
+          },
+          {
+            "text": "Filtres par classe et liste des élèves « à inscrire » exposés en un endpoint dédié, prêt à alimenter les chips de la liste élèves .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 82
+          },
+          {
+            "text": "Création d'évaluation par un admin ou un personnel administratif au nom d'un enseignant, avec contrôle d'identité du titulaire et trace d'audit .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Endpoint exposant les permissions effectives de l'utilisateur courant, consommé par les portails pour afficher uniquement les actions autorisées .",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Outils de provisioning : script de seed déterministe pour les comptes admin / enseignant / élève / parent des scénarios E2E. Le compte parent est lié à un élève seedé pour exercer les flows portail parent .",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": 118
+          },
+          {
+            "text": "Tableau de bord élève : nom, classe, prochain cours, moyenne générale, frais restants et total d'absences, en un seul appel .",
+            "audience": [
+              "élève"
+            ],
+            "pull_request": 75
+          },
+          {
+            "text": "Liste exhaustive des évaluations de l'enseignant connecté pour alimenter la page « Mes évaluations » côté portail .",
+            "audience": [
+              "enseignant"
+            ],
+            "pull_request": 75
+          },
+          {
+            "text": "Les classes (6ème A, Terminale C, …) deviennent permanentes : on ne crée plus une nouvelle classe à chaque rentrée. À chaque changement d'année, la classe reste, on réinscrit ou on promeut les élèves, et la promotion devient un simple choix de destination .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 97
+          },
+          {
+            "text": "Audit des changements de permissions de rôle : on garde désormais l'état avant et après pour reconstruire le diff de chaque modification .",
+            "audience": [
+              "admin",
+              "super-admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Tableau de bord enseignant repensé : nom, prochain cours, totaux et liste des évaluations à venir avec progression de saisie, en cohérence avec ce qu'affiche le portail .",
+            "audience": [
+              "enseignant"
+            ],
+            "pull_request": 75
+          },
+          {
+            "text": "Création d'évaluation : la matière doit être enseignée dans la classe sélectionnée. Toute combinaison incohérente est refusée avec un message clair en français .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": 76
+          },
+          {
+            "text": "Liste des matières filtrable par classe : on n'affiche plus que les matières du niveau (et de la série) de la classe demandée .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 76
+          },
+          {
+            "text": "Publication des bulletins : la réponse expose désormais un message lisible et un compteur (`{message, count}`) au lieu d'un objet brut, pour cohérence avec le contrat utilisé côté front .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 103
           }
         ],
         "Security": [
