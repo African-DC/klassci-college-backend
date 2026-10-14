@@ -127,6 +127,10 @@ class Level(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Politique LV2 propre a la base de l'etablissement. Aucune inference sur le nom.
+    lv2_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
 
     series: Mapped[list[Series]] = relationship(back_populates="level", passive_deletes=True)
     classes: Mapped[list[Class]] = relationship(back_populates="level", passive_deletes=True)

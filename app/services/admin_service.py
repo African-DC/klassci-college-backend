@@ -1600,9 +1600,11 @@ async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
 
 def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     level_name = None
+    lv2_enabled = False
     series_name = None
     if hasattr(c, "level") and c.level is not None:
         level_name = c.level.name
+        lv2_enabled = c.level.lv2_enabled
     if hasattr(c, "series") and c.series is not None:
         series_name = c.series.name
     return ClassResponse(
@@ -1613,6 +1615,7 @@ def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
         room_id=c.room_id,
         max_students=c.max_students,
         level_name=level_name,
+        lv2_enabled=lv2_enabled,
         series_name=series_name,
         enrolled_count=enrolled_count,
         created_at=c.created_at,
@@ -1707,6 +1710,7 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
+    previous_level_id = cls.level_id
     await audited_update(
         db,
         cls,
@@ -1715,6 +1719,25 @@ async def update_class(
         updater=repo.update_class,
         actor=updated_by,
     )
+    if cls.level_id != previous_level_id:
+        # Le changement du niveau d'une classe concerne toutes ses inscriptions.
+        # Le retrait est explicite et audite inscription par inscription.
+        from app.models.enrollment import Enrollment
+        from app.services.enrollment_profile import clear_lv2_if_class_forbids_it
+
+        affected = (
+            (
+                await db.execute(
+                    select(Enrollment).where(
+                        Enrollment.class_id == class_id, Enrollment.lv2.is_not(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for enrollment in affected:
+            await clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:

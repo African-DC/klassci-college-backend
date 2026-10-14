@@ -39,6 +39,7 @@ class InformationSheetClass(BaseModel):
     id: int
     name: str
     level_name: str
+    lv2_enabled: bool
     rows: list[InformationSheetRow]
 
 
