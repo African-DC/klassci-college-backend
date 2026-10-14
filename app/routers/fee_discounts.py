@@ -26,7 +26,8 @@ async def list_enrollment_discounts(
 
 
 @router.put(
-    "/{enrollment_id}/fees/{fee_id}/discount", response_model=FeeDiscountResponse,
+    "/{enrollment_id}/fees/{fee_id}/discount",
+    response_model=FeeDiscountResponse,
 )
 async def upsert_enrollment_fee_discount(
     enrollment_id: int,
@@ -38,7 +39,11 @@ async def upsert_enrollment_fee_discount(
 ) -> FeeDiscountResponse:
     """Accorder ou corriger une remise, sans réécrire les versements."""
     return await fee_discounts.set_discount(
-        db, enrollment_id, fee_id, data, actor=current_user.user_id,
+        db,
+        enrollment_id,
+        fee_id,
+        data,
+        actor=current_user.user_id,
     )
 
 
@@ -55,5 +60,8 @@ async def delete_enrollment_fee_discount(
 ) -> None:
     """Annuler une remise et restaurer le montant initial, avec audit."""
     await fee_discounts.remove_discount(
-        db, enrollment_id, fee_id, actor=current_user.user_id,
+        db,
+        enrollment_id,
+        fee_id,
+        actor=current_user.user_id,
     )
