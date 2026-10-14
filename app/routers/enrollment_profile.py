@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.schemas.enrollment import EnrollmentResponse
+from app.schemas.fee_discount import DiscountInput, DiscountLine
 from app.schemas.enrollment_profile import (
     EnrollmentProfileBatchRequest,
     EnrollmentProfileBatchResponse,
@@ -17,7 +18,6 @@ from app.schemas.enrollment_profile import (
     ScholarshipUpsert,
 )
 from app.services import enrollment_profile_update, enrollment_scholarship, fee_discount
-from app.schemas.fee_discount import DiscountInput, DiscountLine
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])
 
