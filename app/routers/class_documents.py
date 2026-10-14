@@ -30,7 +30,6 @@ async def get_class_roster_pdf(
     nationalities: list[str] = Query(default=[]),
     assignments: list[str] = Query(default=[]),
     repeaters: bool | None = Query(None),
-
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
@@ -40,7 +39,18 @@ async def get_class_roster_pdf(
     Tri par nom de famille puis prénom. Photo miniature ou initiales.
     """
     return await pdf_response(
-        lambda: class_roster_service.get_class_roster_pdf(db, class_id, RosterFilters(genre=genre, age_min=age_min, age_max=age_max, nationalities=nationalities, assignments=assignments, repeaters=repeaters)),
+        lambda: class_roster_service.get_class_roster_pdf(
+            db,
+            class_id,
+            RosterFilters(
+                genre=genre,
+                age_min=age_min,
+                age_max=age_max,
+                nationalities=nationalities,
+                assignments=assignments,
+                repeaters=repeaters,
+            ),
+        ),
         filename=f"liste-classe-{class_id}.pdf",
         error_context=f"liste de classe {class_id}",
     )
@@ -58,12 +68,22 @@ async def get_class_roster_word(
     nationalities: list[str] = Query(default=[]),
     assignments: list[str] = Query(default=[]),
     repeaters: bool | None = Query(None),
-
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Exporter les élèves validés de l'année courante en document Word éditable."""
-    content = await class_roster_service.get_class_roster_docx(db, class_id, RosterFilters(genre=genre, age_min=age_min, age_max=age_max, nationalities=nationalities, assignments=assignments, repeaters=repeaters))
+    content = await class_roster_service.get_class_roster_docx(
+        db,
+        class_id,
+        RosterFilters(
+            genre=genre,
+            age_min=age_min,
+            age_max=age_max,
+            nationalities=nationalities,
+            assignments=assignments,
+            repeaters=repeaters,
+        ),
+    )
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -84,9 +104,16 @@ async def get_class_roster_excel(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     content = await class_roster_service.get_class_roster_xlsx(
-        db, class_id,
-        RosterFilters(genre=genre, age_min=age_min, age_max=age_max,
-                      nationalities=nationalities, assignments=assignments, repeaters=repeaters),
+        db,
+        class_id,
+        RosterFilters(
+            genre=genre,
+            age_min=age_min,
+            age_max=age_max,
+            nationalities=nationalities,
+            assignments=assignments,
+            repeaters=repeaters,
+        ),
     )
     return Response(
         content=content,

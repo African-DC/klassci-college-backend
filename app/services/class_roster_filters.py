@@ -19,11 +19,16 @@ class RosterFilters(BaseModel):
             raise ValueError("Genre invalide")
         if self.age_min is not None and self.age_max is not None and self.age_min > self.age_max:
             raise ValueError("Age minimum superieur au maximum")
-        if any(x not in ("affecte", "reaffecte", "non_affecte", "inconnu") for x in self.assignments):
+        if any(
+            x not in ("affecte", "reaffecte", "non_affecte", "inconnu") for x in self.assignments
+        ):
             raise ValueError("Statut d'affectation invalide")
         return self
 
-def filter_roster(students: list[dict], filters: RosterFilters, today: date | None = None) -> list[dict]:
+
+def filter_roster(
+    students: list[dict], filters: RosterFilters, today: date | None = None
+) -> list[dict]:
     today = today or date.today()
     names = {s.casefold().strip() for s in filters.nationalities if s.strip()}
     statuses = set(filters.assignments)
@@ -36,7 +41,9 @@ def filter_roster(students: list[dict], filters: RosterFilters, today: date | No
             if not born:
                 continue
             age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-            if (filters.age_min is not None and age < filters.age_min) or (filters.age_max is not None and age > filters.age_max):
+            if (filters.age_min is not None and age < filters.age_min) or (
+                filters.age_max is not None and age > filters.age_max
+            ):
                 continue
         if names and (s.get("nationality") or "").casefold().strip() not in names:
             continue

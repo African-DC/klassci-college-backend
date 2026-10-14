@@ -102,7 +102,9 @@ async def _load_students(db: AsyncSession, class_id: int, academic_year_id: int)
     return rows
 
 
-async def get_class_roster_pdf(db: AsyncSession, class_id: int, filters: RosterFilters | None = None) -> bytes:
+async def get_class_roster_pdf(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """Génère le PDF liste de classe pour une classe (AY courante)."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
@@ -252,7 +254,9 @@ def _word_roster_document(data: dict) -> bytes:
     return stream.getvalue()
 
 
-async def get_class_roster_docx(db: AsyncSession, class_id: int, filters: RosterFilters | None = None) -> bytes:
+async def get_class_roster_docx(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """La même population d'élèves que la liste de classe PDF, au format Word."""
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
@@ -270,10 +274,13 @@ async def get_class_roster_docx(db: AsyncSession, class_id: int, filters: Roster
     )
 
 
-async def get_class_roster_xlsx(db: AsyncSession, class_id: int, filters: RosterFilters | None = None) -> bytes:
+async def get_class_roster_xlsx(
+    db: AsyncSession, class_id: int, filters: RosterFilters | None = None
+) -> bytes:
     """Export Excel de la meme population filtree que PDF et Word."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill
+
     klass = await _load_class_with_room(db, class_id)
     ay = await _current_academic_year(db)
     if ay is None:
@@ -284,21 +291,57 @@ async def get_class_roster_xlsx(db: AsyncSession, class_id: int, filters: Roster
     ws.title = "Liste de classe"
     ws.append([f"LISTE DE CLASSE — {klass.name} — {ay.name}"])
     ws.append([f"Effectif : {len(students)}"])
-    ws.append(["N°", "Matricule", "Nom", "Prénoms", "Sexe", "Naissance", "Lieu de naissance", "Nationalité", "Qualité", "Affectation"])
+    ws.append(
+        [
+            "N°",
+            "Matricule",
+            "Nom",
+            "Prénoms",
+            "Sexe",
+            "Naissance",
+            "Lieu de naissance",
+            "Nationalité",
+            "Qualité",
+            "Affectation",
+        ]
+    )
     for i, student in enumerate(students, 1):
         born = student.get("birth_date")
-        ws.append([i, student.get("enrollment_number") or "", student.get("last_name") or "",
-                   student.get("first_name") or "", student.get("genre") or "",
-                   born.strftime("%d/%m/%Y") if born else "",
-                   student.get("birth_place") or "", student.get("nationality") or "",
-                   "Redoublant" if student.get("is_repeater") is True else ("Non redoublant" if student.get("is_repeater") is False else ""),
-                   {"affecte": "Affecté", "reaffecte": "Réaffecté", "non_affecte": "Non affecté"}.get(student.get("assignment_status"), "")])
+        ws.append(
+            [
+                i,
+                student.get("enrollment_number") or "",
+                student.get("last_name") or "",
+                student.get("first_name") or "",
+                student.get("genre") or "",
+                born.strftime("%d/%m/%Y") if born else "",
+                student.get("birth_place") or "",
+                student.get("nationality") or "",
+                "Redoublant"
+                if student.get("is_repeater") is True
+                else ("Non redoublant" if student.get("is_repeater") is False else ""),
+                {"affecte": "Affecté", "reaffecte": "Réaffecté", "non_affecte": "Non affecté"}.get(
+                    student.get("assignment_status"), ""
+                ),
+            ]
+        )
     for cell in ws[3]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="0F3F8C")
     ws.freeze_panes = "A4"
     ws.auto_filter.ref = f"A3:J{max(3, ws.max_row)}"
-    for col, width in {"A": 7, "B": 19, "C": 25, "D": 28, "E": 8, "F": 18, "G": 25, "H": 20, "I": 21, "J": 19}.items():
+    for col, width in {
+        "A": 7,
+        "B": 19,
+        "C": 25,
+        "D": 28,
+        "E": 8,
+        "F": 18,
+        "G": 25,
+        "H": 20,
+        "I": 21,
+        "J": 19,
+    }.items():
         ws.column_dimensions[col].width = width
     out = BytesIO()
     wb.save(out)
