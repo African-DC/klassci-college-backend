@@ -160,13 +160,18 @@ def generate_grade_sheet_pdf(
     )
 
     issued_str = datetime.utcnow().strftime("%d/%m/%Y")
+    page_css = ui.base_styles(
+        theme,
+        page_size=f"A4 {orientation}",
+        margin="10mm" if orientation == "portrait" else "12mm",
+    )
 
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
     <head>
         <meta charset="UTF-8">
-        {ui.base_styles(theme, page_size=f"A4 {orientation}", margin="10mm" if orientation == "portrait" else "12mm")}
+        {page_css}
         {_sheet_styles(orientation)}
     </head>
     <body>
