@@ -11,7 +11,9 @@ from app.services.pdf.grade_sheet import generate_grade_sheet_pdf
 
 
 @pytest.mark.parametrize("orientation", ["portrait", "landscape"])
-def test_grade_sheet_orientation_and_writable_grid(monkeypatch: pytest.MonkeyPatch, orientation: str) -> None:
+def test_grade_sheet_orientation_and_writable_grid(
+    monkeypatch: pytest.MonkeyPatch, orientation: str
+) -> None:
     captured: dict[str, str] = {}
 
     class HTMLStub:
@@ -29,10 +31,10 @@ def test_grade_sheet_orientation_and_writable_grid(monkeypatch: pytest.MonkeyPat
         "academic_year_name": "2026-2027",
         "effectif": 1,
     }
-    students = [{"enrollment_number": "CI-001", "last_name": "Kouassi", "first_name": "Awa"}]
-    data = generate_grade_sheet_pdf(
-        school, class_info, students, orientation=orientation,
-    )
+    students = [
+        {"enrollment_number": "CI-001", "last_name": "Kouassi", "first_name": "Awa"}
+    ]
+    data = generate_grade_sheet_pdf(school, class_info, students, orientation=orientation)
 
     html = captured["html"]
     assert data == b"%PDF-1.7"
