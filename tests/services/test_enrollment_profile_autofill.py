@@ -167,7 +167,10 @@ async def test_une_lv2_en_6e_est_refusee_et_rien_n_est_cree(db: Session) -> None
         await _inscrire(db, CLASSE_6E, lv2="allemand")
 
     assert refus.value.status_code == 422
-    assert "6ème" in refus.value.detail
+    # Le refus dépend de la configuration du niveau, jamais de son libellé.
+    assert "LV2" in refus.value.detail
+    assert "désactivée" in refus.value.detail
+    assert "6ème" not in refus.value.detail
     assert db.query(Enrollment).filter_by(student_id=ELEVE).count() == 0
 
 

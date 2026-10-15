@@ -567,6 +567,7 @@ class ClassResponse(BaseModel):
     level_name: str | None = None
     series_name: str | None = None
     enrolled_count: int = 0
+    lv2_enabled: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -707,11 +708,13 @@ class AcademicYearListResponse(BaseModel):
 class LevelCreate(BaseModel):
     name: str
     order: int = 0
+    lv2_enabled: bool = True
 
 
 class LevelUpdate(BaseModel):
     name: str | None = None
     order: int | None = None
+    lv2_enabled: bool | None = None
 
 
 class LevelResponse(BaseModel):
@@ -720,6 +723,7 @@ class LevelResponse(BaseModel):
     id: int
     name: str
     order: int
+    lv2_enabled: bool
 
 
 class LevelListResponse(BaseModel):
