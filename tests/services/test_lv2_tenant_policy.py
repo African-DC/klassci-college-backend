@@ -13,6 +13,7 @@ from app.services.enrollment_profile import lv2_enabled_for_class
 from tests.services._sheet_world import (
     ACTEUR,
     AN_COURANT,
+    AN_PASSE,
     CLASSE_4E,
     CLASSE_6E,
     AsyncBridge,
@@ -64,6 +65,10 @@ async def test_deplacer_la_classe_vers_niveau_sans_lv2_retire_et_audite(
         AN_COURANT,
         lv2="allemand",
     )
+    # L'inscription historique ne doit pas perdre sa LV2 : la classe est
+    # commune à toutes les années scolaires.
+    add_student(db, 101, "Koné", "Aya")
+    archive = add_enrollment(db, 101, 101, CLASSE_4E, AN_PASSE, lv2="espagnol")
     db.commit()
     await admin_service.update_class(
         AsyncBridge(db),
@@ -72,10 +77,13 @@ async def test_deplacer_la_classe_vers_niveau_sans_lv2_retire_et_audite(
         updated_by=ACTEUR,
     )
     db.refresh(enrollment)
+    db.refresh(archive)
     assert enrollment.lv2 is None
+    assert archive.lv2 == "espagnol"
     audit = db.query(AuditLog).filter_by(entity_type="enrollment", entity_id=enrollment.id).one()
     assert audit.old_values == {"lv2": "allemand"}
     assert audit.new_values == {"lv2": None}
+    assert db.query(AuditLog).filter_by(entity_type="enrollment", entity_id=archive.id).count() == 0
 
 
 @pytest.mark.asyncio
