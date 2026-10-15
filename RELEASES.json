@@ -1152,6 +1152,14 @@
         ],
         "Added": [
           {
+            "text": "La feuille de notes de classe s'imprime désormais en A4 portrait ou paysage, avec une grille ajustée pour préserver la lisibilité des noms et les cases manuscrites",
+            "audience": [
+              "enseignants",
+              "direction"
+            ],
+            "pull_request": 520
+          },
+          {
             "text": "Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel",
             "audience": [
               "direction",
