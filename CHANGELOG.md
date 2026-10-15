@@ -12,6 +12,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
 ### Added
+- La feuille de notes de classe s'imprime désormais en A4 portrait ou paysage, avec une grille ajustée pour préserver la lisibilité des noms et les cases manuscrites *(enseignants, direction)* (#521)
 - Chaque établissement définit la disponibilité de la LV2 pour chaque niveau. La validation d'inscription, la réinscription et la saisie groupée appliquent la configuration de leur base, sans dépendre du nom du niveau ; les changements de classe retirant une LV2 sont journalisés *(direction, secrétariat, éducateur)*
 - Migration `0086` : colonne `levels.lv2_enabled`, reprise du comportement historique pour les niveaux de 6ème et 5ème existants ; aucune LV2 déjà inscrite n'est effacée. À exécuter sur chaque base tenant avant le déploiement du backend puis du frontend *(technique, déploiement)*
 - Les listes de classe acceptent des critères combinés (sexe, tranche d'âge, nationalités multiples, affectation, redoublement) et les transmettent de manière identique aux exports PDF, Word et Excel *(direction, secrétariat)* (#515)

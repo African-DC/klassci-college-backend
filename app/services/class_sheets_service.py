@@ -8,6 +8,8 @@ métadonnées superflues (photo, genre, tel parent) : seul le trio N° / matricu
 
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -98,6 +100,7 @@ async def get_grade_sheet_pdf(
     note_columns: int,
     subject_id: int | None = None,
     trimester: int | None = None,
+    orientation: Literal["portrait", "landscape"] = "landscape",
 ) -> bytes:
     """Génère la feuille de notes vierge d'une classe (AY courante).
 
@@ -116,4 +119,5 @@ async def get_grade_sheet_pdf(
         note_columns=note_columns,
         subject_name=subject_name,
         trimester=trimester,
+        orientation=orientation,
     )

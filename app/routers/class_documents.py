@@ -5,6 +5,7 @@ sous la limite no-god-code. Pattern miroir de `student_documents.py`.
 """
 
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -159,18 +160,21 @@ async def get_grade_sheet_pdf(
     columns: int = Query(6, ge=1, le=12, description="Nombre de colonnes de notes vides"),
     subject_id: int | None = Query(None, description="Pré-remplit la matière dans l'en-tête"),
     trimester: int | None = Query(None, ge=1, le=3, description="Pré-remplit le trimestre"),
+    orientation: Literal["portrait", "landscape"] = Query(
+        "landscape", description="Orientation de la feuille A4"
+    ),
     _: None = require_permission("admin:students:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
     """Feuille de travail imprimable pour reporter les notes au stylo (AY courante).
 
     Tableau : N° / Matricule / Nom, puis `columns` colonnes Note vides et une
-    colonne Moyenne vide. Paysage A4. Pas de document officiel ni de sceau numérique.
+    colonne Moyenne vide. A4 paysage par défaut ou portrait sur demande.
     Matière et trimestre optionnels : pré-remplissent l'en-tête si fournis.
     """
     return await pdf_response(
         lambda: class_sheets_service.get_grade_sheet_pdf(
-            db, class_id, columns, subject_id, trimester
+            db, class_id, columns, subject_id, trimester, orientation
         ),
         filename=f"feuille-notes-{class_id}.pdf",
         error_context=f"feuille de notes {class_id}",
