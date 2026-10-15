@@ -96,7 +96,7 @@ class PreviousLevel(str, enum.Enum):
 
 
 class SecondLanguage(str, enum.Enum):
-    """LV2, choisie à partir de la 4ème."""
+    """LV2, sous réserve du paramétrage du niveau de classe."""
 
     ALLEMAND = "allemand"
     ESPAGNOL = "espagnol"

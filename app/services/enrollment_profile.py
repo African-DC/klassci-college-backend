@@ -9,8 +9,8 @@ tel autre.
 Un nouvel élève, sans inscription antérieure dans l'établissement, n'a que ce
 que le guichet a tapé. Le reste reste vide.
 
-Ce module garde aussi la seule règle de cohérence de la fiche : pas de LV2 en
-6ème ni en 5ème.
+La disponibilité LV2 provient exclusivement de la configuration du niveau,
+dans la base propre à chaque établissement.
 """
 
 from dataclasses import dataclass
@@ -24,11 +24,25 @@ from app.core.exceptions import BusinessValidationError
 from app.models.academic import AcademicYear, Class, Level
 from app.models.enrollment import CLOSED_STATUSES, Enrollment, PreviousLevel
 from app.schemas.enrollment_profile import PROFILE_FIELDS, EnrollmentProfileFields
-from app.services.level_codes import LEVELS_WITHOUT_LV2, national_level_code
+from app.services.level_codes import national_level_code
 
-LV2_FORBIDDEN_MESSAGE = (
-    "La LV2 ne s'enseigne pas en 6ème ni en 5ème : retirez-la pour un élève de cette classe."
-)
+LV2_FORBIDDEN_MESSAGE = "La LV2 est désactivée pour ce niveau dans les paramètres académiques."
+
+
+async def lv2_allowed_for_class(db: AsyncSession, class_id: int) -> bool:
+    """Lit la politique LV2 du niveau identifié, dans la base du tenant courant."""
+    stmt = select(Level.lv2_enabled).join(Class, Class.level_id == Level.id).where(Class.id == class_id)
+    enabled = (await db.execute(stmt)).scalar_one_or_none()
+    if enabled is None:
+        raise BusinessValidationError(f"Classe {class_id} introuvable ou niveau sans réglage LV2.")
+    return bool(enabled)
+
+
+async def ensure_lv2_allowed(db: AsyncSession, class_id: int, lv2: object) -> bool:
+    allowed = await lv2_allowed_for_class(db, class_id)
+    if lv2 is not None and not allowed:
+        raise BusinessValidationError(LV2_FORBIDDEN_MESSAGE)
+    return allowed
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,11 +54,6 @@ class PriorSnapshot:
     lv2: str | None
     artistic_discipline: str | None
 
-
-def ensure_lv2_allowed(level_name: str | None, lv2: object) -> None:
-    """Refuse une LV2 sur une classe de 6ème ou de 5ème (422)."""
-    if lv2 is not None and national_level_code(level_name) in LEVELS_WITHOUT_LV2:
-        raise BusinessValidationError(LV2_FORBIDDEN_MESSAGE)
 
 
 async def level_name_of_class(db: AsyncSession, class_id: int) -> str | None:
@@ -108,7 +117,7 @@ async def prior_snapshot(
 
 
 def _with_prior(
-    typed: EnrollmentProfileFields, prior: PriorSnapshot | None, new_code: PreviousLevel | None
+    typed: EnrollmentProfileFields, prior: PriorSnapshot | None, new_code: PreviousLevel | None, lv2_allowed: bool
 ) -> dict[str, object]:
     """Ce qui est tapé l'emporte ; un champ laissé vide se remplit de l'antécédent.
 
@@ -133,7 +142,7 @@ def _with_prior(
             values["previous_level"] = prior.level_code
             if typed.previous_series is None:
                 values["previous_series"] = prior.series
-        if typed.lv2 is None and new_code not in LEVELS_WITHOUT_LV2:
+        if typed.lv2 is None and lv2_allowed:
             values["lv2"] = prior.lv2
         if typed.artistic_discipline is None:
             values["artistic_discipline"] = prior.artistic_discipline
@@ -162,13 +171,13 @@ async def apply_initial_profile(
 ) -> None:
     """Pose la fiche d'une inscription qu'on vient de créer.
 
-    Refuse d'abord une LV2 tapée sur une 6ème ou une 5ème, puis complète les
+    Valide la LV2 selon le niveau configuré de la classe, puis complète les
     champs laissés vides à partir de l'inscription de l'année précédente.
     """
     level_name = await level_name_of_class(db, enrollment.class_id)
-    ensure_lv2_allowed(level_name, typed.lv2)
+    allowed = await ensure_lv2_allowed(db, enrollment.class_id, typed.lv2)
     prior = await prior_snapshot(db, enrollment.student_id, year)
-    for name, value in _with_prior(typed, prior, national_level_code(level_name)).items():
+    for name, value in _with_prior(typed, prior, national_level_code(level_name), allowed).items():
         setattr(enrollment, name, value)
     await db.flush()
 
@@ -184,15 +193,14 @@ def profile_values(enrollment: Enrollment) -> dict[str, object]:
 async def clear_lv2_if_class_forbids_it(
     db: AsyncSession, enrollment: Enrollment, *, actor: int
 ) -> None:
-    """Après un changement de classe : une LV2 n'a pas cours en 6ème ni en 5ème.
+    """Retirer et journaliser la LV2 après un changement vers un niveau désactivé.
 
     Même règle qu'à la création, appliquée sans refuser le changement de
     classe : c'est la classe qui décide, la LV2 suit. Le retrait est journalisé.
     """
     if enrollment.lv2 is None:
         return
-    code = national_level_code(await level_name_of_class(db, enrollment.class_id))
-    if code not in LEVELS_WITHOUT_LV2:
+    if await lv2_allowed_for_class(db, enrollment.class_id):
         return
     old = getattr(enrollment.lv2, "value", enrollment.lv2)
     enrollment.lv2 = None

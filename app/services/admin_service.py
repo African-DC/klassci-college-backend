@@ -15,6 +15,8 @@ from app.core.audit_values import frozen, frozen_changed, subject_of
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
 from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
+from app.models.enrollment import Enrollment, CLOSED_STATUSES
+from app.services import enrollment_profile
 from app.models.permission import UserRole
 from app.models.user import (
     Parent,
@@ -1707,14 +1709,32 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
-    await audited_update(
-        db,
-        cls,
-        changes,
-        entity_type="class",
-        updater=repo.update_class,
-        actor=updated_by,
-    )
+    # Une classe est universelle : si son niveau change, corriger explicitement
+    # les inscriptions actives de l'année courante, sans réécrire l'historique.
+    level_changed = "level_id" in changes and changes["level_id"] != cls.level_id
+    async with db.begin_nested():
+        await audited_update(
+            db,
+            cls,
+            changes,
+            entity_type="class",
+            updater=repo.update_class,
+            actor=updated_by,
+        )
+        if level_changed:
+            active_stmt = (
+                select(Enrollment)
+                .join(AcademicYear, AcademicYear.id == Enrollment.academic_year_id)
+                .where(
+                    Enrollment.class_id == class_id,
+                    AcademicYear.is_current.is_(True),
+                    Enrollment.status.not_in(CLOSED_STATUSES),
+                    Enrollment.archived_at.is_(None),
+                    Enrollment.lv2.is_not(None),
+                )
+            )
+            for enrollment in (await db.execute(active_stmt)).scalars().all():
+                await enrollment_profile.clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:

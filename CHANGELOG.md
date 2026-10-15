@@ -8,6 +8,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Changed
+- La LV2 est configurable par niveau, propre à chaque établissement. L'inscription, la réinscription et la saisie groupée respectent le niveau ; un changement de classe vers un niveau désactivé retire la LV2 avec journal d'audit, sans altérer les archives *(direction, secrétariat)*
+
 ### Fixed
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
