@@ -1,4 +1,4 @@
-"""Feuille de notes — PDF A4 paysage vierge à remplir à la main.
+"""Feuille de notes — PDF A4 portrait ou paysage vierge à remplir à la main.
 
 Feuille de travail imprimable pour reporter les notes au stylo : masthead
 sobre, titre, puis un tableau dont les colonnes de notes (Note 1..K) et la
@@ -14,7 +14,7 @@ matière sur un trimestre avant de les reporter dans le système.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from app.services.pdf import components as ui
 from app.services.pdf.theme import PDFTheme
@@ -28,43 +28,53 @@ def _student_name(student: dict[str, Any]) -> str:
     return f"<strong>{last}</strong> {first}".strip()
 
 
-def _sheet_styles() -> str:
-    """Styles complémentaires : colonnes de notes + moyenne + lignes hautes."""
-    return """
+def _sheet_styles(orientation: Literal["portrait", "landscape"]) -> str:
+    """Cases lisibles et assez hautes pour inscrire les notes au stylo."""
+    font_size = "9px" if orientation == "portrait" else "9.5px"
+    cell_padding = "3px" if orientation == "portrait" else "5px"
+    return f"""
     <style>
-        .sheet-table { font-size: 9.5px; }
-        .sheet-table thead th { text-align: center; }
-        .sheet-table thead th.col-name { text-align: left; }
-        .sheet-table thead th.col-moy { border-bottom-color: var(--accent); }
-        .sheet-table tbody td {
-            height: 24px; padding-top: 9px; padding-bottom: 9px;
+        .sheet-table {{ font-size: {font_size}; }}
+        .sheet-table thead th {{
+            text-align: center; padding-left: {cell_padding};
+            padding-right: {cell_padding};
+        }}
+        .sheet-table thead th.col-name {{ text-align: left; }}
+        .sheet-table thead th.col-moy {{ border-bottom-color: var(--accent); }}
+        .sheet-table tbody td {{
+            height: 26px; padding: 8px {cell_padding};
             vertical-align: middle;
-        }
-        .sheet-table td.cell-num { text-align: center; color: var(--muted); }
-        .sheet-table td.cell-mat { text-align: center; font-family: 'Courier New', monospace; }
-        .sheet-table td.cell-blank { text-align: center; }
-        .sheet-table td.cell-moy { text-align: center; background: var(--soft-bg); }
-        /* Une feuille qu'on remplit au stylo a besoin de cases. Sans filet
-           vertical, les colonnes n'existaient qu'en en-tete : l'enseignant
-           n'avait aucun reperage pour cocher en face du bon eleve, et sur ce
-           document la grille EST la fonction. */
+            overflow-wrap: break-word;
+        }}
+        .sheet-table td.cell-num {{ text-align: center; color: var(--muted); }}
+        .sheet-table td.cell-mat {{ text-align: center; font-family: 'Courier New', monospace; }}
+        .sheet-table td.cell-blank {{ text-align: center; }}
+        .sheet-table td.cell-moy {{ text-align: center; background: var(--soft-bg); }}
         .sheet-table thead th.cell-blank,
         .sheet-table td.cell-blank {{
             border-left: 0.75px solid var(--border);
         }}
-        .sheet-table tbody td {{
-            border-bottom: 0.75px solid var(--border);
-        }}
+        .sheet-table tbody td {{ border-bottom: 0.75px solid var(--border); }}
+        .sheet-table tbody tr {{ break-inside: avoid; }}
     </style>
     """
 
 
-def _colgroup(note_columns: int) -> str:
-    fixed = ['<col style="width:4%">', '<col style="width:12%">', '<col style="width:26%">']
-    remaining = 100 - 42 - 10  # 10% pour la colonne Moyenne
-    note_width = remaining / note_columns
+def _colgroup(note_columns: int, orientation: Literal["portrait", "landscape"]) -> str:
+    # Les noms gardent de la place, même sur l'A4 étroit en portrait.
+    if orientation == "portrait":
+        widths = (5, 13, 28, 10)
+    else:
+        widths = (4, 12, 26, 10)
+    num, matricule, name, average = widths
+    fixed = [
+        f'<col style="width:{num}%">',
+        f'<col style="width:{matricule}%">',
+        f'<col style="width:{name}%">',
+    ]
+    note_width = (100 - sum(widths)) / note_columns
     notes = f'<col style="width:{note_width:.3f}%">' * note_columns
-    moy = '<col style="width:10%">'
+    moy = f'<col style="width:{average}%">'
     return f"<colgroup>{''.join(fixed)}{notes}{moy}</colgroup>"
 
 
@@ -111,8 +121,9 @@ def generate_grade_sheet_pdf(
     note_columns: int = _DEFAULT_NOTE_COLUMNS,
     subject_name: str = "",
     trimester: int | None = None,
+    orientation: Literal["portrait", "landscape"] = "landscape",
 ) -> bytes:
-    """Génère la feuille de notes vierge (paysage A4) — theme école dynamique.
+    """Génère la feuille de notes vierge (A4 portrait ou paysage) — thème école.
 
     `class_info` : {class_name, level_name, academic_year_name, effectif}
     `students` : [{enrollment_number, first_name, last_name}]
@@ -123,6 +134,8 @@ def generate_grade_sheet_pdf(
     from weasyprint import HTML  # lazy import — GTK requis au runtime
 
     theme = PDFTheme.from_school(school)
+    if orientation not in ("portrait", "landscape"):
+        raise ValueError("Orientation de feuille de notes invalide")
     note_columns = max(1, note_columns)
 
     class_name = class_info.get("class_name", "") or ""
@@ -142,19 +155,24 @@ def generate_grade_sheet_pdf(
 
     table = (
         '<table class="pdf-table sheet-table">'
-        f"{_colgroup(note_columns)}{_thead(note_columns)}{_tbody(students, note_columns)}"
+        f"{_colgroup(note_columns, orientation)}{_thead(note_columns)}{_tbody(students, note_columns)}"
         "</table>"
     )
 
     issued_str = datetime.utcnow().strftime("%d/%m/%Y")
+    page_css = ui.base_styles(
+        theme,
+        page_size=f"A4 {orientation}",
+        margin="10mm" if orientation == "portrait" else "12mm",
+    )
 
     html = f"""
     <!DOCTYPE html>
     <html lang="fr">
     <head>
         <meta charset="UTF-8">
-        {ui.base_styles(theme, page_size="A4 landscape", margin="12mm")}
-        {_sheet_styles()}
+        {page_css}
+        {_sheet_styles(orientation)}
     </head>
     <body>
         <div class="pdf-page-body">

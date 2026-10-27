@@ -1600,9 +1600,11 @@ async def get_student_parents(db: AsyncSession, student_id: int) -> list[dict]:
 
 def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
     level_name = None
+    lv2_enabled = False
     series_name = None
     if hasattr(c, "level") and c.level is not None:
         level_name = c.level.name
+        lv2_enabled = c.level.lv2_enabled
     if hasattr(c, "series") and c.series is not None:
         series_name = c.series.name
     return ClassResponse(
@@ -1613,6 +1615,7 @@ def _class_to_response(c: object, enrolled_count: int = 0) -> ClassResponse:
         room_id=c.room_id,
         max_students=c.max_students,
         level_name=level_name,
+        lv2_enabled=lv2_enabled,
         series_name=series_name,
         enrolled_count=enrolled_count,
         created_at=c.created_at,
@@ -1707,14 +1710,42 @@ async def update_class(
     changes = data.model_dump(exclude_none=True, mode="json")
     if not changes:
         return _class_to_response(cls)
-    await audited_update(
-        db,
-        cls,
-        changes,
-        entity_type="class",
-        updater=repo.update_class,
-        actor=updated_by,
-    )
+    previous_level_id = cls.level_id
+    # Une classe est universelle et peut porter des inscriptions d'années
+    # précédentes. Préserver leurs LV2 : seules les inscriptions ouvertes
+    # de l'année COURANTE suivent ce changement administratif.
+    async with db.begin_nested():
+        await audited_update(
+            db,
+            cls,
+            changes,
+            entity_type="class",
+            updater=repo.update_class,
+            actor=updated_by,
+        )
+        if cls.level_id != previous_level_id:
+            from app.models.enrollment import CLOSED_STATUSES, Enrollment
+            from app.services.enrollment_profile import clear_lv2_if_class_forbids_it
+
+            affected = (
+                (
+                    await db.execute(
+                        select(Enrollment)
+                        .join(AcademicYear, AcademicYear.id == Enrollment.academic_year_id)
+                        .where(
+                            Enrollment.class_id == class_id,
+                            Enrollment.lv2.is_not(None),
+                            AcademicYear.is_current.is_(True),
+                            Enrollment.status.not_in(CLOSED_STATUSES),
+                            Enrollment.archived_at.is_(None),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for enrollment in affected:
+                await clear_lv2_if_class_forbids_it(db, enrollment, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_class_by_id(db, class_id)
     if refreshed is None:
