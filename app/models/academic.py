@@ -25,6 +25,7 @@ from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
     from app.models.enrollment import Enrollment
+    from app.models.subject_teacher import SubjectTeacher
     from app.models.timetable import TimetableSlot
     from app.models.user import TeacherProfile
 
@@ -229,6 +230,8 @@ class Subject(Base, TimestampMixin):
     coefficient: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     hours_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Compatibilité : premier enseignant de `teacher_links`, tenu à jour par
+    # services/subject_teachers.set_subject_teachers.
     teacher_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("teacher_profiles.id", ondelete="SET NULL"),
@@ -239,6 +242,10 @@ class Subject(Base, TimestampMixin):
     level: Mapped[Level | None] = relationship(foreign_keys=[level_id])
     series: Mapped[Series | None] = relationship(foreign_keys=[series_id])
     teacher: Mapped[TeacherProfile | None] = relationship(foreign_keys=[teacher_id])
+    # Enseignants ordonnés par `position`. Lecture seule : l'écriture passe par le service.
+    teacher_links: Mapped[list[SubjectTeacher]] = relationship(
+        order_by="SubjectTeacher.position", viewonly=True
+    )
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="subject")
 
 

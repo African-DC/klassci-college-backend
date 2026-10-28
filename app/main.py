@@ -15,6 +15,7 @@ from app.core.sentry import init_sentry
 from app.core.uploads import UPLOAD_ROOT, ensure_upload_dirs
 from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
+from app.routers.admin_subject_teachers import router as admin_subject_teachers_router
 from app.routers.archive import router as archive_router
 from app.routers.arrears_policy import router as arrears_policy_router
 from app.routers.attachments import router as attachments_router
@@ -123,6 +124,7 @@ register_archive_filter()
 app.include_router(duplicates_router)
 app.include_router(teacher_documents_router)
 app.include_router(admin_router)
+app.include_router(admin_subject_teachers_router)
 app.include_router(archive_router)
 app.include_router(attachments_router)
 app.include_router(attendance_router)

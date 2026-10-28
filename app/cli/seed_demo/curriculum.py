@@ -15,6 +15,7 @@ from app.cli.seed_demo.context import SeedContext
 from app.models.academic import Subject
 from app.schemas.admin import SubjectCreate
 from app.services import admin_service
+from app.services.subject_teachers import set_subject_teachers
 
 #: Une couleur par matière, pour que l'emploi du temps se lise d'un coup d'œil.
 COLORS: dict[str, str] = {
@@ -103,7 +104,7 @@ async def ensure_instances(ctx: SeedContext) -> None:
                 # créneau : on la complète, sans jamais déloger un enseignant
                 # que l'école a désigné elle-même.
                 if found.teacher_id is None and teacher_id is not None:
-                    found.teacher_id = teacher_id
+                    await set_subject_teachers(ctx.db, found, [teacher_id])
                 if found.color is None:
                     found.color = COLORS.get(name)
 

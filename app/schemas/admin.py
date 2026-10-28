@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 from app.models.user import TeacherContract
 from app.schemas.fee import FeeEntitlement
+from app.schemas.subject_teachers import SubjectTeacherRef
 
 # ---------------------------------------------------------------------------
 # Student
@@ -592,6 +593,7 @@ class SubjectCreate(BaseModel):
     hours_per_week: int = 2
     color: str | None = None
     teacher_id: int | None = None
+    teacher_ids: list[int] | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -609,6 +611,7 @@ class SubjectUpdate(BaseModel):
     hours_per_week: int | None = None
     color: str | None = None
     teacher_id: int | None = None
+    teacher_ids: list[int] | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -630,6 +633,7 @@ class SubjectResponse(BaseModel):
     color: str | None = None
     teacher_id: int | None = None
     teacher_name: str | None = None
+    teachers: list[SubjectTeacherRef] = []
     level_name: str | None = None
     series_name: str | None = None
     created_at: datetime
@@ -643,6 +647,7 @@ class SubjectDuplicateRequest(BaseModel):
     coefficient: int | None = None
     hours_per_week: int | None = None
     teacher_id: int | None = None
+    teacher_ids: list[int] | None = None
 
 
 class SubjectListResponse(BaseModel):

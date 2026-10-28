@@ -1,6 +1,6 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, with_loader_criteria
@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload, with_loader_criteria
 from app.models.academic import AcademicYear, Class, Level, Room, Series, Subject
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.permission import Permission, Role, RolePermission, UserRole
+from app.models.subject_teacher import SubjectTeacher
 from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile, User
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
@@ -326,11 +327,7 @@ async def get_admin_summary(db: AsyncSession) -> dict:
         "instances": await _scalar(
             select(func.count(Subject.id)).where(Subject.level_id.isnot(None))
         ),
-        "without_teacher": await _scalar(
-            select(func.count(Subject.id)).where(
-                Subject.level_id.isnot(None), Subject.teacher_id.is_(None)
-            )
-        ),
+        "without_teacher": await count_instances_without_teacher(db),
         "total_hours": await _scalar(
             select(func.coalesce(func.sum(Subject.hours_per_week), 0)).where(
                 Subject.level_id.isnot(None)
@@ -688,13 +685,30 @@ async def delete_class(db: AsyncSession, cls: Class) -> None:
 # ---------------------------------------------------------------------------
 
 
+_SUBJECT_LOAD_OPTIONS = (
+    selectinload(Subject.level),
+    selectinload(Subject.series),
+    selectinload(Subject.teacher_links).selectinload(SubjectTeacher.teacher),
+)
+
+
+async def count_instances_without_teacher(db: AsyncSession) -> int:
+    """Matières d'un niveau (instances) sans aucun enseignant rattaché."""
+    stmt = select(func.count(Subject.id)).where(
+        Subject.level_id.isnot(None),
+        ~exists().where(SubjectTeacher.subject_id == Subject.id),
+    )
+    return int((await db.execute(stmt)).scalar() or 0)
+
+
 async def get_subject_by_id(db: AsyncSession, subject_id: int) -> Subject | None:
+    # populate_existing : après une écriture de teacher_links dans la même session,
+    # la collection déjà chargée doit être relue, pas gardée telle quelle.
     stmt = (
         select(Subject)
-        .options(
-            selectinload(Subject.level), selectinload(Subject.series), selectinload(Subject.teacher)
-        )
+        .options(*_SUBJECT_LOAD_OPTIONS)
         .where(Subject.id == subject_id)
+        .execution_options(populate_existing=True)
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -731,11 +745,7 @@ async def list_subjects(
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
     stmt = (
-        base.options(
-            selectinload(Subject.level),
-            selectinload(Subject.series),
-            selectinload(Subject.teacher),
-        )
+        base.options(*_SUBJECT_LOAD_OPTIONS)
         .offset((page - 1) * size)
         .limit(size)
         .order_by(Subject.name.asc())

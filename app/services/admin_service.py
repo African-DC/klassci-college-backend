@@ -84,10 +84,16 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
+from app.schemas.subject_teachers import SubjectTeacherRef
 from app.services import archive_service, fees_paid, photo_lifecycle
 from app.services import fee_entitlements as entitlements
 from app.services.audited_crud import audited_update
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
+from app.services.subject_teachers import (
+    replace_subject_teachers_audited,
+    requested_teacher_ids,
+    set_subject_teachers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1783,10 +1789,16 @@ def _subject_to_response(s: object) -> SubjectResponse:
         r.level_name = s.level.name  # type: ignore[union-attr]
     if hasattr(s, "series") and s.series:  # type: ignore[union-attr]
         r.series_name = s.series.name  # type: ignore[union-attr]
-    if hasattr(s, "teacher") and s.teacher:  # type: ignore[union-attr]
-        t = s.teacher  # type: ignore[union-attr]
-        r.teacher_name = f"{t.first_name} {t.last_name}"
-        r.teacher_id = t.id
+    teachers = [
+        SubjectTeacherRef(
+            id=link.teacher.id,
+            full_name=f"{link.teacher.first_name} {link.teacher.last_name}",
+        )
+        for link in s.teacher_links  # type: ignore[union-attr]
+    ]
+    r.teachers = teachers
+    r.teacher_id = teachers[0].id if teachers else None
+    r.teacher_name = teachers[0].full_name if teachers else None
     return r
 
 
@@ -1829,8 +1841,12 @@ async def get_subject(db: AsyncSession, subject_id: int) -> SubjectResponse:
 async def create_subject(
     db: AsyncSession, data: SubjectCreate, *, created_by: int
 ) -> SubjectResponse:
+    teacher_ids = requested_teacher_ids(data.teacher_ids, data.teacher_id) or []
     async with db.begin_nested():
-        subject = await repo.create_subject(db, **data.model_dump())
+        subject = await repo.create_subject(
+            db, **data.model_dump(exclude={"teacher_ids", "teacher_id"})
+        )
+        await set_subject_teachers(db, subject, teacher_ids)
         await audit_log(
             db,
             entity_type="subject",
@@ -1852,17 +1868,21 @@ async def update_subject(
     subject = await repo.get_subject_by_id(db, subject_id)
     if subject is None:
         raise NotFoundError("Subject", subject_id)
-    changes = data.model_dump(exclude_none=True, mode="json")
-    if not changes:
+    changes = data.model_dump(exclude_none=True, mode="json", exclude={"teacher_ids", "teacher_id"})
+    teacher_ids = requested_teacher_ids(data.teacher_ids, data.teacher_id)
+    if not changes and teacher_ids is None:
         return _subject_to_response(subject)
-    await audited_update(
-        db,
-        subject,
-        changes,
-        entity_type="subject",
-        updater=repo.update_subject,
-        actor=updated_by,
-    )
+    if changes:
+        await audited_update(
+            db,
+            subject,
+            changes,
+            entity_type="subject",
+            updater=repo.update_subject,
+            actor=updated_by,
+        )
+    if teacher_ids is not None:
+        await replace_subject_teachers_audited(db, subject, teacher_ids, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_subject_by_id(db, subject_id)
     if refreshed is None:
@@ -1921,7 +1941,9 @@ async def duplicate_subject(
         color=source.color,
         level_id=data.level_id,
         series_id=data.series_id,
-        teacher_id=data.teacher_id,
+    )
+    await set_subject_teachers(
+        db, new_subject, requested_teacher_ids(data.teacher_ids, data.teacher_id) or []
     )
     await audit_log(
         db,
