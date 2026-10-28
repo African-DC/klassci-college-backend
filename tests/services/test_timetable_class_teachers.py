@@ -208,6 +208,25 @@ async def test_creneau_refuse_pour_un_enseignant_qui_n_enseigne_pas_la_matiere(
 
 
 @pytest.mark.asyncio
+async def test_creneau_refuse_si_la_classe_a_choisi_un_autre_enseignant(
+    session: AsyncSession,
+) -> None:
+    maths = await _matiere(session, "Mathématiques", [KOUASSI, TRAORE], heures=4)
+    await _choisir(session, CLASSE_6A, maths.id, TRAORE)
+
+    with pytest.raises(BusinessValidationError) as erreur:
+        await svc.create_slot(
+            session, _creneau(CLASSE_6A, maths.id, KOUASSI, "08:00", "09:00"), created_by=ACTEUR
+        )
+    assert "est confiée à" in erreur.value.detail
+
+    cree = await svc.create_slot(
+        session, _creneau(CLASSE_6A, maths.id, TRAORE, "08:00", "09:00"), created_by=ACTEUR
+    )
+    assert cree.teacher_id == TRAORE
+
+
+@pytest.mark.asyncio
 async def test_creneau_accepte_pour_un_enseignant_retenu(session: AsyncSession) -> None:
     anglais = await _matiere(session, "Anglais", [YAO], heures=3)
 

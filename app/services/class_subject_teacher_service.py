@@ -19,6 +19,7 @@ from app.repositories import class_subject_teacher_repository as repo
 from app.schemas.class_subject_teachers import ClassSubjectTeacherAssignment, Source
 from app.schemas.subject_teachers import SubjectTeacherRef
 from app.services.class_subjects import subjects_for_class
+from app.services.subject_teachers import ensure_teacher_kept
 
 
 @dataclass(frozen=True)
@@ -164,3 +165,25 @@ async def save_class_teachers(
     await db.commit()
     cls = await load_class_or_404(db, class_id)
     return cls, await resolve_class_teachers(db, cls)
+
+
+async def ensure_slot_teacher(
+    db: AsyncSession, *, class_id: int, subject_id: int, teacher_id: int
+) -> None:
+    """Refuse un créneau dont l'enseignant n'est pas celui que la classe a choisi.
+
+    L'enseignant doit d'abord être retenu pour la matière. Si la classe a choisi
+    un enseignant pour cette matière, seul celui-ci peut y être planifié.
+    """
+    await ensure_teacher_kept(db, teacher_id=teacher_id, subject_id=subject_id)
+    chosen = (await repo.explicit_teachers_for_class(db, class_id)).get(subject_id)
+    if chosen is None or chosen == teacher_id:
+        return
+    teacher = await db.get(TeacherProfile, chosen)
+    subject = await db.get(Subject, subject_id)
+    nom = (teacher.display_name if teacher else "") or f"l'enseignant #{chosen}"
+    matiere = subject.name if subject else f"#{subject_id}"
+    raise BusinessValidationError(
+        f"Dans cette classe, « {matiere} » est confiée à {nom}. "
+        "Changez l'enseignant dans « Enseignants de la classe » pour en planifier un autre."
+    )

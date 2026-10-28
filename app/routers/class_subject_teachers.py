@@ -59,7 +59,7 @@ async def put_class_subject_teachers(
     _: None = require_permission("timetable:write"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassSubjectTeachersResponse:
-    """Enregistre les enseignants choisis pour la classe (teacher_id null = retirer le choix)."""
+    """Mise à jour partielle : seules les matières listées changent (teacher_id null = retirer le choix)."""
     cls, entries = await service.save_class_teachers(
         db, class_id, data.assignments, actor=current_user.user_id
     )

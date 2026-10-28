@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-28T19:33:44Z",
+  "generated_at": "2026-10-28T20:10:39Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -18,7 +18,7 @@
             "pull_request": null
           },
           {
-            "text": "Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent",
+            "text": "Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe",
             "audience": [
               "admin",
               "direction des études"

@@ -1,12 +1,13 @@
-"""Les matières d'une classe : la seule définition de « qui appartient à cette classe ».
+"""Les matières d'une classe : la définition de « qui appartient à cette classe » pour l'emploi du temps.
 
 Une matière est une instance (niveau, série). Une classe reçoit les matières de
 son niveau ; si elle a une série, celles de sa série et les matières sans série.
 Une classe sans série reçoit toutes les matières de son niveau.
 
-La règle n'existe qu'en SQL (`class_subject_condition`) : elle sert à une seule
-classe comme à une jointure. Un chantier séparé (#527) restreindra les classes
-sans série.
+La règle est écrite en SQL (`class_subject_condition`) : elle sert à une seule
+classe comme à une jointure. `curriculum_service` garde sa propre règle pour les
+évaluations, qui accepte aussi les matières du catalogue (sans niveau). Un
+chantier séparé (#527) aligne le cas des classes sans série.
 """
 
 from sqlalchemy import Select, and_, or_, select
