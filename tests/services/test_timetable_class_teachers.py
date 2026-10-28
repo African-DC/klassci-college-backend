@@ -31,8 +31,10 @@ from app.services.reports_subject_stats import enrich_subject_rows
 
 ANNEE_ID = 1
 NIVEAU_6E = 1
+NIVEAU_5E = 2
 CLASSE_6A = 10
 CLASSE_6B = 11
+CLASSE_5A = 12
 KOUASSI, TRAORE, YAO = 1, 2, 3
 ACTEUR = 1
 TABLES = (
@@ -246,6 +248,59 @@ async def test_conflit_entre_deux_classes_reste_refuse(session: AsyncSession) ->
         await svc.create_slot(
             session, _creneau(CLASSE_6B, maths.id, KOUASSI, "08:00", "09:00"), created_by=ACTEUR
         )
+
+
+@pytest.mark.asyncio
+async def test_modification_horaire_passe_meme_si_l_enseignant_n_est_plus_retenu(
+    session: AsyncSession,
+) -> None:
+    maths = await _matiere(session, "Mathématiques", [KOUASSI, TRAORE], heures=4)
+    cree = await svc.create_slot(
+        session, _creneau(CLASSE_6A, maths.id, KOUASSI, "08:00", "09:00"), created_by=ACTEUR
+    )
+    await subject_svc.set_subject_teachers(session, maths, [TRAORE])
+    await session.commit()
+
+    modifie = await svc.update_slot(
+        session,
+        cree.id,
+        TimetableSlotUpdate(start_time="10:00", end_time="11:00"),
+        updated_by=ACTEUR,
+    )
+
+    assert modifie.start_time == "10:00"
+
+
+@pytest.mark.asyncio
+async def test_changer_l_enseignant_vers_un_non_retenu_est_refuse(session: AsyncSession) -> None:
+    maths = await _matiere(session, "Mathématiques", [KOUASSI, TRAORE], heures=4)
+    cree = await svc.create_slot(
+        session, _creneau(CLASSE_6A, maths.id, KOUASSI, "08:00", "09:00"), created_by=ACTEUR
+    )
+
+    with pytest.raises(BusinessValidationError) as erreur:
+        await svc.update_slot(
+            session,
+            cree.id,
+            TimetableSlotUpdate(teacher_id=YAO),
+            updated_by=ACTEUR,
+        )
+
+    assert "Sophie Yao" in erreur.value.detail
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_d_une_classe_sans_matiere_pour_son_niveau(
+    session: AsyncSession,
+) -> None:
+    session.add(Level(id=NIVEAU_5E, name="5e", order=2))
+    session.add(Class(id=CLASSE_5A, name="5eme A", level_id=NIVEAU_5E))
+    await session.commit()
+
+    diagnostic = await svc.diagnostic_for_class(session, CLASSE_5A)
+
+    assert diagnostic["ready"] is False
+    assert diagnostic["subjects_without_teacher"] == []
 
 
 def test_bulletin_affiche_le_prof_de_la_classe_du_bulletin() -> None:

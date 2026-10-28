@@ -87,8 +87,8 @@ from app.schemas.admin import (
 from app.services import archive_service, fees_paid, photo_lifecycle, subject_teachers
 from app.services import fee_entitlements as entitlements
 from app.services.audited_crud import audited_update
-from app.services.class_subject_teacher_service import teacher_weekly_hours
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
+from app.services.teacher_workload import teacher_weekly_hours
 
 logger = logging.getLogger(__name__)
 

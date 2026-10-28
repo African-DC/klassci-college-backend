@@ -4,8 +4,6 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
-from app.core.exceptions import NotFoundError
-from app.models.academic import Class
 from app.schemas.class_subject_teachers import (
     ClassSubjectTeacherItem,
     ClassSubjectTeachersResponse,
@@ -41,13 +39,6 @@ def _to_response(
     )
 
 
-async def _class_or_404(db: AsyncSession, class_id: int) -> Class:
-    cls = await db.get(Class, class_id)
-    if cls is None:
-        raise NotFoundError("Class", class_id)
-    return cls
-
-
 @router.get("/{class_id}/subject-teachers", response_model=ClassSubjectTeachersResponse)
 async def get_class_subject_teachers(
     class_id: int,
@@ -55,7 +46,7 @@ async def get_class_subject_teachers(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassSubjectTeachersResponse:
     """Matières de la classe, enseignants proposés et enseignant résolu pour chacune."""
-    cls = await _class_or_404(db, class_id)
+    cls = await service.load_class_or_404(db, class_id)
     entries = await service.resolve_class_teachers(db, cls)
     return _to_response(cls.id, cls.name, entries)
 
@@ -69,8 +60,7 @@ async def put_class_subject_teachers(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> ClassSubjectTeachersResponse:
     """Enregistre les enseignants choisis pour la classe (teacher_id null = retirer le choix)."""
-    entries = await service.save_class_teachers(
+    cls, entries = await service.save_class_teachers(
         db, class_id, data.assignments, actor=current_user.user_id
     )
-    cls = await _class_or_404(db, class_id)
     return _to_response(cls.id, cls.name, entries)

@@ -18,10 +18,8 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
-from app.services.class_subject_teacher_service import (
-    resolve_class_teachers,
-    verifier_enseignant_retenu,
-)
+from app.services.class_subject_teacher_service import resolve_class_teachers
+from app.services.subject_teachers import ensure_teacher_kept
 
 logger = logging.getLogger(__name__)
 
@@ -173,12 +171,7 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
-    await verifier_enseignant_retenu(
-        db,
-        teacher_id=data.teacher_id,
-        subject_id=data.subject_id,
-        nom_enseignant=await _nom_enseignant(db, data.teacher_id),
-    )
+    await ensure_teacher_kept(db, teacher_id=data.teacher_id, subject_id=data.subject_id)
     # Vérifier les conflits
     await _verifier_enseignant_libre(
         db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
@@ -252,12 +245,8 @@ async def update_slot(
         new_room_id = slot.room_id
 
     new_subject_id = data.subject_id if data.subject_id is not None else slot.subject_id
-    await verifier_enseignant_retenu(
-        db,
-        teacher_id=new_teacher_id,
-        subject_id=new_subject_id,
-        nom_enseignant=await _nom_enseignant(db, new_teacher_id),
-    )
+    if (new_teacher_id, new_subject_id) != (slot.teacher_id, slot.subject_id):
+        await ensure_teacher_kept(db, teacher_id=new_teacher_id, subject_id=new_subject_id)
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
         db,
@@ -492,8 +481,8 @@ async def auto_generate(
     if without_teacher:
         names = ", ".join(s.name for s in without_teacher)
         raise BusinessValidationError(
-            f"Matieres sans enseignant pour cette classe : {names}. "
-            "Completez « Enseignants de la classe » dans l'emploi du temps."
+            f"Matières sans enseignant pour cette classe : {names}. "
+            "Complétez « Enseignants de la classe » dans l'emploi du temps."
         )
 
     # 4. Build assignments data for Celery

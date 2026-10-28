@@ -1,14 +1,10 @@
 """Accès DB aux enseignants retenus par classe et par matière."""
 
-from collections.abc import Iterable
-
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from app.models.academic import Class, Subject
 from app.models.class_subject_teacher import ClassSubjectTeacher
-from app.models.subject_teacher import SubjectTeacher
 
 
 async def explicit_teachers_for_class(db: AsyncSession, class_id: int) -> dict[int, int]:
@@ -19,66 +15,68 @@ async def explicit_teachers_for_class(db: AsyncSession, class_id: int) -> dict[i
     return dict((await db.execute(stmt)).all())
 
 
-async def explicit_teachers_for_subjects(
-    db: AsyncSession, subject_ids: Iterable[int]
-) -> dict[tuple[int, int], int]:
-    """(class_id, subject_id) -> teacher_id, pour les matières données, toutes classes."""
-    ids = list(subject_ids)
-    if not ids:
-        return {}
-    stmt = select(
-        ClassSubjectTeacher.class_id, ClassSubjectTeacher.subject_id, ClassSubjectTeacher.teacher_id
-    ).where(ClassSubjectTeacher.subject_id.in_(ids))
-    return {(cid, sid): tid for cid, sid, tid in (await db.execute(stmt)).all()}
-
-
-async def set_class_teacher(
-    db: AsyncSession, class_id: int, subject_id: int, teacher_id: int | None
+async def apply_class_teachers(
+    db: AsyncSession, class_id: int, wanted: dict[int, int | None]
 ) -> None:
-    """Pose le choix explicite, ou le retire si `teacher_id` est None. Ne commite pas."""
-    row = (
-        await db.execute(
-            select(ClassSubjectTeacher).where(
-                ClassSubjectTeacher.class_id == class_id,
-                ClassSubjectTeacher.subject_id == subject_id,
+    """Applique les choix de la classe en une passe : retire ceux à None, pose les autres.
+
+    Une seule lecture des lignes existantes, un seul flush. Ne commite pas.
+    """
+    existing = {
+        row.subject_id: row
+        for row in (
+            await db.execute(
+                select(ClassSubjectTeacher).where(ClassSubjectTeacher.class_id == class_id)
             )
         )
-    ).scalar_one_or_none()
-    if teacher_id is None:
-        if row is not None:
-            await db.delete(row)
-        return
-    if row is None:
-        db.add(ClassSubjectTeacher(class_id=class_id, subject_id=subject_id, teacher_id=teacher_id))
-    else:
-        row.teacher_id = teacher_id
+        .scalars()
+        .all()
+    }
+    for subject_id, teacher_id in wanted.items():
+        row = existing.get(subject_id)
+        if teacher_id is None:
+            if row is not None:
+                await db.delete(row)
+        elif row is None:
+            db.add(
+                ClassSubjectTeacher(class_id=class_id, subject_id=subject_id, teacher_id=teacher_id)
+            )
+        else:
+            row.teacher_id = teacher_id
     await db.flush()
 
 
 async def purge_orphan_teachers(
     db: AsyncSession, subject_id: int, kept_teacher_ids: list[int]
-) -> None:
-    """Retire les choix de la matière dont l'enseignant n'est plus retenu pour elle."""
-    stmt = delete(ClassSubjectTeacher).where(ClassSubjectTeacher.subject_id == subject_id)
+) -> dict[int, list[int]]:
+    """Retire les choix de la matière dont l'enseignant n'est plus retenu pour elle.
+
+    Rend, pour la matière, les classes dont le choix a été retiré. Ne commite pas.
+    """
+    cond = [ClassSubjectTeacher.subject_id == subject_id]
     if kept_teacher_ids:
-        stmt = stmt.where(ClassSubjectTeacher.teacher_id.not_in(kept_teacher_ids))
-    await db.execute(stmt)
+        cond.append(ClassSubjectTeacher.teacher_id.not_in(kept_teacher_ids))
+    return await _purge(db, cond)
 
 
-async def classes_for_levels(db: AsyncSession, level_ids: Iterable[int]) -> list[Class]:
-    ids = list(level_ids)
-    if not ids:
-        return []
-    return list((await db.execute(select(Class).where(Class.level_id.in_(ids)))).scalars().all())
+async def purge_choices_of_teacher(db: AsyncSession, teacher_id: int) -> dict[int, list[int]]:
+    """Retire tous les choix d'un enseignant, toutes matières confondues.
+
+    Rend subject_id -> classes dont le choix a été retiré. Ne commite pas.
+    """
+    return await _purge(db, [ClassSubjectTeacher.teacher_id == teacher_id])
 
 
-async def subjects_taught_by(db: AsyncSession, teacher_id: int) -> list[Subject]:
-    """Matières où l'enseignant est retenu, avec la liste complète de leurs enseignants."""
-    retenues = select(SubjectTeacher.subject_id).where(SubjectTeacher.teacher_id == teacher_id)
-    stmt = (
-        select(Subject)
-        .where(Subject.id.in_(retenues))
-        .options(selectinload(Subject.teacher_links))
-        .order_by(Subject.id)
-    )
-    return list((await db.execute(stmt)).scalars().all())
+async def _purge(db: AsyncSession, cond: list[ColumnElement[bool]]) -> dict[int, list[int]]:
+    rows = (
+        await db.execute(
+            select(ClassSubjectTeacher.subject_id, ClassSubjectTeacher.class_id).where(*cond)
+        )
+    ).all()
+    if not rows:
+        return {}
+    await db.execute(delete(ClassSubjectTeacher).where(*cond))
+    removed: dict[int, list[int]] = {}
+    for subject_id, class_id in rows:
+        removed.setdefault(subject_id, []).append(class_id)
+    return removed

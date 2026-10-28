@@ -178,6 +178,24 @@ async def filters(db: AsyncSession) -> dict:
     }
 
 
+async def _subject_links(
+    db: AsyncSession, s: Selection, teacher_ids: list[int]
+) -> list[tuple[Subject, int]]:
+    """Matières retenues pour les enseignants donnés, filtrées par la sélection, en SQL."""
+    stmt = (
+        select(Subject, SubjectTeacher.teacher_id)
+        .join(SubjectTeacher, SubjectTeacher.subject_id == Subject.id)
+        .where(SubjectTeacher.teacher_id.in_(teacher_ids))
+    )
+    if s.subject_ids:
+        stmt = stmt.where(Subject.id.in_(s.subject_ids))
+    if s.level_ids:
+        stmt = stmt.where(Subject.level_id.in_(s.level_ids))
+    if s.series_ids:
+        stmt = stmt.where(Subject.series_id.in_(s.series_ids))
+    return [(sub, tid) for sub, tid in (await db.execute(stmt)).all()]
+
+
 async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
     s.validate()
     teachers = (await db.execute(select(TeacherProfile))).scalars().all()
@@ -251,24 +269,9 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             )
         # Les enseignants affectés seulement sur la fiche matière, sans créneau,
         # restent visibles au niveau de la matière : pas de classe inventée.
-        links = (
-            await db.execute(
-                select(Subject, SubjectTeacher.teacher_id).join(
-                    SubjectTeacher, SubjectTeacher.subject_id == Subject.id
-                )
-            )
-        ).all()
+        # Une fiche matière n'identifie aucune classe : rien à lister si la sélection en nomme.
+        links = [] if s.class_ids else await _subject_links(db, s, list(by_id))
         for sub, tid in links:
-            if tid not in by_id:
-                continue
-            if s.subject_ids and sub.id not in s.subject_ids:
-                continue
-            if s.level_ids and sub.level_id not in s.level_ids:
-                continue
-            if s.series_ids and sub.series_id not in s.series_ids:
-                continue
-            if s.class_ids:
-                continue  # une fiche matière n'identifie aucune classe
             key = (tid, sub.id, None)
             if key in seen:
                 continue

@@ -8,6 +8,8 @@ from app.schemas.subject_teachers import SubjectTeacherRef
 
 MAX_ASSIGNMENTS = 60
 
+Source = Literal["explicit", "single", "none"]
+
 
 class ClassSubjectTeacherItem(BaseModel):
     subject_id: int
@@ -17,7 +19,7 @@ class ClassSubjectTeacherItem(BaseModel):
     eligible_teachers: list[SubjectTeacherRef]
     assigned_teacher_id: int | None
     resolved_teacher_id: int | None
-    source: Literal["explicit", "single", "none"]
+    source: Source
 
 
 class ClassSubjectTeachersResponse(BaseModel):

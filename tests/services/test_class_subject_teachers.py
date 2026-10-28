@@ -5,12 +5,16 @@ enregistré. Les matières passent par le vrai service de répartition, qui purg
 les choix devenus orphelins.
 """
 
+import importlib.util
 from collections.abc import AsyncIterator
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Integer, MetaData, select
+from pydantic import ValidationError
+from sqlalchemy import Integer, MetaData, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -20,9 +24,13 @@ from app.models.academic import Class, Level, Series, Subject
 from app.models.audit import AuditLog
 from app.models.class_subject_teacher import ClassSubjectTeacher
 from app.models.user import TeacherProfile
-from app.schemas.class_subject_teachers import ClassSubjectTeacherAssignment
+from app.schemas.class_subject_teachers import (
+    ClassSubjectTeacherAssignment,
+    ClassSubjectTeachersUpdate,
+)
 from app.services import class_subject_teacher_service as svc
 from app.services import subject_teachers as subject_svc
+from app.services import teacher_workload as workload
 
 NIVEAU_6E = 1
 NIVEAU_5E = 2
@@ -242,17 +250,17 @@ async def test_heures_hebdomadaires_suivent_l_enseignant_resolu_par_classe(
     await _choisir(session, CLASSE_6B, maths.id, TRAORE)
 
     # Kouassi : maths en 6A (4) + histoire en 5A (9, unique enseignant du niveau)
-    assert await svc.teacher_weekly_hours(session, KOUASSI) == 4 + 9
-    assert await svc.teacher_weekly_hours(session, TRAORE) == 4
+    assert await workload.teacher_weekly_hours(session, KOUASSI) == 4 + 9
+    assert await workload.teacher_weekly_hours(session, TRAORE) == 4
     # Yao : anglais dans les deux classes de 6e, unique enseignant du niveau
-    assert await svc.teacher_weekly_hours(session, YAO) == 3 * 2
+    assert await workload.teacher_weekly_hours(session, YAO) == 3 * 2
 
 
 @pytest.mark.asyncio
 async def test_heures_comptent_une_fois_par_classe_du_niveau(session: AsyncSession) -> None:
     await _matiere(session, "Sciences", NIVEAU_6E, [KOUASSI], heures=5)
 
-    assert await svc.teacher_weekly_hours(session, KOUASSI) == 5 * 2
+    assert await workload.teacher_weekly_hours(session, KOUASSI) == 5 * 2
 
 
 @pytest.mark.asyncio
@@ -282,3 +290,115 @@ async def test_serie_restreint_les_matieres_de_la_classe(session: AsyncSession) 
     assert any(
         e.subject.name == "Physique C" for e in await svc.resolve_class_teachers(session, autre)
     )
+
+
+CHEMIN_MIGRATION_0088 = (
+    Path(__file__).resolve().parents[2]
+    / "alembic"
+    / "versions"
+    / "20261028_0088_class_subject_teachers.py"
+)
+
+
+def _charger_migration_0088() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "migration_0088_class_subject_teachers", CHEMIN_MIGRATION_0088
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.asyncio
+async def test_recopie_des_index_rejouable_sans_index_sur_classe(session: AsyncSession) -> None:
+    module = _charger_migration_0088()
+    conn = await session.connection()
+    await session.execute(text("DROP INDEX ix_class_subject_teachers_teacher_id"))
+
+    await conn.run_sync(module._ensure_indexes)
+    await conn.run_sync(module._ensure_indexes)
+
+    noms = await conn.run_sync(
+        lambda c: [ix["name"] for ix in inspect(c).get_indexes("class_subject_teachers")]
+    )
+    assert "ix_class_subject_teachers_teacher_id" in noms
+    assert "ix_class_subject_teachers_subject_id" in noms
+    assert not any(nom.endswith("class_id") for nom in noms)
+
+
+@pytest.mark.asyncio
+async def test_retrait_d_un_enseignant_purge_ses_choix_et_journalise_par_matiere(
+    session: AsyncSession,
+) -> None:
+    maths = await _matiere(session, "Mathématiques", NIVEAU_6E, [KOUASSI, TRAORE])
+    await _choisir(session, CLASSE_6A, maths.id, TRAORE)
+    await _choisir(session, CLASSE_6B, maths.id, TRAORE)
+
+    await subject_svc.unlink_teacher(session, TRAORE, actor=ACTEUR)
+    await session.commit()
+
+    restants = (await session.execute(select(ClassSubjectTeacher))).scalars().all()
+    assert restants == []
+    journal = (
+        (await session.execute(select(AuditLog).where(AuditLog.entity_type == "subject")))
+        .scalars()
+        .all()
+    )
+    assert len(journal) == 1
+    assert journal[0].entity_id == maths.id
+    assert journal[0].old_values == {"class_teacher_choices_removed": [CLASSE_6A, CLASSE_6B]}
+    assert journal[0].new_values == {"class_teacher_choices_removed": []}
+
+
+@pytest.mark.asyncio
+async def test_retrait_d_une_matiere_purge_le_choix_orphelin_et_journalise(
+    session: AsyncSession,
+) -> None:
+    maths = await _matiere(session, "Mathématiques", NIVEAU_6E, [KOUASSI, TRAORE])
+    await _choisir(session, CLASSE_6A, maths.id, TRAORE)
+    attached = await session.get(Subject, maths.id)
+    assert attached is not None
+
+    await subject_svc.set_subject_teachers(session, attached, [KOUASSI], actor=ACTEUR)
+    await session.commit()
+
+    journal = (
+        (await session.execute(select(AuditLog).where(AuditLog.entity_type == "subject")))
+        .scalars()
+        .all()
+    )
+    assert [j.old_values for j in journal] == [{"class_teacher_choices_removed": [CLASSE_6A]}]
+
+
+@pytest.mark.asyncio
+async def test_classe_sans_matiere_pour_son_niveau(session: AsyncSession) -> None:
+    cinquieme = await session.get(Class, CLASSE_5A)
+    assert cinquieme is not None
+
+    assert await svc.resolve_class_teachers(session, cinquieme) == []
+    cls, entrees = await svc.save_class_teachers(session, CLASSE_5A, [], actor=ACTEUR)
+    assert cls.id == CLASSE_5A
+    assert entrees == []
+
+
+@pytest.mark.asyncio
+async def test_sans_enseignant_resolu_aucun_nom_n_est_devine(session: AsyncSession) -> None:
+    await _matiere(session, "Mathématiques", NIVEAU_6E, [KOUASSI, TRAORE])
+
+    assert await svc.class_teacher_names(session, CLASSE_6A) == {}
+
+
+def test_put_refuse_une_matiere_en_double() -> None:
+    with pytest.raises(ValidationError):
+        ClassSubjectTeachersUpdate(
+            assignments=[
+                {"subject_id": 1, "teacher_id": KOUASSI},
+                {"subject_id": 1, "teacher_id": TRAORE},
+            ]
+        )
+
+
+def test_put_refuse_plus_de_soixante_lignes() -> None:
+    with pytest.raises(ValidationError):
+        ClassSubjectTeachersUpdate(assignments=[{"subject_id": i} for i in range(1, 62)])
