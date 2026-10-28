@@ -7,7 +7,10 @@ l'affectation par classe (bulletins, synthèse de classe, export enseignant,
 fiche enseignant). Il ne sera retiré qu'une fois ces lecteurs migrés.
 
 La migration est rejouable : la table n'est créée que si elle est absente,
-et la recopie n'ajoute jamais deux fois le même couple matière / enseignant.
+chaque index n'est créé que s'il manque, et la recopie n'ajoute jamais deux
+fois le même couple matière / enseignant. L'index unique (subject_id,
+teacher_id) couvre déjà les recherches par matière, d'où l'absence d'index
+dédié sur subject_id.
 
 Revision ID: 0087_subject_teachers
 Revises: 0086_level_lv2
@@ -23,6 +26,9 @@ down_revision = "0086_level_lv2"
 branch_labels = None
 depends_on = None
 
+TABLE = "subject_teachers"
+TEACHER_INDEX = "ix_subject_teachers_teacher_id"
+
 COPY_SQL = """
 INSERT INTO subject_teachers (subject_id, teacher_id, position, created_at, updated_at)
 SELECT s.id, s.teacher_id, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -35,11 +41,18 @@ WHERE s.teacher_id IS NOT NULL
 """
 
 
+def _ensure_indexes(bind: sa.Connection) -> None:
+    """Crée chaque index absent de `subject_teachers`, et laisse les autres en place."""
+    existing = {ix["name"] for ix in sa.inspect(bind).get_indexes(TABLE)}
+    if TEACHER_INDEX not in existing:
+        bind.execute(sa.text(f"CREATE INDEX {TEACHER_INDEX} ON {TABLE} (teacher_id)"))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    if not sa.inspect(bind).has_table("subject_teachers"):
+    if not sa.inspect(bind).has_table(TABLE):
         op.create_table(
-            "subject_teachers",
+            TABLE,
             sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
             sa.Column("subject_id", sa.BigInteger(), nullable=False),
             sa.Column("teacher_id", sa.BigInteger(), nullable=False),
@@ -52,10 +65,9 @@ def upgrade() -> None:
                 "subject_id", "teacher_id", name="uq_subject_teachers_subject_teacher"
             ),
         )
-        op.create_index("ix_subject_teachers_subject_id", "subject_teachers", ["subject_id"])
-        op.create_index("ix_subject_teachers_teacher_id", "subject_teachers", ["teacher_id"])
+    _ensure_indexes(bind)
     bind.execute(sa.text(COPY_SQL))
 
 
 def downgrade() -> None:
-    op.drop_table("subject_teachers")
+    op.drop_table(TABLE)

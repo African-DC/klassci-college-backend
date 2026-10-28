@@ -24,7 +24,7 @@ class SubjectTeacher(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     subject_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False, index=True
+        BigInteger, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False
     )
     teacher_id: Mapped[int] = mapped_column(
         BigInteger,

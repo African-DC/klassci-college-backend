@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import Integer, MetaData, select, text
+from sqlalchemy import Integer, MetaData, func, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -26,7 +26,7 @@ from app.models.audit import AuditLog
 from app.models.subject_teacher import SubjectTeacher
 from app.models.timetable import DayOfWeek, TimetableSlot
 from app.models.user import TeacherProfile
-from app.repositories import admin_repository as repo
+from app.repositories import subject_teacher_repository as srepo
 from app.schemas.admin import SubjectCreate, SubjectDuplicateRequest, SubjectResponse, SubjectUpdate
 from app.services import admin_service
 from app.services import subject_teachers as svc
@@ -141,7 +141,7 @@ async def test_plus_de_trente_enseignants_refuses(session: AsyncSession) -> None
     await session.flush()
 
     with pytest.raises(BusinessValidationError):
-        await svc.set_subject_teachers(session, matiere, list(range(1, 32)))
+        await svc.validate_teacher_ids(session, list(range(1, 32)))
 
 
 @pytest.mark.asyncio
@@ -274,9 +274,9 @@ async def test_comptage_des_creneaux_par_enseignant(session: AsyncSession) -> No
     await _creneau(session, cree.id, KOUASSI, 9)
     await _creneau(session, cree.id, TRAORE, 10)
 
-    comptes = await svc.count_slots_by_teacher(session, cree.id)
+    comptes = await srepo.count_slots_by_teacher(session, cree.id)
 
-    assert comptes == {KOUASSI: 2, TRAORE: 1}
+    assert [(c.teacher_id, c.slots) for c in comptes] == [(KOUASSI, 2), (TRAORE, 1)]
 
 
 @pytest.mark.asyncio
@@ -302,7 +302,7 @@ async def test_tableau_de_bord_compte_les_instances_sans_enseignant(session: Asy
     session.add(Subject(name="Catalogue sans niveau", level_id=None))
     await session.commit()
 
-    assert await repo.count_instances_without_teacher(session) == 1
+    assert await srepo.count_instances_without_teacher(session) == 1
 
 
 def _charger_migration() -> ModuleType:
@@ -337,3 +337,66 @@ async def test_recopie_de_migration_un_rang_par_matiere_et_rejouable(session: As
         )
     ).all()
     assert sorted(lignes) == [(1, KOUASSI, 0), (3, YAO, 0)]
+
+
+@pytest.mark.asyncio
+async def test_modification_avec_enseignant_inconnu_ne_change_rien(session: AsyncSession) -> None:
+    cree = await _matiere(session, "Mathématiques", teacher_ids=[KOUASSI])
+
+    with pytest.raises(BusinessValidationError):
+        await admin_service.update_subject(
+            session,
+            cree.id,
+            SubjectUpdate(name="Maths", teacher_ids=[TRAORE, 999]),
+            updated_by=ACTEUR,
+        )
+
+    relu = await admin_service.get_subject(session, cree.id)
+    assert relu.name == "Mathématiques"
+    assert _noms(relu) == ["Jean Kouassi"]
+
+
+@pytest.mark.asyncio
+async def test_copie_avec_enseignant_inconnu_ne_cree_rien(session: AsyncSession) -> None:
+    source = await _matiere(session, "Mathématiques", teacher_ids=[KOUASSI])
+
+    with pytest.raises(BusinessValidationError):
+        await admin_service.duplicate_subject(
+            session,
+            SubjectDuplicateRequest(subject_id=source.id, level_id=NIVEAU_5E, teacher_ids=[999]),
+            created_by=ACTEUR,
+        )
+
+    total = await session.scalar(
+        select(func.count(Subject.id)).where(Subject.level_id == NIVEAU_5E)
+    )
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_suppression_du_premier_enseignant_promeut_le_suivant(session: AsyncSession) -> None:
+    cree = await _matiere(session, "Mathématiques", teacher_ids=[KOUASSI, TRAORE])
+    enseignant = await session.get(TeacherProfile, KOUASSI)
+    assert enseignant is not None
+
+    await admin_service.TEACHER_KIND.delete(session, enseignant)
+    await session.commit()
+
+    relu = await admin_service.get_subject(session, cree.id)
+    assert relu.teacher_id == TRAORE
+    assert _noms(relu) == ["Awa Traoré"]
+
+
+@pytest.mark.asyncio
+async def test_recopie_des_index_rejouable_sur_sqlite(session: AsyncSession) -> None:
+    module = _charger_migration()
+    conn = await session.connection()
+    await session.execute(text("DROP INDEX ix_subject_teachers_teacher_id"))
+
+    await conn.run_sync(module._ensure_indexes)
+    await conn.run_sync(module._ensure_indexes)
+
+    noms = await conn.run_sync(
+        lambda c: [ix["name"] for ix in inspect(c).get_indexes("subject_teachers")]
+    )
+    assert noms.count("ix_subject_teachers_teacher_id") == 1

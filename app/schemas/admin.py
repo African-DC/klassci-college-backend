@@ -585,15 +585,26 @@ class ClassListResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class SubjectCreate(BaseModel):
+class TeacherAssignmentFields(BaseModel):
+    """Enseignants demandés. L'ancien `teacher_id` devient une liste d'un seul élément."""
+
+    teacher_id: int | None = None
+    teacher_ids: list[int] | None = Field(default=None, max_length=30)
+
+    @model_validator(mode="after")
+    def _fold_legacy_teacher_id(self) -> "TeacherAssignmentFields":
+        if self.teacher_ids is None and self.teacher_id is not None:
+            self.teacher_ids = [self.teacher_id]
+        return self
+
+
+class SubjectCreate(TeacherAssignmentFields):
     name: str
     level_id: int | None = None
     series_id: int | None = None
     coefficient: int = 1
     hours_per_week: int = 2
     color: str | None = None
-    teacher_id: int | None = None
-    teacher_ids: list[int] | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -603,15 +614,13 @@ class SubjectCreate(BaseModel):
         return v
 
 
-class SubjectUpdate(BaseModel):
+class SubjectUpdate(TeacherAssignmentFields):
     name: str | None = None
     level_id: int | None = None
     series_id: int | None = None
     coefficient: int | None = None
     hours_per_week: int | None = None
     color: str | None = None
-    teacher_id: int | None = None
-    teacher_ids: list[int] | None = None
 
     @field_validator("coefficient", "hours_per_week")
     @classmethod
@@ -640,14 +649,12 @@ class SubjectResponse(BaseModel):
     updated_at: datetime
 
 
-class SubjectDuplicateRequest(BaseModel):
+class SubjectDuplicateRequest(TeacherAssignmentFields):
     subject_id: int
     level_id: int
     series_id: int | None = None
     coefficient: int | None = None
     hours_per_week: int | None = None
-    teacher_id: int | None = None
-    teacher_ids: list[int] | None = None
 
 
 class SubjectListResponse(BaseModel):

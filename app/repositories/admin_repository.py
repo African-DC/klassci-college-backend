@@ -1,6 +1,6 @@
 """Repository admin — accès DB pour les entités de base (CRUD)."""
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload, with_loader_criteria
@@ -10,6 +10,7 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.permission import Permission, Role, RolePermission, UserRole
 from app.models.subject_teacher import SubjectTeacher
 from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile, User
+from app.repositories.subject_teacher_repository import count_instances_without_teacher
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
 # ---------------------------------------------------------------------------
@@ -692,24 +693,8 @@ _SUBJECT_LOAD_OPTIONS = (
 )
 
 
-async def count_instances_without_teacher(db: AsyncSession) -> int:
-    """Matières d'un niveau (instances) sans aucun enseignant rattaché."""
-    stmt = select(func.count(Subject.id)).where(
-        Subject.level_id.isnot(None),
-        ~exists().where(SubjectTeacher.subject_id == Subject.id),
-    )
-    return int((await db.execute(stmt)).scalar() or 0)
-
-
 async def get_subject_by_id(db: AsyncSession, subject_id: int) -> Subject | None:
-    # populate_existing : après une écriture de teacher_links dans la même session,
-    # la collection déjà chargée doit être relue, pas gardée telle quelle.
-    stmt = (
-        select(Subject)
-        .options(*_SUBJECT_LOAD_OPTIONS)
-        .where(Subject.id == subject_id)
-        .execution_options(populate_existing=True)
-    )
+    stmt = select(Subject).options(*_SUBJECT_LOAD_OPTIONS).where(Subject.id == subject_id)
     return (await db.execute(stmt)).scalar_one_or_none()
 
 

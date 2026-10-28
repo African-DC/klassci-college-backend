@@ -14,7 +14,7 @@ from app.core.audit import AuditAction, audit_log
 from app.core.audit_values import frozen, frozen_changed, subject_of
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.core.security import hash_password
-from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Trimester
+from app.models.academic import AcademicYear, SchoolHoliday, SchoolSettings, Subject, Trimester
 from app.models.permission import UserRole
 from app.models.user import (
     Parent,
@@ -85,15 +85,10 @@ from app.schemas.admin import (
     TeacherUpdate,
 )
 from app.schemas.subject_teachers import SubjectTeacherRef
-from app.services import archive_service, fees_paid, photo_lifecycle
+from app.services import archive_service, fees_paid, photo_lifecycle, subject_teachers
 from app.services import fee_entitlements as entitlements
 from app.services.audited_crud import audited_update
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
-from app.services.subject_teachers import (
-    replace_subject_teachers_audited,
-    requested_teacher_ids,
-    set_subject_teachers,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -251,11 +246,19 @@ async def update_student(
 # Corbeille — les fiches personnes, toutes sur la même mécanique
 # ---------------------------------------------------------------------------
 
+
+async def _delete_teacher(db: AsyncSession, teacher: TeacherProfile) -> None:
+    """Supprime la fiche et retire ses matières : le premier enseignant restant prend la place."""
+    subject_ids = await subject_teachers.detach_teacher(db, teacher.id)
+    await repo.delete_teacher(db, teacher)
+    await subject_teachers.resync_first_teacher(db, subject_ids)
+
+
 TEACHER_KIND = archive_service.ArchivableKind(
     "teacher",
     "L'enseignant",
     TeacherProfile,
-    lambda db, r: repo.delete_teacher(db, r),
+    _delete_teacher,
     archive_service.owns_user_account,
 )
 STAFF_KIND = archive_service.ArchivableKind(
@@ -1783,22 +1786,23 @@ async def delete_class(db: AsyncSession, class_id: int, *, deleted_by: int) -> N
 # ---------------------------------------------------------------------------
 
 
-def _subject_to_response(s: object) -> SubjectResponse:
+def _subject_to_response(s: Subject) -> SubjectResponse:
     r = SubjectResponse.model_validate(s)
-    if hasattr(s, "level") and s.level:  # type: ignore[union-attr]
-        r.level_name = s.level.name  # type: ignore[union-attr]
-    if hasattr(s, "series") and s.series:  # type: ignore[union-attr]
-        r.series_name = s.series.name  # type: ignore[union-attr]
+    if s.level:
+        r.level_name = s.level.name
+    if s.series:
+        r.series_name = s.series.name
     teachers = [
         SubjectTeacherRef(
             id=link.teacher.id,
             full_name=f"{link.teacher.first_name} {link.teacher.last_name}",
         )
-        for link in s.teacher_links  # type: ignore[union-attr]
+        for link in s.teacher_links
     ]
+    first = teachers[0] if teachers else None
     r.teachers = teachers
-    r.teacher_id = teachers[0].id if teachers else None
-    r.teacher_name = teachers[0].full_name if teachers else None
+    r.teacher_id = first.id if first else None
+    r.teacher_name = first.full_name if first else None
     return r
 
 
@@ -1841,12 +1845,12 @@ async def get_subject(db: AsyncSession, subject_id: int) -> SubjectResponse:
 async def create_subject(
     db: AsyncSession, data: SubjectCreate, *, created_by: int
 ) -> SubjectResponse:
-    teacher_ids = requested_teacher_ids(data.teacher_ids, data.teacher_id) or []
+    teacher_ids = await subject_teachers.validate_teacher_ids(db, data.teacher_ids or [])
     async with db.begin_nested():
         subject = await repo.create_subject(
             db, **data.model_dump(exclude={"teacher_ids", "teacher_id"})
         )
-        await set_subject_teachers(db, subject, teacher_ids)
+        await subject_teachers.set_subject_teachers(db, subject, teacher_ids)
         await audit_log(
             db,
             entity_type="subject",
@@ -1869,20 +1873,36 @@ async def update_subject(
     if subject is None:
         raise NotFoundError("Subject", subject_id)
     changes = data.model_dump(exclude_none=True, mode="json", exclude={"teacher_ids", "teacher_id"})
-    teacher_ids = requested_teacher_ids(data.teacher_ids, data.teacher_id)
+    teacher_ids = (
+        None
+        if data.teacher_ids is None
+        else await subject_teachers.validate_teacher_ids(db, data.teacher_ids)
+    )
     if not changes and teacher_ids is None:
         return _subject_to_response(subject)
-    if changes:
-        await audited_update(
-            db,
-            subject,
-            changes,
-            entity_type="subject",
-            updater=repo.update_subject,
-            actor=updated_by,
-        )
-    if teacher_ids is not None:
-        await replace_subject_teachers_audited(db, subject, teacher_ids, actor=updated_by)
+    async with db.begin_nested():
+        if changes:
+            await audited_update(
+                db,
+                subject,
+                changes,
+                entity_type="subject",
+                updater=repo.update_subject,
+                actor=updated_by,
+            )
+        if teacher_ids is not None:
+            previous = await subject_teachers.set_subject_teachers(db, subject, teacher_ids)
+            if previous != teacher_ids:
+                await audit_log(
+                    db,
+                    entity_type="subject",
+                    action=AuditAction.UPDATE,
+                    user_id=updated_by,
+                    entity_id=subject.id,
+                    old_values={"teacher_ids": previous},
+                    new_values={"teacher_ids": teacher_ids},
+                    subject_label=subject.name,
+                )
     await db.commit()
     refreshed = await repo.get_subject_by_id(db, subject_id)
     if refreshed is None:
@@ -1916,6 +1936,7 @@ async def duplicate_subject(
     source = await repo.get_subject_by_id(db, data.subject_id)
     if source is None:
         raise NotFoundError("Subject", data.subject_id)
+    teacher_ids = await subject_teachers.validate_teacher_ids(db, data.teacher_ids or [])
 
     # Check for duplicate (same name in same level+series)
     existing, _ = await repo.list_subjects(db, page=1, size=1, level_id=data.level_id)
@@ -1933,26 +1954,25 @@ async def duplicate_subject(
                 f"La matière '{source.name}' existe déjà dans ce niveau/série"
             )
 
-    new_subject = await repo.create_subject(
-        db,
-        name=source.name,
-        coefficient=data.coefficient or source.coefficient,
-        hours_per_week=data.hours_per_week or source.hours_per_week,
-        color=source.color,
-        level_id=data.level_id,
-        series_id=data.series_id,
-    )
-    await set_subject_teachers(
-        db, new_subject, requested_teacher_ids(data.teacher_ids, data.teacher_id) or []
-    )
-    await audit_log(
-        db,
-        entity_type="subject",
-        action=AuditAction.CREATE,
-        user_id=created_by,
-        entity_id=new_subject.id,
-        new_values={"duplicated_from": data.subject_id, "level_id": data.level_id},
-    )
+    async with db.begin_nested():
+        new_subject = await repo.create_subject(
+            db,
+            name=source.name,
+            coefficient=data.coefficient or source.coefficient,
+            hours_per_week=data.hours_per_week or source.hours_per_week,
+            color=source.color,
+            level_id=data.level_id,
+            series_id=data.series_id,
+        )
+        await subject_teachers.set_subject_teachers(db, new_subject, teacher_ids)
+        await audit_log(
+            db,
+            entity_type="subject",
+            action=AuditAction.CREATE,
+            user_id=created_by,
+            entity_id=new_subject.id,
+            new_values={"duplicated_from": data.subject_id, "level_id": data.level_id},
+        )
     await db.commit()
     # Re-fetch with relationships loaded
     loaded = await repo.get_subject_by_id(db, new_subject.id)
