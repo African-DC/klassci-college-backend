@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-28T20:10:39Z",
+  "generated_at": "2026-10-28T20:11:00Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1318,6 +1318,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic",
+            "audience": [
+              "admin",
+              "direction des études"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
             "audience": [
