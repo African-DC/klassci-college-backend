@@ -1,7 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "source": "CHANGELOG.md",
-  "generated_at": "2026-10-01T23:29:35Z",
+  "generated_at": "2026-10-28T19:15:12Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,1148 +8,15 @@
       "date": null,
       "released": false,
       "sections": {
-        "Fixed": [
-          {
-            "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
-            "audience": [
-              "scolarité",
-              "direction"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF",
-            "audience": [
-              "direction",
-              "secrétariat"
-            ],
-            "pull_request": 475
-          },
-          {
-            "text": "Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps",
-            "audience": [
-              "comptable",
-              "secrétariat"
-            ],
-            "pull_request": 472
-          },
-          {
-            "text": "La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription",
-            "audience": [
-              "directeur",
-              "secrétariat"
-            ],
-            "pull_request": 469
-          },
-          {
-            "text": "Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit",
-            "audience": [
-              "admin",
-              "directeur",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 »",
-            "audience": [
-              "admin",
-              "directeur",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû",
-            "audience": [
-              "comptable",
-              "secrétariat",
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le point par catégorie annonce quand il a été coupé au plafond, au lieu de se laisser lire comme complet",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le point par catégorie ne porte plus une colonne « Reste à payer » vide de bout en bout quand il ne couvre qu'une caisse",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les états du point par catégorie retrouvent leurs couleurs sur le document PDF",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Corriger l'affectation d'un élève sur sa fiche l'enregistre vraiment, et rejoue aussitôt ses frais : l'affectation décide du tarif subventionné",
-            "audience": [
-              "admin",
-              "secrétariat",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le journal des versements se filtre par catégorie de frais sans exiger la gestion de la grille tarifaire",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Liste, bandeau et exports de versements se bornent à l'année demandée : un encaissement d'un autre exercice n'y figure plus",
-            "audience": [
-              "admin",
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La liste des inscriptions se filtre vraiment par année, classe et « à valider », au lieu de ne retrancher que la page déjà chargée",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": 394
-          },
-          {
-            "text": "Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu",
-            "audience": [
-              "admin",
-              "technique"
-            ],
-            "pull_request": 387
-          },
-          {
-            "text": "Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": 379
-          },
-          {
-            "text": "Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un envoi trop volumineux est refusé pendant la lecture, sans être d'abord chargé entièrement en mémoire",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie",
-            "audience": [
-              "admin",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route",
-            "audience": [
-              "super-admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le script d'intégration d'un établissement refuse désormais de démarrer sans confirmation : relancé tel quel, il réinitialisait le mot de passe admin d'une école en service",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le fichier de déploiement versionné ne décrivait pas le service qui ferme les caisses chaque nuit : une reconstruction depuis le dépôt l'aurait omis",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les montées de dépendances passent la validation de nom de branche, au lieu de forcer une fusion qui contourne tous les contrôles",
-            "audience": [
-              "technique"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un identifiant d'établissement ne peut plus se terminer par un saut de ligne, ce qui créait une base au nom indiscernable de son voisin",
-            "audience": [
-              "sécurité"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un nom de fichier contenant des séparateurs ne provoque plus une erreur 500 à l'envoi d'une photo",
-            "audience": [
-              "sécurité"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Créer une inscription depuis le formulaire « Nouvelle inscription » prévient enfin la personne qui doit encaisser : ce chemin ne déclenchait pas la chaîne",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'extension d'une photo envoyée vient désormais de son type d'image, plus de son nom de fichier : un nom forgé pouvait faire écrire le fichier hors du dossier prévu",
-            "audience": [
-              "sécurité"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les notifications de la chaîne d'inscription sont désormais réellement enregistrées : aucune n'était écrite",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "« Encaissé par vous » suit les filtres, comme le nombre de versements affiché à côté",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Filtrer par caissier fait suivre le bandeau, au lieu de compter toute l'école",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les chiffres du bandeau des paiements suivent les filtres de l'écran, au lieu d'annoncer les totaux de l'année entière",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un élève dont l'inscription est ouverte mais pas encore validée n'est plus présenté comme « à inscrire »",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Poser un créneau sans salle était refusé par « La salle « » n'existe pas »",
-            "audience": [
-              "admin",
-              "directeur des études"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un enseignant déclaré disponible toute la matinée ne pouvait recevoir qu'une heure de cours d'affilée : les heures déclarées se recollent désormais",
-            "audience": [
-              "directeur des études",
-              "secrétariat",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Noter une seule absence rendait l'enseignant impossible à placer toute la semaine : une absence ne ferme plus que son propre créneau",
-            "audience": [
-              "directeur des études",
-              "secrétariat",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le cahier de textes est désormais numéroté : sur vingt-sept pages, on ne pouvait ni se repérer ni voir qu'il en manquait une",
-            "audience": [
-              "enseignant",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les traits de signature se soudaient en un seul filet : on ne voyait plus où signait le professeur et où signait le chef d'établissement",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'emploi du temps s'arrêtait au dernier jour occupé : un vendredi sans créneau disparaissait de la semaine",
-            "audience": [
-              "admin",
-              "enseignant",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les feuilles d'appel et de notes n'avaient aucune case où écrire : les colonnes n'existaient qu'en en-tête",
-            "audience": [
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bulletin annonçait le code de l'établissement comme une direction régionale",
-            "audience": [
-              "parent",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le relevé de notes coupait l'intitulé des évaluations à dix-sept signes",
-            "audience": [
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le procès-verbal du conseil imprimait « passage » en minuscules au lieu de la décision en toutes lettres",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les montants du bordereau de caisse s'écrivaient sans séparateur de milliers (« 155000.00 » au lieu de « 155 000 »)",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un compteur à zéro s'affichait en vert ou en orange, comme s'il annonçait une réussite ou une alerte",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Sur tous les documents, les cartes de compteurs, les blocs des responsables légaux et les intitulés de champ se touchaient au lieu d'être espacés",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les mentions d'État en tête de document se lisaient comme un filigrane : la République prend désormais le premier rang, la devise et le ministère suivent",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Sur la fiche d'inscription, les intitulés étaient collés à leurs valeurs (« SEXEFéminin ») et le cadre photo affichait le mot « Photo »",
-            "audience": [
-              "admin",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La décision du conseil s'imprimait en identifiant technique (« CouncilDecision.PASSAGE ») sur le bulletin remis aux familles",
-            "audience": [
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un créneau refusé dit enfin pourquoi : quel enseignant, à quelle heure, et avec quelle classe il est déjà pris, au lieu d'un refus sans explication",
-            "audience": [
-              "directeur des études",
-              "secrétariat",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La grille de disponibilités d'un enseignant affichait sa semaine fermée alors que la saisie manuelle d'un créneau l'acceptait quand même : les deux appliquent désormais la même règle que la génération automatique",
-            "audience": [
-              "directeur des études",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement",
-            "audience": [
-              "caissier",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La recherche par nom d'élève et le filtre par catégorie de frais étaient acceptés puis ignorés : le tableau ne bougeait pas",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un export des versements ne déverse plus que la caisse de celui qui le demande : un caissier obtenait jusqu'ici les mêmes documents qu'un comptable, alors que son écran ne lui montre que ses propres encaissements",
-            "audience": [
-              "caissier",
-              "comptable",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier",
-            "audience": [
-              "comptable",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier",
-            "audience": [
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La date du bordereau s'écrivait en anglais, « Friday 21 August 2026 », en tête d'une pièce comptable française",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un refus de changement de statut affichait au guichet « impossible de passer de 'PaymentStatus.COMPLETED' », un nom technique interne, et le journal d'audit financier en gardait la trace",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La notification de clôture d'office s'accordait mal au pluriel : « Votre journées de caisse du 19/08, 20/08 ont été clôturées »",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier",
-            "audience": [
-              "admin",
-              "directeur des études"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le certificat de scolarité déclarait l'élève né dans sa ville de résidence : faute de lieu de naissance en base, il recopiait le domicile. Un élève né à Bouaké et habitant Cocody était certifié « né à Cocody » sur une pièce officielle",
-            "audience": [
-              "secrétariat",
-              "parent",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le récapitulatif par moyen de paiement du bordereau journalier et de l'écran caisse omettait tout moyen qu'il ne connaissait pas, alors que le total continuait de le compter : la somme des lignes ne collait plus au total imprimé juste en dessous",
-            "audience": [
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un versement enregistré depuis l'ancien écran de paiement passait même sur une journée de caisse déjà clôturée, ce que le nouvel écran refusait déjà",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser",
-            "audience": [
-              "secrétariat",
-              "caissier",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie",
-            "audience": [
-              "secrétariat",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante",
-            "audience": [
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La régénération des frais annonçait « aucun frais à régénérer » après en avoir créé : elle ne comptait que les suppressions",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé",
-            "audience": [
-              "comptable",
-              "parent",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté",
-            "audience": [
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'éducateur et le secrétariat peuvent enfin délivrer un billet d'annulation de zéro : l'écran demandait les évaluations manquées par le cahier de notes de la classe, que ni l'un ni l'autre n'a le droit de lire, et refusait donc leur premier clic",
-            "audience": [
-              "éducateur",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les quatre compteurs du registre des convocations décrivent l'année consultée et non le filtre en cours : cliquer « Tuteur absent » affichait « Convocations 8, Tuteur venu 0, Tuteur absent 8 »",
-            "audience": [
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une inscription pouvait être détruite sans motif, sans passer par la corbeille et sans que personne n'en soit averti",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent",
-            "audience": [
-              "comptable",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés",
-            "audience": [
-              "directeur",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une famille exonérée après avoir payé restait comptée comme ayant payé dans les chiffres de l'école",
-            "audience": [
-              "comptable",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit",
-            "audience": [
-              "comptable",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées",
-            "audience": [
-              "comptable",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul",
-            "audience": [
-              "comptable",
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais",
-            "audience": [
-              "secrétariat",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit",
-            "audience": [
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un billet d'entrée perdu ou mal imprimé peut être réédité : la réimpression ne modifie plus rien dans le cahier d'appel",
-            "audience": [
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "L'observation notée dans le cahier d'appel, « parti à l'infirmerie », est conservée au journal avant d'être remplacée par la mention du billet",
-            "audience": [
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Un doublon sur une contrainte à plusieurs colonnes conseillait « choisissez un autre nom » devant un formulaire qui n'a pas de champ « nom ». Le message se décide maintenant sur la contrainte violée, et non sur l'apparence de la valeur",
-            "audience": [
-              "admin",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Deux points d'entrée de l'API annonçaient le dépôt de justificatifs sur une inscription alors qu'aucun code ne les servait : ils échouaient à chaque appel. Les justificatifs se déposent sur la fiche de l'élève, où ils ont toujours fonctionné",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les erreurs inattendues affichent enfin leur code de référence à l'écran ; le navigateur bloquait jusqu'ici la réponse et l'utilisateur ne voyait qu'une erreur réseau",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Rapport de fin de trimestre : les enseignants de sexe masculin étaient comptés dans les totaux mais dans aucune colonne, et signalés en plus comme « sexe non renseigné ». Les tableaux 19 et 21 déposés à la DRENA annonçaient un corps enseignant exclusivement féminin. Ils comptent désormais chacun dans sa colonne, et la fiche de l'enseignant affiche son sexe et son type de contrat au lieu de deux tirets .",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Rapport de fin de trimestre : les tableaux que la plateforme ne sait pas encore remplir sortaient en grille de zéros ou en blanc sans explication — visites de classe, formations, boursiers, synthèses par contrat et par sexe. Ils portent maintenant la mention « à compléter manuellement » et disent en une phrase ce qui manque. Un zéro déposé à la DRENA se lit comme un constat, pas comme une absence de saisie .",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Rapport de fin de trimestre : les colonnes « N° CNPS » et « N° autorisation d'enseigner » du personnel administratif sortaient vides sans le dire ; le document annonce désormais qu'aucun écran ne permet encore de les saisir .",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Actes de vie scolaire : émettre un second billet d'annulation de zéro ou une seconde convocation pour le même élève invalidait le premier papier, déjà remis à la famille. L'enseignant qui scannait le code du document du premier trimestre lisait « document remplacé ». Chaque acte garde désormais sa propre référence, et un billet réimprimé reste vérifiable .",
-            "audience": [
-              "éducateur",
-              "directeur des études",
-              "secrétariat"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Actes de vie scolaire : tous les élèves sans matricule partageaient la même référence de document. Un échec d'impression bloquait alors l'édition pour toute l'école pendant cinq minutes. L'absence de matricule est maintenant refusée avec un message clair, qui indique de le renseigner sur la fiche de l'élève .",
-            "audience": [
-              "secrétariat",
-              "éducateur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Une école qui ajoutait un tarif affecté par-dessus sa grille existante voyait chaque élève affecté inscrit ensuite recevoir deux fois le même frais : dette doublée, échéancier doublé, et certificat de scolarité retenu pour un impayé qui n'existait pas. Un seul tarif s'applique désormais par catégorie de frais, le plus précis. Les frais déjà facturés en double sont fusionnés, sans perdre un seul versement .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Régénérer les frais d'une inscription échouait sur toute famille ayant déjà versé quelque chose : l'opération voulait remplacer des frais sur lesquels de l'argent était imputé. Les frais payés sont désormais conservés, les autres remplacés, et le décompte des deux est annoncé .",
-            "audience": [
-              "secrétariat",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les accueils des portails parent et élève annonçaient un reste à payer trop élevé, et le détail sous un frais soldé n'affichait aucun versement : la famille pouvait croire son argent perdu. Chaque versement apparaît maintenant sous les frais auxquels il a été imputé .",
-            "audience": [
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les portails parent et élève sous-estimaient les sommes versées depuis la refonte des paiements : une famille ayant versé 155 000 FCFA voyait « 95 000 restants » au lieu de 45 000. Le calcul est désormais le même partout .",
-            "audience": [
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Ajouter un montant à un niveau créait un doublon au lieu d'être refusé, et l'affichage par niveau en retenait un au hasard : d'où l'impression qu'un montant sautait d'un niveau à l'autre. La protection contre les doublons existait mais n'avait jamais fonctionné pour les niveaux de collège. Les doublons déjà en base sont fusionnés sans perdre un seul frais d'élève .",
-            "audience": [
-              "comptable",
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Supprimer une série vidait silencieusement la série des classes qui l'utilisaient, en répondant « supprimé » : la base laisse désormais parler ses contraintes au lieu de détacher les données dans le dos de l'utilisateur .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Plus aucun « Erreur serveur » muet : quand quelque chose d'imprévu se produit, l'écran affiche un message avec un code de référence à communiquer, et ce même code figure dans le journal du serveur. Les téléchargements Excel, qui échouaient jusque-là en silence, sont couverts aussi .",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les messages de conflit disent enfin la bonne chose : créer un montant en double annonce la combinaison en cause au lieu d'un « 1-2-3-4 existe déjà », et enregistrer sur un élément supprimé entre-temps ne parle plus de suppression .",
-            "audience": [
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Retirer un échéancier négocié qui n'existait pas ne répond plus « supprimé » et n'écrit plus de trace pour une action qui n'a pas eu lieu ; définir un échéancier sur une inscription inconnue le dit, au lieu d'annoncer des frais à 0 FCFA .",
-            "audience": [
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Les « Erreur serveur » sur la configuration des frais sont remplacées par un message qui dit quoi faire : créer une catégorie dont le nom existe déjà annonce désormais le nom en cause, et supprimer un élément encore utilisé explique qu'il faut d'abord retirer ce qui en dépend. La règle vaut pour tout l'écran, pas seulement les frais .",
-            "audience": [
-              "tous"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le « reste à payer » d'un élève était surévalué : les versements enregistrés depuis la refonte des paiements n'étaient pas comptés dans le total de la fiche. Une famille ayant versé 155 000 FCFA en apparaissait à 105 000 .",
-            "audience": [
-              "admin",
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le bordereau journalier imprimé par un caissier contenait les versements de toute l'école : le nom du caissier ne servait qu'à signer le document, pas à le filtrer. Chacun n'obtient désormais que sa propre caisse, le comptable gardant la vue consolidée .",
-            "audience": [
-              "caissier"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le comptable ne pouvait ouvrir aucun écran filtrant par année scolaire, dont la page Frais : il lui manquait le droit de lire les années. Il configure désormais la grille tarifaire complète (catégories, montants par niveau, options) et édite les rapports .",
-            "audience": [
-              "comptable"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Le score de performance enseignant restait inaccessible sur les établissements récemment créés, faute d'un droit jamais installé à leur ouverture .",
-            "audience": [
-              "admin",
-              "directeur"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Pipeline et production Windows : `PyMySQL` est épinglé à la version compatible avec `aiomysql`, et l'ancien déploiement EC2 automatique est retiré.",
-            "audience": [],
-            "pull_request": null
-          },
-          {
-            "text": "Reçu de versement (PDF) : les informations de l'élève (nom, nature, méthode, référence, statut) sont désormais parfaitement alignées en colonnes, au lieu d'un rendu tassé et décalé .",
-            "audience": [
-              "admin",
-              "personnel"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Relevé de notes : le document sortait vide quand la matière choisie était rattachée à un niveau alors que les notes visaient l'entrée générique (ou l'inverse) ; il rapproche désormais les évaluations par nom de matière et affiche bien toutes les notes du trimestre .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Fiche parent : les enfants liés s'affichaient sans nom ni classe (lignes vides) ; ils apparaissent désormais correctement avec toutes leurs informations .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Documents officiels (certificat, attestation) : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Bulletin : la mention affiche désormais son libellé en clair (« Très Bien », « Bien », « Assez Bien »…) au lieu d'un code technique (« Mention.TRES_BIEN ») .",
-            "audience": [
-              "enseignant",
-              "parent",
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Liste de classe : le numéro matricule de chaque élève s'affiche à nouveau au lieu d'un tiret, le champ étant désormais lu sur la fiche élève et non sur l'inscription .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Profil élève (`/student/profile`) accessible sans erreur serveur : Aminata, Bertrand et Fatou voient désormais leur fiche au lieu d'une page blanche .",
-            "audience": [
-              "élève"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Emploi du temps de l'enfant côté parent (`/parent/children/{id}/timetable`) charge sans erreur serveur : Mariam voit l'EDT d'Aminata au lieu d'une page blanche .",
-            "audience": [
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Année scolaire courante (`/admin/academic-years/current`) accessible sans erreur de validation : le dashboard admin affiche désormais l'année active sans bug .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Téléchargement d'un PDF en erreur : le serveur renvoie maintenant un message JSON explicite (« Génération PDF impossible pour … ») au lieu d'une réponse vide générique. Bulletin, reçu, EDT, certificat, fiche d'inscription, PV de conseil, bordereau, état des frais et liste de classe sont protégés .",
-            "audience": [
-              "admin",
-              "parent",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Fiche élève : les graphes « Moyennes par trimestre » et « Absences par trimestre » du tab Parcours affichent désormais les vraies données (trimestre 1 : moyenne générale, meilleure et plus faible matière) au lieu d'un message « Pas encore de notes » trompeur .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Bulletin scolaire : la liste des élèves affiche le nom complet, le matricule et un avatar à initiales au lieu d'un identifiant technique `#3`. La fenêtre de détail montre le détail par matière avec coefficient et moyenne .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Chaîne de migrations Alembic réparée : la migration de présence enseignant pointait vers un ancêtre nommé `0029_school_pdf_customization` qui n'existe pas (le vrai id étant juste `0029`). Toute installation d'établissement échouait avec une erreur cryptique avant cette correction .",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Pointage de présence des enseignants désormais accessible : les permissions des 3 nouveaux endpoints (admin saisit, lecture, prof auto-déclare) sont maintenant attribuées aux rôles correspondants (admin, director, staff, teacher). Auparavant tous les appels retournaient 403, ce qui rendait la feature inopérante .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": 148
-          },
-          {
-            "text": "Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») .",
-            "audience": [
-              "admin",
-              "parent"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Génération PDF désormais compatible avec les versions récentes de `pydyf` : pin explicite `pydyf<0.12` dans `requirements.txt` car la 0.12 a un breaking change incompatible avec WeasyPrint 62 (Stream.transform retiré → 500 silencieux au render) .",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Identité visuelle de l'école désormais appliquée à TOUS les documents PDF : les bulletins, certificats de scolarité, attestations de fréquentation, emplois du temps, listes de classe, fiches d'inscription et PV de conseil reprennent maintenant les couleurs, la devise et le site web configurés. Auparavant ces 6 documents retombaient silencieusement sur la palette KLASSCI par défaut malgré la configuration tenant .",
-            "audience": [
-              "admin",
-              "parent",
-              "enseignant"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "PV de conseil de classe (PDF) : génération corrigée, l'année scolaire n'était pas pré-chargée et provoquait une erreur 500 silencieuse au téléchargement .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Fiche enseignant : la vue d'ensemble (nombre de classes, d'élèves, d'évaluations, heures par semaine) restait à zéro à cause d'une 500 silencieuse sur le profil enrichi. Tous les indicateurs s'affichent désormais correctement .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 114
-          },
-          {
-            "text": "Liste des bulletins (`GET /reports/bulletins`) qui renvoyait une 500 « Internal Server Error » à cause d'un `NULLS LAST` dans le tri par rang non supporté par MySQL. Remplacé par l'astuce portable `IS NULL` qui place les bulletins sans rang en queue .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 113
-          },
-          {
-            "text": "Publication des bulletins : la mise à `publié` ne s'appliquait à aucune ligne (les notifications aux parents n'étaient jamais envoyées). Bug silencieux d'un `not` Python évalué au chargement du module au lieu d'un filtre SQL .",
-            "audience": [],
-            "pull_request": 101
-          },
-          {
-            "text": "Frais optionnels (cantine, transport, activités) qui n'étaient jamais récupérés automatiquement à l'inscription d'un élève : seuls les frais obligatoires apparaissaient. Même bug `not` Python sur la colonne SQLAlchemy .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": 101
-          },
-          {
-            "text": "Fiche élève, création, modification et upload de photo qui renvoyaient « Connexion au serveur impossible » depuis l'enrichissement de la liste : restaurés en eager-loadant l'inscription année courante au chargement d'un élève .",
-            "audience": [
-              "admin"
-            ],
-            "pull_request": null
-          },
-          {
-            "text": "Création d'évaluation qui échouait silencieusement avec « Erreur serveur » : l'audit serveur sait désormais sérialiser correctement la date .",
-            "audience": [
-              "admin",
-              "enseignant"
-            ],
-            "pull_request": 76
-          },
-          {
-            "text": "Permissions de gestion des rôles, des salles et des séries désormais seedées par défaut. Auparavant, les pages correspondantes côté portail étaient inaccessibles en silence .",
-            "audience": [],
-            "pull_request": 73
-          },
-          {
-            "text": "Démontage propre de la migration ajoutant la traçabilité de saisie des notes (l'ordre de suppression de l'index et de la contrainte cassait la rétrogradation sur MySQL).",
-            "audience": [],
-            "pull_request": null
-          },
-          {
-            "text": "Tableau de bord enseignant et tableau de bord élève qui renvoyaient « Connexion impossible » en boucle : les chemins et formats de réponse sont désormais alignés avec ce que les portails attendent .",
-            "audience": [
-              "enseignant",
-              "élève"
-            ],
-            "pull_request": 75
-          },
-          {
-            "text": "Script de seed des comptes test : protège contre la création de profils élève en double pour un même utilisateur, qui faisait planter le tableau de bord élève en production .",
-            "audience": [
-              "devops"
-            ],
-            "pull_request": null
-          }
-        ],
         "Added": [
+          {
+            "text": "Matières : un niveau peut désormais avoir plusieurs enseignants pour une même matière",
+            "audience": [
+              "admin",
+              "direction des études"
+            ],
+            "pull_request": null
+          },
           {
             "text": "La feuille de notes de classe s'imprime désormais en A4 portrait ou paysage, avec une grille ajustée pour préserver la lisibilité des noms et les cases manuscrites",
             "audience": [
@@ -2443,6 +1309,1147 @@
             "pull_request": 103
           }
         ],
+        "Fixed": [
+          {
+            "text": "Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés",
+            "audience": [
+              "scolarité",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'effectif affiché sur les fiches et la liste des classes correspond désormais aux élèves dont l'inscription est validée pour l'année scolaire courante, comme les listes nominatives et PDF",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": 475
+          },
+          {
+            "text": "Corriger le niveau de l'année précédente sur la fiche de renseignements recalcule la qualité (redoublant ou non), sauf si elle est saisie en même temps",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": 472
+          },
+          {
+            "text": "La colonne « Qualité » du rapport DEEP ne déduit plus « Non redoublant » d'un historique que l'école n'a pas déclaré complet, et reprend la qualité saisie sur l'inscription",
+            "audience": [
+              "directeur",
+              "secrétariat"
+            ],
+            "pull_request": 469
+          },
+          {
+            "text": "Les consultations d'attestations et de certificats s'affichent au nom de l'élève, et les paramètres au nom de l'établissement",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le journal nomme ses lignes, anciennes comprises : une classe, une série, un élève ou un versement s'affichent par leur nom, le numéro en petit",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les références citées dans un changement se lisent par leur nom, « Niveau : 6e » plutôt que « Niveau : 3 »",
+            "audience": [
+              "admin",
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un article réglé en argent par erreur, puis dont le versement a été annulé, peut de nouveau être marqué déposé ou rendu dû",
+            "audience": [
+              "comptable",
+              "secrétariat",
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le motif d'une dérogation à l'inscription ne figure plus dans l'adresse de la page, donc plus dans les journaux du serveur : il nomme une famille",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le code QR de reprise photo mène désormais au portail de l'établissement qui l'affiche, et non à celui inscrit dans la configuration du serveur",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le PDF et le classeur du point par catégorie disent enfin la même chose : mêmes colonnes, même ligne de total, mêmes mots, et un tiret qui signifie « on ne sait pas » des deux côtés",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie annonce quand il a été coupé au plafond, au lieu de se laisser lire comme complet",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie ne porte plus une colonne « Reste à payer » vide de bout en bout quand il ne couvre qu'une caisse",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le point par catégorie ne compte plus les dépôts en nature de toute l'école quand il est limité à une seule caisse",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les états du point par catégorie retrouvent leurs couleurs sur le document PDF",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le journal des versements, PDF comme classeur, nomme toutes les catégories de frais touchées par un versement avec le montant allé sur chacune",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Corriger l'affectation d'un élève sur sa fiche l'enregistre vraiment, et rejoue aussitôt ses frais : l'affectation décide du tarif subventionné",
+            "audience": [
+              "admin",
+              "secrétariat",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le journal des versements se filtre par catégorie de frais sans exiger la gestion de la grille tarifaire",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Liste, bandeau et exports de versements se bornent à l'année demandée : un encaissement d'un autre exercice n'y figure plus",
+            "audience": [
+              "admin",
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La liste des inscriptions se filtre vraiment par année, classe et « à valider », au lieu de ne retrancher que la page déjà chargée",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un versement annulé ne peut plus réapparaître dans un solde : chaque lecture d'argent est désormais vérifiée sur ce point",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le logiciel refuse de deviner qui est nouveau tant que trop peu d'élèves sont rattachés aux années précédentes",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": 394
+          },
+          {
+            "text": "Vider un champ d'une inscription laisse désormais une trace dans le journal, au lieu de passer inaperçu",
+            "audience": [
+              "admin",
+              "technique"
+            ],
+            "pull_request": 387
+          },
+          {
+            "text": "Encaisser un versement pendant qu'un autre est annulé sur les mêmes frais ne peut plus imputer deux fois le même argent",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": 379
+          },
+          {
+            "text": "Les photos d'élèves, celles du personnel et le tampon de signature survivent aux mises à jour de la plateforme, au lieu de disparaître",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La production monte à nouveau le dossier où vivent les photos, la signature et le logo : ces fichiers existaient toujours, ils n'étaient plus servis",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Remplacer ou retirer le logo ou le tampon efface l'ancien fichier, au lieu d'en laisser une copie définitive sur le serveur",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un envoi trop volumineux est refusé pendant la lecture, sans être d'abord chargé entièrement en mémoire",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La vérification de fidélité de la configuration de déploiement comparait le fichier du disque, qui diffère toujours sur Windows : elle annonçait une dérive inexistante",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La recherche par matricule ne parcourt plus tout le fichier élèves : elle retrouve la fiche directement, quelle que soit la casse saisie",
+            "audience": [
+              "admin",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La création d'un établissement laisse plus de temps aux migrations, et dit précisément quoi faire si elle est interrompue en cours de route",
+            "audience": [
+              "super-admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un `docker compose up` lancé depuis le dossier de déploiement prenait la pile d'avant Dokploy, sans volume de téléversements ni fermeture des caisses",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le fichier de déploiement versionné décrivait des conteneurs qui n'existaient plus, et ses volumes pointaient sur ceux de la production : une pile de test s'attachait aux données réelles",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le script d'intégration d'un établissement refuse désormais de démarrer sans confirmation : relancé tel quel, il réinitialisait le mot de passe admin d'une école en service",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le fichier de déploiement versionné ne décrivait pas le service qui ferme les caisses chaque nuit : une reconstruction depuis le dépôt l'aurait omis",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les montées de dépendances passent la validation de nom de branche, au lieu de forcer une fusion qui contourne tous les contrôles",
+            "audience": [
+              "technique"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un identifiant d'établissement ne peut plus se terminer par un saut de ligne, ce qui créait une base au nom indiscernable de son voisin",
+            "audience": [
+              "sécurité"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un nom de fichier contenant des séparateurs ne provoque plus une erreur 500 à l'envoi d'une photo",
+            "audience": [
+              "sécurité"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Créer une inscription depuis le formulaire « Nouvelle inscription » prévient enfin la personne qui doit encaisser : ce chemin ne déclenchait pas la chaîne",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'extension d'une photo envoyée vient désormais de son type d'image, plus de son nom de fichier : un nom forgé pouvait faire écrire le fichier hors du dossier prévu",
+            "audience": [
+              "sécurité"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les notifications de la chaîne d'inscription sont désormais réellement enregistrées : aucune n'était écrite",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "« Encaissé par vous » suit les filtres, comme le nombre de versements affiché à côté",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Filtrer par caissier fait suivre le bandeau, au lieu de compter toute l'école",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les chiffres du bandeau des paiements suivent les filtres de l'écran, au lieu d'annoncer les totaux de l'année entière",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un élève dont l'inscription est ouverte mais pas encore validée n'est plus présenté comme « à inscrire »",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Poser un créneau sans salle était refusé par « La salle « » n'existe pas »",
+            "audience": [
+              "admin",
+              "directeur des études"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un enseignant déclaré disponible toute la matinée ne pouvait recevoir qu'une heure de cours d'affilée : les heures déclarées se recollent désormais",
+            "audience": [
+              "directeur des études",
+              "secrétariat",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Noter une seule absence rendait l'enseignant impossible à placer toute la semaine : une absence ne ferme plus que son propre créneau",
+            "audience": [
+              "directeur des études",
+              "secrétariat",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le cahier de textes est désormais numéroté : sur vingt-sept pages, on ne pouvait ni se repérer ni voir qu'il en manquait une",
+            "audience": [
+              "enseignant",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les traits de signature se soudaient en un seul filet : on ne voyait plus où signait le professeur et où signait le chef d'établissement",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'emploi du temps s'arrêtait au dernier jour occupé : un vendredi sans créneau disparaissait de la semaine",
+            "audience": [
+              "admin",
+              "enseignant",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les feuilles d'appel et de notes n'avaient aucune case où écrire : les colonnes n'existaient qu'en en-tête",
+            "audience": [
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bulletin annonçait le code de l'établissement comme une direction régionale",
+            "audience": [
+              "parent",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le relevé de notes coupait l'intitulé des évaluations à dix-sept signes",
+            "audience": [
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le procès-verbal du conseil imprimait « passage » en minuscules au lieu de la décision en toutes lettres",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les montants du bordereau de caisse s'écrivaient sans séparateur de milliers (« 155000.00 » au lieu de « 155 000 »)",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un compteur à zéro s'affichait en vert ou en orange, comme s'il annonçait une réussite ou une alerte",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Sur tous les documents, les cartes de compteurs, les blocs des responsables légaux et les intitulés de champ se touchaient au lieu d'être espacés",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les mentions d'État en tête de document se lisaient comme un filigrane : la République prend désormais le premier rang, la devise et le ministère suivent",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Sur la fiche d'inscription, les intitulés étaient collés à leurs valeurs (« SEXEFéminin ») et le cadre photo affichait le mot « Photo »",
+            "audience": [
+              "admin",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La décision du conseil s'imprimait en identifiant technique (« CouncilDecision.PASSAGE ») sur le bulletin remis aux familles",
+            "audience": [
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un créneau refusé dit enfin pourquoi : quel enseignant, à quelle heure, et avec quelle classe il est déjà pris, au lieu d'un refus sans explication",
+            "audience": [
+              "directeur des études",
+              "secrétariat",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La grille de disponibilités d'un enseignant affichait sa semaine fermée alors que la saisie manuelle d'un créneau l'acceptait quand même : les deux appliquent désormais la même règle que la génération automatique",
+            "audience": [
+              "directeur des études",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le reçu d'un versement ne se générait plus : « Génération impossible ». La famille repartait sans sa preuve de paiement",
+            "audience": [
+              "caissier",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La caissière lisait les chiffres de toute l'école au-dessus d'un tableau qui ne contenait que ses versements",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La recherche par nom d'élève et le filtre par catégorie de frais étaient acceptés puis ignorés : le tableau ne bougeait pas",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un export des versements ne déverse plus que la caisse de celui qui le demande : un caissier obtenait jusqu'ici les mêmes documents qu'un comptable, alors que son écran ne lui montre que ses propres encaissements",
+            "audience": [
+              "caissier",
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bordereau journalier du comptable était signé « Le Caissier » au nom de la personne qui l'imprimait : une pièce comptable récapitulant trois caisses désignait ainsi le comptable comme caissier",
+            "audience": [
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bordereau nommait les personnes par le début de leur adresse e-mail, « accountant6 » ou « cashier3 », au lieu de leur nom sur la fiche Personnel",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bordereau consolidé ne disait pas qui avait encaissé quoi : il ventile désormais par caisse et par moyen de paiement, et le détail porte une colonne Caissier",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La date du bordereau s'écrivait en anglais, « Friday 21 August 2026 », en tête d'une pièce comptable française",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un refus de changement de statut affichait au guichet « impossible de passer de 'PaymentStatus.COMPLETED' », un nom technique interne, et le journal d'audit financier en gardait la trace",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La notification de clôture d'office s'accordait mal au pluriel : « Votre journées de caisse du 19/08, 20/08 ont été clôturées »",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le balayage de nuit comptait comme des échecs les bases de données étrangères hébergées sur le même serveur : le compteur d'incidents ne signalait plus rien",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Regénérer un procès-verbal de conseil de classe déjà établi échouait sur une erreur technique : le second essai passe désormais, comme le premier",
+            "audience": [
+              "admin",
+              "directeur des études"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le courriel qui prévient la direction d'une suppression ne partait jamais : l'envoi échouait au moment de nommer l'auteur du geste, et l'échec était avalé pour ne pas bloquer la suppression. La direction se croyait avertie et ne l'était pas",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le certificat de scolarité déclarait l'élève né dans sa ville de résidence : faute de lieu de naissance en base, il recopiait le domicile. Un élève né à Bouaké et habitant Cocody était certifié « né à Cocody » sur une pièce officielle",
+            "audience": [
+              "secrétariat",
+              "parent",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le récapitulatif par moyen de paiement du bordereau journalier et de l'écran caisse omettait tout moyen qu'il ne connaissait pas, alors que le total continuait de le compter : la somme des lignes ne collait plus au total imprimé juste en dessous",
+            "audience": [
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un versement enregistré depuis l'ancien écran de paiement passait même sur une journée de caisse déjà clôturée, ce que le nouvel écran refusait déjà",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un élève inscrit depuis le formulaire complet ne recevait AUCUN frais : sa fiche annonçait « 0 F » à la famille et la caisse n'avait rien à encaisser",
+            "audience": [
+              "secrétariat",
+              "caissier",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le statut d'affectation était bien enregistré mais jamais relu : tout écran affichait « non renseigné » sur une valeur pourtant saisie",
+            "audience": [
+              "secrétariat",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La capacité maximale d'une classe n'était pas vérifiée à l'inscription : le contrôle comptait les élèves d'une année inexistante",
+            "audience": [
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La régénération des frais annonçait « aucun frais à régénérer » après en avoir créé : elle ne comptait que les suppressions",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les frais d'inscription, dus en totalité le jour de l'inscription, étaient étalés sur les tranches de scolarité : l'échéancier réclamait 43 750 F fin novembre là où l'école attend 37 000 F à la rentrée puis 30 800 F. Une famille pouvait ainsi se voir retenir un certificat sur un calendrier que l'école n'avait jamais annoncé",
+            "audience": [
+              "comptable",
+              "parent",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un montant ferme ne réclame jamais plus qu'un élève ne doit : un affecté subventionné ne se voit plus présenter l'échéancier d'un non affecté",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'éducateur et le secrétariat peuvent enfin délivrer un billet d'annulation de zéro : l'écran demandait les évaluations manquées par le cahier de notes de la classe, que ni l'un ni l'autre n'a le droit de lire, et refusait donc leur premier clic",
+            "audience": [
+              "éducateur",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les quatre compteurs du registre des convocations décrivent l'année consultée et non le filtre en cours : cliquer « Tuteur absent » affichait « Convocations 8, Tuteur venu 0, Tuteur absent 8 »",
+            "audience": [
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une inscription pouvait être détruite sans motif, sans passer par la corbeille et sans que personne n'en soit averti",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un élève affecté pouvait porter deux fois la même scolarité, l'une au tarif général et l'autre au tarif affecté : les lignes en double sont fusionnées et la base interdit désormais qu'elles se recréent",
+            "audience": [
+              "comptable",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le taux d'avancement du tableau de bord contredisait les fiches des élèves : il comparait les versements encaissés à un total qui comptait aussi les frais facultatifs et les frais exonérés",
+            "audience": [
+              "directeur",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une famille exonérée après avoir payé restait comptée comme ayant payé dans les chiffres de l'école",
+            "audience": [
+              "comptable",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un tarif réservé aux affectés ou aux non affectés ne pouvait plus redevenir universel : le formulaire acceptait « Tous les élèves » et rien ne changeait. Une portée cochée par erreur obligeait à supprimer le tarif, ce que la présence d'un élève inscrit dessus interdit",
+            "audience": [
+              "comptable",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une portée mal orthographiée était enregistrée telle quelle et ne correspondait plus jamais à aucun élève ; seules les deux valeurs du métier sont désormais acceptées",
+            "audience": [
+              "comptable",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une famille exonérée après avoir payé paraissait en avance sur sa scolarité et n'était plus signalée en retard : l'argent imputé à un frais annulé sort désormais du calcul",
+            "audience": [
+              "comptable",
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Sur une fiche parent, le solde dû et le badge « à jour » pouvaient se contredire : les deux reposent maintenant sur les mêmes frais",
+            "audience": [
+              "secrétariat",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un billet d'entrée dont l'impression échouait laissait l'absence régularisée sans papier, et la relance était refusée ; l'absence reste ouverte tant que le billet n'est pas produit",
+            "audience": [
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un billet d'entrée perdu ou mal imprimé peut être réédité : la réimpression ne modifie plus rien dans le cahier d'appel",
+            "audience": [
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "L'observation notée dans le cahier d'appel, « parti à l'infirmerie », est conservée au journal avant d'être remplacée par la mention du billet",
+            "audience": [
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Un doublon sur une contrainte à plusieurs colonnes conseillait « choisissez un autre nom » devant un formulaire qui n'a pas de champ « nom ». Le message se décide maintenant sur la contrainte violée, et non sur l'apparence de la valeur",
+            "audience": [
+              "admin",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Deux points d'entrée de l'API annonçaient le dépôt de justificatifs sur une inscription alors qu'aucun code ne les servait : ils échouaient à chaque appel. Les justificatifs se déposent sur la fiche de l'élève, où ils ont toujours fonctionné",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les erreurs inattendues affichent enfin leur code de référence à l'écran ; le navigateur bloquait jusqu'ici la réponse et l'utilisateur ne voyait qu'une erreur réseau",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "La suppression définitive d'un enseignant, d'un membre du personnel ou d'un parent envoie désormais le courriel de traçabilité, comme celle d'un élève",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Rapport de fin de trimestre : les enseignants de sexe masculin étaient comptés dans les totaux mais dans aucune colonne, et signalés en plus comme « sexe non renseigné ». Les tableaux 19 et 21 déposés à la DRENA annonçaient un corps enseignant exclusivement féminin. Ils comptent désormais chacun dans sa colonne, et la fiche de l'enseignant affiche son sexe et son type de contrat au lieu de deux tirets .",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Rapport de fin de trimestre : les tableaux que la plateforme ne sait pas encore remplir sortaient en grille de zéros ou en blanc sans explication — visites de classe, formations, boursiers, synthèses par contrat et par sexe. Ils portent maintenant la mention « à compléter manuellement » et disent en une phrase ce qui manque. Un zéro déposé à la DRENA se lit comme un constat, pas comme une absence de saisie .",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Rapport de fin de trimestre : les colonnes « N° CNPS » et « N° autorisation d'enseigner » du personnel administratif sortaient vides sans le dire ; le document annonce désormais qu'aucun écran ne permet encore de les saisir .",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Actes de vie scolaire : émettre un second billet d'annulation de zéro ou une seconde convocation pour le même élève invalidait le premier papier, déjà remis à la famille. L'enseignant qui scannait le code du document du premier trimestre lisait « document remplacé ». Chaque acte garde désormais sa propre référence, et un billet réimprimé reste vérifiable .",
+            "audience": [
+              "éducateur",
+              "directeur des études",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Actes de vie scolaire : tous les élèves sans matricule partageaient la même référence de document. Un échec d'impression bloquait alors l'édition pour toute l'école pendant cinq minutes. L'absence de matricule est maintenant refusée avec un message clair, qui indique de le renseigner sur la fiche de l'élève .",
+            "audience": [
+              "secrétariat",
+              "éducateur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Une école qui ajoutait un tarif affecté par-dessus sa grille existante voyait chaque élève affecté inscrit ensuite recevoir deux fois le même frais : dette doublée, échéancier doublé, et certificat de scolarité retenu pour un impayé qui n'existait pas. Un seul tarif s'applique désormais par catégorie de frais, le plus précis. Les frais déjà facturés en double sont fusionnés, sans perdre un seul versement .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Régénérer les frais d'une inscription échouait sur toute famille ayant déjà versé quelque chose : l'opération voulait remplacer des frais sur lesquels de l'argent était imputé. Les frais payés sont désormais conservés, les autres remplacés, et le décompte des deux est annoncé .",
+            "audience": [
+              "secrétariat",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les accueils des portails parent et élève annonçaient un reste à payer trop élevé, et le détail sous un frais soldé n'affichait aucun versement : la famille pouvait croire son argent perdu. Chaque versement apparaît maintenant sous les frais auxquels il a été imputé .",
+            "audience": [
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les portails parent et élève sous-estimaient les sommes versées depuis la refonte des paiements : une famille ayant versé 155 000 FCFA voyait « 95 000 restants » au lieu de 45 000. Le calcul est désormais le même partout .",
+            "audience": [
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Ajouter un montant à un niveau créait un doublon au lieu d'être refusé, et l'affichage par niveau en retenait un au hasard : d'où l'impression qu'un montant sautait d'un niveau à l'autre. La protection contre les doublons existait mais n'avait jamais fonctionné pour les niveaux de collège. Les doublons déjà en base sont fusionnés sans perdre un seul frais d'élève .",
+            "audience": [
+              "comptable",
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Supprimer une série vidait silencieusement la série des classes qui l'utilisaient, en répondant « supprimé » : la base laisse désormais parler ses contraintes au lieu de détacher les données dans le dos de l'utilisateur .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Plus aucun « Erreur serveur » muet : quand quelque chose d'imprévu se produit, l'écran affiche un message avec un code de référence à communiquer, et ce même code figure dans le journal du serveur. Les téléchargements Excel, qui échouaient jusque-là en silence, sont couverts aussi .",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les messages de conflit disent enfin la bonne chose : créer un montant en double annonce la combinaison en cause au lieu d'un « 1-2-3-4 existe déjà », et enregistrer sur un élément supprimé entre-temps ne parle plus de suppression .",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Retirer un échéancier négocié qui n'existait pas ne répond plus « supprimé » et n'écrit plus de trace pour une action qui n'a pas eu lieu ; définir un échéancier sur une inscription inconnue le dit, au lieu d'annoncer des frais à 0 FCFA .",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Les « Erreur serveur » sur la configuration des frais sont remplacées par un message qui dit quoi faire : créer une catégorie dont le nom existe déjà annonce désormais le nom en cause, et supprimer un élément encore utilisé explique qu'il faut d'abord retirer ce qui en dépend. La règle vaut pour tout l'écran, pas seulement les frais .",
+            "audience": [
+              "tous"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le « reste à payer » d'un élève était surévalué : les versements enregistrés depuis la refonte des paiements n'étaient pas comptés dans le total de la fiche. Une famille ayant versé 155 000 FCFA en apparaissait à 105 000 .",
+            "audience": [
+              "admin",
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le bordereau journalier imprimé par un caissier contenait les versements de toute l'école : le nom du caissier ne servait qu'à signer le document, pas à le filtrer. Chacun n'obtient désormais que sa propre caisse, le comptable gardant la vue consolidée .",
+            "audience": [
+              "caissier"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le comptable ne pouvait ouvrir aucun écran filtrant par année scolaire, dont la page Frais : il lui manquait le droit de lire les années. Il configure désormais la grille tarifaire complète (catégories, montants par niveau, options) et édite les rapports .",
+            "audience": [
+              "comptable"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Le score de performance enseignant restait inaccessible sur les établissements récemment créés, faute d'un droit jamais installé à leur ouverture .",
+            "audience": [
+              "admin",
+              "directeur"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Pipeline et production Windows : `PyMySQL` est épinglé à la version compatible avec `aiomysql`, et l'ancien déploiement EC2 automatique est retiré.",
+            "audience": [],
+            "pull_request": null
+          },
+          {
+            "text": "Reçu de versement (PDF) : les informations de l'élève (nom, nature, méthode, référence, statut) sont désormais parfaitement alignées en colonnes, au lieu d'un rendu tassé et décalé .",
+            "audience": [
+              "admin",
+              "personnel"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Relevé de notes : le document sortait vide quand la matière choisie était rattachée à un niveau alors que les notes visaient l'entrée générique (ou l'inverse) ; il rapproche désormais les évaluations par nom de matière et affiche bien toutes les notes du trimestre .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Fiche parent : les enfants liés s'affichaient sans nom ni classe (lignes vides) ; ils apparaissent désormais correctement avec toutes leurs informations .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Documents officiels (certificat, attestation) : le signataire n'apparaît plus en double (« Le Chef d'Établissement, Le Chef d'Établissement ») quand le nom du chef d'établissement n'est pas distinct de son titre .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Bulletin : la mention affiche désormais son libellé en clair (« Très Bien », « Bien », « Assez Bien »…) au lieu d'un code technique (« Mention.TRES_BIEN ») .",
+            "audience": [
+              "enseignant",
+              "parent",
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Liste de classe : le numéro matricule de chaque élève s'affiche à nouveau au lieu d'un tiret, le champ étant désormais lu sur la fiche élève et non sur l'inscription .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Profil élève (`/student/profile`) accessible sans erreur serveur : Aminata, Bertrand et Fatou voient désormais leur fiche au lieu d'une page blanche .",
+            "audience": [
+              "élève"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Emploi du temps de l'enfant côté parent (`/parent/children/{id}/timetable`) charge sans erreur serveur : Mariam voit l'EDT d'Aminata au lieu d'une page blanche .",
+            "audience": [
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Année scolaire courante (`/admin/academic-years/current`) accessible sans erreur de validation : le dashboard admin affiche désormais l'année active sans bug .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Téléchargement d'un PDF en erreur : le serveur renvoie maintenant un message JSON explicite (« Génération PDF impossible pour … ») au lieu d'une réponse vide générique. Bulletin, reçu, EDT, certificat, fiche d'inscription, PV de conseil, bordereau, état des frais et liste de classe sont protégés .",
+            "audience": [
+              "admin",
+              "parent",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Fiche élève : les graphes « Moyennes par trimestre » et « Absences par trimestre » du tab Parcours affichent désormais les vraies données (trimestre 1 : moyenne générale, meilleure et plus faible matière) au lieu d'un message « Pas encore de notes » trompeur .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Bulletin scolaire : la liste des élèves affiche le nom complet, le matricule et un avatar à initiales au lieu d'un identifiant technique `#3`. La fenêtre de détail montre le détail par matière avec coefficient et moyenne .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Chaîne de migrations Alembic réparée : la migration de présence enseignant pointait vers un ancêtre nommé `0029_school_pdf_customization` qui n'existe pas (le vrai id étant juste `0029`). Toute installation d'établissement échouait avec une erreur cryptique avant cette correction .",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Pointage de présence des enseignants désormais accessible : les permissions des 3 nouveaux endpoints (admin saisit, lecture, prof auto-déclare) sont maintenant attribuées aux rôles correspondants (admin, director, staff, teacher). Auparavant tous les appels retournaient 403, ce qui rendait la feature inopérante .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": 148
+          },
+          {
+            "text": "Reçus de paiement et bordereaux : la méthode et le statut s'affichent désormais en français lisible (« Espèces », « Validé ») au lieu du nom technique brut (« PaymentMethod.CASH », « PaymentStatus.COMPLETED ») .",
+            "audience": [
+              "admin",
+              "parent"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Génération PDF désormais compatible avec les versions récentes de `pydyf` : pin explicite `pydyf<0.12` dans `requirements.txt` car la 0.12 a un breaking change incompatible avec WeasyPrint 62 (Stream.transform retiré → 500 silencieux au render) .",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Identité visuelle de l'école désormais appliquée à TOUS les documents PDF : les bulletins, certificats de scolarité, attestations de fréquentation, emplois du temps, listes de classe, fiches d'inscription et PV de conseil reprennent maintenant les couleurs, la devise et le site web configurés. Auparavant ces 6 documents retombaient silencieusement sur la palette KLASSCI par défaut malgré la configuration tenant .",
+            "audience": [
+              "admin",
+              "parent",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "PV de conseil de classe (PDF) : génération corrigée, l'année scolaire n'était pas pré-chargée et provoquait une erreur 500 silencieuse au téléchargement .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Fiche enseignant : la vue d'ensemble (nombre de classes, d'élèves, d'évaluations, heures par semaine) restait à zéro à cause d'une 500 silencieuse sur le profil enrichi. Tous les indicateurs s'affichent désormais correctement .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 114
+          },
+          {
+            "text": "Liste des bulletins (`GET /reports/bulletins`) qui renvoyait une 500 « Internal Server Error » à cause d'un `NULLS LAST` dans le tri par rang non supporté par MySQL. Remplacé par l'astuce portable `IS NULL` qui place les bulletins sans rang en queue .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 113
+          },
+          {
+            "text": "Publication des bulletins : la mise à `publié` ne s'appliquait à aucune ligne (les notifications aux parents n'étaient jamais envoyées). Bug silencieux d'un `not` Python évalué au chargement du module au lieu d'un filtre SQL .",
+            "audience": [],
+            "pull_request": 101
+          },
+          {
+            "text": "Frais optionnels (cantine, transport, activités) qui n'étaient jamais récupérés automatiquement à l'inscription d'un élève : seuls les frais obligatoires apparaissaient. Même bug `not` Python sur la colonne SQLAlchemy .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": 101
+          },
+          {
+            "text": "Fiche élève, création, modification et upload de photo qui renvoyaient « Connexion au serveur impossible » depuis l'enrichissement de la liste : restaurés en eager-loadant l'inscription année courante au chargement d'un élève .",
+            "audience": [
+              "admin"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Création d'évaluation qui échouait silencieusement avec « Erreur serveur » : l'audit serveur sait désormais sérialiser correctement la date .",
+            "audience": [
+              "admin",
+              "enseignant"
+            ],
+            "pull_request": 76
+          },
+          {
+            "text": "Permissions de gestion des rôles, des salles et des séries désormais seedées par défaut. Auparavant, les pages correspondantes côté portail étaient inaccessibles en silence .",
+            "audience": [],
+            "pull_request": 73
+          },
+          {
+            "text": "Démontage propre de la migration ajoutant la traçabilité de saisie des notes (l'ordre de suppression de l'index et de la contrainte cassait la rétrogradation sur MySQL).",
+            "audience": [],
+            "pull_request": null
+          },
+          {
+            "text": "Tableau de bord enseignant et tableau de bord élève qui renvoyaient « Connexion impossible » en boucle : les chemins et formats de réponse sont désormais alignés avec ce que les portails attendent .",
+            "audience": [
+              "enseignant",
+              "élève"
+            ],
+            "pull_request": 75
+          },
+          {
+            "text": "Script de seed des comptes test : protège contre la création de profils élève en double pour un même utilisateur, qui faisait planter le tableau de bord élève en production .",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          }
+        ],
         "Changed": [
           {
             "text": "Le point par catégorie nomme ce dont il parle : l'année scolaire, le périmètre, la caisse et son porteur, les filtres appliqués, la date du tirage et son auteur",
@@ -3353,5 +3360,6 @@
         ]
       }
     }
-  ]
+  ],
+  "source": "CHANGELOG.md"
 }

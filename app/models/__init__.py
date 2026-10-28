@@ -116,6 +116,9 @@ from app.models.school_life import (  # noqa: F401
     SummonsOutcome,
 )
 
+# Enseignants par matière (plusieurs par niveau)
+from app.models.subject_teacher import SubjectTeacher  # noqa: F401
+
 # Emploi du temps
 from app.models.timetable import (  # noqa: F401
     DayOfWeek,
