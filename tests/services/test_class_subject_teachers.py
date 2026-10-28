@@ -265,6 +265,7 @@ async def test_heures_comptent_une_fois_par_classe_du_niveau(session: AsyncSessi
 
 @pytest.mark.asyncio
 async def test_serie_restreint_les_matieres_de_la_classe(session: AsyncSession) -> None:
+    commune = await _matiere(session, "Français", NIVEAU_6E, [KOUASSI])
     serie = Series(id=1, name="C", level_id=NIVEAU_6E)
     session.add(serie)
     await session.flush()
@@ -284,12 +285,11 @@ async def test_serie_restreint_les_matieres_de_la_classe(session: AsyncSession) 
 
     entrees = await svc.resolve_class_teachers(session, await session.get(Class, CLASSE_6A))
     assert any(e.subject.name == "Physique C" for e in entrees)
-    # Une classe sans série reçoit toutes les matières du niveau (règle inchangée, #527 à venir).
+    # Une classe sans série ne reçoit pas les matières propres à une série.
     autre = await session.get(Class, CLASSE_6B)
     assert autre is not None
-    assert any(
-        e.subject.name == "Physique C" for e in await svc.resolve_class_teachers(session, autre)
-    )
+    ids = [e.subject.id for e in await svc.resolve_class_teachers(session, autre)]
+    assert ids == [commune.id]
 
 
 CHEMIN_MIGRATION_0088 = (
