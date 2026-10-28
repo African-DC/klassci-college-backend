@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import AcademicYear, Class, Level, Series, Subject
+from app.models.subject_teacher import SubjectTeacher
 from app.models.timetable import TimetableSlot
 from app.models.user import TeacherProfile, User
 from app.services._school_settings_helper import load_school_settings_for_pdf
@@ -177,6 +178,24 @@ async def filters(db: AsyncSession) -> dict:
     }
 
 
+async def _subject_links(
+    db: AsyncSession, s: Selection, teacher_ids: list[int]
+) -> list[tuple[Subject, int]]:
+    """Matières retenues pour les enseignants donnés, filtrées par la sélection, en SQL."""
+    stmt = (
+        select(Subject, SubjectTeacher.teacher_id)
+        .join(SubjectTeacher, SubjectTeacher.subject_id == Subject.id)
+        .where(SubjectTeacher.teacher_id.in_(teacher_ids))
+    )
+    if s.subject_ids:
+        stmt = stmt.where(Subject.id.in_(s.subject_ids))
+    if s.level_ids:
+        stmt = stmt.where(Subject.level_id.in_(s.level_ids))
+    if s.series_ids:
+        stmt = stmt.where(Subject.series_id.in_(s.series_ids))
+    return [(sub, tid) for sub, tid in (await db.execute(stmt)).all()]
+
+
 async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
     s.validate()
     teachers = (await db.execute(select(TeacherProfile))).scalars().all()
@@ -250,30 +269,17 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             )
         # Les enseignants affectés seulement sur la fiche matière, sans créneau,
         # restent visibles au niveau de la matière : pas de classe inventée.
-        subjects = (
-            (await db.execute(select(Subject).where(Subject.teacher_id.is_not(None))))
-            .scalars()
-            .all()
-        )
-        for sub in subjects:
-            if sub.teacher_id not in by_id:
-                continue
-            if s.subject_ids and sub.id not in s.subject_ids:
-                continue
-            if s.level_ids and sub.level_id not in s.level_ids:
-                continue
-            if s.series_ids and sub.series_id not in s.series_ids:
-                continue
-            if s.class_ids:
-                continue  # une fiche matière n'identifie aucune classe
-            key = (sub.teacher_id, sub.id, None)
+        # Une fiche matière n'identifie aucune classe : rien à lister si la sélection en nomme.
+        links = [] if s.class_ids else await _subject_links(db, s, list(by_id))
+        for sub, tid in links:
+            key = (tid, sub.id, None)
             if key in seen:
                 continue
             seen.add(key)
             rows.append(
                 {
-                    **by_id[sub.teacher_id],
-                    "_id": str(sub.teacher_id),
+                    **by_id[tid],
+                    "_id": str(tid),
                     "_subject_id": str(sub.id),
                     "_class_id": "",
                     "subject": sub.name,

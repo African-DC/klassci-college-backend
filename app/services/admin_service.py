@@ -88,6 +88,7 @@ from app.services import archive_service, fees_paid, photo_lifecycle, subject_te
 from app.services import fee_entitlements as entitlements
 from app.services.audited_crud import audited_update
 from app.services.finance_visibility import FinanceView, payment_pulse, redact
+from app.services.teacher_workload import teacher_weekly_hours
 
 logger = logging.getLogger(__name__)
 
@@ -826,13 +827,10 @@ async def get_teacher_full(db: AsyncSession, teacher_id: int) -> dict:
     result["students_count"] = students_count
     result["evaluations_count"] = evaluations_count
 
-    # Hours per week (sum of subject hours_per_week via Subject assigned to teacher)
-    from app.models.academic import Subject
+    # Hours per week : matières résolues vers cet enseignant, par classe
+    result["hours_per_week"] = float(await teacher_weekly_hours(db, teacher_id))
 
-    hours_stmt = select(func.coalesce(func.sum(Subject.hours_per_week), 0)).where(
-        Subject.teacher_id == teacher_id
-    )
-    result["hours_per_week"] = float((await db.execute(hours_stmt)).scalar() or 0)
+    from app.models.academic import Subject
 
     # Availability rate
     from app.models.timetable import TeacherAvailability

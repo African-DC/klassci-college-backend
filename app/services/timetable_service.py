@@ -4,7 +4,6 @@ import logging
 from datetime import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.audit import AuditAction, audit_log
 from app.core.audit_values import frozen
@@ -19,6 +18,7 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
+from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +170,9 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
+    await ensure_slot_teacher(
+        db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
+    )
     # Vérifier les conflits
     await _verifier_enseignant_libre(
         db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
@@ -242,6 +245,11 @@ async def update_slot(
     else:
         new_room_id = slot.room_id
 
+    new_subject_id = data.subject_id if data.subject_id is not None else slot.subject_id
+    if (new_teacher_id, new_subject_id) != (slot.teacher_id, slot.subject_id):
+        await ensure_slot_teacher(
+            db, class_id=slot.class_id, subject_id=new_subject_id, teacher_id=new_teacher_id
+        )
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
         db,
@@ -348,40 +356,31 @@ async def diagnostic_for_class(
     - total_slots_available: int
     - manual_slots_count: int
     """
-    from sqlalchemy import func, or_, select
+    from sqlalchemy import func, select
 
-    from app.models.academic import Class, Subject
+    from app.models.academic import Class
 
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
 
-    # Get subjects for this level
-    subjects_stmt = (
-        select(Subject)
-        .where(Subject.level_id == cls.level_id)
-        .options(selectinload(Subject.teacher))
-    )
-    if cls.series_id:
-        subjects_stmt = subjects_stmt.where(
-            or_(Subject.series_id == cls.series_id, Subject.series_id.is_(None))
-        )
-    subjects = list((await db.execute(subjects_stmt)).scalars().all())
+    entries = await resolve_class_teachers(db, cls)
 
     without_teacher = []
     with_teacher = []
     total_hours = 0
 
-    for s in subjects:
+    for e in entries:
+        s = e.subject
         total_hours += s.hours_per_week
-        if s.teacher_id and s.teacher:
+        if e.resolved_teacher_id is not None:
             with_teacher.append(
                 {
                     "id": s.id,
                     "name": s.name,
                     "hours_per_week": s.hours_per_week,
-                    "teacher_id": s.teacher_id,
-                    "teacher_name": f"{s.teacher.first_name} {s.teacher.last_name}",
+                    "teacher_id": e.resolved_teacher_id,
+                    "teacher_name": e.resolved_name or "",
                 }
             )
         else:
@@ -408,7 +407,7 @@ async def diagnostic_for_class(
     total_slots = 6 * slots_per_day
 
     return {
-        "ready": len(without_teacher) == 0 and len(subjects) > 0,
+        "ready": len(without_teacher) == 0 and len(entries) > 0,
         "class_id": class_id,
         "class_name": cls.name,
         "subjects_without_teacher": without_teacher,
@@ -452,9 +451,9 @@ async def auto_generate(
     7. Supprime seulement les slots auto-generes
     8. Lance le solveur
     """
-    from sqlalchemy import delete, or_, select
+    from sqlalchemy import delete, select
 
-    from app.models.academic import AcademicYear, Class, Subject
+    from app.models.academic import AcademicYear, Class
     from app.models.timetable import DayOfWeek
 
     # 1. Settings
@@ -473,30 +472,30 @@ async def auto_generate(
         raise BusinessValidationError("Aucune année académique courante configurée.")
     academic_year_id = current_ay.id
 
-    # 3. Get subjects for this level
-    subjects_stmt = select(Subject).where(Subject.level_id == cls.level_id)
-    if cls.series_id:
-        subjects_stmt = subjects_stmt.where(
-            or_(Subject.series_id == cls.series_id, Subject.series_id.is_(None))
-        )
-    subjects = list((await db.execute(subjects_stmt)).scalars().all())
+    # 3. Matières de la classe, avec l'enseignant résolu pour chacune
+    entries = await resolve_class_teachers(db, cls)
 
-    if not subjects:
+    if not entries:
         raise BusinessValidationError(
             "Aucune matiere assignee a ce niveau. Assignez des matieres dans le Kanban d'abord."
         )
 
-    without_teacher = [s for s in subjects if not s.teacher_id]
+    without_teacher = [e.subject for e in entries if e.resolved_teacher_id is None]
     if without_teacher:
         names = ", ".join(s.name for s in without_teacher)
         raise BusinessValidationError(
-            f"Matieres sans enseignant : {names}. Utilisez le diagnostic pour les assigner."
+            f"Matières sans enseignant pour cette classe : {names}. "
+            "Complétez « Enseignants de la classe » dans l'emploi du temps."
         )
 
     # 4. Build assignments data for Celery
     assignments_data = [
-        {"teacher_id": s.teacher_id, "subject_id": s.id, "hours_per_week": s.hours_per_week}
-        for s in subjects
+        {
+            "teacher_id": e.resolved_teacher_id,
+            "subject_id": e.subject.id,
+            "hours_per_week": e.subject.hours_per_week,
+        }
+        for e in entries
     ]
 
     # 5. Day names (English)
@@ -551,7 +550,7 @@ async def auto_generate(
                 manual_fixed_data.append({"assignment_idx": asg_idx, "block_idx": blk.index})
 
     # 8. Cross-class conflicts — convert to block indices
-    teacher_ids = {s.teacher_id for s in subjects}
+    teacher_ids = {ad["teacher_id"] for ad in assignments_data}
     cross_class_blocked: dict[int, list[int]] = {}
     for tid in teacher_ids:
         blocked_indices = await repo.get_cross_class_blocked_block_indices(

@@ -155,6 +155,11 @@ class TeacherProfile(Base, TimestampMixin, ArchivableMixin):
 
     user: Mapped[User] = relationship(back_populates="teacher_profile")
 
+    @property
+    def display_name(self) -> str:
+        """« Prénom Nom », sans espace parasite."""
+        return f"{self.first_name} {self.last_name}".strip()
+
 
 # ---------------------------------------------------------------------------
 # Student

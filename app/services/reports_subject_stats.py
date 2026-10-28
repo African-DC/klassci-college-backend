@@ -58,14 +58,19 @@ def compute_subject_stats(class_bulletins: list[Any]) -> dict[int, dict[str, Any
 
 
 def enrich_subject_rows(
-    bulletin: Any, subject_stats: dict[int, dict[str, Any]]
+    bulletin: Any,
+    subject_stats: dict[int, dict[str, Any]],
+    teacher_names: dict[int, str],
 ) -> list[dict[str, Any]]:
-    """Lignes matières du bulletin enrichies du prof, du rang et de la moy. classe."""
+    """Lignes matières du bulletin enrichies du prof, du rang et de la moy. classe.
+
+    `teacher_names` (subject_id -> nom, enseignant résolu pour la classe du bulletin).
+    Une matière absente de la carte n'a pas d'enseignant affiché.
+    """
     rows: list[dict[str, Any]] = []
     for sa in bulletin.subject_averages or []:
         stats = subject_stats.get(sa.subject_id, {})
-        teacher = getattr(sa.subject, "teacher", None) if sa.subject else None
-        teacher_name = f"{teacher.first_name} {teacher.last_name}".strip() if teacher else None
+        teacher_name = teacher_names.get(sa.subject_id)
         rows.append(
             {
                 "subject_name": sa.subject.name if sa.subject else "",
