@@ -18,6 +18,7 @@ from app.core.exceptions import NotFoundError
 from app.models.academic import AcademicYear, Class
 from app.repositories import reports_repository as repo
 from app.services._school_settings_helper import load_school_settings_for_pdf
+from app.services.class_subject_teacher_service import class_teacher_names
 from app.services.pdf import generate_class_synthesis_pdf
 from app.services.reports_subject_stats import compute_general_stats, compute_subject_stats
 
@@ -38,19 +39,18 @@ async def _load_class(db: AsyncSession, class_id: int) -> Class:
     return klass
 
 
-def _subject_directory(class_bulletins: list) -> dict[int, dict[str, str | None]]:
+def _subject_directory(
+    class_bulletins: list, teacher_names: dict[int, str]
+) -> dict[int, dict[str, str | None]]:
     """subject_id -> {name, teacher_name} depuis les bulletins de la classe."""
     directory: dict[int, dict[str, str | None]] = {}
     for bulletin in class_bulletins:
         for sa in bulletin.subject_averages or []:
             if sa.subject_id in directory or sa.subject is None:
                 continue
-            teacher = getattr(sa.subject, "teacher", None)
             directory[sa.subject_id] = {
                 "name": sa.subject.name,
-                "teacher_name": (
-                    f"{teacher.first_name} {teacher.last_name}".strip() if teacher else None
-                ),
+                "teacher_name": teacher_names.get(sa.subject_id),
             }
     return directory
 
@@ -67,7 +67,8 @@ async def get_class_synthesis_pdf(
 
     subject_stats = compute_subject_stats(class_bulletins)
     general = compute_general_stats(class_bulletins)
-    directory = _subject_directory(class_bulletins)
+    teacher_names = await class_teacher_names(db, class_id)
+    directory = _subject_directory(class_bulletins, teacher_names)
 
     palmares = sorted(
         (

@@ -82,11 +82,10 @@ def test_general_stats_empty():
 
 
 def test_enrich_rows_carries_teacher_rank_and_class_avg():
-    teacher = SimpleNamespace(first_name="Jean", last_name="Kouassi")
-    subject = SimpleNamespace(name="Mathématiques", teacher=teacher)
+    subject = SimpleNamespace(name="Mathématiques")
     bulletin = _bulletin(7, [_sa(10, 16, subject=subject, coefficient=4)])
     stats = {10: {"avg": Decimal("12.50"), "ranks": {7: 2}}}
-    rows = enrich_subject_rows(bulletin, stats)
+    rows = enrich_subject_rows(bulletin, stats, {10: "Jean Kouassi"})
     assert rows[0]["subject_name"] == "Mathématiques"
     assert rows[0]["teacher_name"] == "Jean Kouassi"
     assert rows[0]["rank"] == 2

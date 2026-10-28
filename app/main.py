@@ -15,6 +15,7 @@ from app.core.sentry import init_sentry
 from app.core.uploads import UPLOAD_ROOT, ensure_upload_dirs
 from app.routers.accounts import router as accounts_router
 from app.routers.admin import router as admin_router
+from app.routers.admin_subject_teachers import router as admin_subject_teachers_router
 from app.routers.archive import router as archive_router
 from app.routers.arrears_policy import router as arrears_policy_router
 from app.routers.attachments import router as attachments_router
@@ -24,6 +25,7 @@ from app.routers.auth import router as auth_router
 from app.routers.cash_sessions import router as cash_sessions_router
 from app.routers.class_documents import router as class_documents_router
 from app.routers.class_information_sheet import router as class_information_sheet_router
+from app.routers.class_subject_teachers import router as class_subject_teachers_router
 from app.routers.council import router as council_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.deep_report import router as deep_report_router
@@ -123,6 +125,7 @@ register_archive_filter()
 app.include_router(duplicates_router)
 app.include_router(teacher_documents_router)
 app.include_router(admin_router)
+app.include_router(admin_subject_teachers_router)
 app.include_router(archive_router)
 app.include_router(attachments_router)
 app.include_router(attendance_router)
@@ -141,6 +144,7 @@ app.include_router(enrollment_payments_router)
 app.include_router(cash_sessions_router)
 app.include_router(installments_router)
 app.include_router(class_documents_router)
+app.include_router(class_subject_teachers_router)
 app.include_router(fees_router)
 app.include_router(grades_router)
 app.include_router(leave_self_router)

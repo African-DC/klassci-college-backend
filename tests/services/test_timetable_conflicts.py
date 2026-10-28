@@ -63,6 +63,8 @@ def _sqlite_schema() -> list[Table]:
     for nom in (
         "classes",
         "subjects",
+        "subject_teachers",
+        "class_subject_teachers",
         "rooms",
         "teacher_profiles",
         "timetable_slots",

@@ -33,6 +33,9 @@ from app.models.audit import AuditAction, AuditLog  # noqa: F401
 # Session de caisse (journée de guichet d'un caissier)
 from app.models.cash_session import CashSession, CashSessionStatus  # noqa: F401
 
+# Enseignant retenu par classe et par matière
+from app.models.class_subject_teacher import ClassSubjectTeacher  # noqa: F401
+
 # Données propres au rapport de fin de trimestre de la DEEP
 from app.models.deep_report import (  # noqa: F401
     ClassVisit,
@@ -115,6 +118,9 @@ from app.models.school_life import (  # noqa: F401
     RetakeAuthorizationEvaluation,
     SummonsOutcome,
 )
+
+# Enseignants par matière (plusieurs par niveau)
+from app.models.subject_teacher import SubjectTeacher  # noqa: F401
 
 # Emploi du temps
 from app.models.timetable import (  # noqa: F401
