@@ -589,7 +589,7 @@ class TeacherAssignmentFields(BaseModel):
     """Enseignants demandés. L'ancien `teacher_id` devient une liste d'un seul élément."""
 
     teacher_id: int | None = None
-    teacher_ids: list[int] | None = Field(default=None, max_length=30)
+    teacher_ids: list[int] | None = None
 
     @model_validator(mode="after")
     def _fold_legacy_teacher_id(self) -> "TeacherAssignmentFields":

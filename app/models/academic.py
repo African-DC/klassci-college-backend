@@ -244,7 +244,7 @@ class Subject(Base, TimestampMixin):
     teacher: Mapped[TeacherProfile | None] = relationship(foreign_keys=[teacher_id])
     # Enseignants ordonnés par `position`. Lecture seule : l'écriture passe par le service.
     teacher_links: Mapped[list[SubjectTeacher]] = relationship(
-        order_by="SubjectTeacher.position", viewonly=True
+        order_by="[SubjectTeacher.position, SubjectTeacher.id]", viewonly=True
     )
     timetable_slots: Mapped[list[TimetableSlot]] = relationship(back_populates="subject")
 

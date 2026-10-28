@@ -276,7 +276,7 @@ async def test_comptage_des_creneaux_par_enseignant(session: AsyncSession) -> No
 
     comptes = await srepo.count_slots_by_teacher(session, cree.id)
 
-    assert [(c.teacher_id, c.slots) for c in comptes] == [(KOUASSI, 2), (TRAORE, 1)]
+    assert comptes == [(KOUASSI, 2), (TRAORE, 1)]
 
 
 @pytest.mark.asyncio

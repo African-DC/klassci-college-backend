@@ -7,7 +7,6 @@ from app.models.academic import Subject
 from app.models.subject_teacher import SubjectTeacher
 from app.models.timetable import TimetableSlot
 from app.models.user import TeacherProfile
-from app.schemas.subject_teachers import SubjectSlotCount
 
 
 async def find_existing_teacher_ids(db: AsyncSession, teacher_ids: list[int]) -> set[int]:
@@ -37,7 +36,7 @@ async def add_links(db: AsyncSession, subject_id: int, ordered_ids: list[int]) -
     )
 
 
-async def count_slots_by_teacher(db: AsyncSession, subject_id: int) -> list[SubjectSlotCount]:
+async def count_slots_by_teacher(db: AsyncSession, subject_id: int) -> list[tuple[int, int]]:
     """Créneaux de l'emploi du temps par enseignant, pour une matière, triés par identifiant."""
     stmt = (
         select(TimetableSlot.teacher_id, func.count(TimetableSlot.id))
@@ -46,7 +45,7 @@ async def count_slots_by_teacher(db: AsyncSession, subject_id: int) -> list[Subj
         .order_by(TimetableSlot.teacher_id)
     )
     rows = (await db.execute(stmt)).all()
-    return [SubjectSlotCount(teacher_id=int(tid), slots=int(total)) for tid, total in rows]
+    return [(int(tid), int(total)) for tid, total in rows]
 
 
 async def count_instances_without_teacher(db: AsyncSession) -> int:
@@ -71,18 +70,16 @@ async def resync_first_teacher(db: AsyncSession, subject_ids: list[int]) -> None
     """Remet `subjects.teacher_id` sur le premier enseignant restant (ou NULL)."""
     if not subject_ids:
         return
-    subjects = (
-        (await db.execute(select(Subject).where(Subject.id.in_(subject_ids)))).scalars().all()
+    rows = await db.execute(
+        select(SubjectTeacher.subject_id, SubjectTeacher.teacher_id)
+        .where(SubjectTeacher.subject_id.in_(subject_ids))
+        .order_by(SubjectTeacher.subject_id, SubjectTeacher.position, SubjectTeacher.id)
     )
-    for subject in subjects:
-        first = (
-            await db.execute(
-                select(SubjectTeacher.teacher_id)
-                .where(SubjectTeacher.subject_id == subject.id)
-                .order_by(SubjectTeacher.position, SubjectTeacher.id)
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        subject.teacher_id = first
+    first: dict[int, int] = {}
+    for subject_id, teacher_id in rows.all():
+        first.setdefault(subject_id, teacher_id)
+    subjects = await db.execute(select(Subject).where(Subject.id.in_(subject_ids)))
+    for subject in subjects.scalars().all():
+        subject.teacher_id = first.get(subject.id)
         db.expire(subject, ["teacher_links"])
     await db.flush()

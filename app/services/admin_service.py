@@ -84,7 +84,6 @@ from app.schemas.admin import (
     TeacherResponse,
     TeacherUpdate,
 )
-from app.schemas.subject_teachers import SubjectTeacherRef
 from app.services import archive_service, fees_paid, photo_lifecycle, subject_teachers
 from app.services import fee_entitlements as entitlements
 from app.services.audited_crud import audited_update
@@ -249,9 +248,8 @@ async def update_student(
 
 async def _delete_teacher(db: AsyncSession, teacher: TeacherProfile) -> None:
     """Supprime la fiche et retire ses matières : le premier enseignant restant prend la place."""
-    subject_ids = await subject_teachers.detach_teacher(db, teacher.id)
+    await subject_teachers.unlink_teacher(db, teacher.id)
     await repo.delete_teacher(db, teacher)
-    await subject_teachers.resync_first_teacher(db, subject_ids)
 
 
 TEACHER_KIND = archive_service.ArchivableKind(
@@ -1792,13 +1790,7 @@ def _subject_to_response(s: Subject) -> SubjectResponse:
         r.level_name = s.level.name
     if s.series:
         r.series_name = s.series.name
-    teachers = [
-        SubjectTeacherRef(
-            id=link.teacher.id,
-            full_name=f"{link.teacher.first_name} {link.teacher.last_name}",
-        )
-        for link in s.teacher_links
-    ]
+    teachers = subject_teachers.teacher_refs(s)
     first = teachers[0] if teachers else None
     r.teachers = teachers
     r.teacher_id = first.id if first else None
@@ -1891,18 +1883,7 @@ async def update_subject(
                 actor=updated_by,
             )
         if teacher_ids is not None:
-            previous = await subject_teachers.set_subject_teachers(db, subject, teacher_ids)
-            if previous != teacher_ids:
-                await audit_log(
-                    db,
-                    entity_type="subject",
-                    action=AuditAction.UPDATE,
-                    user_id=updated_by,
-                    entity_id=subject.id,
-                    old_values={"teacher_ids": previous},
-                    new_values={"teacher_ids": teacher_ids},
-                    subject_label=subject.name,
-                )
+            await subject_teachers.replace_teachers(db, subject, teacher_ids, actor=updated_by)
     await db.commit()
     refreshed = await repo.get_subject_by_id(db, subject_id)
     if refreshed is None:

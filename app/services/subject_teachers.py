@@ -6,10 +6,15 @@ lecteurs qui n'ont pas encore migré (voir la migration 0087).
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.academic import Subject
 from app.repositories import subject_teacher_repository as repo
-from app.schemas.subject_teachers import SubjectSlotCountsResponse
+from app.schemas.subject_teachers import (
+    SubjectSlotCount,
+    SubjectSlotCountsResponse,
+    SubjectTeacherRef,
+)
 
 MAX_TEACHERS_PER_SUBJECT = 30
 
@@ -48,19 +53,46 @@ async def set_subject_teachers(
     return previous
 
 
-async def detach_teacher(db: AsyncSession, teacher_id: int) -> list[int]:
-    """Retire un enseignant de toutes ses matières ; rend les matières touchées."""
+async def replace_teachers(
+    db: AsyncSession, subject: Subject, ordered_ids: list[int], *, actor: int
+) -> None:
+    """Remplace la liste et journalise l'ancienne et la nouvelle, si elle change."""
+    previous = await set_subject_teachers(db, subject, ordered_ids)
+    if previous == ordered_ids:
+        return
+    await audit_log(
+        db,
+        entity_type="subject",
+        action=AuditAction.UPDATE,
+        user_id=actor,
+        entity_id=subject.id,
+        old_values={"teacher_ids": previous},
+        new_values={"teacher_ids": ordered_ids},
+        subject_label=subject.name,
+    )
+
+
+async def unlink_teacher(db: AsyncSession, teacher_id: int) -> None:
+    """Retire un enseignant de toutes ses matières ; le suivant prend la première place."""
     subject_ids = await repo.subject_ids_for_teacher(db, teacher_id)
     await repo.delete_links_for_teacher(db, teacher_id)
-    return subject_ids
-
-
-async def resync_first_teacher(db: AsyncSession, subject_ids: list[int]) -> None:
     await repo.resync_first_teacher(db, subject_ids)
+
+
+def teacher_refs(subject: Subject) -> list[SubjectTeacherRef]:
+    return [
+        SubjectTeacherRef(
+            id=link.teacher.id, full_name=f"{link.teacher.first_name} {link.teacher.last_name}"
+        )
+        for link in subject.teacher_links
+    ]
 
 
 async def slot_counts_for_subject(db: AsyncSession, subject_id: int) -> SubjectSlotCountsResponse:
     """Réponse de la route des créneaux par enseignant."""
     if await db.get(Subject, subject_id) is None:
         raise NotFoundError("Subject", subject_id)
-    return SubjectSlotCountsResponse(counts=await repo.count_slots_by_teacher(db, subject_id))
+    rows = await repo.count_slots_by_teacher(db, subject_id)
+    return SubjectSlotCountsResponse(
+        counts=[SubjectSlotCount(teacher_id=tid, slots=n) for tid, n in rows]
+    )
