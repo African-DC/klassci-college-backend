@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import AcademicYear, Class, Level, Series, Subject
+from app.models.subject_teacher import SubjectTeacher
 from app.models.timetable import TimetableSlot
 from app.models.user import TeacherProfile, User
 from app.services._school_settings_helper import load_school_settings_for_pdf
@@ -250,13 +251,15 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
             )
         # Les enseignants affectés seulement sur la fiche matière, sans créneau,
         # restent visibles au niveau de la matière : pas de classe inventée.
-        subjects = (
-            (await db.execute(select(Subject).where(Subject.teacher_id.is_not(None))))
-            .scalars()
-            .all()
-        )
-        for sub in subjects:
-            if sub.teacher_id not in by_id:
+        links = (
+            await db.execute(
+                select(Subject, SubjectTeacher.teacher_id).join(
+                    SubjectTeacher, SubjectTeacher.subject_id == Subject.id
+                )
+            )
+        ).all()
+        for sub, tid in links:
+            if tid not in by_id:
                 continue
             if s.subject_ids and sub.id not in s.subject_ids:
                 continue
@@ -266,14 +269,14 @@ async def load(db: AsyncSession, s: Selection) -> tuple[dict, list[dict]]:
                 continue
             if s.class_ids:
                 continue  # une fiche matière n'identifie aucune classe
-            key = (sub.teacher_id, sub.id, None)
+            key = (tid, sub.id, None)
             if key in seen:
                 continue
             seen.add(key)
             rows.append(
                 {
-                    **by_id[sub.teacher_id],
-                    "_id": str(sub.teacher_id),
+                    **by_id[tid],
+                    "_id": str(tid),
                     "_subject_id": str(sub.id),
                     "_class_id": "",
                     "subject": sub.name,

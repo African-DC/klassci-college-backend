@@ -15,6 +15,7 @@ from app.schemas.subject_teachers import (
     SubjectSlotCountsResponse,
     SubjectTeacherRef,
 )
+from app.services.class_subject_teacher_service import purge_orphan_class_teachers
 
 MAX_TEACHERS_PER_SUBJECT = 30
 
@@ -50,6 +51,7 @@ async def set_subject_teachers(
     await db.flush()
     # La collection chargée avant l'écriture ne doit pas survivre à l'écriture.
     db.expire(subject, ["teacher_links"])
+    await purge_orphan_class_teachers(db, subject.id, ordered_ids)
     return previous
 
 

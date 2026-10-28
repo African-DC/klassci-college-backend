@@ -20,6 +20,7 @@ from app.services._school_settings_helper import (
     load_school_settings_for_pdf as _get_school_settings,
 )
 from app.services.attendance_service import get_student_attendance_summary
+from app.services.class_subject_teacher_service import class_teacher_names
 from app.services.pdf._helpers import enum_value
 from app.services.pdf_service import generate_bulletin_pdf
 from app.services.reports_subject_stats import (
@@ -88,7 +89,8 @@ async def get_bulletin_pdf(db: AsyncSession, bulletin_id: int) -> bytes:
     )
     subject_stats = compute_subject_stats(class_bulletins)
     class_stats = compute_general_stats(class_bulletins)
-    subject_averages = enrich_subject_rows(bulletin, subject_stats)
+    teacher_names = await class_teacher_names(db, bulletin.class_id)
+    subject_averages = enrich_subject_rows(bulletin, subject_stats, teacher_names)
     # Absences scopees au trimestre du bulletin si ses dates sont connues,
     # sinon repli sur l'annee entiere.
     trimester = await repo.get_trimester(db, bulletin.academic_year_id, bulletin.trimester)
