@@ -32,7 +32,7 @@ async def list_incidents(
     status: IncidentStatus | None = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    _: None = require_permission("super-admin:logs:read"),
+    _: None = require_permission("super-admin:incidents:read"),
 ) -> IncidentPage:
     async with short_lived_engine(
         tenant_database_url(_validated(tenant)), pool_pre_ping=True
@@ -47,7 +47,7 @@ async def list_incidents(
 async def get_incident(
     tenant: str,
     incident_id: str,
-    _: None = require_permission("super-admin:logs:read"),
+    _: None = require_permission("super-admin:incidents:read"),
 ) -> IncidentOut:
     async with short_lived_engine(
         tenant_database_url(_validated(tenant)), pool_pre_ping=True
@@ -61,7 +61,7 @@ async def update_incident(
     tenant: str,
     incident_id: str,
     data: IncidentUpdate,
-    _: None = require_permission("super-admin:logs:read"),
+    _: None = require_permission("super-admin:incidents:manage"),
 ) -> IncidentOut:
     async with short_lived_engine(
         tenant_database_url(_validated(tenant)), pool_pre_ping=True
@@ -75,7 +75,7 @@ async def reply(
     tenant: str,
     incident_id: str,
     data: IncidentReply,
-    _: None = require_permission("super-admin:logs:read"),
+    _: None = require_permission("super-admin:incidents:manage"),
 ) -> IncidentOut:
     async with short_lived_engine(
         tenant_database_url(_validated(tenant)), pool_pre_ping=True

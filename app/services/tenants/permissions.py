@@ -180,7 +180,10 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     # Comptes des acteurs (1)
     {"slug": "admin:accounts:manage", "name": "Manage actor login accounts"},
     {"slug": "support:read", "name": "See school support incidents"},
-    # Super Admin (7)
+    # Permission-specific support access (read vs write)
+    {"slug": "super-admin:incidents:read", "name": "Read platform support incidents"},
+    {"slug": "super-admin:incidents:manage", "name": "Manage platform support incidents"},
+    # Super Admin (9)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
     {"slug": "super-admin:tenants:read", "name": "View tenants list and per-tenant stats"},
     {"slug": "super-admin:tenants:status:write", "name": "Suspend / restore / archive a tenant"},

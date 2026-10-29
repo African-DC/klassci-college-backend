@@ -42,7 +42,18 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"], ondelete="SET NULL"),
     )
     op.create_index("ix_support_incident_events_incident_id", "support_incident_events", ["incident_id"])
-    op.execute("INSERT IGNORE INTO permissions (slug, name) VALUES ('support:read', 'See school support incidents')")
+    op.execute(
+        """INSERT IGNORE INTO permissions (slug, name) VALUES
+        ('support:read', 'See school support incidents'),
+        ('super-admin:incidents:read', 'Read platform support incidents'),
+        ('super-admin:incidents:manage', 'Manage platform support incidents')"""
+    )
+    op.execute(
+        """INSERT IGNORE INTO role_permissions (role_id, permission_id)
+        SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+        WHERE r.name = 'super_admin' AND p.slug IN
+        ('super-admin:incidents:read', 'super-admin:incidents:manage')"""
+    )
     op.execute("""
         INSERT IGNORE INTO role_permissions (role_id, permission_id)
         SELECT rp.role_id, p_new.id FROM role_permissions rp
@@ -58,4 +69,11 @@ def downgrade() -> None:
         DELETE rp FROM role_permissions rp JOIN permissions p ON rp.permission_id=p.id
         WHERE p.slug='support:read'
     """)
-    op.execute("DELETE FROM permissions WHERE slug='support:read'")
+    op.execute(
+        """DELETE rp FROM role_permissions rp JOIN permissions p ON rp.permission_id=p.id
+        WHERE p.slug IN ('super-admin:incidents:read', 'super-admin:incidents:manage')"""
+    )
+    op.execute(
+        "DELETE FROM permissions WHERE slug IN "
+        "('support:read', 'super-admin:incidents:read', 'super-admin:incidents:manage')"
+    )
