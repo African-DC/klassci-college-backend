@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-29T22:12:28Z",
+  "generated_at": "2026-10-29T22:13:07Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -18,7 +18,7 @@
             "pull_request": null
           },
           {
-            "text": "Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement .",
+            "text": "Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement",
             "audience": [
               "établissements et support KLASSCI"
             ],
