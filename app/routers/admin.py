@@ -52,6 +52,7 @@ from app.schemas.admin import (
     SchoolHolidayDTO,
     SchoolInfoUpdate,
     SchoolSettingsResponse,
+    TimetableSettingsUpdate,
     SeriesCreate,
     SeriesListResponse,
     SeriesResponse,
@@ -892,6 +893,20 @@ async def update_school_info(
 ) -> SchoolSettingsResponse:
     """Met a jour les informations generales de l'etablissement."""
     school = await admin_service.update_school_info(db, data, updated_by=current_user.user_id)
+    return await _build_settings_response(db, school)
+
+
+@router.put("/settings/timetable", response_model=SchoolSettingsResponse)
+async def update_timetable_settings(
+    data: TimetableSettingsUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:academic-years:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> SchoolSettingsResponse:
+    """Update the timetable's daily hours and slot duration for this tenant."""
+    school = await admin_service.update_timetable_settings(
+        db, data, updated_by=current_user.user_id
+    )
     return await _build_settings_response(db, school)
 
 
