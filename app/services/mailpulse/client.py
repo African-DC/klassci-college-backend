@@ -249,6 +249,7 @@ def message_idempotency_key(
         return f"college:event:{digest}"
     return f"college:one-shot:{uuid4().hex}"
 
+
 def _sanitize(text: str) -> str:
     """Retire les caractères de contrôle qui font échouer certains providers."""
     return "".join(ch for ch in text if ch == "\n" or unicodedata.category(ch)[0] != "C")
