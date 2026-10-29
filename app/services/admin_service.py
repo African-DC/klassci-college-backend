@@ -83,7 +83,6 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
-    TimetableSettingsUpdate,
 )
 from app.services import archive_service, fees_paid, photo_lifecycle, subject_teachers
 from app.services import fee_entitlements as entitlements
@@ -2389,32 +2388,6 @@ async def update_school_info(
         )
     await db.commit()
     # Re-fetch to get updated timestamps
-    return await get_school_settings(db)
-
-
-async def update_timetable_settings(
-    db: AsyncSession, data: TimetableSettingsUpdate, *, updated_by: int
-) -> SchoolSettings:
-    """Persist and audit school-specific timetable rules."""
-    school = await get_school_settings(db)
-    values = data.model_dump()
-    previous = {key: getattr(school, key) for key in values}
-    if previous == values:
-        return school
-    async with db.begin_nested():
-        for key, value in values.items():
-            setattr(school, key, value)
-        await db.flush()
-        await audit_log(
-            db,
-            entity_type="school_settings",
-            action=AuditAction.UPDATE,
-            user_id=updated_by,
-            entity_id=school.id,
-            old_values=previous,
-            new_values=values,
-        )
-    await db.commit()
     return await get_school_settings(db)
 
 

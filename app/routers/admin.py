@@ -89,6 +89,7 @@ from app.services import (
     enrollment_fees,
     enrollment_history,
     matricule_service,
+    timetable_settings_service,
 )
 from app.services.finance_visibility import FinanceView
 from app.utils.photo_upload import save_image_upload
@@ -904,7 +905,7 @@ async def update_timetable_settings(
     db: AsyncSession = Depends(get_tenant_db),
 ) -> SchoolSettingsResponse:
     """Update the timetable's daily hours and slot duration for this tenant."""
-    school = await admin_service.update_timetable_settings(
+    school = await timetable_settings_service.update_timetable_settings(
         db, data, updated_by=current_user.user_id
     )
     return await _build_settings_response(db, school)
