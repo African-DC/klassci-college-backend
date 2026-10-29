@@ -10,6 +10,14 @@
       "sections": {
         "Added": [
           {
+            "text": "Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Matières : un niveau peut désormais avoir plusieurs enseignants pour une même matière",
             "audience": [
               "admin",
