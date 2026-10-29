@@ -58,7 +58,6 @@ from app.schemas.admin import (
     RoomResponse,
     RoomUpdate,
     SchoolInfoUpdate,
-    TimetableSettingsUpdate,
     SeriesCreate,
     SeriesListResponse,
     SeriesResponse,
@@ -84,6 +83,7 @@ from app.schemas.admin import (
     TeacherListResponse,
     TeacherResponse,
     TeacherUpdate,
+    TimetableSettingsUpdate,
 )
 from app.services import archive_service, fees_paid, photo_lifecycle, subject_teachers
 from app.services import fee_entitlements as entitlements
