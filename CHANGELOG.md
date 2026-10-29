@@ -17,6 +17,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ### Fixed
 - Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran *(direction, secrétariat)*
 - Emploi du temps PDF : les repères horaires rapprochés ne se chevauchent plus, sans décaler les créneaux placés à la minute près *(administration, direction)* (#542)
+- Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables *(administration, technique)* (#538)
 - Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic *(admin, direction des études)*
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 

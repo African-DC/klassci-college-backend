@@ -6,6 +6,7 @@ interrupteur actif et par les interrupteurs de canal de test.
 """
 
 import logging
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -146,6 +147,7 @@ async def _send_all(
             sender_email=school.mailpulse_sender_email,
             sender_name=school.mailpulse_sender_name,
             external_event_id=f"test-{event}",
+            idempotency_key=f"college:test:{uuid4().hex}",
         )
         results.append(
             MailPulseTestResult(
@@ -165,6 +167,7 @@ async def _send_all(
             subject=subject,
             body=body,
             external_event_id=f"test-{event}",
+            idempotency_key=f"college:test:{uuid4().hex}",
         )
         results.append(
             MailPulseTestResult(
