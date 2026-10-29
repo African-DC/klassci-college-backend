@@ -1,4 +1,4 @@
-from app.services.pdf.timetable import _visible_special_labels
+from app.services.pdf.timetable import _slot_html, _visible_special_labels
 
 
 def test_non_hour_labels_do_not_collide_with_hour_ticks():
@@ -14,9 +14,6 @@ def test_spaced_labels_are_kept_in_time_order():
 def test_dense_pdf_suppresses_collisions_at_reduced_scale():
     hours = [8 * 60, 9 * 60, 10 * 60]
     assert _visible_special_labels({510, 515, 520}, hours, 0.45) == [510]
-
-from app.services.pdf.timetable import _slot_html
-
 
 def test_short_slot_keeps_its_exact_times_even_when_room_is_omitted():
     slot = {
