@@ -226,7 +226,6 @@ class MailPulseClient:
         return _parse_response(resp, operation=operation)
 
 
-
 def message_idempotency_key(
     *,
     channel: Channel,
