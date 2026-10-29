@@ -142,3 +142,6 @@ from app.models.user import (  # noqa: F401
     User,
     UserRoleEnum,
 )
+
+# Incidents de support — base propre à chaque établissement
+from app.models.support_incident import SupportIncident, SupportIncidentEvent  # noqa: F401

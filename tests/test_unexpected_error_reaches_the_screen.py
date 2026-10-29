@@ -62,7 +62,7 @@ def test_le_500_rend_un_code_de_reference_recopiable(caplog) -> None:
         corps = _client().get("/panne", headers={"Origin": ORIGINE}).json()
 
     assert corps["code"] == "INTERNAL"
-    assert len(corps["reference"]) == 6
+    assert len(corps["reference"]) == 12
     assert corps["reference"] in corps["detail"]
     # Hexadécimal en capitales : dictable au téléphone sans ambiguïté de casse.
     assert set(corps["reference"]) <= set("0123456789ABCDEF")

@@ -20,6 +20,7 @@ import hashlib
 import ipaddress
 import logging
 import re
+import secrets
 import tempfile
 from dataclasses import dataclass
 
@@ -497,6 +498,16 @@ class TenantMiddleware:
                 token = current_tenant_id.set(tenant)
                 try:
                     await self.app(scope, prepared.receive, send)
+                except Exception:
+                    # The tenant context remains active until we reset it.
+                    reference = secrets.token_hex(6).upper()
+                    scope.setdefault("state", {})["incident_reference"] = reference
+                    try:
+                        from app.services.support_incidents import capture_unexpected
+                        await capture_unexpected(reference, tenant)
+                    except Exception:
+                        logger.exception("Failed to persist incident [%s]", reference)
+                    raise
                 finally:
                     current_tenant_id.reset(token)
             finally:
