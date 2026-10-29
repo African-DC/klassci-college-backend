@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-28T20:11:00Z",
+  "generated_at": "2026-10-29T22:51:33Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,21 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement",
+            "audience": [
+              "établissements et support KLASSCI"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Matières : un niveau peut désormais avoir plusieurs enseignants pour une même matière",
             "audience": [
@@ -1318,6 +1333,22 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Emploi du temps PDF : les repères horaires rapprochés ne se chevauchent plus, sans décaler les créneaux placés à la minute près",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": 542
+          },
           {
             "text": "Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables",
             "audience": [

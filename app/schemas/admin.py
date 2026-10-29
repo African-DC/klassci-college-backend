@@ -817,11 +817,28 @@ class NotificationSettingsUpdate(BaseModel):
     notify_reenrollment: bool
 
 
+class TimetableSettingsUpdate(BaseModel):
+    """Configuration horaire propre à chaque établissement."""
+
+    slot_duration_minutes: int = Field(ge=5, le=180)
+    day_start_hour: int = Field(ge=0, le=23)
+    day_end_hour: int = Field(ge=1, le=24)
+
+    @model_validator(mode="after")
+    def validate_school_day(self):
+        if self.day_start_hour >= self.day_end_hour:
+            raise ValueError("L'heure de fin doit être après l'heure de début.")
+        return self
+
+
 class SchoolSettingsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     school_name: str
+    slot_duration_minutes: int = 60
+    day_start_hour: int = 7
+    day_end_hour: int = 17
     address: str | None
     phone: str | None
     email: str | None
