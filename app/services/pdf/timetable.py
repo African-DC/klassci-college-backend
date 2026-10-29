@@ -90,6 +90,19 @@ def _fmt_min(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
+def _visible_special_labels(special: set[int], hour_marks: list[int], px_per_min: float) -> list[int]:
+    """Keep non-hour labels only when they do not collide with the time axis."""
+    min_spacing_px = 13.0  # typographic label height, not a school timetable rule
+    selected: list[int] = []
+    for minute in sorted(special):
+        if any(abs(minute - hour) * px_per_min < min_spacing_px for hour in hour_marks):
+            continue
+        if selected and (minute - selected[-1]) * px_per_min < min_spacing_px:
+            continue
+        selected.append(minute)
+    return selected
+
+
 def _resolve_color(
     token: str | None, cache: dict[str, tuple[str, str, str]], name: str
 ) -> tuple[str, str, str]:
@@ -249,20 +262,11 @@ def generate_timetable_pdf(
                 offset = mm % 60
                 if offset != 0 and min(offset, 60 - offset) >= 5 and grid_start <= mm <= grid_end:
                     special.add(mm)
-    # Un repère spécial n'a de sens que s'il tient réellement entre deux
-    # libellés. Ex. 09:50 / 10:00 / 10:10 sur une heure de 40 px se touchent.
-    # L'heure exacte reste toujours inscrite dans la carte du créneau.
-    visible_marks = list(hour_marks)
-    min_label_gap_px = 12.0
-    for mm in sorted(special):
-        if all(
-            abs(_label_top(mm) - _label_top(other)) >= min_label_gap_px for other in visible_marks
-        ):
-            grid_layers.append(
-                f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
-                f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'
-            )
-            visible_marks.append(mm)
+    for mm in _visible_special_labels(special, hour_marks, px_per_min):
+        grid_layers.append(
+            f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
+            f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'
+        )
 
     # Séparateurs verticaux de colonnes (gouttière + entre jours).
     for i in range(n_days + 1):
