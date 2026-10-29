@@ -112,6 +112,9 @@ async def get(db: AsyncSession, incident_id: str, *, actor_id: int | None) -> In
     if actor_id is not None and item.created_by != actor_id:
         # Hide existence of another user's issue.
         raise NotFoundError("Incident", incident_id)
+    # `updated_at` est recalculé par la base à chaque UPDATE : sans rechargement,
+    # sa lecture tardive hors greenlet lèverait MissingGreenlet.
+    await db.refresh(item)
     events = (
         (
             await db.execute(
