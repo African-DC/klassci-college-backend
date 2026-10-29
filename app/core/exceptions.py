@@ -130,21 +130,21 @@ class EnrollmentBlockedByArrearsError(AppException):
 # ---------------------------------------------------------------------------
 
 
-def unexpected_error_response(path: str) -> JSONResponse:
+def unexpected_error_response(path: str, reference: str | None = None) -> JSONResponse:
     """Transforme l'imprevu en reponse exploitable, et journalise la trace.
 
     Le code de reference relie ce que l'utilisateur a lu a la ligne de journal
     exacte : il n'a plus a raconter ce qu'il faisait pour qu'on retrouve la
     panne.
     """
-    reference = secrets.token_hex(3).upper()
+    reference = reference or secrets.token_hex(3).upper()
     logger.exception("Erreur inattendue [%s] sur %s", reference, path)
     return JSONResponse(
         status_code=500,
         content={
             "detail": (
                 "Une erreur inattendue est survenue. Communiquez le code "
-                f"{reference} a votre administrateur."
+                f"{reference} au support KLASSCI."
             ),
             "code": "INTERNAL",
             "reference": reference,
@@ -194,7 +194,9 @@ class UnexpectedErrorMiddleware:
                 # Les en-tetes sont deja partis : plus moyen de rendre autre
                 # chose. On laisse remonter, la trace sera journalisee au-dessus.
                 raise
-            response = unexpected_error_response(scope.get("path", ""))
+            response = unexpected_error_response(
+                scope.get("path", ""), scope.get("state", {}).get("incident_reference")
+            )
             await response(scope, receive, send)
 
 
