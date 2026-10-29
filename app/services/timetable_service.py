@@ -690,9 +690,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
                 "start_time": start_t,
                 "end_time": end_t,
                 "subject_name": s.subject.name if s.subject else "",
-                "teacher_name": f"{s.teacher.last_name} {s.teacher.first_name}"
-                if s.teacher
-                else "",
+                "teacher_name": s.teacher.display_name if s.teacher else "",
                 "room": s.room.name if s.room else None,
                 "subject_color": s.subject.color
                 if s.subject and hasattr(s.subject, "color")

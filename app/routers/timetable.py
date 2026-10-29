@@ -14,6 +14,7 @@ from app.schemas.timetable import (
     TeacherAvailabilityResponse,
     TeacherAvailabilityUpdate,
     TeacherWeekResponse,
+    TimetableConfigResponse,
     TimetableSlotCreate,
     TimetableSlotResponse,
     TimetableSlotUpdate,
@@ -62,6 +63,20 @@ async def generate_timetable(
 ) -> GenerateTimetableResponse:
     """Lance la génération OR-Tools de l'emploi du temps (tâche asynchrone)."""
     return timetable_service.trigger_generate(current_user.tenant_id, data)
+
+
+@router.get("/configuration", response_model=TimetableConfigResponse)
+async def timetable_configuration(
+    _: None = require_permission("timetable:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> TimetableConfigResponse:
+    """Échelle horaire de l'établissement, source de vérité pour la grille."""
+    duration, start, end = await timetable_service._get_timetable_settings(db)
+    return TimetableConfigResponse(
+        slot_duration_minutes=duration,
+        day_start_hour=start,
+        day_end_hour=end,
+    )
 
 
 @router.get("/diagnostic")

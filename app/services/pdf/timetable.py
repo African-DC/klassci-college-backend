@@ -73,7 +73,7 @@ _NEUTRAL_TOKEN = ("#eef2f6", "#cbd5e1", "#334155")
 # Espace vertical disponible pour la grille après en-tête + ligne des jours +
 # légende + pied de page (en px CSS ; ~475px sur A4 paysage marge 8mm).
 _GRID_AVAIL_PX = 430.0
-_HOUR_H_MAX = 56.0  # cellule pas démesurée pour une journée courte
+_HOUR_H_MAX = 96.0  # cellule pas démesurée pour une journée courte
 _HOUR_H_MIN = 26.0  # plancher de lisibilité (journées très longues)
 _GUTTER_PCT = 7.0  # largeur de la colonne des heures (%)
 _DAYHEAD_H = 26.0  # hauteur de la ligne des jours (px)
@@ -129,7 +129,7 @@ def _slot_html(
         lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
     if height_px >= 44 and room:
         lines.append(f'<div class="tt-slot-sub tt-slot-room">{room}</div>')
-    if height_px >= 58:
+    if height_px >= 30:
         lines.append(f'<div class="tt-slot-time">{time_str}</div>')
 
     style = (
@@ -190,12 +190,13 @@ def generate_timetable_pdf(
     # Bornes horaires : rognées aux heures réellement utilisées (arrondi à l'heure).
     all_starts = [_time_to_min(s["start_time"]) for s in slots if s.get("start_time")]
     all_ends = [_time_to_min(s["end_time"]) for s in slots if s.get("end_time")]
-    if all_starts and all_ends:
-        grid_start = (min(all_starts) // 60) * 60
-        grid_end = -(-max(all_ends) // 60) * 60  # ceil vers l'heure
-    else:
-        grid_start = day_start * 60
-        grid_end = day_end * 60
+    # Les bornes de la grille viennent des réglages de l'établissement, pas
+    # des seuls cours déjà saisis : un jour incomplet ne doit pas cacher ses
+    # heures libres dans le PDF. Élargir si un créneau existant déborde.
+    grid_start = min(day_start * 60, min(all_starts, default=day_start * 60))
+    grid_end = max(day_end * 60, max(all_ends, default=day_end * 60))
+    grid_start = (grid_start // 60) * 60
+    grid_end = -(-grid_end // 60) * 60
     span_min = max(60, grid_end - grid_start)
     span_hours = span_min / 60.0
 
@@ -248,11 +249,18 @@ def generate_timetable_pdf(
                 offset = mm % 60
                 if offset != 0 and min(offset, 60 - offset) >= 5 and grid_start <= mm <= grid_end:
                     special.add(mm)
+    # Un repère spécial n'a de sens que s'il tient réellement entre deux
+    # libellés. Ex. 09:50 / 10:00 / 10:10 sur une heure de 40 px se touchent.
+    # L'heure exacte reste toujours inscrite dans la carte du créneau.
+    visible_marks = list(hour_marks)
+    min_label_gap_px = 12.0
     for mm in sorted(special):
-        grid_layers.append(
-            f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
-            f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'
-        )
+        if all(abs(_label_top(mm) - _label_top(other)) >= min_label_gap_px for other in visible_marks):
+            grid_layers.append(
+                f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
+                f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'
+            )
+            visible_marks.append(mm)
 
     # Séparateurs verticaux de colonnes (gouttière + entre jours).
     for i in range(n_days + 1):
