@@ -179,6 +179,7 @@ ALL_PERMISSIONS: list[dict[str, str]] = [
     {"slug": "mailpulse:test", "name": "Send MailPulse test notifications"},
     # Comptes des acteurs (1)
     {"slug": "admin:accounts:manage", "name": "Manage actor login accounts"},
+    {"slug": "support:read", "name": "See school support incidents"},
     # Super Admin (7)
     {"slug": "super-admin:tenants:create", "name": "Provision new tenants"},
     {"slug": "super-admin:tenants:read", "name": "View tenants list and per-tenant stats"},

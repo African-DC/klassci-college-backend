@@ -1,18 +1,17 @@
 """Small cohesive incident workflow; every operation receives a tenant-scoped DB session."""
 import logging
-import secrets
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.datetimes import utcnow_naive
 from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.support_incident import SupportIncident, SupportIncidentEvent
-from app.schemas.support_incident import IncidentCreate, IncidentOut, IncidentPage, IncidentReply, IncidentUpdate
+from app.schemas.support_incident import IncidentCreate, IncidentEventOut, IncidentOut, IncidentPage, IncidentReply, IncidentUpdate
 
 logger = logging.getLogger(__name__)
 
 def _as_output(item: SupportIncident, events: list[SupportIncidentEvent] | None = None) -> IncidentOut:
     return IncidentOut.model_validate(item).model_copy(
-        update={"events": [__import__("app.schemas.support_incident", fromlist=["IncidentEventOut"]).IncidentEventOut.model_validate(e) for e in events or []]}
+        update={"events": [IncidentEventOut.model_validate(e) for e in events or []]}
     )
 
 async def create(db: AsyncSession, data: IncidentCreate, actor_id: int) -> IncidentOut:
