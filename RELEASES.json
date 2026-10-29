@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-28T20:11:00Z",
+  "generated_at": "2026-10-29T21:58:12Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1333,6 +1333,14 @@
               "secrétariat"
             ],
             "pull_request": null
+          },
+          {
+            "text": "Emploi du temps PDF : les repères horaires rapprochés ne se chevauchent plus, sans décaler les créneaux placés à la minute près",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": 542
           },
           {
             "text": "Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic",
