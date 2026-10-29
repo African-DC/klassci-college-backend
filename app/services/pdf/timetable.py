@@ -90,7 +90,9 @@ def _fmt_min(m: int) -> str:
     return f"{m // 60:02d}:{m % 60:02d}"
 
 
-def _visible_special_labels(special: set[int], hour_marks: list[int], px_per_min: float) -> list[int]:
+def _visible_special_labels(
+    special: set[int], hour_marks: list[int], px_per_min: float
+) -> list[int]:
     """Keep non-hour labels only when they do not collide with the time axis."""
     min_spacing_px = 13.0  # typographic label height, not a school timetable rule
     selected: list[int] = []
