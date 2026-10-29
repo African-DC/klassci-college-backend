@@ -137,7 +137,7 @@ def unexpected_error_response(path: str, reference: str | None = None) -> JSONRe
     exacte : il n'a plus a raconter ce qu'il faisait pour qu'on retrouve la
     panne.
     """
-    reference = reference or secrets.token_hex(6).upper()
+    reference = reference or secrets.token_hex(3).upper()
     logger.exception("Erreur inattendue [%s] sur %s", reference, path)
     return JSONResponse(
         status_code=500,

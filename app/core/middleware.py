@@ -500,7 +500,7 @@ class TenantMiddleware:
                     await self.app(scope, prepared.receive, send)
                 except Exception:
                     # The tenant context remains active until we reset it.
-                    reference = secrets.token_hex(6).upper()
+                    reference = secrets.token_hex(3).upper()
                     scope.setdefault("state", {})["incident_reference"] = reference
                     try:
                         from app.services.support_incidents import capture_unexpected
