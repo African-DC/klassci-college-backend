@@ -45,6 +45,12 @@ class TimetableSlotResponse(BaseModel):
     room: str | None
 
 
+class TimetableConfigResponse(BaseModel):
+    slot_duration_minutes: int
+    day_start_hour: int
+    day_end_hour: int
+
+
 # ---------------------------------------------------------------------------
 # Teacher availability
 # ---------------------------------------------------------------------------
