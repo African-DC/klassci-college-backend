@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-29T22:13:07Z",
+  "generated_at": "2026-10-29T22:51:33Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1348,6 +1348,14 @@
               "direction"
             ],
             "pull_request": 542
+          },
+          {
+            "text": "Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables",
+            "audience": [
+              "administration",
+              "technique"
+            ],
+            "pull_request": 538
           },
           {
             "text": "Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic",
