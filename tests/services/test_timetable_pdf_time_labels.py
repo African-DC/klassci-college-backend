@@ -15,6 +15,7 @@ def test_dense_pdf_suppresses_collisions_at_reduced_scale():
     hours = [8 * 60, 9 * 60, 10 * 60]
     assert _visible_special_labels({510, 515, 520}, hours, 0.45) == [510]
 
+
 def test_short_slot_keeps_its_exact_times_even_when_room_is_omitted():
     slot = {
         "subject_name": "SVT",
