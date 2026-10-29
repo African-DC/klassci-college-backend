@@ -17,7 +17,6 @@ from app.schemas.support_incident import (
     IncidentUpdate,
 )
 
-
 logger = logging.getLogger(__name__)
 
 def _as_output(item: SupportIncident, events: list[SupportIncidentEvent] | None = None) -> IncidentOut:

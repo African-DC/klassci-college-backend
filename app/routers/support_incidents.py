@@ -18,7 +18,6 @@ from app.schemas.support_incident import (
 )
 from app.services import support_incidents as service
 
-
 router = APIRouter(prefix="/support/incidents", tags=["support"])
 
 async def _visibility(user: TokenData, db: AsyncSession) -> int | None:

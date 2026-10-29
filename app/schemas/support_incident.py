@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 IncidentStatus = Literal["new", "in_progress", "waiting", "resolved", "closed"]
 IncidentPriority = Literal["low", "normal", "high", "critical"]
 

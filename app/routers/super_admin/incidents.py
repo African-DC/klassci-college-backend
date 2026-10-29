@@ -16,7 +16,6 @@ from app.schemas.support_incident import (
 from app.services import support_incidents as service
 from app.services.tenants._engine import short_lived_engine
 
-
 router = APIRouter(prefix="/incidents", tags=["super-admin"])
 
 def _validated(slug: str) -> str:
