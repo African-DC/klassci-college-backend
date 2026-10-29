@@ -138,14 +138,15 @@ def _slot_html(
     room = esc(slot.get("room") or "")
     time_str = f"{slot['start_time']}–{slot['end_time']}"
 
-    # Divulgation progressive selon la hauteur (comme la grille FE).
+    # L'horaire exact prime sur la salle : les repères de l'axe peuvent
+    # disparaître lorsque plusieurs débuts/fins sont trop proches.
     lines = [f'<div class="tt-slot-subject">{subject}</div>']
-    if height_px >= 30 and teacher:
-        lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
-    if height_px >= 44 and room:
-        lines.append(f'<div class="tt-slot-sub tt-slot-room">{room}</div>')
-    if height_px >= 30:
+    if height_px >= 25:
         lines.append(f'<div class="tt-slot-time">{time_str}</div>')
+    if height_px >= 37 and teacher:
+        lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
+    if height_px >= 50 and room:
+        lines.append(f'<div class="tt-slot-sub tt-slot-room">{room}</div>')
 
     style = (
         f"left:{left_pct:.3f}%; width:{width_pct:.3f}%; "
