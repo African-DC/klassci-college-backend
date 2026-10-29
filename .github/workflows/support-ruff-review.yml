@@ -1,0 +1,17 @@
+name: Support Ruff formatting diagnostic
+on:
+  push:
+    branches:
+      - feature/532-support-incident-center
+jobs:
+  ruff-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install ruff==0.15.12
+      - name: Show exact formatting patch
+        run: |
+          ruff format --diff app/core/exceptions.py app/core/middleware.py app/models/support_incident.py app/routers/super_admin/incidents.py app/routers/support_incidents.py app/schemas/support_incident.py app/services/support_incidents.py tests/test_support_incidents_contract.py
