@@ -1,0 +1,17 @@
+name: Timetable Ruff Diff (temporary)
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - "app/services/pdf/timetable.py"
+      - "tests/test_timetable_pdf_consistency.py"
+      - ".github/workflows/timetable-ruff-diff.yml"
+jobs:
+  review-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: 0.15.12
+          args: "format --diff app/services/pdf/timetable.py tests/test_timetable_pdf_consistency.py"
