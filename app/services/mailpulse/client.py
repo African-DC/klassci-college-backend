@@ -243,7 +243,8 @@ def message_idempotency_key(
     if explicit_key is not None and explicit_key.strip():
         return explicit_key.strip()
     if external_event_id and external_event_id.strip():
-        digest = hashlib.sha256(f"{channel}\x00{recipient}\x00{external_event_id}".encode()).hexdigest()
+        event_bytes = f"{channel}\x00{recipient}\x00{external_event_id}".encode()
+        digest = hashlib.sha256(event_bytes).hexdigest()
         return f"college:event:{digest}"
     return f"college:one-shot:{uuid4().hex}"
 
