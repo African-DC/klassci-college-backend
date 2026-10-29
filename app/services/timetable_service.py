@@ -656,7 +656,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     """Generate a PDF of the timetable for a class."""
     from sqlalchemy import select
 
-    from app.models.academic import AcademicYear, Class, SchoolSettings
+    from app.models.academic import AcademicYear, Class
     from app.services.pdf_service import generate_timetable_pdf
 
     # Get class info
@@ -673,10 +673,8 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     # Get school settings (full payload for PDF official header/footer)
     from app.services._school_settings_helper import load_school_settings_for_pdf
 
-    settings = (await db.execute(select(SchoolSettings))).scalar_one_or_none()
     school_settings = await load_school_settings_for_pdf(db)
-    day_start = settings.day_start_hour if settings else 7
-    day_end = settings.day_end_hour if settings else 18
+    _, day_start, day_end = await _get_timetable_settings(db)
 
     # Get all slots for this class
     slots_raw = await repo.list_slots(db, class_id=class_id)
