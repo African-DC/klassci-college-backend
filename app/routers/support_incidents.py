@@ -20,8 +20,10 @@ from app.services import support_incidents as service
 
 router = APIRouter(prefix="/support/incidents", tags=["support"])
 
+
 async def _visibility(user: TokenData, db: AsyncSession) -> int | None:
     return None if await resolve_permission(user, db, "support:read") else user.user_id
+
 
 @router.get("", response_model=IncidentPage)
 async def list_incidents(
@@ -32,28 +34,47 @@ async def list_incidents(
     user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> IncidentPage:
-    return await service.list_page(db, actor_id=await _visibility(user, db),
-                                   reference=reference, status=status, page=page, size=size)
+    return await service.list_page(
+        db,
+        actor_id=await _visibility(user, db),
+        reference=reference,
+        status=status,
+        page=page,
+        size=size,
+    )
+
 
 @router.post("", response_model=IncidentOut, status_code=201)
-async def create_incident(data: IncidentCreate,
+async def create_incident(
+    data: IncidentCreate,
     user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> IncidentOut:
     return await service.create(db, data, actor_id=user.user_id)
 
+
 @router.get("/{incident_id}", response_model=IncidentOut)
-async def get_incident(incident_id: str,
+async def get_incident(
+    incident_id: str,
     user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> IncidentOut:
     return await service.get(db, incident_id, actor_id=await _visibility(user, db))
 
+
 @router.post("/{incident_id}/replies", response_model=IncidentOut)
-async def reply_to_incident(incident_id: str, data: IncidentReply,
+async def reply_to_incident(
+    incident_id: str,
+    data: IncidentReply,
     user: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> IncidentOut:
     # School-wide readers are not automatically allowed to speak for the reporter.
-    return await service.reply(db, incident_id, data, actor_id=user.user_id,
-                               actor_kind="school", owner_only=not await resolve_permission(user, db, "support:read"))
+    return await service.reply(
+        db,
+        incident_id,
+        data,
+        actor_id=user.user_id,
+        actor_kind="school",
+        owner_only=not await resolve_permission(user, db, "support:read"),
+    )

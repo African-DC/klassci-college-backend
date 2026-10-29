@@ -504,6 +504,7 @@ class TenantMiddleware:
                     scope.setdefault("state", {})["incident_reference"] = reference
                     try:
                         from app.services.support_incidents import capture_unexpected
+
                         await capture_unexpected(reference, tenant)
                     except Exception:
                         logger.exception("Failed to persist incident [%s]", reference)

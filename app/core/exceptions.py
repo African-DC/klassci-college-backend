@@ -194,7 +194,9 @@ class UnexpectedErrorMiddleware:
                 # Les en-tetes sont deja partis : plus moyen de rendre autre
                 # chose. On laisse remonter, la trace sera journalisee au-dessus.
                 raise
-            response = unexpected_error_response(scope.get("path", ""), scope.get("state", {}).get("incident_reference"))
+            response = unexpected_error_response(
+                scope.get("path", ""), scope.get("state", {}).get("incident_reference")
+            )
             await response(scope, receive, send)
 
 
