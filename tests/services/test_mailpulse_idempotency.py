@@ -36,8 +36,14 @@ def test_business_event_retries_have_stable_and_recipient_scoped_keys():
     base = {"channel": "email", "recipient": "a@ecole.ci", "external_event_id": "paiement:42"}
     first = message_idempotency_key(explicit_key=None, **base)
     assert message_idempotency_key(explicit_key=None, **base) == first
-    assert message_idempotency_key(explicit_key=None, **{**base, "recipient": "b@ecole.ci"}) != first
-    assert message_idempotency_key(explicit_key=None, **{**base, "external_event_id": "paiement:43"}) != first
+    other_recipient = message_idempotency_key(
+        explicit_key=None, **{**base, "recipient": "b@ecole.ci"}
+    )
+    other_event = message_idempotency_key(
+        explicit_key=None, **{**base, "external_event_id": "paiement:43"}
+    )
+    assert other_recipient != first
+    assert other_event != first
 
 
 def test_manual_messages_get_fresh_keys_and_explicit_keys_win():
