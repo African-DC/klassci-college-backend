@@ -10,6 +10,7 @@ présenté dans l'en-tête `X-MailPulse-Token`, vérifié en temps constant.
 
 import hmac
 import logging
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,6 +112,9 @@ async def handle_inbound(
         recipient=phone,
         body=reply,
         external_event_id=f"info-{parent.id}",
+        # Une nouvelle requete INFO doit obtenir une nouvelle reponse.
+        # Rejeu dedoublable une fois message_id externe disponible en webhook.
+        idempotency_key=f"college:info:{uuid4().hex}",
     )
     logger.info(
         "mailpulse inbound INFO replied parent_id=%s status=%s children=%s",

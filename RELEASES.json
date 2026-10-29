@@ -1319,6 +1319,14 @@
         ],
         "Fixed": [
           {
+            "text": "Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables",
+            "audience": [
+              "administration",
+              "technique"
+            ],
+            "pull_request": 538
+          },
+          {
             "text": "Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic",
             "audience": [
               "admin",
