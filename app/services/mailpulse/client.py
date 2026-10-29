@@ -10,10 +10,12 @@ Contrat API (mailpulse-two.vercel.app) :
   content text|template). Codes d'erreur métier connus renvoyés en 422.
 """
 
+import hashlib
 import logging
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Literal
+from uuid import uuid4
 
 import httpx
 
@@ -187,11 +189,21 @@ class MailPulseClient:
         if metadata:
             payload["metadata"] = metadata
 
+        # MailPulse exige Idempotency-Key (HTTP 400 sans cet en-tete).
+        # Evenement metier durable: meme cle pour les reprises.
+        # Un message sans identifiant d'evenement est traite en one-shot :
+        # appeler l'outbox avec une cle stable pour une garantie cross-retry.
+        key = message_idempotency_key(
+            channel=channel,
+            recipient=value,
+            external_event_id=external_event_id,
+            explicit_key=idempotency_key,
+        )
         return await self._post(
             self._messages_endpoint,
             payload,
             operation=f"{channel}_send",
-            idempotency_key=idempotency_key,
+            idempotency_key=key,
         )
 
     async def _post(
@@ -213,6 +225,29 @@ class MailPulseClient:
 
         return _parse_response(resp, operation=operation)
 
+
+
+def message_idempotency_key(
+    *,
+    channel: Channel,
+    recipient: str,
+    external_event_id: str | None,
+    explicit_key: str | None,
+) -> str:
+    """Cle de transport MailPulse, sans email/telephone en clair.
+
+    Les evenements metier sont stables entre reprises. Les anciens appels sans
+    event_id restent possibles (one-shot) mais ne sont PAS durables : le futur
+    workflow outbox devra toujours passer une cle explicite et persistante.
+    """
+    if explicit_key is not None and explicit_key.strip():
+        return explicit_key.strip()
+    if external_event_id and external_event_id.strip():
+        digest = hashlib.sha256(
+            f"{channel}\x00{recipient}\x00{external_event_id}".encode()
+        ).hexdigest()
+        return f"college:event:{digest}"
+    return f"college:one-shot:{uuid4().hex}"
 
 def _sanitize(text: str) -> str:
     """Retire les caractères de contrôle qui font échouer certains providers."""
