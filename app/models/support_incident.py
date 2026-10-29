@@ -1,10 +1,14 @@
 """Persistent incident ledger; stored in the current school's database."""
+
 import uuid
 from datetime import datetime
+
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.core.database import Base
 from app.models.base import TimestampMixin
+
 
 class SupportIncident(Base, TimestampMixin):
     __tablename__ = "support_incidents"

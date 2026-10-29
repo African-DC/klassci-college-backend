@@ -1,9 +1,23 @@
 """Tenant-only support routes. Reporters see their own issues; school support permission widens scope."""
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.dependencies import TokenData, get_current_user, get_tenant_db, resolve_permission
-from app.schemas.support_incident import IncidentCreate, IncidentOut, IncidentPage, IncidentReply, IncidentStatus
+
+from app.core.dependencies import (
+    TokenData,
+    get_current_user,
+    get_tenant_db,
+    resolve_permission,
+)
+from app.schemas.support_incident import (
+    IncidentCreate,
+    IncidentOut,
+    IncidentPage,
+    IncidentReply,
+    IncidentStatus,
+)
 from app.services import support_incidents as service
+
 
 router = APIRouter(prefix="/support/incidents", tags=["support"])
 
@@ -43,4 +57,4 @@ async def reply_to_incident(incident_id: str, data: IncidentReply,
 ) -> IncidentOut:
     # School-wide readers are not automatically allowed to speak for the reporter.
     return await service.reply(db, incident_id, data, actor_id=user.user_id,
-                               actor_kind="school", owner_only=True)
+                               actor_kind="school", owner_only=not await resolve_permission(user, db, "support:read"))

@@ -1,7 +1,10 @@
 """Public incident contracts: never include traces or server logs."""
+
 from datetime import datetime
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
 
 IncidentStatus = Literal["new", "in_progress", "waiting", "resolved", "closed"]
 IncidentPriority = Literal["low", "normal", "high", "critical"]

@@ -1,12 +1,21 @@
 """Platform support console: explicit tenant selector; no accidental cross-school data mixing."""
+
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
 from app.core.database import tenant_database_url
 from app.core.dependencies import require_permission
 from app.core.slug import is_valid_tenant_slug
-from app.schemas.support_incident import IncidentOut, IncidentPage, IncidentReply, IncidentStatus, IncidentUpdate
+from app.schemas.support_incident import (
+    IncidentOut,
+    IncidentPage,
+    IncidentReply,
+    IncidentStatus,
+    IncidentUpdate,
+)
 from app.services import support_incidents as service
 from app.services.tenants._engine import short_lived_engine
+
 
 router = APIRouter(prefix="/incidents", tags=["super-admin"])
 
