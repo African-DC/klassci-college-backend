@@ -255,7 +255,9 @@ def generate_timetable_pdf(
     visible_marks = list(hour_marks)
     min_label_gap_px = 12.0
     for mm in sorted(special):
-        if all(abs(_label_top(mm) - _label_top(other)) >= min_label_gap_px for other in visible_marks):
+        if all(
+            abs(_label_top(mm) - _label_top(other)) >= min_label_gap_px for other in visible_marks
+        ):
             grid_layers.append(
                 f'<div class="tt-hlabel tt-hlabel-soft" style="top:{_label_top(mm):.1f}px; '
                 f'width:{_GUTTER_PCT:.2f}%;">{_fmt_min(mm)}</div>'

@@ -6,9 +6,7 @@ from app.schemas.timetable import TimetableConfigResponse
 
 
 def test_configuration_contract():
-    config = TimetableConfigResponse(
-        slot_duration_minutes=45, day_start_hour=6, day_end_hour=19
-    )
+    config = TimetableConfigResponse(slot_duration_minutes=45, day_start_hour=6, day_end_hour=19)
     assert config.day_start_hour == 6
     assert config.slot_duration_minutes == 45
 
@@ -38,10 +36,20 @@ def test_pdf_keeps_full_school_day_and_normalizes_labels(monkeypatch):
     monkeypatch.setattr(timetable.PDFTheme, "from_school", lambda *_: object())
     result = timetable.generate_timetable_pdf(
         slots=[
-            {"day": "friday", "start_time": "08:00", "end_time": "09:50",
-             "subject_name": "SVT", "teacher_name": "NANA JACQUES"},
-            {"day": "monday", "start_time": "10:10", "end_time": "11:05",
-             "subject_name": "Anglais", "teacher_name": "YAPI ACHI PACOME"},
+            {
+                "day": "friday",
+                "start_time": "08:00",
+                "end_time": "09:50",
+                "subject_name": "SVT",
+                "teacher_name": "NANA JACQUES",
+            },
+            {
+                "day": "monday",
+                "start_time": "10:10",
+                "end_time": "11:05",
+                "subject_name": "Anglais",
+                "teacher_name": "YAPI ACHI PACOME",
+            },
         ],
         class_name="6ème 1",
         academic_year="2026-2027",
@@ -54,5 +62,5 @@ def test_pdf_keeps_full_school_day_and_normalizes_labels(monkeypatch):
     assert "07:00" in html and "17:00" in html
     assert "NANA JACQUES" in html
     # Time labels near 10:00 must not collide in the gutter.
-    assert 'tt-hlabel-soft' in html
-    assert '>10:10</div>' not in html
+    assert "tt-hlabel-soft" in html
+    assert ">10:10</div>" not in html
