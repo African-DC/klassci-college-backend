@@ -7,9 +7,7 @@ from app.schemas.admin import TimetableSettingsUpdate
 
 
 def test_valid_school_timetable_rules():
-    rules = TimetableSettingsUpdate(
-        day_start_hour=8, day_end_hour=16, slot_duration_minutes=55
-    )
+    rules = TimetableSettingsUpdate(day_start_hour=8, day_end_hour=16, slot_duration_minutes=55)
     assert rules.slot_duration_minutes == 55
 
 

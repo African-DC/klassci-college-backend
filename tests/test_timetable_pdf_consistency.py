@@ -1,14 +1,39 @@
 """PDF and API timetable consistency regression tests."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
-from app.schemas.timetable import TimetableConfigResponse
 
+def test_configuration_endpoint_returns_school_hours():
+    """GET /timetable/configuration renvoie l'échelle horaire de l'établissement."""
+    from fastapi.testclient import TestClient
 
-def test_configuration_contract():
-    config = TimetableConfigResponse(slot_duration_minutes=45, day_start_hour=6, day_end_hour=19)
-    assert config.day_start_hour == 6
-    assert config.slot_duration_minutes == 45
+    from app.core.dependencies import TokenData, get_current_user, get_tenant_db
+    from app.core.redis import get_redis
+    from app.main import app
+
+    user = TokenData(user_id=1, tenant_id="local", email="admin@college.ci")
+    app.dependency_overrides[get_current_user] = lambda: user
+    app.dependency_overrides[get_tenant_db] = lambda: AsyncMock()
+    app.dependency_overrides[get_redis] = lambda: AsyncMock()
+    try:
+        with patch(
+            "app.services.timetable_service._get_timetable_settings",
+            new_callable=AsyncMock,
+            return_value=(45, 6, 19),
+        ):
+            with TestClient(app) as client:
+                resp = client.get("/timetable/configuration")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "slot_duration_minutes": 45,
+        "day_start_hour": 6,
+        "day_end_hour": 19,
+    }
 
 
 def test_pdf_keeps_full_school_day_and_normalizes_labels(monkeypatch):
