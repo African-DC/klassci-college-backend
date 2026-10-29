@@ -31,7 +31,6 @@ def test_pdf_keeps_full_school_day_and_normalizes_labels(monkeypatch):
     wp = pytest.importorskip("weasyprint")
     monkeypatch.setattr(wp, "HTML", FakeHTML)
 
-    original = timetable.ui.premium_header
     monkeypatch.setattr(timetable.ui, "premium_header", lambda *a, **kw: "")
     monkeypatch.setattr(timetable.ui, "premium_footer", lambda *a, **kw: "")
     monkeypatch.setattr(timetable.ui, "base_styles", lambda *a, **kw: "")
