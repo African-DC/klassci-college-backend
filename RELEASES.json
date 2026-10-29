@@ -1319,6 +1319,14 @@
         ],
         "Fixed": [
           {
+            "text": "Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran",
+            "audience": [
+              "direction",
+              "secrétariat"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic",
             "audience": [
               "admin",

@@ -13,6 +13,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
 ### Fixed
+- Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran *(direction, secrétariat)*
 - Emploi du temps : une classe sans série ne reçoit plus les matières propres à une série de son niveau, à la génération comme au diagnostic *(admin, direction des études)*
 - Les fiches de renseignements et statistiques DREN comptent uniquement les inscriptions validées, non archivées et rattachées à l'année scolaire sélectionnée, sans mélanger dossiers en attente et arriérés *(scolarité, direction)*
 
