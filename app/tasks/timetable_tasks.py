@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -53,6 +55,23 @@ def generate_timetable_task(
         raise exc
 
 
+@asynccontextmanager
+async def _tenant_timetable_session(tenant_id: str) -> AsyncIterator[AsyncSession]:
+    """Always close tenant connections and restore context, even on failure."""
+    token = current_tenant_id.set(tenant_id)
+    engine = None
+    try:
+        url = settings.DATABASE_URL.format(tenant=tenant_id)
+        engine = create_async_engine(url, echo=False)
+        factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        async with factory() as session:
+            yield session
+    finally:
+        if engine is not None:
+            await engine.dispose()
+        current_tenant_id.reset(token)
+
+
 async def _generate_async(
     tenant_id: str,
     class_id: int,
@@ -75,12 +94,7 @@ async def _generate_async(
         solve,
     )
 
-    current_tenant_id.set(tenant_id)
-    db_url = settings.DATABASE_URL.format(tenant=tenant_id)
-    engine = create_async_engine(db_url, echo=False)
-    factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
-    async with factory() as db:
+    async with _tenant_timetable_session(tenant_id) as db:
         # Locks serialize simultaneous generation jobs sharing a class or
         # teacher. Keep a single transaction through the final replacement.
         from sqlalchemy import select
@@ -257,7 +271,6 @@ async def _generate_async(
         for ms in manual_slots:
             slot_responses.append(_slot_to_dict(ms))
 
-        await engine.dispose()
         return slot_responses
 
 
