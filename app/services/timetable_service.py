@@ -188,6 +188,7 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
+    await schedule_event_service.lock_class_scope(db, data.class_id)
     await schedule_event_service.ensure_course_allowed(
         db,
         class_id=data.class_id,
@@ -198,6 +199,13 @@ async def create_slot(
     )
     await ensure_slot_teacher(
         db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
+    )
+    from sqlalchemy import select
+
+    from app.models.user import TeacherProfile
+
+    await db.execute(
+        select(TeacherProfile.id).where(TeacherProfile.id == data.teacher_id).with_for_update()
     )
     # Vérifier les conflits
     await _verifier_enseignant_libre(
@@ -288,6 +296,8 @@ async def update_slot(
         await ensure_slot_teacher(
             db, class_id=slot.class_id, subject_id=new_subject_id, teacher_id=new_teacher_id
         )
+    # Serialize manual edits with in-flight generation.
+    await schedule_event_service.lock_class_scope(db, slot.class_id)
     # Une pause bloquante interdit aussi la modification d'un cours existant.
     await schedule_event_service.ensure_course_allowed(
         db,
@@ -296,6 +306,13 @@ async def update_slot(
         day=new_day,
         start=new_start,
         end=new_end,
+    )
+    from sqlalchemy import select
+
+    from app.models.user import TeacherProfile
+
+    await db.execute(
+        select(TeacherProfile.id).where(TeacherProfile.id == new_teacher_id).with_for_update()
     )
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(

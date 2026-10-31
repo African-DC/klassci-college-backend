@@ -81,6 +81,23 @@ async def _generate_async(
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async with factory() as db:
+        # Locks serialize simultaneous generation jobs sharing a class or
+        # teacher. Keep a single transaction through the final replacement.
+        from sqlalchemy import select
+
+        from app.models.academic import Class
+        from app.models.user import TeacherProfile
+
+        await db.execute(
+            select(Class.id).where(Class.id == class_id).with_for_update()
+        )
+        for teacher_id in sorted({a["teacher_id"] for a in assignments_data}):
+            await db.execute(
+                select(TeacherProfile.id)
+                .where(TeacherProfile.id == teacher_id)
+                .with_for_update()
+            )
+
         # Re-read breaks and manual courses at execution time. Queued jobs
         # must never use an obsolete snapshot of the school's timetable.
         from sqlalchemy import delete, or_, select

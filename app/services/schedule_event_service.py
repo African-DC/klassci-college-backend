@@ -20,6 +20,14 @@ def _overlap(model, day: str, start: time, end: time):
     )
 
 
+async def lock_class_scope(db: AsyncSession, class_id: int | None) -> None:
+    """Serialize schedule mutations with generation for affected classes."""
+    stmt = select(Class.id).order_by(Class.id).with_for_update()
+    if class_id is not None:
+        stmt = stmt.where(Class.id == class_id)
+    await db.execute(stmt)
+
+
 async def list_events(db: AsyncSession, *, academic_year_id: int, class_id: int | None = None):
     stmt = select(ScheduleEvent).where(ScheduleEvent.academic_year_id == academic_year_id)
     if class_id is not None:
@@ -113,6 +121,7 @@ async def save_event(
     event_id: int | None = None,
 ):
     await _validate_scope(db, data)
+    await lock_class_scope(db, data.class_id)
     event = await db.get(ScheduleEvent, event_id) if event_id is not None else None
     if event_id is not None and event is None:
         raise NotFoundError("ScheduleEvent", event_id)
@@ -151,6 +160,7 @@ async def remove_event(db: AsyncSession, event_id: int, actor: int):
     event = await db.get(ScheduleEvent, event_id)
     if event is None:
         raise NotFoundError("ScheduleEvent", event_id)
+    await lock_class_scope(db, event.class_id)
     await audit_log(
         db,
         entity_type="schedule_event",
@@ -204,6 +214,13 @@ async def save_events_bulk(
     """Validate ALL days before inserting; never leave a partial school week."""
     if not events or len(events) > 60:
         raise BusinessValidationError("Sélectionnez entre 1 et 60 périodes à créer.")
+    # Lock every affected classroom in deterministic order before validation.
+    scopes = {item.class_id for item in events}
+    if None in scopes:
+        await lock_class_scope(db, None)
+    else:
+        for class_id in sorted(scopes):
+            await lock_class_scope(db, class_id)
     for index, value in enumerate(events):
         await _validate_scope(db, value)
         await _check_event_conflicts(db, value)
