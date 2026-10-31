@@ -6,7 +6,7 @@ import enum
 from datetime import time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Time
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -107,3 +107,23 @@ class TeacherAvailability(Base):
     )
 
     teacher: Mapped[TeacherProfile] = relationship()
+
+
+class ScheduleEvent(Base, TimestampMixin):
+    """Recurring non-curricular school event, scoped to a tenant DB and school year."""
+
+    __tablename__ = "schedule_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    academic_year_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    class_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("classes.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    blocks_courses: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    day: Mapped[str] = mapped_column(ValueEnum(DayOfWeek, name="day_of_week"), nullable=False)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)

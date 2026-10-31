@@ -121,6 +121,16 @@ async def _generate_async(
             int(tid_str): set(indices) for tid_str, indices in preferred_blocks.items()
         }
 
+        # The worker loads the current events, so edits made while queued are honoured.
+        from app.models.timetable import ScheduleEvent, TimetableSlot
+        from app.services.schedule_event_service import blocked_indices
+        from sqlalchemy import delete, or_, select
+        event_stmt = select(ScheduleEvent).where(
+            ScheduleEvent.academic_year_id == academic_year_id,
+            or_(ScheduleEvent.class_id.is_(None), ScheduleEvent.class_id == class_id),
+        )
+        events = list((await db.execute(event_stmt)).scalars().all())
+
         # Solve
         gen_result = solve(
             assignments=assignments,
@@ -129,11 +139,21 @@ async def _generate_async(
             teacher_unavailabilities=teacher_unavailabilities,
             fixed_blocks=fixed if fixed else None,
             preferred_blocks=pref if pref else None,
+            school_blocked=blocked_indices(events, grid_blocks, class_id),
         )
         if not gen_result.feasible:
             raise ValueError(
                 "OR-Tools: aucun emploi du temps faisable avec les contraintes donnees"
             )
+
+        # Failed solves leave the previous generated schedule untouched.
+        # Replace the auto-generated slots only after a feasible result exists.
+        await db.execute(delete(TimetableSlot).where(
+            TimetableSlot.class_id == class_id,
+            TimetableSlot.academic_year_id == academic_year_id,
+            TimetableSlot.timetable_id.is_not(None),
+        ))
+        await db.flush()
 
         # Create timetable header
         timetable = await repo.create_timetable(

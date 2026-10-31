@@ -19,6 +19,7 @@ from app.schemas.timetable import (
     TimetableSlotUpdate,
 )
 from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
+from app.services import schedule_event_service
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,10 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
+    await schedule_event_service.ensure_course_allowed(
+        db, class_id=data.class_id, academic_year_id=data.academic_year_id,
+        day=data.day.value, start=start, end=end,
+    )
     await ensure_slot_teacher(
         db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
     )
@@ -250,6 +255,11 @@ async def update_slot(
         await ensure_slot_teacher(
             db, class_id=slot.class_id, subject_id=new_subject_id, teacher_id=new_teacher_id
         )
+    # Une pause bloquante interdit aussi la modification d'un cours existant.
+    await schedule_event_service.ensure_course_allowed(
+        db, class_id=slot.class_id, academic_year_id=slot.academic_year_id,
+        day=new_day, start=new_start, end=new_end,
+    )
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
         db,
@@ -358,7 +368,7 @@ async def diagnostic_for_class(
     """
     from sqlalchemy import func, select
 
-    from app.models.academic import Class
+    from app.models.academic import AcademicYear, Class
 
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
@@ -404,7 +414,16 @@ async def diagnostic_for_class(
     slot_duration, start_h, end_h = await _get_timetable_settings(db)
     minutes_per_day = (end_h - start_h) * 60
     slots_per_day = minutes_per_day // slot_duration
-    total_slots = 6 * slots_per_day
+    # Real capacity excludes the minutes occupied by blocking school events.
+    from app.models.timetable import DayOfWeek
+    from app.utils.timetable_generator import build_blocks
+    current_year = (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))).scalar_one_or_none()
+    if current_year:
+        ev = await schedule_event_service.list_events(db, academic_year_id=current_year.id, class_id=class_id)
+        blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration)
+        total_slots = len(blocks) - len(schedule_event_service.blocked_indices(ev, blocks, class_id))
+    else:
+        total_slots = 6 * slots_per_day
 
     return {
         "ready": len(without_teacher) == 0 and len(entries) > 0,
@@ -511,13 +530,7 @@ async def auto_generate(
         ]
     ]
 
-    # 6. Delete only auto-generated slots
-    del_stmt = delete(TimetableSlot).where(
-        TimetableSlot.class_id == class_id,
-        TimetableSlot.timetable_id.is_not(None),
-    )
-    await db.execute(del_stmt)
-    await db.flush()
+    # Generated course slots are replaced only AFTER the solver succeeds.
 
     # 7. Load manual slots — convert to block indices
     from app.utils.timetable_generator import build_blocks
@@ -696,6 +709,20 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
             }
         )
 
+    # Non-pedagogical periods share the same minute-accurate PDF time axis.
+    from app.models.academic import AcademicYear
+    current_ay = (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))).scalar_one_or_none()
+    if current_ay:
+        events = await schedule_event_service.list_events(
+            db, academic_year_id=current_ay.id, class_id=class_id,
+        )
+        for event in events:
+            slots_data.append({
+                "day": event.day, "start_time": event.start_time.strftime("%H:%M"),
+                "end_time": event.end_time.strftime("%H:%M"),
+                "subject_name": event.title, "teacher_name": "", "room": None,
+                "subject_color": "amber" if event.blocks_courses else "teal",
+            })
     class_name = cls.name
     return generate_timetable_pdf(
         slots=slots_data,

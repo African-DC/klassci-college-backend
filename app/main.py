@@ -61,6 +61,7 @@ from app.routers.school_life_documents import router as school_life_documents_ro
 from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
 from app.routers.summons import router as summons_router
+from app.routers.schedule_events import router as schedule_events_router
 from app.routers.super_admin import router as super_admin_router
 from app.routers.support_incidents import router as support_incidents_router
 from app.routers.teacher_attendance import admin_router as teacher_attendance_admin_router
@@ -175,6 +176,7 @@ app.include_router(dren_stats_router)
 app.include_router(super_admin_router)
 app.include_router(support_incidents_router)
 app.include_router(timetable_router)
+app.include_router(schedule_events_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
 app.include_router(teacher_attendance_admin_router)

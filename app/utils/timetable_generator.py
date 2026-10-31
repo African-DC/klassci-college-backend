@@ -160,6 +160,7 @@ def solve(
     teacher_unavailabilities: dict[int, set[int]] | None = None,
     fixed_blocks: list[FixedBlock] | None = None,
     preferred_blocks: dict[int, set[int]] | None = None,
+    school_blocked: set[int] | None = None,
 ) -> GeneratorResult:
     """Lance le solveur CP-SAT avec granularite configurable.
 
@@ -203,6 +204,12 @@ def solve(
         if total_minutes % slot_duration_minutes > 0:
             num_blocks += 1
         model.add(sum(x[a, b] for b in range(n_b)) == num_blocks)
+
+    # School events are hard constraints independent of teachers and subjects.
+    for b in school_blocked or set():
+        if 0 <= b < n_b:
+            for a in range(n_a):
+                model.add(x[a, b] == 0)
 
     # C2: class has at most 1 course per block
     for b in range(n_b):
