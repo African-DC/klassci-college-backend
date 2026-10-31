@@ -258,20 +258,29 @@ def solve(
                 if b < n_b:
                     model.add(x[a, b] == 0)
 
-    # At most one continuous teaching run per subject and day. A real
-    # interruption also starts a new run (no artificial continuity over breaks).
-    by_day: dict[int, list[int]] = {}
-    for b, blk in enumerate(blocks):
-        by_day.setdefault(blk.day_index, []).append(b)
+    # A subject may resume after a real school interruption. Within each
+    # uninterrupted teaching segment, keep at most one continuous course run.
+    segments: dict[tuple[int, int], list[int]] = {}
+    for b, block in enumerate(blocks):
+        previous = blocks[b - 1] if b > 0 else None
+        if (
+            previous is None
+            or previous.day_index != block.day_index
+            or previous.end_minutes != block.start_minutes
+        ):
+            segment_number = 0 if previous is None or previous.day_index != block.day_index else max(
+                key[1] for key in segments if key[0] == block.day_index
+            ) + 1
+        segments.setdefault((block.day_index, segment_number), []).append(b)
     for a in range(n_a):
-        for day_indices in by_day.values():
+        for segment_indices in segments.values():
             starts = []
-            for position, b in enumerate(day_indices):
+            for pos, b in enumerate(segment_indices):
                 started = model.new_bool_var(f"start_{a}_{b}")
-                if position == 0 or blocks[day_indices[position - 1]].end_minutes != blocks[b].start_minutes:
+                if pos == 0:
                     model.add(started == x[a, b])
                 else:
-                    prev = day_indices[position - 1]
+                    prev = segment_indices[pos - 1]
                     model.add(started >= x[a, b] - x[a, prev])
                     model.add(started <= x[a, b])
                     model.add(started <= 1 - x[a, prev])

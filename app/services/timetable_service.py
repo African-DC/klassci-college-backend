@@ -420,8 +420,9 @@ async def diagnostic_for_class(
 
     # True capacity, with minute-accurate breaks and manual lessons.
     from app.models.timetable import DayOfWeek
-    from app.utils.timetable_generator import build_blocks
     from sqlalchemy import select
+
+    from app.utils.timetable_generator import build_blocks
 
     slot_duration, start_h, end_h = await _get_timetable_settings(db)
     current_year = (

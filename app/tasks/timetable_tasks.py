@@ -71,7 +71,6 @@ async def _generate_async(
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import (
         Assignment,
-        FixedBlock,
         build_blocks,
         solve,
     )
