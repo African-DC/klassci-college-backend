@@ -138,11 +138,15 @@ def _slot_html(
     room = esc(slot.get("room") or "")
     time_str = f"{slot['start_time']}–{slot['end_time']}"
 
-    # L'horaire exact prime sur la salle : les repères de l'axe peuvent
-    # disparaître lorsque plusieurs débuts/fins sont trop proches.
-    lines = [f'<div class="tt-slot-subject">{subject}</div>']
-    if height_px >= 25:
-        lines.append(f'<div class="tt-slot-time">{time_str}</div>')
+    # Exact non-rounded times are always printed, even for 10/15-minute
+    # interruptions where two lines would overflow their real minute height.
+    if height_px < 25:
+        lines = [f'<div class="tt-slot-time">{time_str}</div>']
+    else:
+        lines = [
+            f'<div class="tt-slot-subject">{subject}</div>',
+            f'<div class="tt-slot-time">{time_str}</div>',
+        ]
     if height_px >= 37 and teacher:
         lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
     if height_px >= 50 and room:

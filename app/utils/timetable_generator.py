@@ -32,6 +32,7 @@ class Assignment:
     teacher_id: int
     subject_id: int
     hours_per_week: int  # total hours (integer)
+    minutes_per_week: int | None = None  # remaining minutes after manual courses
 
 
 @dataclass
@@ -76,26 +77,40 @@ def build_blocks(
     day_start_hour: int,
     day_end_hour: int,
     slot_duration_minutes: int,
+    blocked_periods: dict[str, list[tuple[int, int]]] | None = None,
 ) -> list[SlotBlock]:
-    """Construit la grille de blocs pour la semaine."""
+    """Build minute-precise teaching segments, restarting after every interruption.
+
+    Each continuous stretch starts at the configured day start or directly at
+    the end of a break/manual lesson. Thus 10:15–11:15 is a genuine 60-minute
+    lesson, not a lost 10:00–11:00 block. Short trailing fragments are retained
+    for exact weekly minute totals and penalized by the solver.
+    """
+    if slot_duration_minutes <= 0 or day_start_hour >= day_end_hour:
+        raise ValueError("Invalid timetable grid settings")
+    if not 0 <= day_start_hour < day_end_hour <= 24:
+        raise ValueError("Working hours must fit within one day")
     blocks: list[SlotBlock] = []
-    idx = 0
     for day_idx, day in enumerate(days):
-        start_min = day_start_hour * 60
-        end_min = day_end_hour * 60
-        t = start_min
-        while t + slot_duration_minutes <= end_min:
-            blocks.append(
-                SlotBlock(
-                    day=day,
-                    start_minutes=t,
-                    end_minutes=t + slot_duration_minutes,
-                    day_index=day_idx,
-                    index=idx,
-                )
-            )
-            t += slot_duration_minutes
-            idx += 1
+        lower, upper = day_start_hour * 60, day_end_hour * 60
+        ranges = sorted(
+            (max(lower, int(a)), min(upper, int(b)))
+            for a, b in (blocked_periods or {}).get(day, [])
+            if int(a) < int(b) and int(b) > lower and int(a) < upper
+        )
+        merged: list[tuple[int, int]] = []
+        for a, b in ranges:
+            if merged and a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+            else:
+                merged.append((a, b))
+        cursor = lower
+        for stop_start, stop_end in [*merged, (upper, upper)]:
+            while cursor < stop_start:
+                finish = min(cursor + slot_duration_minutes, stop_start)
+                blocks.append(SlotBlock(day, cursor, finish, day_idx, len(blocks)))
+                cursor = finish
+            cursor = max(cursor, stop_end)
     return blocks
 
 
@@ -160,6 +175,7 @@ def solve(
     teacher_unavailabilities: dict[int, set[int]] | None = None,
     fixed_blocks: list[FixedBlock] | None = None,
     preferred_blocks: dict[int, set[int]] | None = None,
+    school_blocked: set[int] | None = None,
 ) -> GeneratorResult:
     """Lance le solveur CP-SAT avec granularite configurable.
 
@@ -175,7 +191,13 @@ def solve(
         GeneratorResult avec merged_slots (creneaux fusionnes prets pour la DB).
     """
     if not assignments or not blocks:
-        return GeneratorResult(feasible=False)
+        return GeneratorResult(
+            feasible=not any(
+                (a.minutes_per_week if a.minutes_per_week is not None else a.hours_per_week * 60)
+                > 0
+                for a in assignments
+            )
+        )
 
     model = cp_model.CpModel()
     n_a = len(assignments)
@@ -195,14 +217,23 @@ def solve(
             if 0 <= fb.assignment_idx < n_a and 0 <= fb.block_idx < n_b:
                 model.add(x[fb.assignment_idx, fb.block_idx] == 1)
 
-    # C1: each assignment gets exactly (hours_per_week * 60 / slot_duration) blocks
+    # Every minute required by each subject must be scheduled, never rounded.
     for a, asg in enumerate(assignments):
-        total_minutes = asg.hours_per_week * 60
-        num_blocks = total_minutes // slot_duration_minutes
-        # If there's a remainder, add 1 extra block (last session slightly shorter)
-        if total_minutes % slot_duration_minutes > 0:
-            num_blocks += 1
-        model.add(sum(x[a, b] for b in range(n_b)) == num_blocks)
+        total_minutes = (
+            asg.minutes_per_week if asg.minutes_per_week is not None else asg.hours_per_week * 60
+        )
+        if total_minutes < 0:
+            return GeneratorResult(feasible=False)
+        model.add(
+            sum((blk.end_minutes - blk.start_minutes) * x[a, b] for b, blk in enumerate(blocks))
+            == total_minutes
+        )
+
+    # School events are hard constraints independent of teachers and subjects.
+    for b in school_blocked or set():
+        if 0 <= b < n_b:
+            for a in range(n_a):
+                model.add(x[a, b] == 0)
 
     # C2: class has at most 1 course per block
     for b in range(n_b):
@@ -223,36 +254,46 @@ def solve(
                 if b < n_b:
                     model.add(x[a, b] == 0)
 
-    # C5: consecutivity — blocks of the same assignment on the same day
-    # must be contiguous (no gaps). We enforce: for each assignment,
-    # on each day, the assigned blocks form a single contiguous run.
-    # This is done by: if block b is assigned and block b+1 is NOT assigned
-    # (same day), then no later block on that day can be assigned.
-    blocks_by_day: dict[int, list[int]] = {}
-    for b_idx, blk in enumerate(blocks):
-        blocks_by_day.setdefault(blk.day_index, []).append(b_idx)
-
+    # A subject may resume after a real school interruption. Within each
+    # uninterrupted teaching segment, keep at most one continuous course run.
+    segments: dict[tuple[int, int], list[int]] = {}
+    for b, block in enumerate(blocks):
+        previous = blocks[b - 1] if b > 0 else None
+        if (
+            previous is None
+            or previous.day_index != block.day_index
+            or previous.end_minutes != block.start_minutes
+        ):
+            segment_number = (
+                0
+                if previous is None or previous.day_index != block.day_index
+                else max(key[1] for key in segments if key[0] == block.day_index) + 1
+            )
+        segments.setdefault((block.day_index, segment_number), []).append(b)
     for a in range(n_a):
-        for _day_idx, day_blocks in blocks_by_day.items():
-            if len(day_blocks) < 2:
-                continue
-            # For contiguity: once you stop, you can't restart on the same day
-            # Use auxiliary vars: started[a, day] and stopped[a, day, b]
-            # Simpler approach: for each pair (i, j) where i < j and they're
-            # not consecutive, if x[a,i]=1 and x[a,j]=1, then all between must be 1
-            for i_pos in range(len(day_blocks)):
-                for j_pos in range(i_pos + 2, len(day_blocks)):
-                    bi = day_blocks[i_pos]
-                    bj = day_blocks[j_pos]
-                    # If both bi and bj are assigned, all blocks between must be too
-                    for k_pos in range(i_pos + 1, j_pos):
-                        bk = day_blocks[k_pos]
-                        # x[a,bi] + x[a,bj] - 1 <= x[a,bk]
-                        # i.e., if both bi and bj are 1, then bk must be 1
-                        model.add(x[a, bk] >= x[a, bi] + x[a, bj] - 1)
+        for segment_indices in segments.values():
+            starts = []
+            for pos, b in enumerate(segment_indices):
+                started = model.new_bool_var(f"start_{a}_{b}")
+                if pos == 0:
+                    model.add(started == x[a, b])
+                else:
+                    prev = segment_indices[pos - 1]
+                    model.add(started >= x[a, b] - x[a, prev])
+                    model.add(started <= x[a, b])
+                    model.add(started <= 1 - x[a, prev])
+                starts.append(started)
+            model.add(sum(starts) <= 1)
 
     # ----- Soft constraints (objective) -----
     objective_terms: list = []
+
+    # Avoid isolated tiny courses whenever whole lessons can satisfy the
+    # requested minutes. This is a preference, not a loss of teaching minutes.
+    for a in range(n_a):
+        for b, blk in enumerate(blocks):
+            if blk.end_minutes - blk.start_minutes < slot_duration_minutes:
+                objective_terms.append((PREFERRED_BONUS * 5) * x[a, b])
 
     if preferred_blocks:
         for a, asg in enumerate(assignments):

@@ -33,6 +33,7 @@ from app.services import (
     bulletin_visibility,
     document_release_service,
     fees_paid,
+    schedule_event_service,
 )
 from app.services import fee_entitlements as entitlements
 from app.services.finance_visibility import FinanceView
@@ -429,8 +430,14 @@ async def get_child_timetable(
     ]
 
     class_name = enrollment.class_.name if enrollment.class_ else f"Classe #{enrollment.class_id}"
+    events = await schedule_event_service.list_events(
+        db,
+        academic_year_id=enrollment.academic_year_id,
+        class_id=enrollment.class_id,
+    )
     return ChildTimetableResponse(
         student_id=student_id,
         class_name=class_name,
         slots=slot_responses,
+        events=events,
     )

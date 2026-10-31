@@ -71,7 +71,6 @@ async def _generate_async(
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import (
         Assignment,
-        FixedBlock,
         build_blocks,
         solve,
     )
@@ -82,18 +81,80 @@ async def _generate_async(
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async with factory() as db:
-        # Build the block grid
-        grid_blocks = build_blocks(day_names, day_start_hour, day_end_hour, slot_duration_minutes)
+        # Re-read breaks and manual courses at execution time. Queued jobs
+        # must never use an obsolete snapshot of the school's timetable.
+        from sqlalchemy import delete, or_, select
 
-        # Build assignments
-        assignments = [
-            Assignment(
-                teacher_id=a["teacher_id"],
-                subject_id=a["subject_id"],
-                hours_per_week=a["hours_per_week"],
+        from app.models.timetable import ScheduleEvent, TimetableSlot
+        from app.services.schedule_event_service import to_blocked_periods
+
+        events = list(
+            (
+                await db.execute(
+                    select(ScheduleEvent).where(
+                        ScheduleEvent.academic_year_id == academic_year_id,
+                        or_(
+                            ScheduleEvent.class_id.is_(None),
+                            ScheduleEvent.class_id == class_id,
+                        ),
+                    )
+                )
             )
-            for a in assignments_data
-        ]
+            .scalars()
+            .all()
+        )
+        manual = list(
+            (
+                await db.execute(
+                    select(TimetableSlot).where(
+                        TimetableSlot.class_id == class_id,
+                        TimetableSlot.academic_year_id == academic_year_id,
+                        TimetableSlot.timetable_id.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        blocked = to_blocked_periods(events, class_id)
+        covered_minutes: dict[tuple[int, int], int] = {}
+        for slot in manual:
+            day = slot.day.value if hasattr(slot.day, "value") else slot.day
+            begin = slot.start_time.hour * 60 + slot.start_time.minute
+            end = slot.end_time.hour * 60 + slot.end_time.minute
+            if end <= begin:
+                raise ValueError("Invalid existing manual lesson interval")
+            if any(a < end and b > begin for a, b in blocked.get(day, [])):
+                raise ValueError("A manual lesson conflicts with a school break")
+            blocked.setdefault(day, []).append((begin, end))
+            key = (slot.teacher_id, slot.subject_id)
+            covered_minutes[key] = covered_minutes.get(key, 0) + end - begin
+        assignments = []
+        for a in assignments_data:
+            key = (a["teacher_id"], a["subject_id"])
+            remaining = a["hours_per_week"] * 60 - covered_minutes.pop(key, 0)
+            if remaining < 0:
+                raise ValueError("Manual lessons exceed the subject's weekly quota")
+            assignments.append(
+                Assignment(
+                    teacher_id=a["teacher_id"],
+                    subject_id=a["subject_id"],
+                    hours_per_week=a["hours_per_week"],
+                    minutes_per_week=remaining,
+                )
+            )
+        if covered_minutes:
+            raise ValueError("A manual lesson is no longer assigned to its teacher and subject")
+        from math import gcd
+
+        # A 90-minute manual lesson may leave a 30-minute quota. Work in the
+        # greatest exact common granularity rather than round 30 minutes away.
+        quantum = slot_duration_minutes
+        for assignment in assignments:
+            remaining = assignment.minutes_per_week or 0
+            if remaining:
+                quantum = gcd(quantum, remaining)
+        grid_blocks = build_blocks(day_names, day_start_hour, day_end_hour, quantum, blocked)
 
         # Load teacher unavailabilities from DB
         teacher_unavailabilities: dict[int, set[int]] = {}
@@ -104,30 +165,26 @@ async def _generate_async(
             if blocked:
                 teacher_unavailabilities[tid] = blocked
 
-        # Merge cross-class conflicts
-        for tid_str, indices in cross_class_blocked.items():
-            tid = int(tid_str)
-            existing = teacher_unavailabilities.get(tid, set())
-            teacher_unavailabilities[tid] = existing | set(indices)
-
-        # Build fixed blocks
-        fixed = [
-            FixedBlock(assignment_idx=f["assignment_idx"], block_idx=f["block_idx"])
-            for f in manual_fixed
-        ]
-
-        # Build preferred blocks
-        pref: dict[int, set[int]] = {
-            int(tid_str): set(indices) for tid_str, indices in preferred_blocks.items()
-        }
+        # Fresh cross-class availability, using the exact break-adjusted times.
+        for tid in unique_teachers:
+            cross = await repo.get_cross_class_blocked_block_indices(
+                db,
+                tid,
+                class_id,
+                grid_blocks,
+                academic_year_id=academic_year_id,
+            )
+            teacher_unavailabilities[tid] = teacher_unavailabilities.get(tid, set()) | cross
+        pref = {}
+        for tid in unique_teachers:
+            pref[tid] = await repo.get_preferred_block_indices(db, tid, grid_blocks)
 
         # Solve
         gen_result = solve(
             assignments=assignments,
             blocks=grid_blocks,
-            slot_duration_minutes=slot_duration_minutes,
+            slot_duration_minutes=quantum,
             teacher_unavailabilities=teacher_unavailabilities,
-            fixed_blocks=fixed if fixed else None,
             preferred_blocks=pref if pref else None,
         )
         if not gen_result.feasible:
@@ -135,34 +192,25 @@ async def _generate_async(
                 "OR-Tools: aucun emploi du temps faisable avec les contraintes donnees"
             )
 
+        # Failed solves leave the previous generated schedule untouched.
+        # Replace the auto-generated slots only after a feasible result exists.
+        await db.execute(
+            delete(TimetableSlot).where(
+                TimetableSlot.class_id == class_id,
+                TimetableSlot.academic_year_id == academic_year_id,
+                TimetableSlot.timetable_id.is_not(None),
+            )
+        )
+        await db.flush()
+
         # Create timetable header
         timetable = await repo.create_timetable(
             db, class_id=class_id, academic_year_id=academic_year_id
         )
 
-        # Filter out merged slots that correspond to manual fixed blocks
-        # (manual slots already exist in DB, don't duplicate)
-        manual_block_set = {(f["assignment_idx"], f["block_idx"]) for f in manual_fixed}
-
-        # Determine which merged slots are new vs manual
-        # A merged slot is "manual" if ALL its constituent blocks are in the fixed set
-        new_merged = []
-        for ms in gen_result.merged_slots:
-            # Check if this merged slot overlaps with manual blocks
-            ms_start_min = ms.start_time.hour * 60 + ms.start_time.minute
-            ms_end_min = ms.end_time.hour * 60 + ms.end_time.minute
-            is_manual = False
-            for blk in grid_blocks:
-                if (
-                    blk.day == ms.day
-                    and blk.start_minutes >= ms_start_min
-                    and blk.end_minutes <= ms_end_min
-                ):
-                    if (ms.assignment_idx, blk.index) in manual_block_set:
-                        is_manual = True
-                        break
-            if not is_manual:
-                new_merged.append(ms)
+        # Manual courses are excluded from the grid. The solver only returns
+        # the remaining teaching minutes, so no manual course is duplicated.
+        new_merged = gen_result.merged_slots
 
         # Persist new merged slots
         slots_to_create = [

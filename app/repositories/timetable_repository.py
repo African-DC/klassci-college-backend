@@ -64,6 +64,7 @@ async def find_teacher_conflict(
     start_time: time,
     end_time: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> TimetableSlot | None:
     """Le cours qui occupe déjà l'enseignant sur ce créneau, s'il existe.
 
@@ -87,6 +88,8 @@ async def find_teacher_conflict(
     )
     if exclude_slot_id is not None:
         stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     return (await db.execute(stmt)).scalars().first()
 
 
@@ -97,6 +100,7 @@ async def check_class_conflict(
     start_time: time,
     end_time: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> bool:
     """Retourne True si la classe a déjà un cours sur ce créneau."""
     stmt = select(TimetableSlot).where(
@@ -107,6 +111,8 @@ async def check_class_conflict(
     )
     if exclude_slot_id is not None:
         stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     result = (await db.execute(stmt)).scalar_one_or_none()
     return result is not None
 
@@ -551,33 +557,28 @@ async def get_unavailable_block_indices(
     blocks: list,
 ) -> set[int]:
     """Retourne les indices de blocs ou le prof est indisponible."""
-    count_stmt = (
-        select(func.count())
-        .select_from(TeacherAvailability)
-        .where(
-            TeacherAvailability.teacher_id == teacher_id,
+    # Explicit closures block only their own intervals. Opening windows turn
+    # the week into an allow-list, where adjacent entries count as continuous.
+    has_open = await a_declare_des_ouvertures(db, teacher_id)
+    entries = list(
+        (
+            await db.execute(
+                select(TeacherAvailability).where(TeacherAvailability.teacher_id == teacher_id)
+            )
         )
+        .scalars()
+        .all()
     )
-    total = (await db.execute(count_stmt)).scalar() or 0
-    if total == 0:
-        return set()
-
-    stmt = select(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
-        TeacherAvailability.available.is_(True),
-    )
-    availabilities = list((await db.execute(stmt)).scalars().all())
-
     blocked: set[int] = set()
     for blk in blocks:
-        blk_start = time(blk.start_minutes // 60, blk.start_minutes % 60)
-        blk_end = time(blk.end_minutes // 60, blk.end_minutes % 60)
-        is_available = False
-        for avail in availabilities:
-            if avail.day == blk.day and avail.start_time <= blk_start and avail.end_time >= blk_end:
-                is_available = True
-                break
-        if not is_available:
+        start = time(blk.start_minutes // 60, blk.start_minutes % 60)
+        end = time(blk.end_minutes // 60, blk.end_minutes % 60)
+        day_entries = [a for a in entries if a.day == blk.day]
+        if any(not a.available and a.start_time < end and a.end_time > start for a in day_entries):
+            blocked.add(blk.index)
+        elif has_open and not couvre_entierement(
+            [a for a in day_entries if a.available], start, end
+        ):
             blocked.add(blk.index)
     return blocked
 
@@ -610,12 +611,15 @@ async def get_cross_class_blocked_block_indices(
     teacher_id: int,
     exclude_class_id: int,
     blocks: list,
+    academic_year_id: int | None = None,
 ) -> set[int]:
-    """Retourne les indices de blocs ou le prof est occupe dans une autre classe."""
+    """Block teacher overlaps in the requested academic year only."""
     stmt = select(TimetableSlot).where(
         TimetableSlot.teacher_id == teacher_id,
         TimetableSlot.class_id != exclude_class_id,
     )
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     existing = list((await db.execute(stmt)).scalars().all())
 
     blocked: set[int] = set()

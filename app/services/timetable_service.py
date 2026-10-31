@@ -18,6 +18,7 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
+from app.services import schedule_event_service
 from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,16 @@ async def list_slots(
     academic_year_id: int | None = None,
 ) -> list[TimetableSlotResponse]:
     """Liste les créneaux avec filtres optionnels."""
+    # Universal classes retain history; the default display is the current
+    # school year, never a mixture of current and previous years.
+    if academic_year_id is None:
+        from sqlalchemy import select
+
+        from app.models.academic import AcademicYear
+
+        academic_year_id = (
+            await db.execute(select(AcademicYear.id).where(AcademicYear.is_current.is_(True)))
+        ).scalar_one_or_none()
     slots = await repo.list_slots(
         db,
         class_id=class_id,
@@ -109,6 +120,7 @@ async def _verifier_enseignant_libre(
     start: time,
     end: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> None:
     """Refuse un créneau si l'enseignant est pris, en disant par quoi.
 
@@ -120,7 +132,13 @@ async def _verifier_enseignant_libre(
     jour = _JOURS_FR.get(day, day)
 
     conflit = await repo.find_teacher_conflict(
-        db, teacher_id, day, start, end, exclude_slot_id=exclude_slot_id
+        db,
+        teacher_id,
+        day,
+        start,
+        end,
+        exclude_slot_id=exclude_slot_id,
+        academic_year_id=academic_year_id,
     )
     if conflit is not None:
         nom = await _nom_enseignant(db, teacher_id)
@@ -170,14 +188,34 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
+    await schedule_event_service.ensure_course_allowed(
+        db,
+        class_id=data.class_id,
+        academic_year_id=data.academic_year_id,
+        day=data.day.value,
+        start=start,
+        end=end,
+    )
     await ensure_slot_teacher(
         db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
     )
     # Vérifier les conflits
     await _verifier_enseignant_libre(
-        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
+        db,
+        teacher_id=data.teacher_id,
+        day=data.day.value,
+        start=start,
+        end=end,
+        academic_year_id=data.academic_year_id,
     )
-    if await repo.check_class_conflict(db, data.class_id, data.day.value, start, end):
+    if await repo.check_class_conflict(
+        db,
+        data.class_id,
+        data.day.value,
+        start,
+        end,
+        academic_year_id=data.academic_year_id,
+    ):
         raise ConflictError(
             f"Cette classe a déjà cours le {_JOURS_FR.get(data.day.value, data.day.value)} "
             f"de {_plage(start, end)}."
@@ -250,6 +288,15 @@ async def update_slot(
         await ensure_slot_teacher(
             db, class_id=slot.class_id, subject_id=new_subject_id, teacher_id=new_teacher_id
         )
+    # Une pause bloquante interdit aussi la modification d'un cours existant.
+    await schedule_event_service.ensure_course_allowed(
+        db,
+        class_id=slot.class_id,
+        academic_year_id=slot.academic_year_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
+    )
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
         db,
@@ -258,9 +305,16 @@ async def update_slot(
         start=new_start,
         end=new_end,
         exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     )
     if await repo.check_class_conflict(
-        db, slot.class_id, new_day, new_start, new_end, exclude_slot_id=slot_id
+        db,
+        slot.class_id,
+        new_day,
+        new_start,
+        new_end,
+        exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     ):
         raise ConflictError(
             f"Cette classe a déjà cours le {_JOURS_FR.get(new_day, new_day)} "
@@ -358,7 +412,9 @@ async def diagnostic_for_class(
     """
     from sqlalchemy import func, select
 
-    from app.models.academic import Class
+    from app.models.academic import AcademicYear, Class
+    from app.models.timetable import DayOfWeek
+    from app.utils.timetable_generator import build_blocks
 
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
@@ -400,20 +456,48 @@ async def diagnostic_for_class(
     )
     manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
 
-    # Calculate total slots from settings
+    # True capacity, with minute-accurate breaks and manual lessons.
+
     slot_duration, start_h, end_h = await _get_timetable_settings(db)
-    minutes_per_day = (end_h - start_h) * 60
-    slots_per_day = minutes_per_day // slot_duration
-    total_slots = 6 * slots_per_day
+    current_year = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
+    manual_minutes = 0
+    blocked = {}
+    if current_year:
+        events = await schedule_event_service.list_events(
+            db, academic_year_id=current_year.id, class_id=class_id
+        )
+        blocked = schedule_event_service.to_blocked_periods(events, class_id)
+        manual_slots = [
+            s
+            for s in await repo.list_manual_slots_for_class(db, class_id)
+            if s.academic_year_id == current_year.id
+        ]
+        for slot in manual_slots:
+            day = slot.day.value if hasattr(slot.day, "value") else slot.day
+            start = slot.start_time.hour * 60 + slot.start_time.minute
+            end = slot.end_time.hour * 60 + slot.end_time.minute
+            blocked.setdefault(day, []).append((start, end))
+            manual_minutes += end - start
+    blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration, blocked)
+    total_minutes = sum(b.end_minutes - b.start_minutes for b in blocks)
+    total_slots = len(blocks)
+    required_minutes = total_hours * 60
+    ready_capacity = total_minutes + manual_minutes >= required_minutes
 
     return {
-        "ready": len(without_teacher) == 0 and len(entries) > 0,
+        "ready": len(without_teacher) == 0 and len(entries) > 0 and ready_capacity,
         "class_id": class_id,
         "class_name": cls.name,
         "subjects_without_teacher": without_teacher,
         "subjects_with_teacher": with_teacher,
         "total_hours_required": total_hours,
         "total_slots_available": total_slots,
+        "total_minutes_available": total_minutes,
+        "total_minutes_manual": manual_minutes,
+        "total_minutes_required": required_minutes,
+        "missing_minutes": max(0, required_minutes - total_minutes - manual_minutes),
         "manual_slots_count": manual_count,
     }
 
@@ -451,7 +535,7 @@ async def auto_generate(
     7. Supprime seulement les slots auto-generes
     8. Lance le solveur
     """
-    from sqlalchemy import delete, select
+    from sqlalchemy import select
 
     from app.models.academic import AcademicYear, Class
     from app.models.timetable import DayOfWeek
@@ -511,13 +595,7 @@ async def auto_generate(
         ]
     ]
 
-    # 6. Delete only auto-generated slots
-    del_stmt = delete(TimetableSlot).where(
-        TimetableSlot.class_id == class_id,
-        TimetableSlot.timetable_id.is_not(None),
-    )
-    await db.execute(del_stmt)
-    await db.flush()
+    # Generated course slots are replaced only AFTER the solver succeeds.
 
     # 7. Load manual slots — convert to block indices
     from app.utils.timetable_generator import build_blocks
@@ -558,6 +636,7 @@ async def auto_generate(
             tid,
             class_id,
             grid_blocks,
+            academic_year_id=academic_year_id,
         )
         if blocked_indices:
             cross_class_blocked[tid] = list(blocked_indices)
@@ -677,7 +756,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     _, day_start, day_end = await _get_timetable_settings(db)
 
     # Get all slots for this class
-    slots_raw = await repo.list_slots(db, class_id=class_id)
+    slots_raw = await repo.list_slots(db, class_id=class_id, academic_year_id=ay.id if ay else None)
     slots_data = []
     for s in slots_raw:
         start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
@@ -696,6 +775,23 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
             }
         )
 
+    # The PDF follows the same academic-year boundary as the classroom view.
+    if ay:
+        events = await schedule_event_service.list_events(
+            db, academic_year_id=ay.id, class_id=class_id
+        )
+        for event in events:
+            slots_data.append(
+                {
+                    "day": event.day,
+                    "start_time": event.start_time.strftime("%H:%M"),
+                    "end_time": event.end_time.strftime("%H:%M"),
+                    "subject_name": event.title,
+                    "teacher_name": "",
+                    "room": None,
+                    "subject_color": "amber" if event.blocks_courses else "teal",
+                }
+            )
     class_name = cls.name
     return generate_timetable_pdf(
         slots=slots_data,
