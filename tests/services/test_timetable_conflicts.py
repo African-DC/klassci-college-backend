@@ -286,7 +286,7 @@ async def test_room_conflict_checks_exact_minute_overlap(db: _AsyncBridge) -> No
             start=time(11, 10),
             end=time(12, 10),
         )
-    assert "Salle" in error.value.detail
+    assert "salle" in error.value.detail.lower()
     assert "6eme B" in error.value.detail
 
     # Adjacent slots do not overlap. Another school year is also independent.
