@@ -102,14 +102,10 @@ async def _generate_async(
         from app.models.academic import Class
         from app.models.user import TeacherProfile
 
-        await db.execute(
-            select(Class.id).where(Class.id == class_id).with_for_update()
-        )
+        await db.execute(select(Class.id).where(Class.id == class_id).with_for_update())
         for teacher_id in sorted({a["teacher_id"] for a in assignments_data}):
             await db.execute(
-                select(TeacherProfile.id)
-                .where(TeacherProfile.id == teacher_id)
-                .with_for_update()
+                select(TeacherProfile.id).where(TeacherProfile.id == teacher_id).with_for_update()
             )
 
         # Re-read breaks and manual courses at execution time. Queued jobs
