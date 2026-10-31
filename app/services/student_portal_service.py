@@ -38,6 +38,7 @@ from app.services import (
     fees_paid,
 )
 from app.services import fee_entitlements as entitlements
+from app.services import schedule_event_service
 
 
 async def _get_student_for_user(db: AsyncSession, user_id: int) -> Student:
@@ -102,9 +103,15 @@ async def get_timetable(db: AsyncSession, user_id: int) -> StudentTimetableRespo
         )
         for s in slots
     ]
+    events = await schedule_event_service.list_events(
+        db,
+        academic_year_id=enrollment.academic_year_id,
+        class_id=enrollment.class_id,
+    )
     return StudentTimetableResponse(
         class_name=enrollment.class_.name,
         slots=slot_responses,
+        events=events,
     )
 
 

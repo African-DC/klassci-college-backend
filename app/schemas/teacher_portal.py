@@ -2,7 +2,9 @@
 
 from datetime import time
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.schedule_event import ScheduleEventResponse
 
 # ---------------------------------------------------------------------------
 # Classes
@@ -44,6 +46,7 @@ class TeacherScheduleSlot(BaseModel):
 class TeacherScheduleResponse(BaseModel):
     items: list[TeacherScheduleSlot]
     total: int
+    events: list[ScheduleEventResponse] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
