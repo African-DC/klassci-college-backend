@@ -193,7 +193,8 @@ def solve(
     if not assignments or not blocks:
         return GeneratorResult(
             feasible=not any(
-                (a.minutes_per_week if a.minutes_per_week is not None else a.hours_per_week * 60) > 0
+                (a.minutes_per_week if a.minutes_per_week is not None else a.hours_per_week * 60)
+                > 0
                 for a in assignments
             )
         )
@@ -219,17 +220,12 @@ def solve(
     # Every minute required by each subject must be scheduled, never rounded.
     for a, asg in enumerate(assignments):
         total_minutes = (
-            asg.minutes_per_week
-            if asg.minutes_per_week is not None
-            else asg.hours_per_week * 60
+            asg.minutes_per_week if asg.minutes_per_week is not None else asg.hours_per_week * 60
         )
         if total_minutes < 0:
             return GeneratorResult(feasible=False)
         model.add(
-            sum(
-                (blk.end_minutes - blk.start_minutes) * x[a, b]
-                for b, blk in enumerate(blocks)
-            )
+            sum((blk.end_minutes - blk.start_minutes) * x[a, b] for b, blk in enumerate(blocks))
             == total_minutes
         )
 
@@ -268,9 +264,11 @@ def solve(
             or previous.day_index != block.day_index
             or previous.end_minutes != block.start_minutes
         ):
-            segment_number = 0 if previous is None or previous.day_index != block.day_index else max(
-                key[1] for key in segments if key[0] == block.day_index
-            ) + 1
+            segment_number = (
+                0
+                if previous is None or previous.day_index != block.day_index
+                else max(key[1] for key in segments if key[0] == block.day_index) + 1
+            )
         segments.setdefault((block.day_index, segment_number), []).append(b)
     for a in range(n_a):
         for segment_indices in segments.values():

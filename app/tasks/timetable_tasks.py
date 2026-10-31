@@ -99,7 +99,9 @@ async def _generate_async(
                         ),
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         manual = list(
             (
@@ -110,7 +112,9 @@ async def _generate_async(
                         TimetableSlot.timetable_id.is_(None),
                     )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         blocked = to_blocked_periods(events, class_id)
         covered_minutes: dict[tuple[int, int], int] = {}
@@ -150,9 +154,7 @@ async def _generate_async(
             remaining = assignment.minutes_per_week or 0
             if remaining:
                 quantum = gcd(quantum, remaining)
-        grid_blocks = build_blocks(
-            day_names, day_start_hour, day_end_hour, quantum, blocked
-        )
+        grid_blocks = build_blocks(day_names, day_start_hour, day_end_hour, quantum, blocked)
 
         # Load teacher unavailabilities from DB
         teacher_unavailabilities: dict[int, set[int]] = {}
@@ -166,12 +168,13 @@ async def _generate_async(
         # Fresh cross-class availability, using the exact break-adjusted times.
         for tid in unique_teachers:
             cross = await repo.get_cross_class_blocked_block_indices(
-                db, tid, class_id, grid_blocks,
+                db,
+                tid,
+                class_id,
+                grid_blocks,
                 academic_year_id=academic_year_id,
             )
-            teacher_unavailabilities[tid] = (
-                teacher_unavailabilities.get(tid, set()) | cross
-            )
+            teacher_unavailabilities[tid] = teacher_unavailabilities.get(tid, set()) | cross
         pref = {}
         for tid in unique_teachers:
             pref[tid] = await repo.get_preferred_block_indices(db, tid, grid_blocks)

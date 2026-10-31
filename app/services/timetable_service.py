@@ -132,7 +132,11 @@ async def _verifier_enseignant_libre(
     jour = _JOURS_FR.get(day, day)
 
     conflit = await repo.find_teacher_conflict(
-        db, teacher_id, day, start, end,
+        db,
+        teacher_id,
+        day,
+        start,
+        end,
         exclude_slot_id=exclude_slot_id,
         academic_year_id=academic_year_id,
     )
@@ -197,11 +201,19 @@ async def create_slot(
     )
     # Vérifier les conflits
     await _verifier_enseignant_libre(
-        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end,
+        db,
+        teacher_id=data.teacher_id,
+        day=data.day.value,
+        start=start,
+        end=end,
         academic_year_id=data.academic_year_id,
     )
     if await repo.check_class_conflict(
-        db, data.class_id, data.day.value, start, end,
+        db,
+        data.class_id,
+        data.day.value,
+        start,
+        end,
         academic_year_id=data.academic_year_id,
     ):
         raise ConflictError(
@@ -296,7 +308,11 @@ async def update_slot(
         academic_year_id=slot.academic_year_id,
     )
     if await repo.check_class_conflict(
-        db, slot.class_id, new_day, new_start, new_end,
+        db,
+        slot.class_id,
+        new_day,
+        new_start,
+        new_end,
         exclude_slot_id=slot_id,
         academic_year_id=slot.academic_year_id,
     ):
@@ -454,7 +470,8 @@ async def diagnostic_for_class(
         )
         blocked = schedule_event_service.to_blocked_periods(events, class_id)
         manual_slots = [
-            s for s in await repo.list_manual_slots_for_class(db, class_id)
+            s
+            for s in await repo.list_manual_slots_for_class(db, class_id)
             if s.academic_year_id == current_year.id
         ]
         for slot in manual_slots:
@@ -463,9 +480,7 @@ async def diagnostic_for_class(
             end = slot.end_time.hour * 60 + slot.end_time.minute
             blocked.setdefault(day, []).append((start, end))
             manual_minutes += end - start
-    blocks = build_blocks(
-        [d.value for d in DayOfWeek], start_h, end_h, slot_duration, blocked
-    )
+    blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration, blocked)
     total_minutes = sum(b.end_minutes - b.start_minutes for b in blocks)
     total_slots = len(blocks)
     required_minutes = total_hours * 60
@@ -741,9 +756,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     _, day_start, day_end = await _get_timetable_settings(db)
 
     # Get all slots for this class
-    slots_raw = await repo.list_slots(
-        db, class_id=class_id, academic_year_id=ay.id if ay else None
-    )
+    slots_raw = await repo.list_slots(db, class_id=class_id, academic_year_id=ay.id if ay else None)
     slots_data = []
     for s in slots_raw:
         start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")

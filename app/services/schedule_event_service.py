@@ -183,7 +183,9 @@ def blocked_indices(events: list[ScheduleEvent], grid_blocks: list, class_id: in
     return result
 
 
-def to_blocked_periods(events: list[ScheduleEvent], class_id: int) -> dict[str, list[tuple[int, int]]]:
+def to_blocked_periods(
+    events: list[ScheduleEvent], class_id: int
+) -> dict[str, list[tuple[int, int]]]:
     """Convert blocking periods to exact day intervals for the scheduler."""
     periods: dict[str, list[tuple[int, int]]] = {}
     for event in events:

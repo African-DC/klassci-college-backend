@@ -563,21 +563,18 @@ async def get_unavailable_block_indices(
     entries = list(
         (
             await db.execute(
-                select(TeacherAvailability).where(
-                    TeacherAvailability.teacher_id == teacher_id
-                )
+                select(TeacherAvailability).where(TeacherAvailability.teacher_id == teacher_id)
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     blocked: set[int] = set()
     for blk in blocks:
         start = time(blk.start_minutes // 60, blk.start_minutes % 60)
         end = time(blk.end_minutes // 60, blk.end_minutes % 60)
         day_entries = [a for a in entries if a.day == blk.day]
-        if any(
-            not a.available and a.start_time < end and a.end_time > start
-            for a in day_entries
-        ):
+        if any(not a.available and a.start_time < end and a.end_time > start for a in day_entries):
             blocked.add(blk.index)
         elif has_open and not couvre_entierement(
             [a for a in day_entries if a.available], start, end
