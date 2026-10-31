@@ -99,7 +99,7 @@ def test_mid_hour_break_preserves_exact_minutes():
 
 def test_manual_lessons_are_subtracted_without_adding_duplicates():
     blocks = build_blocks(
-        ["monday"], 8, 14, 60, {"monday": [(495, 585)]}
+        ["monday"], 8, 14, 30, {"monday": [(495, 585)]}
     )
     assert all(
         not (block.start_minutes < 585 and block.end_minutes > 495)
@@ -108,7 +108,7 @@ def test_manual_lessons_are_subtracted_without_adding_duplicates():
     result = solve(
         [Assignment(teacher_id=5, subject_id=3, hours_per_week=3,
                     minutes_per_week=90)],
-        blocks, 60,
+        blocks, 30,
     )
     assert result.feasible
     assert sum(

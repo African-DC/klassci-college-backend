@@ -40,7 +40,7 @@ def generate_timetable_task(
                 day_names=day_names,
                 day_start_hour=day_start_hour,
                 day_end_hour=day_end_hour,
-                slot_duration_minutes=slot_duration_minutes,
+                slot_duration_minutes=quantum,
                 room_id=room_id,
                 manual_fixed=manual_fixed or [],
                 cross_class_blocked=cross_class_blocked or {},
@@ -126,9 +126,6 @@ async def _generate_async(
             blocked.setdefault(day, []).append((begin, end))
             key = (slot.teacher_id, slot.subject_id)
             covered_minutes[key] = covered_minutes.get(key, 0) + end - begin
-        grid_blocks = build_blocks(
-            day_names, day_start_hour, day_end_hour, slot_duration_minutes, blocked
-        )
         assignments = []
         for a in assignments_data:
             key = (a["teacher_id"], a["subject_id"])
@@ -145,6 +142,18 @@ async def _generate_async(
             )
         if covered_minutes:
             raise ValueError("A manual lesson is no longer assigned to its teacher and subject")
+        from math import gcd
+
+        # A 90-minute manual lesson may leave a 30-minute quota. Work in the
+        # greatest exact common granularity rather than round 30 minutes away.
+        quantum = slot_duration_minutes
+        for assignment in assignments:
+            remaining = assignment.minutes_per_week or 0
+            if remaining:
+                quantum = gcd(quantum, remaining)
+        grid_blocks = build_blocks(
+            day_names, day_start_hour, day_end_hour, quantum, blocked
+        )
 
         # Load teacher unavailabilities from DB
         teacher_unavailabilities: dict[int, set[int]] = {}
