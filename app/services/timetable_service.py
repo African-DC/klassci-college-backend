@@ -172,8 +172,12 @@ async def create_slot(
         room_id = room.id
 
     await schedule_event_service.ensure_course_allowed(
-        db, class_id=data.class_id, academic_year_id=data.academic_year_id,
-        day=data.day.value, start=start, end=end,
+        db,
+        class_id=data.class_id,
+        academic_year_id=data.academic_year_id,
+        day=data.day.value,
+        start=start,
+        end=end,
     )
     await ensure_slot_teacher(
         db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
@@ -257,8 +261,12 @@ async def update_slot(
         )
     # Une pause bloquante interdit aussi la modification d'un cours existant.
     await schedule_event_service.ensure_course_allowed(
-        db, class_id=slot.class_id, academic_year_id=slot.academic_year_id,
-        day=new_day, start=new_start, end=new_end,
+        db,
+        class_id=slot.class_id,
+        academic_year_id=slot.academic_year_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
     )
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
@@ -417,11 +425,17 @@ async def diagnostic_for_class(
     # Real capacity excludes the minutes occupied by blocking school events.
     from app.models.timetable import DayOfWeek
     from app.utils.timetable_generator import build_blocks
-    current_year = (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))).scalar_one_or_none()
+    current_year = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
     if current_year:
-        ev = await schedule_event_service.list_events(db, academic_year_id=current_year.id, class_id=class_id)
+        ev = await schedule_event_service.list_events(
+            db, academic_year_id=current_year.id, class_id=class_id
+        )
         blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration)
-        total_slots = len(blocks) - len(schedule_event_service.blocked_indices(ev, blocks, class_id))
+        total_slots = len(blocks) - len(
+            schedule_event_service.blocked_indices(ev, blocks, class_id)
+        )
     else:
         total_slots = 6 * slots_per_day
 
@@ -711,7 +725,9 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
 
     # Non-pedagogical periods share the same minute-accurate PDF time axis.
     from app.models.academic import AcademicYear
-    current_ay = (await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))).scalar_one_or_none()
+    current_ay = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
     if current_ay:
         events = await schedule_event_service.list_events(
             db, academic_year_id=current_ay.id, class_id=class_id,

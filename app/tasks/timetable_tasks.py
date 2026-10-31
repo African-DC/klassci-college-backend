@@ -128,7 +128,10 @@ async def _generate_async(
         from app.services.schedule_event_service import blocked_indices
         event_stmt = select(ScheduleEvent).where(
             ScheduleEvent.academic_year_id == academic_year_id,
-            or_(ScheduleEvent.class_id.is_(None), ScheduleEvent.class_id == class_id),
+            or_(
+                ScheduleEvent.class_id.is_(None),
+                ScheduleEvent.class_id == class_id,
+            ),
         )
         events = list((await db.execute(event_stmt)).scalars().all())
 
@@ -149,11 +152,13 @@ async def _generate_async(
 
         # Failed solves leave the previous generated schedule untouched.
         # Replace the auto-generated slots only after a feasible result exists.
-        await db.execute(delete(TimetableSlot).where(
-            TimetableSlot.class_id == class_id,
-            TimetableSlot.academic_year_id == academic_year_id,
-            TimetableSlot.timetable_id.is_not(None),
-        ))
+        await db.execute(
+            delete(TimetableSlot).where(
+                TimetableSlot.class_id == class_id,
+                TimetableSlot.academic_year_id == academic_year_id,
+                TimetableSlot.timetable_id.is_not(None),
+            )
+        )
         await db.flush()
 
         # Create timetable header
