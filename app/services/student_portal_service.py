@@ -36,9 +36,9 @@ from app.services import (
     bulletin_visibility,
     document_release_service,
     fees_paid,
+    schedule_event_service,
 )
 from app.services import fee_entitlements as entitlements
-from app.services import schedule_event_service
 
 
 async def _get_student_for_user(db: AsyncSession, user_id: int) -> Student:
