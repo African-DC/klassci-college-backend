@@ -211,7 +211,8 @@ async def save_events_bulk(
             if (
                 value.academic_year_id == previous.academic_year_id
                 and value.day == previous.day
-                and value.blocks_courses and previous.blocks_courses
+                and value.blocks_courses
+                and previous.blocks_courses
                 and (
                     value.class_id is None
                     or previous.class_id is None

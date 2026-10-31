@@ -141,7 +141,7 @@ def _slot_html(
     # Exact non-rounded times are always printed, even for 10/15-minute
     # interruptions where two lines would overflow their real minute height.
     if height_px < 25:
-        lines = [f'<div class="tt-slot-time">{time_str}</div>']
+        lines = [f'<div class="tt-slot-time">{subject} · {time_str}</div>']
     else:
         lines = [
             f'<div class="tt-slot-subject">{subject}</div>',

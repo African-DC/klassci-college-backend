@@ -15,7 +15,6 @@ class ScheduleEventBulkRequest(BaseModel):
     events: list[ScheduleEventCreate] = Field(min_length=1, max_length=60)
 
 
-
 @router.get("", response_model=list[ScheduleEventResponse])
 async def list_events(
     academic_year_id: int = Query(..., gt=0),
@@ -57,7 +56,9 @@ async def delete_event(
     await service.remove_event(db, event_id, current_user.user_id)
 
 
-@router.post("/bulk", response_model=list[ScheduleEventResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/bulk", response_model=list[ScheduleEventResponse], status_code=status.HTTP_201_CREATED
+)
 async def create_events_bulk(
     payload: ScheduleEventBulkRequest,
     current_user: TokenData = Depends(get_current_user),
