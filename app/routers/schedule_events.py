@@ -1,6 +1,7 @@
 """Recurring school-wide or class-specific non-teaching periods."""
 
 from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
@@ -8,6 +9,11 @@ from app.schemas.schedule_event import ScheduleEventCreate, ScheduleEventRespons
 from app.services import schedule_event_service as service
 
 router = APIRouter(prefix="/timetable/events", tags=["timetable"])
+
+
+class ScheduleEventBulkRequest(BaseModel):
+    events: list[ScheduleEventCreate] = Field(min_length=1, max_length=60)
+
 
 
 @router.get("", response_model=list[ScheduleEventResponse])
@@ -49,3 +55,13 @@ async def delete_event(
     db: AsyncSession = Depends(get_tenant_db),
 ):
     await service.remove_event(db, event_id, current_user.user_id)
+
+
+@router.post("/bulk", response_model=list[ScheduleEventResponse], status_code=status.HTTP_201_CREATED)
+async def create_events_bulk(
+    payload: ScheduleEventBulkRequest,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("timetable:write"),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    return await service.save_events_bulk(db, payload.events, current_user.user_id)
