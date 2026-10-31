@@ -410,7 +410,9 @@ async def get_child_timetable(
 
     from app.repositories import student_portal_repository as student_repo
 
-    slots = await student_repo.get_timetable_slots_for_class(db, enrollment.class_id)
+    slots = await student_repo.get_timetable_slots_for_class(
+        db, enrollment.class_id, enrollment.academic_year_id
+    )
 
     slot_responses = [
         ChildTimetableSlot(

@@ -63,7 +63,9 @@ async def get_grades_for_student(
     return list(result.scalars().all())
 
 
-async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list[TimetableSlot]:
+async def get_timetable_slots_for_class(
+    db: AsyncSession, class_id: int, academic_year_id: int | None = None
+) -> list[TimetableSlot]:
     """Retourne les creneaux emploi du temps d'une classe."""
     stmt = (
         select(TimetableSlot)
@@ -75,6 +77,8 @@ async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list
         )
         .order_by(TimetableSlot.day, TimetableSlot.start_time)
     )
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

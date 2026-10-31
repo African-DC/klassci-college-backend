@@ -56,7 +56,8 @@ async def get_classes(db: AsyncSession, user_id: int) -> TeacherClassesListRespo
 async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleResponse:
     """Retourne l'emploi du temps personnel de l'enseignant."""
     teacher = await _get_teacher_for_user(db, user_id)
-    slots = await repo.get_teacher_schedule(db, teacher.id)
+    year_id = await admin_repository.get_current_academic_year_id(db)
+    slots = await repo.get_teacher_schedule(db, teacher.id, year_id)
     items = [
         TeacherScheduleSlot(
             id=slot.id,
@@ -69,7 +70,6 @@ async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleRespons
         )
         for slot in slots
     ]
-    year_id = await admin_repository.get_current_academic_year_id(db)
     events_by_id = {}
     if year_id is not None:
         for class_id in {slot.class_id for slot in slots}:
