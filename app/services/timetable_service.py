@@ -377,6 +377,8 @@ async def diagnostic_for_class(
     from sqlalchemy import func, select
 
     from app.models.academic import AcademicYear, Class
+    from app.models.timetable import DayOfWeek
+    from app.utils.timetable_generator import build_blocks
 
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
@@ -419,10 +421,6 @@ async def diagnostic_for_class(
     manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
 
     # True capacity, with minute-accurate breaks and manual lessons.
-    from app.models.timetable import DayOfWeek
-    from sqlalchemy import select
-
-    from app.utils.timetable_generator import build_blocks
 
     slot_duration, start_h, end_h = await _get_timetable_settings(db)
     current_year = (
