@@ -29,6 +29,7 @@ def upgrade():
         sa.Column("end_time", sa.Time(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.CheckConstraint("end_time > start_time", name="ck_schedule_events_valid_time_range"),
         sa.ForeignKeyConstraint(["academic_year_id"], ["academic_years.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["class_id"], ["classes.id"], ondelete="CASCADE"),
     )

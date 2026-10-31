@@ -166,7 +166,8 @@ async def _generate_async(
         # Fresh cross-class availability, using the exact break-adjusted times.
         for tid in unique_teachers:
             cross = await repo.get_cross_class_blocked_block_indices(
-                db, tid, class_id, grid_blocks
+                db, tid, class_id, grid_blocks,
+                academic_year_id=academic_year_id,
             )
             teacher_unavailabilities[tid] = (
                 teacher_unavailabilities.get(tid, set()) | cross

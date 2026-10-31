@@ -6,7 +6,7 @@ import enum
 from datetime import time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Time
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, ForeignKey, String, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -113,6 +113,7 @@ class ScheduleEvent(Base, TimestampMixin):
     """Recurring non-curricular school event, scoped to a tenant DB and school year."""
 
     __tablename__ = "schedule_events"
+    __table_args__ = (CheckConstraint("end_time > start_time", name="valid_time_range"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     academic_year_id: Mapped[int] = mapped_column(

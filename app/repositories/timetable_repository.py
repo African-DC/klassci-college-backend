@@ -608,12 +608,15 @@ async def get_cross_class_blocked_block_indices(
     teacher_id: int,
     exclude_class_id: int,
     blocks: list,
+    academic_year_id: int | None = None,
 ) -> set[int]:
-    """Retourne les indices de blocs ou le prof est occupe dans une autre classe."""
+    """Block teacher overlaps in the requested academic year only."""
     stmt = select(TimetableSlot).where(
         TimetableSlot.teacher_id == teacher_id,
         TimetableSlot.class_id != exclude_class_id,
     )
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     existing = list((await db.execute(stmt)).scalars().all())
 
     blocked: set[int] = set()

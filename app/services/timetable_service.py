@@ -601,6 +601,7 @@ async def auto_generate(
             tid,
             class_id,
             grid_blocks,
+            academic_year_id=academic_year_id,
         )
         if blocked_indices:
             cross_class_blocked[tid] = list(blocked_indices)
