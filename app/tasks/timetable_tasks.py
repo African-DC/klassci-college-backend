@@ -40,7 +40,7 @@ def generate_timetable_task(
                 day_names=day_names,
                 day_start_hour=day_start_hour,
                 day_end_hour=day_end_hour,
-                slot_duration_minutes=quantum,
+                slot_duration_minutes=slot_duration_minutes,
                 room_id=room_id,
                 manual_fixed=manual_fixed or [],
                 cross_class_blocked=cross_class_blocked or {},
@@ -180,7 +180,7 @@ async def _generate_async(
         gen_result = solve(
             assignments=assignments,
             blocks=grid_blocks,
-            slot_duration_minutes=slot_duration_minutes,
+            slot_duration_minutes=quantum,
             teacher_unavailabilities=teacher_unavailabilities,
             preferred_blocks=pref if pref else None,
         )
