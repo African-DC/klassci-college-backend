@@ -181,3 +181,16 @@ def blocked_indices(events: list[ScheduleEvent], grid_blocks: list, class_id: in
                 result.add(block.index)
                 break
     return result
+
+
+def to_blocked_periods(events: list[ScheduleEvent], class_id: int) -> dict[str, list[tuple[int, int]]]:
+    """Convert blocking periods to exact day intervals for the scheduler."""
+    periods: dict[str, list[tuple[int, int]]] = {}
+    for event in events:
+        if not event.blocks_courses or (event.class_id is not None and event.class_id != class_id):
+            continue
+        day = event.day.value if hasattr(event.day, "value") else event.day
+        start = event.start_time.hour * 60 + event.start_time.minute
+        end = event.end_time.hour * 60 + event.end_time.minute
+        periods.setdefault(day, []).append((start, end))
+    return periods

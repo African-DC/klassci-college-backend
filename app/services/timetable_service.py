@@ -418,36 +418,52 @@ async def diagnostic_for_class(
     )
     manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
 
-    # Calculate total slots from settings
-    slot_duration, start_h, end_h = await _get_timetable_settings(db)
-    minutes_per_day = (end_h - start_h) * 60
-    slots_per_day = minutes_per_day // slot_duration
-    # Real capacity excludes the minutes occupied by blocking school events.
+    # True capacity, with minute-accurate breaks and manual lessons.
     from app.models.timetable import DayOfWeek
     from app.utils.timetable_generator import build_blocks
+    from sqlalchemy import select
 
+    slot_duration, start_h, end_h = await _get_timetable_settings(db)
     current_year = (
         await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
     ).scalar_one_or_none()
+    manual_minutes = 0
+    blocked = {}
     if current_year:
-        ev = await schedule_event_service.list_events(
+        events = await schedule_event_service.list_events(
             db, academic_year_id=current_year.id, class_id=class_id
         )
-        blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration)
-        total_slots = len(blocks) - len(
-            schedule_event_service.blocked_indices(ev, blocks, class_id)
-        )
-    else:
-        total_slots = 6 * slots_per_day
+        blocked = schedule_event_service.to_blocked_periods(events, class_id)
+        manual_slots = [
+            s for s in await repo.list_manual_slots_for_class(db, class_id)
+            if s.academic_year_id == current_year.id
+        ]
+        for slot in manual_slots:
+            day = slot.day.value if hasattr(slot.day, "value") else slot.day
+            start = slot.start_time.hour * 60 + slot.start_time.minute
+            end = slot.end_time.hour * 60 + slot.end_time.minute
+            blocked.setdefault(day, []).append((start, end))
+            manual_minutes += end - start
+    blocks = build_blocks(
+        [d.value for d in DayOfWeek], start_h, end_h, slot_duration, blocked
+    )
+    total_minutes = sum(b.end_minutes - b.start_minutes for b in blocks)
+    total_slots = len(blocks)
+    required_minutes = total_hours * 60
+    ready_capacity = total_minutes + manual_minutes >= required_minutes
 
     return {
-        "ready": len(without_teacher) == 0 and len(entries) > 0,
+        "ready": len(without_teacher) == 0 and len(entries) > 0 and ready_capacity,
         "class_id": class_id,
         "class_name": cls.name,
         "subjects_without_teacher": without_teacher,
         "subjects_with_teacher": with_teacher,
         "total_hours_required": total_hours,
         "total_slots_available": total_slots,
+        "total_minutes_available": total_minutes,
+        "total_minutes_manual": manual_minutes,
+        "total_minutes_required": required_minutes,
+        "missing_minutes": max(0, required_minutes - total_minutes - manual_minutes),
         "manual_slots_count": manual_count,
     }
 
