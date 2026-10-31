@@ -1,7 +1,10 @@
 """Contracts for recurring school-wide and class-specific schedule events."""
+
 from datetime import time
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
 from app.models.timetable import DayOfWeek
 
 EventCategory = Literal["recess", "lunch", "interclass", "study", "assembly", "other"]

@@ -470,7 +470,7 @@ async def auto_generate(
     7. Supprime seulement les slots auto-generes
     8. Lance le solveur
     """
-    from sqlalchemy import delete, select
+    from sqlalchemy import select
 
     from app.models.academic import AcademicYear, Class
     from app.models.timetable import DayOfWeek

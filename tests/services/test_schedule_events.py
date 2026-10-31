@@ -1,6 +1,8 @@
 """Regression tests: minute overlap and solver hard school blocks."""
+
 from datetime import time
 from types import SimpleNamespace
+
 from app.services.schedule_event_service import blocked_indices
 from app.utils.timetable_generator import Assignment, build_blocks, solve
 

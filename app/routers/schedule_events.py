@@ -1,6 +1,8 @@
 """Recurring non-teaching events: school-wide or class-specific."""
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
 from app.schemas.schedule_event import ScheduleEventCreate, ScheduleEventResponse
 from app.services import schedule_event_service as service

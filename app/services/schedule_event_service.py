@@ -1,7 +1,10 @@
 """Business rules for scheduled breaks and supervised school activities."""
+
 from datetime import time
+
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
