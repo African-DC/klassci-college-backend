@@ -20,12 +20,8 @@ def _overlap(model, day: str, start: time, end: time):
     )
 
 
-async def list_events(
-    db: AsyncSession, *, academic_year_id: int, class_id: int | None = None
-):
-    stmt = select(ScheduleEvent).where(
-        ScheduleEvent.academic_year_id == academic_year_id
-    )
+async def list_events(db: AsyncSession, *, academic_year_id: int, class_id: int | None = None):
+    stmt = select(ScheduleEvent).where(ScheduleEvent.academic_year_id == academic_year_id)
     if class_id is not None:
         stmt = stmt.where(
             or_(
@@ -38,9 +34,7 @@ async def list_events(
 
 
 async def _validate_scope(db: AsyncSession, data: ScheduleEventCreate):
-    year_stmt = select(AcademicYear.id).where(
-        AcademicYear.id == data.academic_year_id
-    )
+    year_stmt = select(AcademicYear.id).where(AcademicYear.id == data.academic_year_id)
     if not (await db.execute(year_stmt)).scalar_one_or_none():
         raise NotFoundError("AcademicYear", data.academic_year_id)
     if data.class_id is not None:
@@ -172,9 +166,7 @@ async def remove_event(db: AsyncSession, event_id: int, actor: int):
     await db.commit()
 
 
-def blocked_indices(
-    events: list[ScheduleEvent], grid_blocks: list, class_id: int
-) -> set[int]:
+def blocked_indices(events: list[ScheduleEvent], grid_blocks: list, class_id: int) -> set[int]:
     """Exclude any solver block overlapping a blocking period."""
     result = set()
     for block in grid_blocks:
@@ -185,11 +177,7 @@ def blocked_indices(
                 continue
             start = event.start_time.hour * 60 + event.start_time.minute
             end = event.end_time.hour * 60 + event.end_time.minute
-            if (
-                event.day == block.day
-                and block.start_minutes < end
-                and block.end_minutes > start
-            ):
+            if event.day == block.day and block.start_minutes < end and block.end_minutes > start:
                 result.add(block.index)
                 break
     return result

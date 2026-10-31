@@ -425,6 +425,7 @@ async def diagnostic_for_class(
     # Real capacity excludes the minutes occupied by blocking school events.
     from app.models.timetable import DayOfWeek
     from app.utils.timetable_generator import build_blocks
+
     current_year = (
         await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
     ).scalar_one_or_none()
@@ -725,20 +726,28 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
 
     # Non-pedagogical periods share the same minute-accurate PDF time axis.
     from app.models.academic import AcademicYear
+
     current_ay = (
         await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
     ).scalar_one_or_none()
     if current_ay:
         events = await schedule_event_service.list_events(
-            db, academic_year_id=current_ay.id, class_id=class_id,
+            db,
+            academic_year_id=current_ay.id,
+            class_id=class_id,
         )
         for event in events:
-            slots_data.append({
-                "day": event.day, "start_time": event.start_time.strftime("%H:%M"),
-                "end_time": event.end_time.strftime("%H:%M"),
-                "subject_name": event.title, "teacher_name": "", "room": None,
-                "subject_color": "amber" if event.blocks_courses else "teal",
-            })
+            slots_data.append(
+                {
+                    "day": event.day,
+                    "start_time": event.start_time.strftime("%H:%M"),
+                    "end_time": event.end_time.strftime("%H:%M"),
+                    "subject_name": event.title,
+                    "teacher_name": "",
+                    "room": None,
+                    "subject_color": "amber" if event.blocks_courses else "teal",
+                }
+            )
     class_name = cls.name
     return generate_timetable_pdf(
         slots=slots_data,

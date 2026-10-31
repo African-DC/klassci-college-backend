@@ -17,9 +17,7 @@ async def list_events(
     _: None = require_permission("timetable:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ):
-    return await service.list_events(
-        db, academic_year_id=academic_year_id, class_id=class_id
-    )
+    return await service.list_events(db, academic_year_id=academic_year_id, class_id=class_id)
 
 
 @router.post("", response_model=ScheduleEventResponse, status_code=status.HTTP_201_CREATED)

@@ -126,6 +126,7 @@ async def _generate_async(
 
         from app.models.timetable import ScheduleEvent, TimetableSlot
         from app.services.schedule_event_service import blocked_indices
+
         event_stmt = select(ScheduleEvent).where(
             ScheduleEvent.academic_year_id == academic_year_id,
             or_(
