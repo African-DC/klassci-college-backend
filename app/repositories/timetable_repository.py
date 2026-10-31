@@ -64,6 +64,7 @@ async def find_teacher_conflict(
     start_time: time,
     end_time: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> TimetableSlot | None:
     """Le cours qui occupe déjà l'enseignant sur ce créneau, s'il existe.
 
@@ -87,6 +88,8 @@ async def find_teacher_conflict(
     )
     if exclude_slot_id is not None:
         stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     return (await db.execute(stmt)).scalars().first()
 
 
@@ -97,6 +100,7 @@ async def check_class_conflict(
     start_time: time,
     end_time: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> bool:
     """Retourne True si la classe a déjà un cours sur ce créneau."""
     stmt = select(TimetableSlot).where(
@@ -107,6 +111,8 @@ async def check_class_conflict(
     )
     if exclude_slot_id is not None:
         stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     result = (await db.execute(stmt)).scalar_one_or_none()
     return result is not None
 

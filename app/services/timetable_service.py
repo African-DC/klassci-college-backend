@@ -63,6 +63,16 @@ async def list_slots(
     academic_year_id: int | None = None,
 ) -> list[TimetableSlotResponse]:
     """Liste les créneaux avec filtres optionnels."""
+    # Universal classes retain history; the default display is the current
+    # school year, never a mixture of current and previous years.
+    if academic_year_id is None:
+        from sqlalchemy import select
+
+        from app.models.academic import AcademicYear
+
+        academic_year_id = (
+            await db.execute(select(AcademicYear.id).where(AcademicYear.is_current.is_(True)))
+        ).scalar_one_or_none()
     slots = await repo.list_slots(
         db,
         class_id=class_id,
@@ -110,6 +120,7 @@ async def _verifier_enseignant_libre(
     start: time,
     end: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> None:
     """Refuse un créneau si l'enseignant est pris, en disant par quoi.
 
@@ -121,7 +132,9 @@ async def _verifier_enseignant_libre(
     jour = _JOURS_FR.get(day, day)
 
     conflit = await repo.find_teacher_conflict(
-        db, teacher_id, day, start, end, exclude_slot_id=exclude_slot_id
+        db, teacher_id, day, start, end,
+        exclude_slot_id=exclude_slot_id,
+        academic_year_id=academic_year_id,
     )
     if conflit is not None:
         nom = await _nom_enseignant(db, teacher_id)
@@ -184,9 +197,13 @@ async def create_slot(
     )
     # Vérifier les conflits
     await _verifier_enseignant_libre(
-        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
+        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end,
+        academic_year_id=data.academic_year_id,
     )
-    if await repo.check_class_conflict(db, data.class_id, data.day.value, start, end):
+    if await repo.check_class_conflict(
+        db, data.class_id, data.day.value, start, end,
+        academic_year_id=data.academic_year_id,
+    ):
         raise ConflictError(
             f"Cette classe a déjà cours le {_JOURS_FR.get(data.day.value, data.day.value)} "
             f"de {_plage(start, end)}."
@@ -276,9 +293,12 @@ async def update_slot(
         start=new_start,
         end=new_end,
         exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     )
     if await repo.check_class_conflict(
-        db, slot.class_id, new_day, new_start, new_end, exclude_slot_id=slot_id
+        db, slot.class_id, new_day, new_start, new_end,
+        exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     ):
         raise ConflictError(
             f"Cette classe a déjà cours le {_JOURS_FR.get(new_day, new_day)} "
@@ -721,7 +741,9 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     _, day_start, day_end = await _get_timetable_settings(db)
 
     # Get all slots for this class
-    slots_raw = await repo.list_slots(db, class_id=class_id)
+    slots_raw = await repo.list_slots(
+        db, class_id=class_id, academic_year_id=ay.id if ay else None
+    )
     slots_data = []
     for s in slots_raw:
         start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
@@ -740,17 +762,10 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
             }
         )
 
-    # Non-pedagogical periods share the same minute-accurate PDF time axis.
-    from app.models.academic import AcademicYear
-
-    current_ay = (
-        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
-    ).scalar_one_or_none()
-    if current_ay:
+    # The PDF follows the same academic-year boundary as the classroom view.
+    if ay:
         events = await schedule_event_service.list_events(
-            db,
-            academic_year_id=current_ay.id,
-            class_id=class_id,
+            db, academic_year_id=ay.id, class_id=class_id
         )
         for event in events:
             slots_data.append(
