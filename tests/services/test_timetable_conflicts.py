@@ -68,6 +68,7 @@ def _sqlite_schema() -> list[Table]:
         "rooms",
         "teacher_profiles",
         "timetable_slots",
+    "schedule_events",
         "teacher_availabilities",
         "audit_logs",
     ):
