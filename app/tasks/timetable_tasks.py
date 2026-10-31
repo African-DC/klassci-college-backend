@@ -108,6 +108,11 @@ async def _generate_async(
                 select(TeacherProfile.id).where(TeacherProfile.id == teacher_id).with_for_update()
             )
 
+        from app.models.academic import Room
+
+        if room_id is not None:
+            await db.execute(select(Room.id).where(Room.id == room_id).with_for_update())
+
         # Re-read breaks and manual courses at execution time. Queued jobs
         # must never use an obsolete snapshot of the school's timetable.
         from sqlalchemy import delete, or_, select
@@ -202,6 +207,11 @@ async def _generate_async(
                 academic_year_id=academic_year_id,
             )
             teacher_unavailabilities[tid] = teacher_unavailabilities.get(tid, set()) | cross
+        room_blocked: set[int] = set()
+        if room_id is not None:
+            room_blocked = await repo.get_room_blocked_block_indices(
+                db, room_id, class_id, academic_year_id, grid_blocks
+            )
         pref = {}
         for tid in unique_teachers:
             pref[tid] = await repo.get_preferred_block_indices(db, tid, grid_blocks)
@@ -213,6 +223,7 @@ async def _generate_async(
             slot_duration_minutes=quantum,
             teacher_unavailabilities=teacher_unavailabilities,
             preferred_blocks=pref if pref else None,
+            school_blocked=room_blocked,
         )
         if not gen_result.feasible:
             raise ValueError(

@@ -112,6 +112,33 @@ async def _nom_enseignant(db: AsyncSession, teacher_id: int) -> str:
     return f"{prof.first_name} {prof.last_name}".strip() or f"L'enseignant #{teacher_id}"
 
 
+async def _verifier_salle_libre(
+    db: AsyncSession, *,
+    room_id: int | None, academic_year_id: int,
+    day: str, start: time, end: time,
+    exclude_slot_id: int | None = None,
+) -> None:
+    if room_id is None:
+        return
+    from sqlalchemy import select
+
+    from app.models.academic import Room
+
+    await db.execute(select(Room.id).where(Room.id == room_id).with_for_update())
+    occupied = await repo.find_room_conflict(
+        db,
+        room_id=room_id, academic_year_id=academic_year_id,
+        day=day, start_time=start, end_time=end,
+        exclude_slot_id=exclude_slot_id,
+    )
+    if occupied:
+        raise ConflictError(
+            f"La salle est déjà utilisée par "
+            f"{occupied.class_.name if occupied.class_ else 'une autre classe'} "
+            f"le {_JOURS_FR.get(day, day)} de {_plage(occupied.start_time, occupied.end_time)}."
+        )
+
+
 async def _verifier_enseignant_libre(
     db: AsyncSession,
     *,
@@ -229,6 +256,10 @@ async def create_slot(
             f"de {_plage(start, end)}."
         )
 
+    await _verifier_salle_libre(
+        db, room_id=room_id, academic_year_id=data.academic_year_id,
+        day=data.day.value, start=start, end=end,
+    )
     slot = await repo.create_slot(
         db,
         class_id=data.class_id,
@@ -337,6 +368,11 @@ async def update_slot(
             f"Cette classe a déjà cours le {_JOURS_FR.get(new_day, new_day)} "
             f"de {_plage(new_start, new_end)}."
         )
+
+    await _verifier_salle_libre(
+        db, room_id=new_room_id, academic_year_id=slot.academic_year_id,
+        day=new_day, start=new_start, end=new_end, exclude_slot_id=slot_id,
+    )
 
     old_values = {
         "day": slot.day,

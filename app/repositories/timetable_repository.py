@@ -52,6 +52,47 @@ async def list_slots(
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def find_room_conflict(
+    db: AsyncSession,
+    *, room_id: int, academic_year_id: int,
+    day: str, start_time: time, end_time: time,
+    exclude_slot_id: int | None = None,
+) -> TimetableSlot | None:
+    stmt = select(TimetableSlot).options(selectinload(TimetableSlot.class_)).where(
+        TimetableSlot.room_id == room_id,
+        TimetableSlot.academic_year_id == academic_year_id,
+        TimetableSlot.day == day,
+        TimetableSlot.start_time < end_time,
+        TimetableSlot.end_time > start_time,
+    )
+    if exclude_slot_id is not None:
+        stmt = stmt.where(TimetableSlot.id != exclude_slot_id)
+    return (await db.execute(stmt)).scalars().first()
+
+
+async def get_room_blocked_block_indices(
+    db: AsyncSession, room_id: int, class_id: int,
+    academic_year_id: int, blocks: list,
+) -> set[int]:
+    stmt = select(TimetableSlot).where(
+        TimetableSlot.room_id == room_id,
+        TimetableSlot.class_id != class_id,
+        TimetableSlot.academic_year_id == academic_year_id,
+    )
+    existing = list((await db.execute(stmt)).scalars().all())
+    result: set[int] = set()
+    for blk in blocks:
+        start = time(blk.start_minutes // 60, blk.start_minutes % 60)
+        end = time(blk.end_minutes // 60, blk.end_minutes % 60)
+        if any(
+            (s.day.value if hasattr(s.day, "value") else s.day) == blk.day
+            and s.start_time < end and s.end_time > start
+            for s in existing
+        ):
+            result.add(blk.index)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # TimetableSlot — écriture
 # ---------------------------------------------------------------------------
