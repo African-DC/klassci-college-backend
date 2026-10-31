@@ -265,27 +265,44 @@ async def test_room_conflict_checks_exact_minute_overlap(db: _AsyncBridge) -> No
     db.add(Room(id=9, name="Salle A", room_type="classroom"))
     db.add(
         TimetableSlot(
-            id=901, class_id=SIXIEME_B, teacher_id=KOUASSI,
-            subject_id=MATHS, academic_year_id=ANNEE,
-            room_id=9, day=DayOfWeek.MONDAY.value,
-            start_time=time(10, 15), end_time=time(11, 15),
+            id=901,
+            class_id=SIXIEME_B,
+            teacher_id=KOUASSI,
+            subject_id=MATHS,
+            academic_year_id=ANNEE,
+            room_id=9,
+            day=DayOfWeek.MONDAY.value,
+            start_time=time(10, 15),
+            end_time=time(11, 15),
         )
     )
     await db.commit()
     with pytest.raises(ConflictError) as error:
         await svc._verifier_salle_libre(
-            db, room_id=9, academic_year_id=ANNEE, day="monday",
-            start=time(11, 10), end=time(12, 10),
+            db,
+            room_id=9,
+            academic_year_id=ANNEE,
+            day="monday",
+            start=time(11, 10),
+            end=time(12, 10),
         )
     assert "Salle" in error.value.detail
     assert "6eme B" in error.value.detail
 
     # Adjacent slots do not overlap. Another school year is also independent.
     await svc._verifier_salle_libre(
-        db, room_id=9, academic_year_id=ANNEE, day="monday",
-        start=time(11, 15), end=time(12, 15),
+        db,
+        room_id=9,
+        academic_year_id=ANNEE,
+        day="monday",
+        start=time(11, 15),
+        end=time(12, 15),
     )
     await svc._verifier_salle_libre(
-        db, room_id=9, academic_year_id=ANNEE + 1, day="monday",
-        start=time(10, 20), end=time(11, 20),
+        db,
+        room_id=9,
+        academic_year_id=ANNEE + 1,
+        day="monday",
+        start=time(10, 20),
+        end=time(11, 20),
     )

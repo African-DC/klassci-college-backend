@@ -113,9 +113,13 @@ async def _nom_enseignant(db: AsyncSession, teacher_id: int) -> str:
 
 
 async def _verifier_salle_libre(
-    db: AsyncSession, *,
-    room_id: int | None, academic_year_id: int,
-    day: str, start: time, end: time,
+    db: AsyncSession,
+    *,
+    room_id: int | None,
+    academic_year_id: int,
+    day: str,
+    start: time,
+    end: time,
     exclude_slot_id: int | None = None,
 ) -> None:
     if room_id is None:
@@ -127,8 +131,11 @@ async def _verifier_salle_libre(
     await db.execute(select(Room.id).where(Room.id == room_id).with_for_update())
     occupied = await repo.find_room_conflict(
         db,
-        room_id=room_id, academic_year_id=academic_year_id,
-        day=day, start_time=start, end_time=end,
+        room_id=room_id,
+        academic_year_id=academic_year_id,
+        day=day,
+        start_time=start,
+        end_time=end,
         exclude_slot_id=exclude_slot_id,
     )
     if occupied:
@@ -257,8 +264,12 @@ async def create_slot(
         )
 
     await _verifier_salle_libre(
-        db, room_id=room_id, academic_year_id=data.academic_year_id,
-        day=data.day.value, start=start, end=end,
+        db,
+        room_id=room_id,
+        academic_year_id=data.academic_year_id,
+        day=data.day.value,
+        start=start,
+        end=end,
     )
     slot = await repo.create_slot(
         db,
@@ -370,8 +381,13 @@ async def update_slot(
         )
 
     await _verifier_salle_libre(
-        db, room_id=new_room_id, academic_year_id=slot.academic_year_id,
-        day=new_day, start=new_start, end=new_end, exclude_slot_id=slot_id,
+        db,
+        room_id=new_room_id,
+        academic_year_id=slot.academic_year_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
+        exclude_slot_id=slot_id,
     )
 
     old_values = {
