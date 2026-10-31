@@ -18,8 +18,8 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
-from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
 from app.services import schedule_event_service
+from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
 
 logger = logging.getLogger(__name__)
 

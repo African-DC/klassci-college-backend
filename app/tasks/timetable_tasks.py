@@ -122,9 +122,10 @@ async def _generate_async(
         }
 
         # The worker loads the current events, so edits made while queued are honoured.
+        from sqlalchemy import delete, or_, select
+
         from app.models.timetable import ScheduleEvent, TimetableSlot
         from app.services.schedule_event_service import blocked_indices
-        from sqlalchemy import delete, or_, select
         event_stmt = select(ScheduleEvent).where(
             ScheduleEvent.academic_year_id == academic_year_id,
             or_(ScheduleEvent.class_id.is_(None), ScheduleEvent.class_id == class_id),
