@@ -9,12 +9,16 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié *(administration)* (#547)
 - Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications *(direction, administration)*
 - Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement *(établissements et support KLASSCI)*
 - Matières : un niveau peut désormais avoir plusieurs enseignants pour une même matière *(admin, direction des études)*
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
 ### Fixed
+- Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
+- Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante *(élève, parent)* (#547)
+- Génération de l'emploi du temps : plus aucun cours de quelques minutes, la grille garde sa durée quels que soient les cours manuels, un dépassement du temps de calcul n'est plus présenté comme une impossibilité et l'administrateur voit la cause réelle d'un échec *(administration, direction des études)* (#547)
 - Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran *(direction, secrétariat)*
 - Emploi du temps PDF : les repères horaires rapprochés ne se chevauchent plus, sans décaler les créneaux placés à la minute près *(administration, direction)* (#542)
 - Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables *(administration, technique)* (#538)

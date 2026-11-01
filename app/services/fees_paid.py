@@ -10,7 +10,7 @@ Le calcul vit ici, à un seul endroit, parce qu'un montant dû ne peut pas
 valoir trois sommes différentes selon l'écran qui l'affiche.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -98,7 +98,11 @@ async def paid_by_enrollment(db: AsyncSession, enrollment_id: int) -> dict[int, 
 
 
 async def remaining_outside_year(
-    db: AsyncSession, *, student_id: int, academic_year_id: int | None
+    db: AsyncSession,
+    *,
+    student_id: int,
+    academic_year_id: int | None,
+    excluded_enrollment_ids: Collection[int] = (),
 ) -> Decimal:
     """Ce qu'un élève doit encore, hors d'un exercice donné.
 
@@ -137,6 +141,9 @@ async def remaining_outside_year(
     l'école croirait soldé un exercice qui ne l'est pas.
     """
     par_inscription = await remaining_by_enrollment(db, student_id=student_id)
+    # Une réinscription à venir n'est pas un arriéré.
+    for inscription in excluded_enrollment_ids:
+        par_inscription.pop(inscription, None)
     if academic_year_id is None:
         return sum(par_inscription.values(), Decimal("0"))
 
@@ -224,6 +231,7 @@ async def arrears_outside_year(
     student_id: int,
     academic_year_id: int | None,
     finance: FinanceView,
+    excluded_enrollment_ids: Collection[int] = (),
 ) -> dict:
     """La même somme, rédigée selon ce que l'appelant a le droit de lire.
 
@@ -250,7 +258,10 @@ async def arrears_outside_year(
     écran existe pour ne plus dire.
     """
     montant = await remaining_outside_year(
-        db, student_id=student_id, academic_year_id=academic_year_id
+        db,
+        student_id=student_id,
+        academic_year_id=academic_year_id,
+        excluded_enrollment_ids=excluded_enrollment_ids,
     )
     return redact(
         {

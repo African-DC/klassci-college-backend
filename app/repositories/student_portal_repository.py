@@ -4,11 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Student
+from app.repositories.enrollment_in_force import get_enrollment_in_force
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
@@ -19,22 +20,13 @@ async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | No
 
 
 async def get_active_enrollment_for_student(db: AsyncSession, student_id: int) -> Enrollment | None:
-    """Retourne l'inscription active (non annulee/rejetee) la plus recente."""
-    stmt = (
-        select(Enrollment)
-        .where(
-            Enrollment.student_id == student_id,
-            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
-        )
-        .options(
-            selectinload(Enrollment.class_),
-            selectinload(Enrollment.academic_year),
-        )
-        .order_by(Enrollment.id.desc())
-        .limit(1)
+    """Retourne l'inscription en vigueur, avec sa classe et son année."""
+    return await get_enrollment_in_force(
+        db,
+        student_id,
+        selectinload(Enrollment.class_),
+        selectinload(Enrollment.academic_year),
     )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 async def get_grades_for_student(
@@ -63,7 +55,9 @@ async def get_grades_for_student(
     return list(result.scalars().all())
 
 
-async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list[TimetableSlot]:
+async def get_timetable_slots_for_class(
+    db: AsyncSession, class_id: int, academic_year_id: int | None = None
+) -> list[TimetableSlot]:
     """Retourne les creneaux emploi du temps d'une classe."""
     stmt = (
         select(TimetableSlot)
@@ -75,6 +69,8 @@ async def get_timetable_slots_for_class(db: AsyncSession, class_id: int) -> list
         )
         .order_by(TimetableSlot.day, TimetableSlot.start_time)
     )
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-10-29T22:51:33Z",
+  "generated_at": "2026-11-01T19:35:01Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,13 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié",
+            "audience": [
+              "administration"
+            ],
+            "pull_request": 547
+          },
           {
             "text": "Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications",
             "audience": [
@@ -1333,6 +1340,30 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": 551
+          },
+          {
+            "text": "Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": 547
+          },
+          {
+            "text": "Génération de l'emploi du temps : plus aucun cours de quelques minutes, la grille garde sa durée quels que soient les cours manuels, un dépassement du temps de calcul n'est plus présenté comme une impossibilité et l'administrateur voit la cause réelle d'un échec",
+            "audience": [
+              "administration",
+              "direction des études"
+            ],
+            "pull_request": 547
+          },
           {
             "text": "Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran",
             "audience": [

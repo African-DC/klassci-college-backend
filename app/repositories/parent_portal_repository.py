@@ -4,10 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.user import Parent, ParentStudent, Student
+from app.repositories.enrollment_in_force import get_enrollment_in_force
 
 
 async def get_parent_by_user_id(db: AsyncSession, user_id: int) -> Parent | None:
@@ -66,28 +67,16 @@ async def get_student_grades(
 
 
 async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment | None:
-    """Retourne l'inscription active d'un élève avec ses frais et paiements."""
-    stmt = (
-        select(Enrollment)
-        .where(
-            Enrollment.student_id == student_id,
-            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
-        )
-        .options(
-            selectinload(Enrollment.class_),
-            selectinload(Enrollment.academic_year),
-            selectinload(Enrollment.enrollment_fees)
-            .selectinload(EnrollmentFee.fee_variant)
-            .selectinload(FeeVariant.category),
-            # Pas de `EnrollmentFee.payments` ici : la relation est dépréciée
-            # depuis la migration 0028 et plus personne ne la lit. Le détail
-            # des versements passe par `fees_paid.payments_by_enrollment_fee`.
-        )
-        .order_by(Enrollment.id.desc())
-        .limit(1)
+    """L'inscription en vigueur d'un élève, avec ses frais."""
+    return await get_enrollment_in_force(
+        db,
+        student_id,
+        selectinload(Enrollment.class_),
+        selectinload(Enrollment.academic_year),
+        selectinload(Enrollment.enrollment_fees)
+        .selectinload(EnrollmentFee.fee_variant)
+        .selectinload(FeeVariant.category),
     )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 async def get_student_bulletins(db: AsyncSession, student_id: int) -> list[Bulletin]:

@@ -153,3 +153,4 @@ class GenerateTimetableResponse(BaseModel):
 class TaskStatusResponse(BaseModel):
     status: str  # "pending" | "running" | "success" | "failed"
     result: list[TimetableSlotResponse] | None = None
+    message: str | None = None

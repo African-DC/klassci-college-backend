@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.audit_values import frozen
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
+from app.models.academic import Room
 from app.models.timetable import TimetableSlot
+from app.models.user import TeacherProfile
 from app.repositories import timetable_repository as repo
 from app.schemas.timetable import (
     GenerateTimetableRequest,
@@ -18,7 +20,10 @@ from app.schemas.timetable import (
     TimetableSlotResponse,
     TimetableSlotUpdate,
 )
+from app.services import schedule_event_service
 from app.services.class_subject_teacher_service import ensure_slot_teacher, resolve_class_teachers
+from app.services.timetable_generation import load_class_week, manual_interval
+from app.utils.timetable_days import JOURS_FR
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,16 @@ async def list_slots(
     academic_year_id: int | None = None,
 ) -> list[TimetableSlotResponse]:
     """Liste les créneaux avec filtres optionnels."""
+    # Universal classes retain history; the default display is the current
+    # school year, never a mixture of current and previous years.
+    if academic_year_id is None:
+        from sqlalchemy import select
+
+        from app.models.academic import AcademicYear
+
+        academic_year_id = (
+            await db.execute(select(AcademicYear.id).where(AcademicYear.is_current.is_(True)))
+        ).scalar_one_or_none()
     slots = await repo.list_slots(
         db,
         class_id=class_id,
@@ -79,16 +94,6 @@ async def get_slot(db: AsyncSession, slot_id: int) -> TimetableSlotResponse:
     return _to_slot_response(slot)
 
 
-_JOURS_FR = {
-    "monday": "lundi",
-    "tuesday": "mardi",
-    "wednesday": "mercredi",
-    "thursday": "jeudi",
-    "friday": "vendredi",
-    "saturday": "samedi",
-}
-
-
 def _plage(debut: time, fin: time) -> str:
     return f"{debut.strftime('%H:%M')} à {fin.strftime('%H:%M')}"
 
@@ -101,6 +106,36 @@ async def _nom_enseignant(db: AsyncSession, teacher_id: int) -> str:
     return f"{prof.first_name} {prof.last_name}".strip() or f"L'enseignant #{teacher_id}"
 
 
+async def _verifier_salle_libre(
+    db: AsyncSession,
+    *,
+    room_id: int | None,
+    academic_year_id: int,
+    day: str,
+    start: time,
+    end: time,
+    exclude_slot_id: int | None = None,
+) -> None:
+    if room_id is None:
+        return
+    await repo.lock_rows(db, Room, [room_id])
+    occupied = await repo.find_room_conflict(
+        db,
+        room_id=room_id,
+        academic_year_id=academic_year_id,
+        day=day,
+        start_time=start,
+        end_time=end,
+        exclude_slot_id=exclude_slot_id,
+    )
+    if occupied:
+        raise ConflictError(
+            f"La salle est déjà utilisée par "
+            f"{occupied.class_.name if occupied.class_ else 'une autre classe'} "
+            f"le {JOURS_FR.get(day, day)} de {_plage(occupied.start_time, occupied.end_time)}."
+        )
+
+
 async def _verifier_enseignant_libre(
     db: AsyncSession,
     *,
@@ -109,6 +144,7 @@ async def _verifier_enseignant_libre(
     start: time,
     end: time,
     exclude_slot_id: int | None = None,
+    academic_year_id: int | None = None,
 ) -> None:
     """Refuse un créneau si l'enseignant est pris, en disant par quoi.
 
@@ -117,10 +153,16 @@ async def _verifier_enseignant_libre(
     l'enseignant a déclarée lui-même se règle en lui parlant. « Créneau
     indisponible » obligeait le secrétariat à deviner lequel des deux.
     """
-    jour = _JOURS_FR.get(day, day)
+    jour = JOURS_FR.get(day, day)
 
     conflit = await repo.find_teacher_conflict(
-        db, teacher_id, day, start, end, exclude_slot_id=exclude_slot_id
+        db,
+        teacher_id,
+        day,
+        start,
+        end,
+        exclude_slot_id=exclude_slot_id,
+        academic_year_id=academic_year_id,
     )
     if conflit is not None:
         nom = await _nom_enseignant(db, teacher_id)
@@ -170,19 +212,49 @@ async def create_slot(
             raise BusinessValidationError(f"La salle « {data.room} » n'existe pas.")
         room_id = room.id
 
+    await schedule_event_service.lock_class_scope(db, data.class_id)
+    await schedule_event_service.ensure_course_allowed(
+        db,
+        class_id=data.class_id,
+        academic_year_id=data.academic_year_id,
+        day=data.day.value,
+        start=start,
+        end=end,
+    )
     await ensure_slot_teacher(
         db, class_id=data.class_id, subject_id=data.subject_id, teacher_id=data.teacher_id
     )
+    await repo.lock_rows(db, TeacherProfile, [data.teacher_id])
     # Vérifier les conflits
     await _verifier_enseignant_libre(
-        db, teacher_id=data.teacher_id, day=data.day.value, start=start, end=end
+        db,
+        teacher_id=data.teacher_id,
+        day=data.day.value,
+        start=start,
+        end=end,
+        academic_year_id=data.academic_year_id,
     )
-    if await repo.check_class_conflict(db, data.class_id, data.day.value, start, end):
+    if await repo.check_class_conflict(
+        db,
+        data.class_id,
+        data.day.value,
+        start,
+        end,
+        academic_year_id=data.academic_year_id,
+    ):
         raise ConflictError(
-            f"Cette classe a déjà cours le {_JOURS_FR.get(data.day.value, data.day.value)} "
+            f"Cette classe a déjà cours le {JOURS_FR.get(data.day.value, data.day.value)} "
             f"de {_plage(start, end)}."
         )
 
+    await _verifier_salle_libre(
+        db,
+        room_id=room_id,
+        academic_year_id=data.academic_year_id,
+        day=data.day.value,
+        start=start,
+        end=end,
+    )
     slot = await repo.create_slot(
         db,
         class_id=data.class_id,
@@ -250,6 +322,18 @@ async def update_slot(
         await ensure_slot_teacher(
             db, class_id=slot.class_id, subject_id=new_subject_id, teacher_id=new_teacher_id
         )
+    # Serialize manual edits with in-flight generation.
+    await schedule_event_service.lock_class_scope(db, slot.class_id)
+    # Une pause bloquante interdit aussi la modification d'un cours existant.
+    await schedule_event_service.ensure_course_allowed(
+        db,
+        class_id=slot.class_id,
+        academic_year_id=slot.academic_year_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
+    )
+    await repo.lock_rows(db, TeacherProfile, [new_teacher_id])
     # Vérifier les conflits (en excluant le slot courant)
     await _verifier_enseignant_libre(
         db,
@@ -258,14 +342,31 @@ async def update_slot(
         start=new_start,
         end=new_end,
         exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     )
     if await repo.check_class_conflict(
-        db, slot.class_id, new_day, new_start, new_end, exclude_slot_id=slot_id
+        db,
+        slot.class_id,
+        new_day,
+        new_start,
+        new_end,
+        exclude_slot_id=slot_id,
+        academic_year_id=slot.academic_year_id,
     ):
         raise ConflictError(
-            f"Cette classe a déjà cours le {_JOURS_FR.get(new_day, new_day)} "
+            f"Cette classe a déjà cours le {JOURS_FR.get(new_day, new_day)} "
             f"de {_plage(new_start, new_end)}."
         )
+
+    await _verifier_salle_libre(
+        db,
+        room_id=new_room_id,
+        academic_year_id=slot.academic_year_id,
+        day=new_day,
+        start=new_start,
+        end=new_end,
+        exclude_slot_id=slot_id,
+    )
 
     old_values = {
         "day": slot.day,
@@ -358,7 +459,9 @@ async def diagnostic_for_class(
     """
     from sqlalchemy import func, select
 
-    from app.models.academic import Class
+    from app.models.academic import AcademicYear, Class
+    from app.models.timetable import DayOfWeek
+    from app.utils.timetable_generator import build_blocks
 
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
@@ -400,20 +503,39 @@ async def diagnostic_for_class(
     )
     manual_count = (await db.execute(manual_count_stmt)).scalar() or 0
 
-    # Calculate total slots from settings
+    # True capacity, with minute-accurate breaks and manual lessons.
+
     slot_duration, start_h, end_h = await _get_timetable_settings(db)
-    minutes_per_day = (end_h - start_h) * 60
-    slots_per_day = minutes_per_day // slot_duration
-    total_slots = 6 * slots_per_day
+    current_year = (
+        await db.execute(select(AcademicYear).where(AcademicYear.is_current.is_(True)))
+    ).scalar_one_or_none()
+    manual_minutes = 0
+    blocked: dict[str, list[tuple[int, int]]] = {}
+    if current_year:
+        week = await load_class_week(db, class_id, current_year.id)
+        blocked = week.blocked
+        for slot in week.manual:
+            day, start, end = manual_interval(slot)
+            blocked.setdefault(day, []).append((start, end))
+            manual_minutes += end - start
+    blocks = build_blocks([d.value for d in DayOfWeek], start_h, end_h, slot_duration, blocked)
+    total_minutes = sum(b.end_minutes - b.start_minutes for b in blocks)
+    total_slots = len(blocks)
+    required_minutes = total_hours * 60
+    ready_capacity = total_minutes + manual_minutes >= required_minutes
 
     return {
-        "ready": len(without_teacher) == 0 and len(entries) > 0,
+        "ready": len(without_teacher) == 0 and len(entries) > 0 and ready_capacity,
         "class_id": class_id,
         "class_name": cls.name,
         "subjects_without_teacher": without_teacher,
         "subjects_with_teacher": with_teacher,
         "total_hours_required": total_hours,
         "total_slots_available": total_slots,
+        "total_minutes_available": total_minutes,
+        "total_minutes_manual": manual_minutes,
+        "total_minutes_required": required_minutes,
+        "missing_minutes": max(0, required_minutes - total_minutes - manual_minutes),
         "manual_slots_count": manual_count,
     }
 
@@ -440,26 +562,20 @@ async def auto_generate(
     tenant_id: str,
     class_id: int,
 ) -> GenerateTimetableResponse:
-    """Generation automatique intelligente avec granularite configurable.
+    """Generation automatique avec granularite configurable.
 
     1. Lit les parametres de l'etablissement (duree bloc, heures debut/fin)
-    2. Recupere la classe et ses matieres
+    2. Recupere la classe et ses matieres, chacune avec son enseignant
     3. Verifie que TOUTES les matieres ont un enseignant
-    4. Construit la grille de blocs dynamique
-    5. Charge les slots manuels comme blocs fixes
-    6. Charge les conflits inter-classes et preferences
-    7. Supprime seulement les slots auto-generes
-    8. Lance le solveur
+    4. Lance la tache : les creneaux generes ne sont remplaces qu'apres succes
     """
-    from sqlalchemy import delete, select
+    from sqlalchemy import select
 
     from app.models.academic import AcademicYear, Class
     from app.models.timetable import DayOfWeek
 
-    # 1. Settings
     slot_duration, day_start, day_end = await _get_timetable_settings(db)
 
-    # 2. Get class
     cls = (await db.execute(select(Class).where(Class.id == class_id))).scalar_one_or_none()
     if cls is None:
         raise NotFoundError("Class", class_id)
@@ -470,11 +586,8 @@ async def auto_generate(
     ).scalar_one_or_none()
     if current_ay is None:
         raise BusinessValidationError("Aucune année académique courante configurée.")
-    academic_year_id = current_ay.id
 
-    # 3. Matières de la classe, avec l'enseignant résolu pour chacune
     entries = await resolve_class_teachers(db, cls)
-
     if not entries:
         raise BusinessValidationError(
             "Aucune matiere assignee a ce niveau. Assignez des matieres dans le Kanban d'abord."
@@ -488,7 +601,6 @@ async def auto_generate(
             "Complétez « Enseignants de la classe » dans l'emploi du temps."
         )
 
-    # 4. Build assignments data for Celery
     assignments_data = [
         {
             "teacher_id": e.resolved_teacher_id,
@@ -497,8 +609,6 @@ async def auto_generate(
         }
         for e in entries
     ]
-
-    # 5. Day names (English)
     day_names = [
         d.value
         for d in [
@@ -510,83 +620,20 @@ async def auto_generate(
             DayOfWeek.SATURDAY,
         ]
     ]
-
-    # 6. Delete only auto-generated slots
-    del_stmt = delete(TimetableSlot).where(
-        TimetableSlot.class_id == class_id,
-        TimetableSlot.timetable_id.is_not(None),
-    )
-    await db.execute(del_stmt)
-    await db.flush()
-
-    # 7. Load manual slots — convert to block indices
-    from app.utils.timetable_generator import build_blocks
-
-    grid_blocks = build_blocks(day_names, day_start, day_end, slot_duration)
-
-    manual_slots = await repo.list_manual_slots_for_class(db, class_id)
-    manual_fixed_data = []
-    for ms in manual_slots:
-        ms_day = ms.day if isinstance(ms.day, str) else ms.day
-        ms_start_min = ms.start_time.hour * 60 + ms.start_time.minute
-        ms_end_min = ms.end_time.hour * 60 + ms.end_time.minute
-
-        # Find assignment index
-        asg_idx = None
-        for idx, ad in enumerate(assignments_data):
-            if ad["subject_id"] == ms.subject_id and ad["teacher_id"] == ms.teacher_id:
-                asg_idx = idx
-                break
-        if asg_idx is None:
-            continue
-
-        # Find all blocks that this manual slot covers
-        for blk in grid_blocks:
-            if (
-                blk.day == ms_day
-                and blk.start_minutes >= ms_start_min
-                and blk.end_minutes <= ms_end_min
-            ):
-                manual_fixed_data.append({"assignment_idx": asg_idx, "block_idx": blk.index})
-
-    # 8. Cross-class conflicts — convert to block indices
-    teacher_ids = {ad["teacher_id"] for ad in assignments_data}
-    cross_class_blocked: dict[int, list[int]] = {}
-    for tid in teacher_ids:
-        blocked_indices = await repo.get_cross_class_blocked_block_indices(
-            db,
-            tid,
-            class_id,
-            grid_blocks,
-        )
-        if blocked_indices:
-            cross_class_blocked[tid] = list(blocked_indices)
-
-    # 9. Preferred blocks
-    preferred_data: dict[int, list[int]] = {}
-    for tid in teacher_ids:
-        pref = await repo.get_preferred_block_indices(db, tid, grid_blocks)
-        if pref:
-            preferred_data[tid] = list(pref)
-
     await db.commit()
 
-    # 10. Trigger Celery task
     from app.tasks.timetable_tasks import generate_timetable_task
 
     task = generate_timetable_task.delay(
         tenant_id,
         class_id,
-        academic_year_id,
+        current_ay.id,
         assignments_data,
         day_names,
         day_start,
         day_end,
         slot_duration,
         cls.room_id,
-        manual_fixed_data,
-        {str(k): v for k, v in cross_class_blocked.items()},
-        {str(k): v for k, v in preferred_data.items()},
     )
     return GenerateTimetableResponse(task_id=str(task.id))
 
@@ -615,9 +662,6 @@ def trigger_generate(
         17,
         60,  # defaults
         request.room_id,
-        [],
-        {},
-        {},
     )
     return GenerateTimetableResponse(task_id=str(task.id))
 
@@ -639,12 +683,23 @@ def get_task_status(task_id: str) -> TaskStatusResponse:
     }
     status = state_map.get(result.state, "pending")
 
+    if result.state == "FAILURE":
+        return TaskStatusResponse(
+            status=status,
+            message="Une erreur technique a interrompu la génération. "
+            "Le planning précédent est conservé.",
+        )
+
     task_result: list[TimetableSlotResponse] | None = None
+    message: str | None = None
     if result.state == "SUCCESS" and isinstance(result.result, dict):
+        if error := result.result.get("error"):
+            return TaskStatusResponse(status="failed", message=error)
         raw_slots = result.result.get("slots", [])
         task_result = [TimetableSlotResponse(**s) for s in raw_slots]
+        message = result.result.get("warning")
 
-    return TaskStatusResponse(status=status, result=task_result)
+    return TaskStatusResponse(status=status, result=task_result, message=message)
 
 
 # ---------------------------------------------------------------------------
@@ -677,7 +732,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
     _, day_start, day_end = await _get_timetable_settings(db)
 
     # Get all slots for this class
-    slots_raw = await repo.list_slots(db, class_id=class_id)
+    slots_raw = await repo.list_slots(db, class_id=class_id, academic_year_id=ay.id if ay else None)
     slots_data = []
     for s in slots_raw:
         start_t = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
@@ -696,6 +751,23 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
             }
         )
 
+    # The PDF follows the same academic-year boundary as the classroom view.
+    if ay:
+        events = await schedule_event_service.list_events(
+            db, academic_year_id=ay.id, class_id=class_id
+        )
+        for event in events:
+            slots_data.append(
+                {
+                    "day": event.day,
+                    "start_time": event.start_time.strftime("%H:%M"),
+                    "end_time": event.end_time.strftime("%H:%M"),
+                    "subject_name": event.title,
+                    "teacher_name": "",
+                    "room": None,
+                    "subject_color": "school-break" if event.blocks_courses else "school-activity",
+                }
+            )
     class_name = cls.name
     return generate_timetable_pdf(
         slots=slots_data,

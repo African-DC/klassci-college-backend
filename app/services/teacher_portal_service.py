@@ -22,7 +22,7 @@ from app.schemas.teacher_portal import (
     TeacherScheduleSlot,
     TeacherUpcomingEval,
 )
-from app.services import attendance_service
+from app.services import attendance_service, schedule_event_service
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,8 @@ async def get_classes(db: AsyncSession, user_id: int) -> TeacherClassesListRespo
 async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleResponse:
     """Retourne l'emploi du temps personnel de l'enseignant."""
     teacher = await _get_teacher_for_user(db, user_id)
-    slots = await repo.get_teacher_schedule(db, teacher.id)
+    year_id = await admin_repository.get_current_academic_year_id(db)
+    slots = await repo.get_teacher_schedule(db, teacher.id, year_id)
     items = [
         TeacherScheduleSlot(
             id=slot.id,
@@ -69,7 +70,16 @@ async def get_schedule(db: AsyncSession, user_id: int) -> TeacherScheduleRespons
         )
         for slot in slots
     ]
-    return TeacherScheduleResponse(items=items, total=len(items))
+    events_by_id = {}
+    if year_id is not None:
+        for class_id in {slot.class_id for slot in slots}:
+            for event in await schedule_event_service.list_events(
+                db, academic_year_id=year_id, class_id=class_id
+            ):
+                events_by_id[event.id] = event
+    return TeacherScheduleResponse(
+        items=items, total=len(items), events=list(events_by_id.values())
+    )
 
 
 async def get_dashboard_stats(db: AsyncSession, user_id: int) -> TeacherDashboardStats:
