@@ -57,6 +57,7 @@ from app.routers.public_verify import router as public_verify_router
 from app.routers.reports import router as reports_router
 from app.routers.retakes import missed_evaluations_router
 from app.routers.retakes import router as retakes_router
+from app.routers.schedule_events import router as schedule_events_router
 from app.routers.school_life_documents import router as school_life_documents_router
 from app.routers.student_documents import router as student_documents_router
 from app.routers.student_portal import router as student_portal_router
@@ -175,6 +176,7 @@ app.include_router(dren_stats_router)
 app.include_router(super_admin_router)
 app.include_router(support_incidents_router)
 app.include_router(timetable_router)
+app.include_router(schedule_events_router)
 app.include_router(teachers_router)
 app.include_router(availability_router)
 app.include_router(teacher_attendance_admin_router)

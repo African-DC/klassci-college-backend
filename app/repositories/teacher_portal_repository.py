@@ -63,7 +63,9 @@ async def get_teacher_classes(db: AsyncSession, teacher_id: int) -> list[dict]:
     return results
 
 
-async def get_teacher_schedule(db: AsyncSession, teacher_id: int) -> list[TimetableSlot]:
+async def get_teacher_schedule(
+    db: AsyncSession, teacher_id: int, academic_year_id: int | None = None
+) -> list[TimetableSlot]:
     """Retourne les créneaux emploi du temps d'un enseignant."""
     stmt = (
         select(TimetableSlot)
@@ -75,6 +77,8 @@ async def get_teacher_schedule(db: AsyncSession, teacher_id: int) -> list[Timeta
         )
         .order_by(TimetableSlot.day, TimetableSlot.start_time)
     )
+    if academic_year_id is not None:
+        stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

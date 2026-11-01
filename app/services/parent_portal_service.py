@@ -9,7 +9,7 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
 from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.user import Parent, ParentStudent
-from app.repositories import admin_repository
+from app.repositories import admin_repository, timetable_repository
 from app.repositories import parent_portal_repository as repo
 from app.schemas.parent_portal import (
     BulletinDetail,
@@ -33,6 +33,7 @@ from app.services import (
     bulletin_visibility,
     document_release_service,
     fees_paid,
+    schedule_event_service,
 )
 from app.services import fee_entitlements as entitlements
 from app.services.finance_visibility import FinanceView
@@ -403,13 +404,15 @@ async def get_child_timetable(
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
-    enrollment = await repo.get_student_active_enrollment(db, student_id)
+    enrollment = await timetable_repository.get_enrollment_for_student_timetable(db, student_id)
     if enrollment is None:
         raise NotFoundError("Active enrollment not found for student", student_id)
 
     from app.repositories import student_portal_repository as student_repo
 
-    slots = await student_repo.get_timetable_slots_for_class(db, enrollment.class_id)
+    slots = await student_repo.get_timetable_slots_for_class(
+        db, enrollment.class_id, enrollment.academic_year_id
+    )
 
     slot_responses = [
         ChildTimetableSlot(
@@ -429,8 +432,14 @@ async def get_child_timetable(
     ]
 
     class_name = enrollment.class_.name if enrollment.class_ else f"Classe #{enrollment.class_id}"
+    events = await schedule_event_service.list_events(
+        db,
+        academic_year_id=enrollment.academic_year_id,
+        class_id=enrollment.class_id,
+    )
     return ChildTimetableResponse(
         student_id=student_id,
         class_name=class_name,
         slots=slot_responses,
+        events=events,
     )

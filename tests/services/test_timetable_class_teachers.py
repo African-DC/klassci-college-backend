@@ -48,6 +48,7 @@ TABLES = (
     "subject_teachers",
     "class_subject_teachers",
     "timetable_slots",
+    "schedule_events",
     "teacher_availabilities",
     "audit_logs",
 )

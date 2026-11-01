@@ -51,6 +51,9 @@ _COLOR_TOKENS: dict[str, tuple[str, str, str]] = {
     "rose": ("#ffe4e6", "#fda4af", "#9f1239"),
     "pink": ("#fce7f3", "#f9a8d4", "#9d174d"),
     "red": ("#fee2e2", "#fca5a5", "#991b1b"),
+    # School periods: outside the fallback cycle, so no subject can look like a break.
+    "school-break": ("#e2e8f0", "#94a3b8", "#1e293b"),
+    "school-activity": ("#f1f5f9", "#cbd5e1", "#475569"),
 }
 # Ordre de repli (le plus « ciel » d'abord) pour les matières sans couleur.
 _FALLBACK_CYCLE = [
@@ -138,11 +141,15 @@ def _slot_html(
     room = esc(slot.get("room") or "")
     time_str = f"{slot['start_time']}–{slot['end_time']}"
 
-    # L'horaire exact prime sur la salle : les repères de l'axe peuvent
-    # disparaître lorsque plusieurs débuts/fins sont trop proches.
-    lines = [f'<div class="tt-slot-subject">{subject}</div>']
-    if height_px >= 25:
-        lines.append(f'<div class="tt-slot-time">{time_str}</div>')
+    # Exact non-rounded times are always printed, even for 10/15-minute
+    # interruptions where two lines would overflow their real minute height.
+    if height_px < 25:
+        lines = [f'<div class="tt-slot-time">{subject} · {time_str}</div>']
+    else:
+        lines = [
+            f'<div class="tt-slot-subject">{subject}</div>',
+            f'<div class="tt-slot-time">{time_str}</div>',
+        ]
     if height_px >= 37 and teacher:
         lines.append(f'<div class="tt-slot-sub">{teacher}</div>')
     if height_px >= 50 and room:
