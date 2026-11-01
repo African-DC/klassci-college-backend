@@ -184,14 +184,14 @@ async def _generate_async(
             key = (slot.teacher_id, slot.subject_id)
             covered_minutes[key] = covered_minutes.get(key, 0) + end - begin
         required = []
+        exceeded: list[tuple[int, int, int]] = []
         for a in assignments_data:
             key = (a["teacher_id"], a["subject_id"])
-            remaining = a["hours_per_week"] * 60 - covered_minutes.pop(key, 0)
+            weekly = a["hours_per_week"] * 60
+            remaining = weekly - covered_minutes.pop(key, 0)
             if remaining < 0:
-                raise TimetableGenerationError(
-                    "Les cours manuels d'une matière dépassent son volume horaire "
-                    f"hebdomadaire. Retirez-en, puis relancez la génération. {_PLANNING_CONSERVE}"
-                )
+                exceeded.append((a["subject_id"], weekly - remaining, weekly))
+                continue
             required.append(
                 Assignment(
                     teacher_id=a["teacher_id"],
@@ -200,10 +200,9 @@ async def _generate_async(
                     minutes_per_week=remaining,
                 )
             )
-        if covered_minutes:
+        if exceeded or covered_minutes:
             raise TimetableGenerationError(
-                "Un cours manuel porte sur une matière ou un enseignant qui n'est plus "
-                f"celui de la classe. Corrigez ce cours, puis relancez. {_PLANNING_CONSERVE}"
+                await _manual_lessons_refusal(db, exceeded, {s for _, s in covered_minutes})
             )
         assignments, unplanned = plan_assignments(required, slot_duration_minutes)
         grid_blocks = build_blocks(
@@ -322,15 +321,43 @@ def _jour_et_plage(day: str, slot: Any) -> str:
     return f"{_JOURS_FR.get(day, day)} de {begin} à {end}"
 
 
-async def _unplanned_warning(db: AsyncSession, unplanned: list[tuple[int, int]]) -> str:
-    """Name the minutes too short to be scheduled as a lesson of their own."""
+async def _subject_names(db: AsyncSession, subject_ids: set[int]) -> dict[int, str]:
     from sqlalchemy import select
 
     from app.models.academic import Subject
 
-    ids = [subject_id for subject_id, _ in unplanned]
-    rows = await db.execute(select(Subject.id, Subject.name).where(Subject.id.in_(ids)))
-    names = {row.id: row.name for row in rows}
+    rows = await db.execute(select(Subject.id, Subject.name).where(Subject.id.in_(subject_ids)))
+    return {row.id: row.name for row in rows}
+
+
+def _duree(minutes: int) -> str:
+    hours, rest = divmod(minutes, 60)
+    if not hours:
+        return f"{rest} min"
+    return f"{hours} h {rest:02d}" if rest else f"{hours} h"
+
+
+async def _manual_lessons_refusal(
+    db: AsyncSession, exceeded: list[tuple[int, int, int]], orphans: set[int]
+) -> str:
+    """Say which subjects to correct, since the fix is in the administrator's hands."""
+    names = await _subject_names(db, {subject for subject, _, _ in exceeded} | orphans)
+    parts = []
+    if exceeded:
+        details = ", ".join(
+            f"{names.get(subject, 'une matière')} ({_duree(manual)} posées pour {_duree(weekly)})"
+            for subject, manual, weekly in exceeded
+        )
+        parts.append(f"Les cours manuels dépassent le volume horaire : {details}.")
+    if orphans:
+        details = ", ".join(sorted(names.get(subject, "une matière") for subject in orphans))
+        parts.append(f"Des cours manuels n'ont plus le bon enseignant : {details}.")
+    return f"{' '.join(parts)} Corrigez-les, puis relancez la génération. {_PLANNING_CONSERVE}"
+
+
+async def _unplanned_warning(db: AsyncSession, unplanned: list[tuple[int, int]]) -> str:
+    """Name the minutes too short to be scheduled as a lesson of their own."""
+    names = await _subject_names(db, {subject_id for subject_id, _ in unplanned})
     details = ", ".join(f"{names.get(sid, 'une matière')} ({mins} min)" for sid, mins in unplanned)
     return f"Trop court pour faire un cours, à répartir à la main : {details}."
 

@@ -869,7 +869,7 @@ async def export_timetable_pdf(db: AsyncSession, class_id: int) -> bytes:
                     "subject_name": event.title,
                     "teacher_name": "",
                     "room": None,
-                    "subject_color": "amber" if event.blocks_courses else "teal",
+                    "subject_color": "school-break" if event.blocks_courses else "school-activity",
                 }
             )
     class_name = cls.name

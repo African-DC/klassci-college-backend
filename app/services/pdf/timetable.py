@@ -51,6 +51,9 @@ _COLOR_TOKENS: dict[str, tuple[str, str, str]] = {
     "rose": ("#ffe4e6", "#fda4af", "#9f1239"),
     "pink": ("#fce7f3", "#f9a8d4", "#9d174d"),
     "red": ("#fee2e2", "#fca5a5", "#991b1b"),
+    # School periods: outside the fallback cycle, so no subject can look like a break.
+    "school-break": ("#e2e8f0", "#94a3b8", "#1e293b"),
+    "school-activity": ("#f1f5f9", "#cbd5e1", "#475569"),
 }
 # Ordre de repli (le plus « ciel » d'abord) pour les matières sans couleur.
 _FALLBACK_CYCLE = [

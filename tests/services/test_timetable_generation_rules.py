@@ -19,9 +19,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
 from app.models.academic import Class, Subject
-from app.models.timetable import DayOfWeek, Timetable, TimetableSlot
+from app.models.timetable import DayOfWeek, ScheduleEvent, Timetable, TimetableSlot
 from app.models.user import TeacherProfile
-from app.services import timetable_service
+from app.services import schedule_event_service, timetable_service
+from app.services.pdf.timetable import _FALLBACK_CYCLE, _resolve_color
 from app.tasks import timetable_tasks
 from app.tasks.timetable_tasks import TimetableGenerationError, _generate_async
 from app.utils.timetable_generator import (
@@ -326,8 +327,75 @@ async def test_a_manual_lesson_over_quota_is_named_in_french(
         db.add(_slot(time(8, 0), time(11, 0)))
         await db.commit()
 
-    with pytest.raises(TimetableGenerationError, match="dépassent son volume horaire"):
+    with pytest.raises(TimetableGenerationError) as refusal:
         await _generate(hours=2)
+
+    assert "Anglais (3 h posées pour 2 h)" in str(refusal.value)
+    assert "Le planning précédent est conservé" in str(refusal.value)
+
+
+@pytest.mark.asyncio
+async def test_a_manual_lesson_with_another_teacher_names_the_subject(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    other = _slot(time(8, 0), time(9, 0))
+    other.teacher_id = 99
+    async with session_factory() as db:
+        db.add(other)
+        await db.commit()
+
+    with pytest.raises(TimetableGenerationError, match="plus le bon enseignant : Anglais"):
+        await _generate(hours=2)
+
+
+@pytest.mark.asyncio
+async def test_events_are_listed_from_monday_to_saturday(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as db:
+        for day, start in (
+            ("friday", time(10, 0)),
+            ("saturday", time(10, 0)),
+            ("monday", time(15, 0)),
+            ("monday", time(10, 0)),
+            ("wednesday", time(10, 0)),
+        ):
+            db.add(
+                ScheduleEvent(
+                    academic_year_id=YEAR,
+                    class_id=None,
+                    title="Récréation",
+                    category="recess",
+                    blocks_courses=True,
+                    day=day,
+                    start_time=start,
+                    end_time=time(start.hour, 15),
+                )
+            )
+        await db.commit()
+
+    # A fresh session reads the day back from the database, as production does.
+    async with session_factory() as db:
+        events = await schedule_event_service.list_events(db, academic_year_id=YEAR)
+
+    assert [(DayOfWeek(event.day).value, event.start_time.hour) for event in events] == [
+        ("monday", 10),
+        ("monday", 15),
+        ("wednesday", 10),
+        ("friday", 10),
+        ("saturday", 10),
+    ]
+
+
+@pytest.mark.parametrize("subjects", [1, 7, 12, 30])
+def test_no_subject_shares_the_colour_of_a_break(subjects: int) -> None:
+    cache: dict[str, tuple[str, str, str]] = {}
+    pause = _resolve_color("school-break", cache, "Récréation")
+    activity = _resolve_color("school-activity", cache, "Étude")
+    colours = {_resolve_color(None, cache, f"Matière {i}") for i in range(subjects)}
+    colours |= {_resolve_color(token, cache, token) for token in _FALLBACK_CYCLE}
+
+    assert pause not in colours and activity not in colours
 
 
 # --- Ce que le statut de la tâche renvoie à l'écran ---

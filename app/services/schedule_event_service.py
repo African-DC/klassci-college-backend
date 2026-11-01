@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
-from app.models.timetable import ScheduleEvent, TimetableSlot
+from app.models.timetable import DayOfWeek, ScheduleEvent, TimetableSlot
 from app.schemas.schedule_event import ScheduleEventCreate, ScheduleEventResponse
+
+_WEEK_ORDER = {day: position for position, day in enumerate(DayOfWeek)}
 
 
 def _overlap(model, day: str, start: time, end: time):
@@ -37,8 +39,9 @@ async def list_events(db: AsyncSession, *, academic_year_id: int, class_id: int 
                 ScheduleEvent.class_id == class_id,
             )
         )
-    stmt = stmt.order_by(ScheduleEvent.day, ScheduleEvent.start_time)
-    return list((await db.execute(stmt)).scalars().all())
+    # Days are stored as English words: SQL ordering would start on Friday.
+    events = (await db.execute(stmt)).scalars().all()
+    return sorted(events, key=lambda event: (_WEEK_ORDER[DayOfWeek(event.day)], event.start_time))
 
 
 async def _validate_scope(db: AsyncSession, data: ScheduleEventCreate):
