@@ -1,16 +1,18 @@
 """Service portail parent — logique métier lecture seule."""
 
 import logging
+from collections.abc import Iterable
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, PermissionDeniedError
-from app.models.enrollment import EnrollmentStatus
+from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.user import Parent, ParentStudent
-from app.repositories import admin_repository, timetable_repository
+from app.repositories import admin_repository
 from app.repositories import parent_portal_repository as repo
+from app.repositories.enrollment_in_force import in_force_key
 from app.schemas.parent_portal import (
     BulletinDetail,
     ChildBulletinsResponse,
@@ -34,6 +36,7 @@ from app.services import (
     document_release_service,
     fees_paid,
     schedule_event_service,
+    upcoming_enrollment,
 )
 from app.services import fee_entitlements as entitlements
 from app.services.finance_visibility import FinanceView
@@ -67,6 +70,14 @@ async def _verify_child_access(db: AsyncSession, parent_id: int, student_id: int
 # ---------------------------------------------------------------------------
 
 
+def _enrollment_in_force(enrollments: Iterable[Enrollment]) -> Enrollment | None:
+    """L'inscription en vigueur parmi celles déjà chargées avec leur année."""
+    open_ones = [
+        e for e in enrollments if e.status not in (EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE)
+    ]
+    return max(open_ones, key=in_force_key, default=None)
+
+
 async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
     """Liste les enfants du parent avec leur inscription active."""
     parent = await _get_parent_for_user(db, user_id)
@@ -77,14 +88,8 @@ async def list_children(db: AsyncSession, user_id: int) -> ChildrenListResponse:
         student = link.student
         enrollment_info: ChildEnrollmentInfo | None = None
 
-        # Trouver l'inscription active la plus récente
-        active_enrollments = [
-            e
-            for e in student.enrollments
-            if e.status not in (EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE)
-        ]
-        if active_enrollments:
-            active = max(active_enrollments, key=lambda e: e.id)
+        active = _enrollment_in_force(student.enrollments)
+        if active is not None:
             enrollment_info = ChildEnrollmentInfo(
                 enrollment_id=active.id,
                 class_id=active.class_id,
@@ -128,12 +133,7 @@ async def build_child_summaries(db: AsyncSession, parent: Parent) -> list[Parent
         student = link.student
         full_name = f"{student.last_name} {student.first_name}".strip()
 
-        active_enrollments = [
-            e
-            for e in student.enrollments
-            if e.status not in (EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE)
-        ]
-        active = max(active_enrollments, key=lambda e: e.id) if active_enrollments else None
+        active = _enrollment_in_force(student.enrollments)
         class_name = active.class_.name if active and active.class_ else "—"
         ay_id = active.academic_year_id if active else None
 
@@ -226,12 +226,11 @@ async def get_child_grades(
 
 
 async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> ChildFeesResponse:
-    """Retourne les frais d'un enfant pour son inscription active.
+    """Retourne les frais d'un enfant pour l'année en cours.
 
-    Et, à côté, ce qui reste dû sur les autres exercices. Cet écran lit
-    l'inscription la plus récente : le jour de la réinscription, la dette de
-    l'année précédente en sortirait sans qu'un seul chiffre ne devienne faux,
-    et la famille cesserait de la voir — donc de la régler.
+    Et, à côté, ce qui reste dû sur les années passées, puis les frais d'une
+    réinscription à venir. Chaque somme a sa place : la dette passée ne sort
+    pas de l'écran, et l'année qui vient n'est ni un arriéré ni l'année en cours.
     """
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
@@ -247,11 +246,19 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
     # sa propre situation, et cette même réponse lui rend déjà `total_due` et
     # `total_paid`. Aucune permission ne s'interpose ici ; le dire à l'appel
     # vaut mieux que de laisser un défaut le décider en silence.
+    upcoming = (
+        await upcoming_enrollment.find_upcoming_enrollments(
+            db, student_id=student_id, in_force=enrollment
+        )
+        if enrollment
+        else []
+    )
     arrears = await fees_paid.arrears_outside_year(
         db,
         student_id=student_id,
         academic_year_id=enrollment.academic_year_id if enrollment else None,
         finance=FinanceView.INTERNAL,
+        excluded_enrollment_ids={e.id for e in upcoming},
     )
 
     if enrollment is None:
@@ -314,6 +321,7 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
         fees=fees,
         total_due=total_due,
         total_paid=total_paid,
+        upcoming=await upcoming_enrollment.summarize(db, upcoming),
         **arrears,
     )
 
@@ -404,7 +412,7 @@ async def get_child_timetable(
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
-    enrollment = await timetable_repository.get_enrollment_for_student_timetable(db, student_id)
+    enrollment = await repo.get_student_active_enrollment(db, student_id)
     if enrollment is None:
         raise NotFoundError("Active enrollment not found for student", student_id)
 

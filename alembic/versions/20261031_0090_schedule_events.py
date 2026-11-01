@@ -3,8 +3,10 @@
 Revision ID: 0090_schedule_events
 Revises: 0089_support_incidents
 """
-from alembic import op
+
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0090_schedule_events"
 down_revision = "0089_support_incidents"

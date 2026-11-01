@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 from app.models.academic import AcademicYear, Class
 from app.models.enrollment import Enrollment, EnrollmentStatus
-from app.repositories.timetable_repository import get_enrollment_for_student_timetable
+from app.repositories.student_portal_repository import get_active_enrollment_for_student
 
 THIS_YEAR = 1
 NEXT_YEAR = 5
@@ -82,7 +82,7 @@ async def test_a_reenrollment_for_next_year_does_not_replace_the_current_class(
     )
     await db.commit()
 
-    enrollment = await get_enrollment_for_student_timetable(db, STUDENT)
+    enrollment = await get_active_enrollment_for_student(db, STUDENT)
 
     assert enrollment is not None
     assert enrollment.class_id == SIXIEME
@@ -94,7 +94,7 @@ async def test_a_student_only_enrolled_for_next_year_still_has_a_class(db: Async
     db.add(_enrollment(777, CINQUIEME, NEXT_YEAR, EnrollmentStatus.PROSPECT))
     await db.commit()
 
-    enrollment = await get_enrollment_for_student_timetable(db, STUDENT)
+    enrollment = await get_active_enrollment_for_student(db, STUDENT)
 
     assert enrollment is not None
     assert enrollment.class_id == CINQUIEME
@@ -110,7 +110,7 @@ async def test_a_cancelled_current_enrollment_is_ignored(db: AsyncSession) -> No
     )
     await db.commit()
 
-    enrollment = await get_enrollment_for_student_timetable(db, STUDENT)
+    enrollment = await get_active_enrollment_for_student(db, STUDENT)
 
     assert enrollment is not None
     assert enrollment.class_id == CINQUIEME

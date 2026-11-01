@@ -8,8 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.academic import AcademicYear, Room
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.academic import Room
 from app.models.timetable import TeacherAvailability, Timetable, TimetableSlot
 from app.models.user import TeacherProfile
 from app.utils.timetable_days import day_value
@@ -67,28 +66,6 @@ async def list_slots(
         stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     stmt = stmt.order_by(TimetableSlot.day, TimetableSlot.start_time)
     return list((await db.execute(stmt)).scalars().all())
-
-
-async def get_enrollment_for_student_timetable(
-    db: AsyncSession, student_id: int
-) -> Enrollment | None:
-    """The enrollment whose timetable a family should see today.
-
-    A re-enrollment for next year is more recent but not yet in force: the
-    current school year comes first, the latest enrollment only as a fallback.
-    """
-    stmt = (
-        select(Enrollment)
-        .join(Enrollment.academic_year)
-        .where(
-            Enrollment.student_id == student_id,
-            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
-        )
-        .options(selectinload(Enrollment.class_))
-        .order_by(AcademicYear.is_current.desc(), Enrollment.id.desc())
-        .limit(1)
-    )
-    return (await db.execute(stmt)).scalar_one_or_none()
 
 
 async def find_room_conflict(

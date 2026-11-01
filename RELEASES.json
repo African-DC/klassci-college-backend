@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-01T11:09:01Z",
+  "generated_at": "2026-11-01T19:35:01Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1340,6 +1340,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": 551
+          },
           {
             "text": "Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante",
             "audience": [

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.fee import FeeEntitlement
 from app.schemas.schedule_event import ScheduleEventResponse
+from app.schemas.upcoming_enrollment import UpcomingEnrollmentFees
 
 # ---------------------------------------------------------------------------
 # Grades
@@ -96,6 +97,7 @@ class StudentFeesResponse(BaseModel):
     total_paid: Decimal
     balance: Decimal
     fees: list[EnrollmentFeeResponse]
+    upcoming: list[UpcomingEnrollmentFees] = []
 
 
 # ---------------------------------------------------------------------------
