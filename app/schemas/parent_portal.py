@@ -6,6 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.fee import ArrearsOutsideYear, FeeEntitlement
+from app.schemas.schedule_event import ScheduleEventResponse
 from app.schemas.upcoming_enrollment import UpcomingEnrollmentFees
 
 # ---------------------------------------------------------------------------
@@ -203,3 +204,4 @@ class ChildTimetableResponse(BaseModel):
     student_id: int
     class_name: str
     slots: list[ChildTimetableSlot]
+    events: list[ScheduleEventResponse] = Field(default_factory=list)

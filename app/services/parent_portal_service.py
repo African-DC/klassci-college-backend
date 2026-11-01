@@ -35,6 +35,7 @@ from app.services import (
     bulletin_visibility,
     document_release_service,
     fees_paid,
+    schedule_event_service,
     upcoming_enrollment,
 )
 from app.services import fee_entitlements as entitlements
@@ -417,7 +418,9 @@ async def get_child_timetable(
 
     from app.repositories import student_portal_repository as student_repo
 
-    slots = await student_repo.get_timetable_slots_for_class(db, enrollment.class_id)
+    slots = await student_repo.get_timetable_slots_for_class(
+        db, enrollment.class_id, enrollment.academic_year_id
+    )
 
     slot_responses = [
         ChildTimetableSlot(
@@ -437,8 +440,14 @@ async def get_child_timetable(
     ]
 
     class_name = enrollment.class_.name if enrollment.class_ else f"Classe #{enrollment.class_id}"
+    events = await schedule_event_service.list_events(
+        db,
+        academic_year_id=enrollment.academic_year_id,
+        class_id=enrollment.class_id,
+    )
     return ChildTimetableResponse(
         student_id=student_id,
         class_name=class_name,
         slots=slot_responses,
+        events=events,
     )
