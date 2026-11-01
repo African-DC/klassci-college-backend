@@ -6,6 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.fee import ArrearsOutsideYear, FeeEntitlement
+from app.schemas.upcoming_enrollment import UpcomingEnrollmentFees
 
 # ---------------------------------------------------------------------------
 # Children
@@ -146,6 +147,7 @@ class ChildFeesResponse(ArrearsOutsideYear):
     fees: list[FeeDetail]
     total_due: Decimal
     total_paid: Decimal
+    upcoming: UpcomingEnrollmentFees | None = None
 
 
 # ---------------------------------------------------------------------------

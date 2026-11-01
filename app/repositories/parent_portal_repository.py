@@ -8,6 +8,7 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.user import Parent, ParentStudent, Student
+from app.repositories.enrollment_in_force import in_force_order
 
 
 async def get_parent_by_user_id(db: AsyncSession, user_id: int) -> Parent | None:
@@ -66,9 +67,10 @@ async def get_student_grades(
 
 
 async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> Enrollment | None:
-    """Retourne l'inscription active d'un élève avec ses frais et paiements."""
+    """L'inscription en vigueur d'un élève, selon `in_force_order`."""
     stmt = (
         select(Enrollment)
+        .join(Enrollment.academic_year)
         .where(
             Enrollment.student_id == student_id,
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
@@ -83,7 +85,7 @@ async def get_student_active_enrollment(db: AsyncSession, student_id: int) -> En
             # depuis la migration 0028 et plus personne ne la lit. Le détail
             # des versements passe par `fees_paid.payments_by_enrollment_fee`.
         )
-        .order_by(Enrollment.id.desc())
+        .order_by(*in_force_order())
         .limit(1)
     )
     result = await db.execute(stmt)

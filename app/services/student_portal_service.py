@@ -36,6 +36,7 @@ from app.services import (
     bulletin_visibility,
     document_release_service,
     fees_paid,
+    upcoming_enrollment,
 )
 from app.services import fee_entitlements as entitlements
 
@@ -163,11 +164,15 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
             )
         )
 
+    upcoming = await upcoming_enrollment.find_upcoming_enrollments(
+        db, student_id=student.id, in_force=enrollment
+    )
     return StudentFeesResponse(
         total_due=total_due,
         total_paid=total_paid,
         balance=total_remaining,
         fees=fee_responses,
+        upcoming=await upcoming_enrollment.summarize(db, next(iter(upcoming), None)),
     )
 
 

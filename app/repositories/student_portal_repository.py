@@ -9,6 +9,7 @@ from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Student
+from app.repositories.enrollment_in_force import in_force_order
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
@@ -19,9 +20,10 @@ async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | No
 
 
 async def get_active_enrollment_for_student(db: AsyncSession, student_id: int) -> Enrollment | None:
-    """Retourne l'inscription active (non annulee/rejetee) la plus recente."""
+    """Retourne l'inscription en vigueur, selon `in_force_order`."""
     stmt = (
         select(Enrollment)
+        .join(Enrollment.academic_year)
         .where(
             Enrollment.student_id == student_id,
             Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
@@ -30,7 +32,7 @@ async def get_active_enrollment_for_student(db: AsyncSession, student_id: int) -
             selectinload(Enrollment.class_),
             selectinload(Enrollment.academic_year),
         )
-        .order_by(Enrollment.id.desc())
+        .order_by(*in_force_order())
         .limit(1)
     )
     result = await db.execute(stmt)

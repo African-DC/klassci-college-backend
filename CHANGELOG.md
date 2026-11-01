@@ -8,6 +8,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+### Fixed
+- Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
+
 ### Added
 - Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications *(direction, administration)*
 - Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement *(établissements et support KLASSCI)*
