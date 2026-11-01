@@ -12,7 +12,7 @@ from app.models.attendance import AttendanceRecord, AttendanceStatus
 from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.grade import Evaluation, Grade
 from app.models.user import Student
-from app.repositories import admin_repository
+from app.repositories import admin_repository, timetable_repository
 from app.repositories import student_portal_repository as repo
 from app.schemas.student_portal import (
     BulletinResponse,
@@ -85,7 +85,7 @@ async def get_grades(
 async def get_timetable(db: AsyncSession, user_id: int) -> StudentTimetableResponse:
     """Retourne l'emploi du temps de la classe de l'eleve."""
     student = await _get_student_for_user(db, user_id)
-    enrollment = await repo.get_active_enrollment_for_student(db, student.id)
+    enrollment = await timetable_repository.get_enrollment_for_student_timetable(db, student.id)
     if enrollment is None:
         raise NotFoundError("Active enrollment not found for student", student.id)
 

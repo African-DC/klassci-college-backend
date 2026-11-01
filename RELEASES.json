@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-01T08:50:22Z",
+  "generated_at": "2026-11-01T11:09:01Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1340,6 +1340,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante",
+            "audience": [
+              "élève",
+              "parent"
+            ],
+            "pull_request": 547
+          },
           {
             "text": "Génération de l'emploi du temps : plus aucun cours de quelques minutes, la grille garde sa durée quels que soient les cours manuels, un dépassement du temps de calcul n'est plus présenté comme une impossibilité et l'administrateur voit la cause réelle d'un échec",
             "audience": [

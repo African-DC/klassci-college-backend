@@ -9,7 +9,7 @@ from app.core.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enrollment import EnrollmentStatus
 from app.models.fee import cash_remaining, is_not_cash_due
 from app.models.user import Parent, ParentStudent
-from app.repositories import admin_repository
+from app.repositories import admin_repository, timetable_repository
 from app.repositories import parent_portal_repository as repo
 from app.schemas.parent_portal import (
     BulletinDetail,
@@ -404,7 +404,7 @@ async def get_child_timetable(
     parent = await _get_parent_for_user(db, user_id)
     await _verify_child_access(db, parent.id, student_id)
 
-    enrollment = await repo.get_student_active_enrollment(db, student_id)
+    enrollment = await timetable_repository.get_enrollment_for_student_timetable(db, student_id)
     if enrollment is None:
         raise NotFoundError("Active enrollment not found for student", student_id)
 
