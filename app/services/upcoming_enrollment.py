@@ -41,27 +41,27 @@ async def find_upcoming_enrollments(
 
 
 async def summarize(
-    db: AsyncSession, enrollment: Enrollment | None
-) -> UpcomingEnrollmentFees | None:
-    """Les totaux à afficher ; rien tant qu'aucun frais n'est dû en argent."""
-    if enrollment is None:
-        return None
-    paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
-    total_due = Decimal("0.00")
-    total_paid = Decimal("0.00")
-    remaining = Decimal("0.00")
-    for fee in enrollment.enrollment_fees:
-        paid = paid_by_fee.get(fee.id, Decimal("0"))
-        remaining += cash_remaining(fee.status, fee.amount, paid)
-        if not is_not_cash_due(fee.status):
-            total_due += fee.amount
-            total_paid += paid
-    if total_due <= 0:
-        return None
-    return UpcomingEnrollmentFees(
-        academic_year_name=enrollment.academic_year.name,
-        class_name=enrollment.class_.name if enrollment.class_ else None,
-        total_due=total_due,
-        total_paid=total_paid,
-        remaining=remaining,
-    )
+    db: AsyncSession, enrollments: list[Enrollment]
+) -> list[UpcomingEnrollmentFees]:
+    """Une ligne par année à venir où un frais est dû en argent."""
+    lines = []
+    for enrollment in enrollments:
+        paid_by_fee = await fees_paid.paid_by_enrollment(db, enrollment.id)
+        total_due = total_paid = remaining = Decimal("0.00")
+        for fee in enrollment.enrollment_fees:
+            paid = paid_by_fee.get(fee.id, Decimal("0"))
+            remaining += cash_remaining(fee.status, fee.amount, paid)
+            if not is_not_cash_due(fee.status):
+                total_due += fee.amount
+                total_paid += paid
+        if total_due > 0:
+            lines.append(
+                UpcomingEnrollmentFees(
+                    academic_year_name=enrollment.academic_year.name,
+                    class_name=enrollment.class_.name if enrollment.class_ else None,
+                    total_due=total_due,
+                    total_paid=total_paid,
+                    remaining=remaining,
+                )
+            )
+    return lines

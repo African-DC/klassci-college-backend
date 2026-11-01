@@ -37,12 +37,12 @@ THIS_YEAR = 1
 NEXT_YEAR = 5
 YEAR_AFTER = 6
 LAST_YEAR = 9
-REENROLLED = 2
-NOT_REENROLLED = 3
-ONLY_NEXT_YEAR = 4
-WITH_OLD_DEBT = 6
-SKIPPED_THIS_YEAR = 8
-TWO_YEARS_AHEAD = 9
+REENROLLED = 102
+NOT_REENROLLED = 103
+ONLY_NEXT_YEAR = 104
+WITH_OLD_DEBT = 106
+SKIPPED_THIS_YEAR = 108
+TWO_YEARS_AHEAD = 109
 STUDENT_USER = 100
 PARENT_USER = 200
 PARENT = 7
@@ -218,10 +218,11 @@ async def test_a_reenrolled_student_sees_this_years_money(factory) -> None:
         Decimal("142000"),
         Decimal("43000"),
     )
-    assert fees.upcoming is not None
-    assert fees.upcoming.academic_year_name == "2026-2027"
-    assert fees.upcoming.class_name == "5ème A"
-    assert (fees.upcoming.total_due, fees.upcoming.total_paid, fees.upcoming.remaining) == (
+    assert len(fees.upcoming) == 1
+    line = fees.upcoming[0]
+    assert line.academic_year_name == "2026-2027"
+    assert line.class_name == "5ème A"
+    assert (line.total_due, line.total_paid, line.remaining) == (
         Decimal("35000"),
         Decimal("0"),
         Decimal("35000"),
@@ -252,7 +253,7 @@ async def test_a_parent_sees_this_year_and_next_year_apart(factory) -> None:
         fees = await parent_portal_service.get_child_fees(db, PARENT_USER, REENROLLED)
 
     assert (fees.total_due, fees.total_paid) == (Decimal("185000"), Decimal("142000"))
-    assert fees.upcoming is not None and fees.upcoming.remaining == Decimal("35000")
+    assert [line.remaining for line in fees.upcoming] == [Decimal("35000")]
     # Ni ce qui reste de cette année, ni la réinscription : aucune dette passée.
     assert fees.fees_arrears_other_years == Decimal("0")
     assert fees.has_arrears_other_years is False
@@ -265,7 +266,7 @@ async def test_a_real_debt_from_last_year_stays_visible_on_its_own(factory) -> N
 
     assert fees.total_due == Decimal("60000")
     assert fees.fees_arrears_other_years == Decimal("20000")
-    assert fees.upcoming is not None and fees.upcoming.total_due == Decimal("35000")
+    assert [line.total_due for line in fees.upcoming] == [Decimal("35000")]
 
 
 @pytest.mark.asyncio
@@ -288,7 +289,7 @@ async def test_a_family_not_reenrolled_has_nothing_upcoming(factory) -> None:
         fees = await parent_portal_service.get_child_fees(db, PARENT_USER, NOT_REENROLLED)
 
     assert fees.total_due == Decimal("50000")
-    assert fees.upcoming is None
+    assert fees.upcoming == []
 
 
 @pytest.mark.asyncio
@@ -297,7 +298,7 @@ async def test_a_student_only_enrolled_for_next_year_keeps_that_enrollment(facto
         fees = await parent_portal_service.get_child_fees(db, PARENT_USER, ONLY_NEXT_YEAR)
 
     assert fees.total_due == Decimal("35000")
-    assert fees.upcoming is None
+    assert fees.upcoming == []
 
 
 @pytest.mark.asyncio
@@ -306,7 +307,7 @@ async def test_a_year_that_has_not_started_never_replaces_the_last_one(factory) 
         fees = await parent_portal_service.get_child_fees(db, PARENT_USER, SKIPPED_THIS_YEAR)
 
     assert fees.total_due == Decimal("20000")
-    assert fees.upcoming is not None and fees.upcoming.academic_year_name == "2026-2027"
+    assert [line.academic_year_name for line in fees.upcoming] == ["2026-2027"]
     assert fees.fees_arrears_other_years == Decimal("0")
 
 
@@ -316,5 +317,9 @@ async def test_no_future_year_counts_as_arrears(factory) -> None:
         fees = await parent_portal_service.get_child_fees(db, PARENT_USER, TWO_YEARS_AHEAD)
 
     assert fees.total_due == Decimal("50000")
-    assert fees.upcoming is not None and fees.upcoming.academic_year_name == "2026-2027"
+    # Chaque année à venir a sa ligne, la plus proche d'abord : aucun montant ne disparaît.
+    assert [(line.academic_year_name, line.remaining) for line in fees.upcoming] == [
+        ("2026-2027", Decimal("35000")),
+        ("2027-2028", Decimal("10000")),
+    ]
     assert fees.fees_arrears_other_years == Decimal("0")

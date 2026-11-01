@@ -172,7 +172,7 @@ async def get_fees(db: AsyncSession, user_id: int) -> StudentFeesResponse:
         total_paid=total_paid,
         balance=total_remaining,
         fees=fee_responses,
-        upcoming=await upcoming_enrollment.summarize(db, next(iter(upcoming), None)),
+        upcoming=await upcoming_enrollment.summarize(db, upcoming),
     )
 
 

@@ -320,7 +320,7 @@ async def get_child_fees(db: AsyncSession, user_id: int, student_id: int) -> Chi
         fees=fees,
         total_due=total_due,
         total_paid=total_paid,
-        upcoming=await upcoming_enrollment.summarize(db, upcoming[0] if upcoming else None),
+        upcoming=await upcoming_enrollment.summarize(db, upcoming),
         **arrears,
     )
 

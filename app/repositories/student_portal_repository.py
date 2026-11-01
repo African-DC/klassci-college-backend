@@ -4,12 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Student
-from app.repositories.enrollment_in_force import in_force_order
+from app.repositories.enrollment_in_force import get_enrollment_in_force
 
 
 async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | None:
@@ -20,23 +20,13 @@ async def get_student_by_user_id(db: AsyncSession, user_id: int) -> Student | No
 
 
 async def get_active_enrollment_for_student(db: AsyncSession, student_id: int) -> Enrollment | None:
-    """Retourne l'inscription en vigueur, selon `in_force_order`."""
-    stmt = (
-        select(Enrollment)
-        .join(Enrollment.academic_year)
-        .where(
-            Enrollment.student_id == student_id,
-            Enrollment.status.not_in([EnrollmentStatus.ANNULE, EnrollmentStatus.REJETE]),
-        )
-        .options(
-            selectinload(Enrollment.class_),
-            selectinload(Enrollment.academic_year),
-        )
-        .order_by(*in_force_order())
-        .limit(1)
+    """Retourne l'inscription en vigueur, avec sa classe et son année."""
+    return await get_enrollment_in_force(
+        db,
+        student_id,
+        selectinload(Enrollment.class_),
+        selectinload(Enrollment.academic_year),
     )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 async def get_grades_for_student(

@@ -95,7 +95,7 @@ class StudentFeesResponse(BaseModel):
     total_paid: Decimal
     balance: Decimal
     fees: list[EnrollmentFeeResponse]
-    upcoming: UpcomingEnrollmentFees | None = None
+    upcoming: list[UpcomingEnrollmentFees] = []
 
 
 # ---------------------------------------------------------------------------

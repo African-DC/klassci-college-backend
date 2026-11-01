@@ -8,9 +8,6 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-### Fixed
-- Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
-
 ### Added
 - Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications *(direction, administration)*
 - Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement *(établissements et support KLASSCI)*
@@ -18,6 +15,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
 ### Fixed
+- Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
 - Emploi du temps : export PDF sur la plage horaire configurée de l'établissement, repères lisibles sans chevauchement et ordre des noms enseignants identique à l'écran *(direction, secrétariat)*
 - Emploi du temps PDF : les repères horaires rapprochés ne se chevauchent plus, sans décaler les créneaux placés à la minute près *(administration, direction)* (#542)
 - Notifications MailPulse : les envois fournissent la clé d'idempotence exigée par l'API ; les tests manuels et réponses INFO restent renouvelables *(administration, technique)* (#538)

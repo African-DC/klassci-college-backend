@@ -147,7 +147,7 @@ class ChildFeesResponse(ArrearsOutsideYear):
     fees: list[FeeDetail]
     total_due: Decimal
     total_paid: Decimal
-    upcoming: UpcomingEnrollmentFees | None = None
+    upcoming: list[UpcomingEnrollmentFees] = []
 
 
 # ---------------------------------------------------------------------------
