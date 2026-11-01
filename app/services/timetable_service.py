@@ -787,12 +787,23 @@ def get_task_status(task_id: str) -> TaskStatusResponse:
     }
     status = state_map.get(result.state, "pending")
 
+    if result.state == "FAILURE":
+        return TaskStatusResponse(
+            status=status,
+            message="Une erreur technique a interrompu la génération. "
+            "Le planning précédent est conservé.",
+        )
+
     task_result: list[TimetableSlotResponse] | None = None
+    message: str | None = None
     if result.state == "SUCCESS" and isinstance(result.result, dict):
+        if error := result.result.get("error"):
+            return TaskStatusResponse(status="failed", message=error)
         raw_slots = result.result.get("slots", [])
         task_result = [TimetableSlotResponse(**s) for s in raw_slots]
+        message = result.result.get("warning")
 
-    return TaskStatusResponse(status=status, result=task_result)
+    return TaskStatusResponse(status=status, result=task_result, message=message)
 
 
 # ---------------------------------------------------------------------------

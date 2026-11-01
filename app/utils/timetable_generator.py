@@ -7,7 +7,7 @@ des time ranges (start_time, end_time) apres fusion des blocs consecutifs.
 Contraintes dures :
 - Un enseignant ne peut avoir qu'un seul cours par bloc
 - Une classe ne peut avoir qu'un seul cours par bloc
-- Chaque assignation obtient le nombre exact de blocs necessaires
+- Chaque assignation obtient le nombre exact de minutes, sans cours trop court
 - Les indisponibilites enseignant sont respectees
 - Les creneaux manuels existants sont preserves
 - Pas de cours a cheval sur 2 jours (consecutivite intra-journee)
@@ -16,13 +16,14 @@ Contraintes souples :
 - Preferer les creneaux marques "preferred" par les enseignants
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import time
 
 from ortools.sat.python import cp_model
 
 MAX_SOLVER_SECONDS = 30.0
 PREFERRED_BONUS = 10
+MIN_LESSON_MINUTES = 30
 
 
 @dataclass
@@ -33,6 +34,7 @@ class Assignment:
     subject_id: int
     hours_per_week: int  # total hours (integer)
     minutes_per_week: int | None = None  # remaining minutes after manual courses
+    partial: bool = False  # single shorter lesson, placed inside one block
 
 
 @dataclass
@@ -70,6 +72,34 @@ class GeneratorResult:
 
     feasible: bool
     merged_slots: list[MergedSlot] = field(default_factory=list)
+    timed_out: bool = False  # no answer within the time limit, not a proof of impossibility
+
+
+def plan_assignments(
+    required: list[Assignment], slot_duration_minutes: int
+) -> tuple[list[Assignment], list[tuple[int, int]]]:
+    """Split each weekly volume into whole lessons plus at most one shorter lesson.
+
+    The grid keeps its configured duration, whatever a manual lesson leaves over.
+    A remainder too short to be a lesson is returned as (subject_id, minutes)
+    so that the caller reports it instead of scheduling it. A shorter lesson
+    reserves its whole block: the minutes after it stay free, unscheduled.
+    """
+    planned: list[Assignment] = []
+    unplanned: list[tuple[int, int]] = []
+    shortest = min(MIN_LESSON_MINUTES, slot_duration_minutes)
+    for asg in required:
+        total = (
+            asg.minutes_per_week if asg.minutes_per_week is not None else asg.hours_per_week * 60
+        )
+        remainder = total % slot_duration_minutes
+        if total > remainder:
+            planned.append(replace(asg, minutes_per_week=total - remainder))
+        if remainder >= shortest:
+            planned.append(replace(asg, minutes_per_week=remainder, partial=True))
+        elif remainder:
+            unplanned.append((asg.subject_id, remainder))
+    return planned, unplanned
 
 
 def build_blocks(
@@ -83,8 +113,8 @@ def build_blocks(
 
     Each continuous stretch starts at the configured day start or directly at
     the end of a break/manual lesson. Thus 10:15–11:15 is a genuine 60-minute
-    lesson, not a lost 10:00–11:00 block. Short trailing fragments are retained
-    for exact weekly minute totals and penalized by the solver.
+    lesson, not a lost 10:00–11:00 block. Trailing fragments are retained and
+    penalized by the solver, unless they are too short to be a lesson.
     """
     if slot_duration_minutes <= 0 or day_start_hour >= day_end_hour:
         raise ValueError("Invalid timetable grid settings")
@@ -108,7 +138,8 @@ def build_blocks(
         for stop_start, stop_end in [*merged, (upper, upper)]:
             while cursor < stop_start:
                 finish = min(cursor + slot_duration_minutes, stop_start)
-                blocks.append(SlotBlock(day, cursor, finish, day_idx, len(blocks)))
+                if finish - cursor >= min(MIN_LESSON_MINUTES, slot_duration_minutes):
+                    blocks.append(SlotBlock(day, cursor, finish, day_idx, len(blocks)))
                 cursor = finish
             cursor = max(cursor, stop_end)
     return blocks
@@ -168,6 +199,28 @@ def merge_consecutive_blocks(
     return result
 
 
+def join_adjacent_lessons(
+    slots: list[MergedSlot], assignments: list[Assignment]
+) -> list[MergedSlot]:
+    """Show a whole lesson followed by its shorter part as one continuous course."""
+    joined: list[MergedSlot] = []
+    for slot in sorted(slots, key=lambda s: (s.day, s.start_time)):
+        previous = joined[-1] if joined else None
+        if (
+            previous is not None
+            and previous.day == slot.day
+            and previous.end_time == slot.start_time
+            and assignments[previous.assignment_idx].teacher_id
+            == assignments[slot.assignment_idx].teacher_id
+            and assignments[previous.assignment_idx].subject_id
+            == assignments[slot.assignment_idx].subject_id
+        ):
+            previous.end_time = slot.end_time
+        else:
+            joined.append(slot)
+    return joined
+
+
 def solve(
     assignments: list[Assignment],
     blocks: list[SlotBlock],
@@ -224,6 +277,12 @@ def solve(
         )
         if total_minutes < 0:
             return GeneratorResult(feasible=False)
+        if asg.partial:
+            model.add(sum(x[a, b] for b in range(n_b)) == 1)
+            for b, blk in enumerate(blocks):
+                if blk.end_minutes - blk.start_minutes < total_minutes:
+                    model.add(x[a, b] == 0)
+            continue
         model.add(
             sum((blk.end_minutes - blk.start_minutes) * x[a, b] for b, blk in enumerate(blocks))
             == total_minutes
@@ -310,14 +369,23 @@ def solve(
     solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
     status = solver.solve(model)
 
+    if status == cp_model.MODEL_INVALID:
+        raise RuntimeError("CP-SAT rejected the timetable model")
+    if status == cp_model.UNKNOWN:
+        return GeneratorResult(feasible=False, timed_out=True)
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return GeneratorResult(feasible=False)
 
     # Extract and merge results
     all_merged: list[MergedSlot] = []
-    for a in range(n_a):
+    for a, asg in enumerate(assignments):
         assigned_blocks = [b for b in range(n_b) if solver.value(x[a, b])]
         merged = merge_consecutive_blocks(assigned_blocks, blocks, a)
+        if asg.partial and asg.minutes_per_week is not None:
+            start = blocks[assigned_blocks[0]].start_minutes
+            merged[0].end_time = minutes_to_time(start + asg.minutes_per_week)
         all_merged.extend(merged)
 
-    return GeneratorResult(feasible=True, merged_slots=all_merged)
+    return GeneratorResult(
+        feasible=True, merged_slots=join_adjacent_lessons(all_merged, assignments)
+    )

@@ -14,6 +14,12 @@ from app.core.database import current_tenant_id
 
 logger = logging.getLogger(__name__)
 
+_PLANNING_CONSERVE = "Le planning précédent est conservé."
+
+
+class TimetableGenerationError(Exception):
+    """A generation refusal whose message is written for the school administrator."""
+
 
 @celery_app.task(bind=True, name="timetable.generate")  # type: ignore[misc]
 def generate_timetable_task(
@@ -49,7 +55,11 @@ def generate_timetable_task(
                 preferred_blocks=preferred_blocks or {},
             )
         )
-        return {"slots": result}
+        return result
+    except TimetableGenerationError as exc:
+        # An expected refusal: the transaction rolled back, the schedule is intact.
+        logger.warning("Timetable generation refused for class=%s: %s", class_id, exc)
+        return {"slots": [], "error": str(exc)}
     except Exception as exc:
         logger.exception("Timetable generation failed for tenant=%s class=%s", tenant_id, class_id)
         raise exc
@@ -68,7 +78,11 @@ async def _tenant_timetable_session(tenant_id: str) -> AsyncIterator[AsyncSessio
             yield session
     finally:
         if engine is not None:
-            await engine.dispose()
+            try:
+                await engine.dispose()
+            except Exception:
+                # The work is already committed or rolled back: closing must not change the outcome.
+                logger.exception("Could not close the connections of tenant=%s", tenant_id)
         current_tenant_id.reset(token)
 
 
@@ -85,12 +99,14 @@ async def _generate_async(
     manual_fixed: list[dict[str, int]],
     cross_class_blocked: dict[str, list[int]],
     preferred_blocks: dict[str, list[int]],
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     """Corps async de la generation — solveur + persistence."""
     from app.repositories import timetable_repository as repo
     from app.utils.timetable_generator import (
+        MAX_SOLVER_SECONDS,
         Assignment,
         build_blocks,
+        plan_assignments,
         solve,
     )
 
@@ -155,19 +171,28 @@ async def _generate_async(
             begin = slot.start_time.hour * 60 + slot.start_time.minute
             end = slot.end_time.hour * 60 + slot.end_time.minute
             if end <= begin:
-                raise ValueError("Invalid existing manual lesson interval")
+                raise TimetableGenerationError(
+                    f"Le cours manuel du {_jour_et_plage(day, slot)} a une durée invalide. "
+                    f"{_PLANNING_CONSERVE}"
+                )
             if any(a < end and b > begin for a, b in blocked.get(day, [])):
-                raise ValueError("A manual lesson conflicts with a school break")
+                raise TimetableGenerationError(
+                    f"Le cours manuel du {_jour_et_plage(day, slot)} chevauche une pause. "
+                    f"Déplacez-le, puis relancez la génération. {_PLANNING_CONSERVE}"
+                )
             blocked.setdefault(day, []).append((begin, end))
             key = (slot.teacher_id, slot.subject_id)
             covered_minutes[key] = covered_minutes.get(key, 0) + end - begin
-        assignments = []
+        required = []
         for a in assignments_data:
             key = (a["teacher_id"], a["subject_id"])
             remaining = a["hours_per_week"] * 60 - covered_minutes.pop(key, 0)
             if remaining < 0:
-                raise ValueError("Manual lessons exceed the subject's weekly quota")
-            assignments.append(
+                raise TimetableGenerationError(
+                    "Les cours manuels d'une matière dépassent son volume horaire "
+                    f"hebdomadaire. Retirez-en, puis relancez la génération. {_PLANNING_CONSERVE}"
+                )
+            required.append(
                 Assignment(
                     teacher_id=a["teacher_id"],
                     subject_id=a["subject_id"],
@@ -176,17 +201,14 @@ async def _generate_async(
                 )
             )
         if covered_minutes:
-            raise ValueError("A manual lesson is no longer assigned to its teacher and subject")
-        from math import gcd
-
-        # A 90-minute manual lesson may leave a 30-minute quota. Work in the
-        # greatest exact common granularity rather than round 30 minutes away.
-        quantum = slot_duration_minutes
-        for assignment in assignments:
-            remaining = assignment.minutes_per_week or 0
-            if remaining:
-                quantum = gcd(quantum, remaining)
-        grid_blocks = build_blocks(day_names, day_start_hour, day_end_hour, quantum, blocked)
+            raise TimetableGenerationError(
+                "Un cours manuel porte sur une matière ou un enseignant qui n'est plus "
+                f"celui de la classe. Corrigez ce cours, puis relancez. {_PLANNING_CONSERVE}"
+            )
+        assignments, unplanned = plan_assignments(required, slot_duration_minutes)
+        grid_blocks = build_blocks(
+            day_names, day_start_hour, day_end_hour, slot_duration_minutes, blocked
+        )
 
         # Load teacher unavailabilities from DB
         teacher_unavailabilities: dict[int, set[int]] = {}
@@ -220,14 +242,22 @@ async def _generate_async(
         gen_result = solve(
             assignments=assignments,
             blocks=grid_blocks,
-            slot_duration_minutes=quantum,
+            slot_duration_minutes=slot_duration_minutes,
             teacher_unavailabilities=teacher_unavailabilities,
             preferred_blocks=pref if pref else None,
             school_blocked=room_blocked,
         )
+        if gen_result.timed_out:
+            raise TimetableGenerationError(
+                f"Le calcul n'a pas abouti dans le temps imparti ({MAX_SOLVER_SECONDS:.0f} s), "
+                "ce qui ne signifie pas qu'aucun emploi du temps n'existe. Réessayez, ou "
+                f"réduisez les contraintes de cette classe. {_PLANNING_CONSERVE}"
+            )
         if not gen_result.feasible:
-            raise ValueError(
-                "OR-Tools: aucun emploi du temps faisable avec les contraintes donnees"
+            raise TimetableGenerationError(
+                "Aucun emploi du temps ne respecte toutes les contraintes : volume horaire, "
+                "pauses, cours manuels et disponibilités des enseignants et de la salle. "
+                f"{_PLANNING_CONSERVE}"
             )
 
         # Failed solves leave the previous generated schedule untouched.
@@ -265,7 +295,6 @@ async def _generate_async(
             for ms in new_merged
         ]
         created_slots = await repo.create_slots_bulk(db, slots_to_create, timetable.id)
-        await db.commit()
 
         # Build response (include both new and manual slots)
         slot_responses = []
@@ -278,7 +307,32 @@ async def _generate_async(
         for ms in manual_slots:
             slot_responses.append(_slot_to_dict(ms))
 
-        return slot_responses
+        result: dict[str, Any] = {"slots": slot_responses}
+        if unplanned:
+            result["warning"] = await _unplanned_warning(db, unplanned)
+        # Last step: any failure above rolls back, so "schedule kept" stays true.
+        await db.commit()
+        return result
+
+
+def _jour_et_plage(day: str, slot: Any) -> str:
+    from app.services.timetable_service import _JOURS_FR
+
+    begin, end = slot.start_time.strftime("%H:%M"), slot.end_time.strftime("%H:%M")
+    return f"{_JOURS_FR.get(day, day)} de {begin} à {end}"
+
+
+async def _unplanned_warning(db: AsyncSession, unplanned: list[tuple[int, int]]) -> str:
+    """Name the minutes too short to be scheduled as a lesson of their own."""
+    from sqlalchemy import select
+
+    from app.models.academic import Subject
+
+    ids = [subject_id for subject_id, _ in unplanned]
+    rows = await db.execute(select(Subject.id, Subject.name).where(Subject.id.in_(ids)))
+    names = {row.id: row.name for row in rows}
+    details = ", ".join(f"{names.get(sid, 'une matière')} ({mins} min)" for sid, mins in unplanned)
+    return f"Trop court pour faire un cours, à répartir à la main : {details}."
 
 
 def _slot_to_dict(slot: Any) -> dict[str, Any]:
