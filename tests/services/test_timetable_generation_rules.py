@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base
-from app.models.academic import Class, Subject
+from app.models.academic import Class, Room, Subject
 from app.models.timetable import DayOfWeek, ScheduleEvent, Timetable, TimetableSlot
 from app.models.user import TeacherProfile
-from app.services import schedule_event_service, timetable_service
+from app.services import schedule_event_service, timetable_generation, timetable_service
 from app.services.pdf.timetable import _FALLBACK_CYCLE, _resolve_color
 from app.tasks import timetable_tasks
 from app.tasks.timetable_tasks import TimetableGenerationError, _generate_async
@@ -50,7 +50,7 @@ def _duration(slot: MergedSlot) -> int:
 
 def _required(*minutes: int) -> list[Assignment]:
     return [
-        Assignment(teacher_id=i, subject_id=i, hours_per_week=m // 60, minutes_per_week=m)
+        Assignment(teacher_id=i, subject_id=i, minutes_per_week=m)
         for i, m in enumerate(minutes, start=1)
     ]
 
@@ -236,7 +236,9 @@ def _slot(start: time, end: time, *, generated: bool = False) -> TimetableSlot:
     )
 
 
-async def _generate(hours: int = 2, day_end_hour: int = 17) -> dict[str, Any]:
+async def _generate(
+    hours: int = 2, day_end_hour: int = 17, room_id: int | None = None
+) -> dict[str, Any]:
     return await _generate_async(
         tenant_id="local",
         class_id=CLASS_ID,
@@ -246,10 +248,7 @@ async def _generate(hours: int = 2, day_end_hour: int = 17) -> dict[str, Any]:
         day_start_hour=8,
         day_end_hour=day_end_hour,
         slot_duration_minutes=60,
-        room_id=None,
-        manual_fixed=[],
-        cross_class_blocked={},
-        preferred_blocks={},
+        room_id=room_id,
     )
 
 
@@ -271,6 +270,48 @@ async def test_a_55_minute_manual_lesson_names_the_minutes_left_over(
         for s in slots
     )
     assert durations == [55, 60]
+
+
+@pytest.mark.asyncio
+async def test_an_empty_request_never_wipes_the_schedule(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as db:
+        db.add(_slot(time(8, 0), time(9, 0), generated=True))
+        await db.commit()
+
+    with pytest.raises(TimetableGenerationError, match="Aucune matière à planifier"):
+        await _generate_async(
+            tenant_id="local",
+            class_id=CLASS_ID,
+            academic_year_id=YEAR,
+            assignments_data=[],
+            day_names=["monday"],
+            day_start_hour=8,
+            day_end_hour=17,
+            slot_duration_minutes=60,
+            room_id=None,
+        )
+
+    async with session_factory() as db:
+        kept = list((await db.execute(select(TimetableSlot))).scalars().all())
+    assert len(kept) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_subject_fully_covered_by_manual_lessons_still_succeeds(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as db:
+        db.add(_slot(time(8, 0), time(9, 0)))
+        await db.commit()
+
+    result = await _generate(hours=1)
+
+    assert "warning" not in result
+    async with session_factory() as db:
+        slots = list((await db.execute(select(TimetableSlot))).scalars().all())
+    assert [(s.start_time, s.timetable_id) for s in slots] == [(time(8, 0), None)]
 
 
 @pytest.mark.asyncio
@@ -297,7 +338,7 @@ async def test_a_failure_while_finishing_saves_nothing(
     async def fail(*_args: object) -> str:
         raise RuntimeError("database gone")
 
-    monkeypatch.setattr(timetable_tasks, "_unplanned_warning", fail)
+    monkeypatch.setattr(timetable_generation, "_unplanned_warning", fail)
     async with session_factory() as db:
         db.add_all(
             [
@@ -442,3 +483,61 @@ def test_the_leftover_warning_comes_with_a_successful_generation(
     status = _status(monkeypatch, "SUCCESS", {"slots": [], "warning": "Anglais (5 min)"})
     assert status.status == "completed"
     assert status.message == "Anglais (5 min)"
+
+
+def _span(slot: dict[str, Any]) -> int:
+    start_h, start_m = map(int, slot["start_time"].split(":"))
+    end_h, end_m = map(int, slot["end_time"].split(":"))
+    return (end_h * 60 + end_m) - (start_h * 60 + start_m)
+
+
+@pytest.mark.asyncio
+async def test_a_manual_lesson_of_a_previous_year_is_neither_listed_nor_counted(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    previous = _slot(time(8, 0), time(9, 0))
+    previous.academic_year_id = YEAR - 1
+    async with session_factory() as db:
+        db.add(previous)
+        await db.commit()
+
+    result = await _generate(hours=2)
+
+    assert {slot["academic_year_id"] for slot in result["slots"]} == {YEAR}
+    assert sum(_span(slot) for slot in result["slots"]) == 120
+
+
+@pytest.mark.asyncio
+async def test_a_busy_room_is_never_given_to_this_class(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    room_id, other_class = 5, 11
+    async with session_factory() as db:
+        db.add_all(
+            [
+                Room(id=room_id, name="Labo", room_type="laboratory"),
+                Class(id=other_class, name="5eme B", level_id=1, series_id=None),
+            ]
+        )
+        await db.commit()
+        db.add(
+            TimetableSlot(
+                class_id=other_class,
+                teacher_id=99,
+                subject_id=ENGLISH,
+                academic_year_id=YEAR,
+                day=DayOfWeek.MONDAY,
+                start_time=time(8, 0),
+                end_time=time(10, 0),
+                room_id=room_id,
+                timetable_id=None,
+            )
+        )
+        await db.commit()
+
+    result = await _generate(hours=1, room_id=room_id)
+
+    generated = [slot for slot in result["slots"] if slot["class_id"] == CLASS_ID]
+    assert generated
+    assert all(slot["start_time"] >= "10:00" for slot in generated)
+    assert all(slot["room"] == "Labo" for slot in generated)

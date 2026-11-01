@@ -1,6 +1,7 @@
 """Business rules for recurring school breaks and special sessions."""
 
 from datetime import time
+from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,9 @@ from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, ConflictError, NotFoundError
 from app.models.academic import AcademicYear, Class
 from app.models.timetable import DayOfWeek, ScheduleEvent, TimetableSlot
+from app.repositories import timetable_repository as repo
 from app.schemas.schedule_event import ScheduleEventCreate, ScheduleEventResponse
+from app.utils.timetable_days import day_value
 
 _WEEK_ORDER = {day: position for position, day in enumerate(DayOfWeek)}
 
@@ -24,10 +27,19 @@ def _overlap(model, day: str, start: time, end: time):
 
 async def lock_class_scope(db: AsyncSession, class_id: int | None) -> None:
     """Serialize schedule mutations with generation for affected classes."""
-    stmt = select(Class.id).order_by(Class.id).with_for_update()
     if class_id is not None:
-        stmt = stmt.where(Class.id == class_id)
-    await db.execute(stmt)
+        await repo.lock_rows(db, Class, [class_id])
+        return
+    await db.execute(select(Class.id).order_by(Class.id).with_for_update())
+
+
+def _stored_fields(event: ScheduleEvent) -> dict[str, Any]:
+    """The stored event under the same keys and encoding as the audited payload."""
+    fields: dict[str, Any] = {
+        name: getattr(event, name) for name in ScheduleEventCreate.model_fields
+    }
+    fields["day"] = DayOfWeek(event.day)
+    return ScheduleEventCreate.model_construct(**fields).model_dump(mode="json")
 
 
 async def list_events(db: AsyncSession, *, academic_year_id: int, class_id: int | None = None):
@@ -129,15 +141,7 @@ async def save_event(
     if event_id is not None and event is None:
         raise NotFoundError("ScheduleEvent", event_id)
     await _check_event_conflicts(db, data, event_id)
-    before = (
-        None
-        if event is None
-        else {
-            "title": event.title,
-            "start_time": str(event.start_time),
-            "end_time": str(event.end_time),
-        }
-    )
+    before = None if event is None else _stored_fields(event)
     if event is None:
         event = ScheduleEvent(**data.model_dump())
         db.add(event)
@@ -179,23 +183,6 @@ async def remove_event(db: AsyncSession, event_id: int, actor: int):
     await db.commit()
 
 
-def blocked_indices(events: list[ScheduleEvent], grid_blocks: list, class_id: int) -> set[int]:
-    """Exclude any solver block overlapping a blocking period."""
-    result = set()
-    for block in grid_blocks:
-        for event in events:
-            if not event.blocks_courses or (
-                event.class_id is not None and event.class_id != class_id
-            ):
-                continue
-            start = event.start_time.hour * 60 + event.start_time.minute
-            end = event.end_time.hour * 60 + event.end_time.minute
-            if event.day == block.day and block.start_minutes < end and block.end_minutes > start:
-                result.add(block.index)
-                break
-    return result
-
-
 def to_blocked_periods(
     events: list[ScheduleEvent], class_id: int
 ) -> dict[str, list[tuple[int, int]]]:
@@ -204,7 +191,7 @@ def to_blocked_periods(
     for event in events:
         if not event.blocks_courses or (event.class_id is not None and event.class_id != class_id):
             continue
-        day = event.day.value if hasattr(event.day, "value") else event.day
+        day = day_value(event.day)
         start = event.start_time.hour * 60 + event.start_time.minute
         end = event.end_time.hour * 60 + event.end_time.minute
         periods.setdefault(day, []).append((start, end))

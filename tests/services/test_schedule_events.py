@@ -3,12 +3,11 @@
 from datetime import time
 from types import SimpleNamespace
 
-from app.services.schedule_event_service import blocked_indices
+from app.services.schedule_event_service import to_blocked_periods
 from app.utils.timetable_generator import Assignment, build_blocks, solve
 
 
 def test_school_break_blocks_every_partially_overlapping_hour():
-    blocks = build_blocks(["monday"], 8, 12, 60)
     events = [
         SimpleNamespace(
             day="monday",
@@ -18,11 +17,11 @@ def test_school_break_blocks_every_partially_overlapping_hour():
             blocks_courses=True,
         )
     ]
-    assert blocked_indices(events, blocks, 1) == {2}
+    blocks = build_blocks(["monday"], 8, 12, 60, to_blocked_periods(events, 1))
+    assert all(b.end_minutes <= 610 or b.start_minutes >= 625 for b in blocks)
 
 
 def test_class_specific_event_does_not_block_other_class():
-    blocks = build_blocks(["monday"], 8, 12, 60)
     events = [
         SimpleNamespace(
             day="monday",
@@ -32,16 +31,15 @@ def test_class_specific_event_does_not_block_other_class():
             blocks_courses=True,
         )
     ]
-    assert not blocked_indices(events, blocks, 2)
+    assert to_blocked_periods(events, 2) == {}
 
 
 def test_generator_respects_school_break():
-    blocks = build_blocks(["monday"], 8, 12, 60)
+    blocks = build_blocks(["monday"], 8, 12, 60, {"monday": [(540, 600)]})
     result = solve(
-        [Assignment(teacher_id=4, subject_id=7, hours_per_week=2)],
+        [Assignment(teacher_id=4, subject_id=7, minutes_per_week=120)],
         blocks,
         60,
-        school_blocked={1},
     )
     assert result.feasible
     assert all(
@@ -60,7 +58,7 @@ def test_break_restarts_grid_without_losing_full_60_minute_session():
         (735, 780),
     ]
     result = solve(
-        [Assignment(teacher_id=4, subject_id=7, hours_per_week=3)],
+        [Assignment(teacher_id=4, subject_id=7, minutes_per_week=180)],
         blocks,
         60,
     )
@@ -83,7 +81,7 @@ def test_mid_hour_break_preserves_exact_minutes():
     blocks = build_blocks(["monday"], 8, 14, 60, {"monday": [(610, 625)]})
     assert (625, 685) in [(b.start_minutes, b.end_minutes) for b in blocks]
     result = solve(
-        [Assignment(teacher_id=5, subject_id=3, hours_per_week=4)],
+        [Assignment(teacher_id=5, subject_id=3, minutes_per_week=240)],
         blocks,
         60,
     )
@@ -106,7 +104,7 @@ def test_manual_lessons_are_subtracted_without_adding_duplicates():
     blocks = build_blocks(["monday"], 8, 14, 30, {"monday": [(495, 585)]})
     assert all(not (block.start_minutes < 585 and block.end_minutes > 495) for block in blocks)
     result = solve(
-        [Assignment(teacher_id=5, subject_id=3, hours_per_week=3, minutes_per_week=90)],
+        [Assignment(teacher_id=5, subject_id=3, minutes_per_week=90)],
         blocks,
         30,
     )
@@ -124,7 +122,7 @@ def test_manual_lessons_are_subtracted_without_adding_duplicates():
 def test_impossible_minute_capacity_never_silently_rounds_down():
     blocks = build_blocks(["monday"], 8, 10, 60, {"monday": [(540, 570)]})
     result = solve(
-        [Assignment(teacher_id=5, subject_id=3, hours_per_week=2)],
+        [Assignment(teacher_id=5, subject_id=3, minutes_per_week=120)],
         blocks,
         60,
     )
@@ -148,8 +146,6 @@ def test_adjacent_breaks_merge_without_overlap_and_shift_after_pause():
 
 
 def test_excluded_event_only_affects_its_class():
-    from app.services.schedule_event_service import to_blocked_periods
-
     events = [
         SimpleNamespace(
             day="monday",

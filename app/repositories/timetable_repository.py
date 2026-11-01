@@ -1,6 +1,6 @@
 """Repository emploi du temps — accès DB pour TimetableSlot et TeacherAvailability."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import time
 from typing import Any
 
@@ -12,6 +12,22 @@ from app.models.academic import AcademicYear, Room
 from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.timetable import TeacherAvailability, Timetable, TimetableSlot
 from app.models.user import TeacherProfile
+from app.utils.timetable_days import day_value
+from app.utils.timetable_generator import SlotBlock
+
+# ---------------------------------------------------------------------------
+# Locks
+# ---------------------------------------------------------------------------
+
+
+async def lock_rows(db: AsyncSession, model: Any, ids: Iterable[int]) -> None:
+    """Lock rows by id, in ascending id order. Callers lock families in a fixed order."""
+    wanted = sorted(set(ids))
+    if not wanted:
+        return
+    stmt = select(model.id).where(model.id.in_(wanted)).order_by(model.id).with_for_update()
+    await db.execute(stmt)
+
 
 # ---------------------------------------------------------------------------
 # TimetableSlot — lecture
@@ -101,31 +117,24 @@ async def find_room_conflict(
     return (await db.execute(stmt)).scalars().first()
 
 
-async def get_room_blocked_block_indices(
+async def get_room_busy_periods(
     db: AsyncSession,
     room_id: int,
     class_id: int,
     academic_year_id: int,
-    blocks: list,
-) -> set[int]:
+) -> dict[str, list[tuple[int, int]]]:
+    """Day intervals, in minutes, when the room hosts another class in the year."""
     stmt = select(TimetableSlot).where(
         TimetableSlot.room_id == room_id,
         TimetableSlot.class_id != class_id,
         TimetableSlot.academic_year_id == academic_year_id,
     )
-    existing = list((await db.execute(stmt)).scalars().all())
-    result: set[int] = set()
-    for blk in blocks:
-        start = time(blk.start_minutes // 60, blk.start_minutes % 60)
-        end = time(blk.end_minutes // 60, blk.end_minutes % 60)
-        if any(
-            (s.day.value if hasattr(s.day, "value") else s.day) == blk.day
-            and s.start_time < end
-            and s.end_time > start
-            for s in existing
-        ):
-            result.add(blk.index)
-    return result
+    busy: dict[str, list[tuple[int, int]]] = {}
+    for slot in (await db.execute(stmt)).scalars().all():
+        start = slot.start_time.hour * 60 + slot.start_time.minute
+        end = slot.end_time.hour * 60 + slot.end_time.minute
+        busy.setdefault(day_value(slot.day), []).append((start, end))
+    return busy
 
 
 # ---------------------------------------------------------------------------
@@ -435,7 +444,7 @@ async def find_teacher_unavailability(
     """Ce qui, dans les plages declarees, empeche ce creneau.
 
     La table se lit en liste blanche, exactement comme le generateur
-    automatique la lit deja (`get_unavailable_slot_indices`) et comme la grille
+    automatique la lit deja (`get_unavailable_block_indices`) et comme la grille
     de la fiche enseignant l'affiche : tant qu'un enseignant n'a rien declare,
     il est reponse disponible partout ; des qu'il a declare quelque chose, seul
     ce qui est marque disponible l'est. Deux lectures differentes de la meme
@@ -510,113 +519,20 @@ async def delete_teacher_availability(db: AsyncSession, av: TeacherAvailability)
     await db.flush()
 
 
-async def get_unavailable_slot_indices(
-    db: AsyncSession,
-    teacher_id: int,
-    available_slots: list[dict[str, Any]],
-) -> set[int]:
-    """Retourne les indices des creneaux ou l'enseignant est indisponible.
-
-    Un creneau est considere indisponible si AUCUNE TeacherAvailability
-    avec available=True ne le couvre. Si le prof n'a declare aucune dispo,
-    on suppose qu'il est disponible partout (pas de blocage).
-    """
-    # Check if teacher has ANY availability declarations
-    if not await a_declare_des_ouvertures(db, teacher_id):
-        # No declarations = teacher available everywhere
-        return set()
-
-    # Load available entries (available=True means teacher CAN work)
-    stmt = select(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
-        TeacherAvailability.available.is_(True),
-    )
-    availabilities = list((await db.execute(stmt)).scalars().all())
-
-    # Slots NOT covered by any available entry are blocked
-    blocked: set[int] = set()
-    for idx, slot in enumerate(available_slots):
-        slot_day = slot["day"]
-        slot_start = slot["start_time"]
-        slot_end = slot["end_time"]
-        du_jour = [a for a in availabilities if a.day == slot_day]
-        if not couvre_entierement(du_jour, slot_start, slot_end):
-            blocked.add(idx)
-    return blocked
-
-
-async def get_preferred_slot_indices(
-    db: AsyncSession,
-    teacher_id: int,
-    available_slots: list,
-) -> set[int]:
-    """Retourne les indices des creneaux preferes par l'enseignant."""
-    stmt = select(TeacherAvailability).where(
-        TeacherAvailability.teacher_id == teacher_id,
-        TeacherAvailability.preferred.is_(True),
-    )
-    preferred = list((await db.execute(stmt)).scalars().all())
-
-    indices: set[int] = set()
-    for idx, slot in enumerate(available_slots):
-        slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = _to_time(
-            slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
-        )
-        slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
-        for pref in preferred:
-            if pref.day == slot_day and pref.start_time <= slot_start and pref.end_time >= slot_end:
-                indices.add(idx)
-                break
-    return indices
-
-
-def _to_time(v: Any) -> time:
-    """Convertit une str 'HH:MM' ou un datetime.time en time."""
-    if isinstance(v, time):
-        return v
-    if isinstance(v, str):
-        h, m = v.split(":")
-        return time(int(h), int(m))
-    return v
-
-
-async def get_cross_class_blocked_slots(
-    db: AsyncSession,
-    teacher_id: int,
-    exclude_class_id: int,
-    available_slots: list,
-) -> set[int]:
-    """Retourne les indices des creneaux ou le prof est deja occupe dans une AUTRE classe."""
-    stmt = select(TimetableSlot).where(
-        TimetableSlot.teacher_id == teacher_id,
-        TimetableSlot.class_id != exclude_class_id,
-    )
-    existing = list((await db.execute(stmt)).scalars().all())
-
-    blocked: set[int] = set()
-    for idx, slot in enumerate(available_slots):
-        slot_day = slot.day.value if hasattr(slot.day, "value") else slot["day"]
-        slot_start = _to_time(
-            slot.start_time if hasattr(slot, "start_time") else slot["start_time"]
-        )
-        slot_end = _to_time(slot.end_time if hasattr(slot, "end_time") else slot["end_time"])
-        for ex in existing:
-            ex_day = ex.day if isinstance(ex.day, str) else ex.day
-            if ex_day == slot_day and ex.start_time < slot_end and ex.end_time > slot_start:
-                blocked.add(idx)
-                break
-    return blocked
-
-
 async def list_manual_slots_for_class(
     db: AsyncSession,
     class_id: int,
+    *,
+    academic_year_id: int,
 ) -> list[TimetableSlot]:
-    """Retourne les creneaux manuels (timetable_id IS NULL) d'une classe."""
+    """Retourne les creneaux manuels (timetable_id IS NULL) d'une classe pour une annee."""
     stmt = (
         select(TimetableSlot)
-        .where(TimetableSlot.class_id == class_id, TimetableSlot.timetable_id.is_(None))
+        .where(
+            TimetableSlot.class_id == class_id,
+            TimetableSlot.academic_year_id == academic_year_id,
+            TimetableSlot.timetable_id.is_(None),
+        )
         .options(*_slot_load_options())
     )
     return list((await db.execute(stmt)).scalars().all())
@@ -630,7 +546,7 @@ async def list_manual_slots_for_class(
 async def get_unavailable_block_indices(
     db: AsyncSession,
     teacher_id: int,
-    blocks: list,
+    blocks: list[SlotBlock],
 ) -> set[int]:
     """Retourne les indices de blocs ou le prof est indisponible."""
     # Explicit closures block only their own intervals. Opening windows turn
@@ -662,7 +578,7 @@ async def get_unavailable_block_indices(
 async def get_preferred_block_indices(
     db: AsyncSession,
     teacher_id: int,
-    blocks: list,
+    blocks: list[SlotBlock],
 ) -> set[int]:
     """Retourne les indices de blocs preferes par le prof."""
     stmt = select(TeacherAvailability).where(
@@ -686,7 +602,7 @@ async def get_cross_class_blocked_block_indices(
     db: AsyncSession,
     teacher_id: int,
     exclude_class_id: int,
-    blocks: list,
+    blocks: list[SlotBlock],
     academic_year_id: int | None = None,
 ) -> set[int]:
     """Block teacher overlaps in the requested academic year only."""
@@ -703,8 +619,7 @@ async def get_cross_class_blocked_block_indices(
         blk_start = time(blk.start_minutes // 60, blk.start_minutes % 60)
         blk_end = time(blk.end_minutes // 60, blk.end_minutes % 60)
         for ex in existing:
-            ex_day = ex.day if isinstance(ex.day, str) else ex.day
-            if ex_day == blk.day and ex.start_time < blk_end and ex.end_time > blk_start:
+            if day_value(ex.day) == blk.day and ex.start_time < blk_end and ex.end_time > blk_start:
                 blocked.add(blk.index)
                 break
     return blocked

@@ -37,10 +37,6 @@ class ScheduleEventCreate(BaseModel):
         return self
 
 
-class ScheduleEventUpdate(ScheduleEventCreate):
-    pass
-
-
 class ScheduleEventResponse(ScheduleEventCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int

@@ -9,7 +9,6 @@ Contraintes dures :
 - Une classe ne peut avoir qu'un seul cours par bloc
 - Chaque assignation obtient le nombre exact de minutes, sans cours trop court
 - Les indisponibilites enseignant sont respectees
-- Les creneaux manuels existants sont preserves
 - Pas de cours a cheval sur 2 jours (consecutivite intra-journee)
 
 Contraintes souples :
@@ -25,6 +24,8 @@ MAX_SOLVER_SECONDS = 30.0
 PREFERRED_BONUS = 10
 MIN_LESSON_MINUTES = 30
 
+XVars = dict[tuple[int, int], cp_model.IntVar]
+
 
 @dataclass
 class Assignment:
@@ -32,8 +33,7 @@ class Assignment:
 
     teacher_id: int
     subject_id: int
-    hours_per_week: int  # total hours (integer)
-    minutes_per_week: int | None = None  # remaining minutes after manual courses
+    minutes_per_week: int
     partial: bool = False  # single shorter lesson, placed inside one block
 
 
@@ -46,14 +46,6 @@ class SlotBlock:
     end_minutes: int
     day_index: int  # 0=Monday, 1=Tuesday, etc.
     index: int  # global index in the flat list
-
-
-@dataclass
-class FixedBlock:
-    """Bloc fixe (slot manuel) — doit etre conserve."""
-
-    assignment_idx: int
-    block_idx: int
 
 
 @dataclass
@@ -89,9 +81,7 @@ def plan_assignments(
     unplanned: list[tuple[int, int]] = []
     shortest = min(MIN_LESSON_MINUTES, slot_duration_minutes)
     for asg in required:
-        total = (
-            asg.minutes_per_week if asg.minutes_per_week is not None else asg.hours_per_week * 60
-        )
+        total = asg.minutes_per_week
         remainder = total % slot_duration_minutes
         if total > remainder:
             planned.append(replace(asg, minutes_per_week=total - remainder))
@@ -226,57 +216,62 @@ def solve(
     blocks: list[SlotBlock],
     slot_duration_minutes: int,
     teacher_unavailabilities: dict[int, set[int]] | None = None,
-    fixed_blocks: list[FixedBlock] | None = None,
     preferred_blocks: dict[int, set[int]] | None = None,
-    school_blocked: set[int] | None = None,
 ) -> GeneratorResult:
     """Lance le solveur CP-SAT avec granularite configurable.
 
     Args:
-        assignments: liste d'assignations prof-matiere-heures
+        assignments: liste d'assignations prof-matiere avec leurs minutes hebdomadaires
         blocks: grille de blocs (construite par build_blocks)
         slot_duration_minutes: duree d'un bloc en minutes
         teacher_unavailabilities: teacher_id -> set d'indices bloques
-        fixed_blocks: blocs manuels a conserver
         preferred_blocks: teacher_id -> set d'indices preferes
 
     Returns:
         GeneratorResult avec merged_slots (creneaux fusionnes prets pour la DB).
     """
     if not assignments or not blocks:
-        return GeneratorResult(
-            feasible=not any(
-                (a.minutes_per_week if a.minutes_per_week is not None else a.hours_per_week * 60)
-                > 0
-                for a in assignments
-            )
-        )
+        return GeneratorResult(feasible=not any(a.minutes_per_week > 0 for a in assignments))
+    if any(a.minutes_per_week < 0 for a in assignments):
+        return GeneratorResult(feasible=False)
 
     model = cp_model.CpModel()
-    n_a = len(assignments)
-    n_b = len(blocks)
+    n_a, n_b = len(assignments), len(blocks)
 
     # Variables booleennes x[a, b] = 1 si l'assignation a est placee au bloc b
-    x: dict[tuple[int, int], cp_model.IntVar] = {}
-    for a in range(n_a):
-        for b in range(n_b):
-            x[a, b] = model.new_bool_var(f"x_{a}_{b}")
+    x: XVars = {(a, b): model.new_bool_var(f"x_{a}_{b}") for a in range(n_a) for b in range(n_b)}
 
-    # ----- Hard constraints -----
+    _add_volume_constraints(model, x, assignments, blocks)
+    _add_class_and_teacher_limits(model, x, assignments, n_b)
+    _add_teacher_unavailability(model, x, assignments, teacher_unavailabilities, n_b)
+    _add_segment_contiguity(model, x, n_a, blocks)
+    _add_objective(model, x, assignments, blocks, slot_duration_minutes, preferred_blocks)
 
-    # Fix manual blocks
-    if fixed_blocks:
-        for fb in fixed_blocks:
-            if 0 <= fb.assignment_idx < n_a and 0 <= fb.block_idx < n_b:
-                model.add(x[fb.assignment_idx, fb.block_idx] == 1)
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
+    status = solver.solve(model)
 
-    # Every minute required by each subject must be scheduled, never rounded.
+    if status == cp_model.MODEL_INVALID:
+        raise RuntimeError("CP-SAT rejected the timetable model")
+    if status == cp_model.UNKNOWN:
+        return GeneratorResult(feasible=False, timed_out=True)
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return GeneratorResult(feasible=False)
+
+    merged = _extract_slots(solver, x, assignments, blocks)
+    return GeneratorResult(feasible=True, merged_slots=join_adjacent_lessons(merged, assignments))
+
+
+def _add_volume_constraints(
+    model: cp_model.CpModel,
+    x: XVars,
+    assignments: list[Assignment],
+    blocks: list[SlotBlock],
+) -> None:
+    """Every minute required by each subject must be scheduled, never rounded."""
+    n_b = len(blocks)
     for a, asg in enumerate(assignments):
-        total_minutes = (
-            asg.minutes_per_week if asg.minutes_per_week is not None else asg.hours_per_week * 60
-        )
-        if total_minutes < 0:
-            return GeneratorResult(feasible=False)
+        total_minutes = asg.minutes_per_week
         if asg.partial:
             model.add(sum(x[a, b] for b in range(n_b)) == 1)
             for b, blk in enumerate(blocks):
@@ -288,47 +283,62 @@ def solve(
             == total_minutes
         )
 
-    # School events are hard constraints independent of teachers and subjects.
-    for b in school_blocked or set():
-        if 0 <= b < n_b:
-            for a in range(n_a):
-                model.add(x[a, b] == 0)
 
-    # C2: class has at most 1 course per block
+def _add_class_and_teacher_limits(
+    model: cp_model.CpModel,
+    x: XVars,
+    assignments: list[Assignment],
+    n_b: int,
+) -> None:
+    """A class, and each teacher, has at most one course per block."""
+    n_a = len(assignments)
     for b in range(n_b):
         model.add(sum(x[a, b] for a in range(n_a)) <= 1)
 
-    # C3: teacher has at most 1 course per block
-    teacher_ids = {asg.teacher_id for asg in assignments}
-    for tid in teacher_ids:
+    for tid in {asg.teacher_id for asg in assignments}:
         teacher_asgs = [a for a, asg in enumerate(assignments) if asg.teacher_id == tid]
         for b in range(n_b):
             model.add(sum(x[a, b] for a in teacher_asgs) <= 1)
 
-    # C4: teacher unavailabilities
-    if teacher_unavailabilities:
-        for a, asg in enumerate(assignments):
-            blocked = teacher_unavailabilities.get(asg.teacher_id, set())
-            for b in blocked:
-                if b < n_b:
-                    model.add(x[a, b] == 0)
 
-    # A subject may resume after a real school interruption. Within each
-    # uninterrupted teaching segment, keep at most one continuous course run.
+def _add_teacher_unavailability(
+    model: cp_model.CpModel,
+    x: XVars,
+    assignments: list[Assignment],
+    teacher_unavailabilities: dict[int, set[int]] | None,
+    n_b: int,
+) -> None:
+    if not teacher_unavailabilities:
+        return
+    for a, asg in enumerate(assignments):
+        for b in teacher_unavailabilities.get(asg.teacher_id, set()):
+            if b < n_b:
+                model.add(x[a, b] == 0)
+
+
+def _segments(blocks: list[SlotBlock]) -> dict[tuple[int, int], list[int]]:
+    """Group block indices into uninterrupted teaching segments, numbered within each day."""
     segments: dict[tuple[int, int], list[int]] = {}
-    for b, block in enumerate(blocks):
-        previous = blocks[b - 1] if b > 0 else None
-        if (
-            previous is None
-            or previous.day_index != block.day_index
-            or previous.end_minutes != block.start_minutes
-        ):
-            segment_number = (
-                0
-                if previous is None or previous.day_index != block.day_index
-                else max(key[1] for key in segments if key[0] == block.day_index) + 1
-            )
-        segments.setdefault((block.day_index, segment_number), []).append(b)
+    number = 0
+    previous: SlotBlock | None = None
+    for index, block in enumerate(blocks):
+        if previous is None or previous.day_index != block.day_index:
+            number = 0
+        elif previous.end_minutes != block.start_minutes:
+            number += 1
+        segments.setdefault((block.day_index, number), []).append(index)
+        previous = block
+    return segments
+
+
+def _add_segment_contiguity(
+    model: cp_model.CpModel,
+    x: XVars,
+    n_a: int,
+    blocks: list[SlotBlock],
+) -> None:
+    """A subject may resume after a real interruption, but runs once per segment."""
+    segments = _segments(blocks)
     for a in range(n_a):
         for segment_indices in segments.values():
             starts = []
@@ -344,12 +354,18 @@ def solve(
                 starts.append(started)
             model.add(sum(starts) <= 1)
 
-    # ----- Soft constraints (objective) -----
-    objective_terms: list = []
 
-    # Avoid isolated tiny courses whenever whole lessons can satisfy the
-    # requested minutes. This is a preference, not a loss of teaching minutes.
-    for a in range(n_a):
+def _add_objective(
+    model: cp_model.CpModel,
+    x: XVars,
+    assignments: list[Assignment],
+    blocks: list[SlotBlock],
+    slot_duration_minutes: int,
+    preferred_blocks: dict[int, set[int]] | None,
+) -> None:
+    """Avoid tiny isolated courses and prefer the teachers' chosen blocks."""
+    objective_terms: list = []
+    for a in range(len(assignments)):
         for b, blk in enumerate(blocks):
             if blk.end_minutes - blk.start_minutes < slot_duration_minutes:
                 objective_terms.append((PREFERRED_BONUS * 5) * x[a, b])
@@ -357,35 +373,27 @@ def solve(
     if preferred_blocks:
         for a, asg in enumerate(assignments):
             pref = preferred_blocks.get(asg.teacher_id, set())
-            for b in range(n_b):
+            for b in range(len(blocks)):
                 if b in pref:
                     objective_terms.append(-PREFERRED_BONUS * x[a, b])
 
     if objective_terms:
         model.minimize(sum(objective_terms))
 
-    # Solve
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = MAX_SOLVER_SECONDS
-    status = solver.solve(model)
 
-    if status == cp_model.MODEL_INVALID:
-        raise RuntimeError("CP-SAT rejected the timetable model")
-    if status == cp_model.UNKNOWN:
-        return GeneratorResult(feasible=False, timed_out=True)
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return GeneratorResult(feasible=False)
-
-    # Extract and merge results
+def _extract_slots(
+    solver: cp_model.CpSolver,
+    x: XVars,
+    assignments: list[Assignment],
+    blocks: list[SlotBlock],
+) -> list[MergedSlot]:
     all_merged: list[MergedSlot] = []
+    n_b = len(blocks)
     for a, asg in enumerate(assignments):
         assigned_blocks = [b for b in range(n_b) if solver.value(x[a, b])]
         merged = merge_consecutive_blocks(assigned_blocks, blocks, a)
-        if asg.partial and asg.minutes_per_week is not None:
+        if asg.partial:
             start = blocks[assigned_blocks[0]].start_minutes
             merged[0].end_time = minutes_to_time(start + asg.minutes_per_week)
         all_merged.extend(merged)
-
-    return GeneratorResult(
-        feasible=True, merged_slots=join_adjacent_lessons(all_merged, assignments)
-    )
+    return all_merged
