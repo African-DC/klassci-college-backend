@@ -307,13 +307,14 @@ def test_le_service_d_inscription_n_expose_plus_de_suppression_a_part() -> None:
 def test_le_motif_ne_voyage_plus_dans_l_url() -> None:
     """Une URL finit dans les journaux d'accès du serveur et chez les
     intermédiaires : « exclu pour vol » n'a rien à y faire."""
+    from fastapi.routing import iter_route_contexts
+
     from app.main import app
 
     routes = [
         r
-        for r in app.routes
-        if getattr(r, "path", None) == "/enrollments/{enrollment_id}"
-        and "DELETE" in getattr(r, "methods", set())
+        for r in iter_route_contexts(app.routes)
+        if r.path == "/enrollments/{enrollment_id}" and "DELETE" in (r.methods or set())
     ]
     assert len(routes) == 1
     noms = {p.name for p in routes[0].dependant.query_params}
