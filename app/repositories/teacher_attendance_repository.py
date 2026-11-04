@@ -23,8 +23,8 @@ def _full_load_options() -> list[Any]:
     """Chaîne selectinload utilisée par tout GET retournant un response Pydantic."""
     return [
         selectinload(TeacherSessionAttendance.teacher),
-        selectinload(TeacherSessionAttendance.slot).selectinload(TimetableSlot.subject),
-        selectinload(TeacherSessionAttendance.slot).selectinload(TimetableSlot.class_),
+        selectinload(TeacherSessionAttendance.class_),
+        selectinload(TeacherSessionAttendance.subject),
         selectinload(TeacherSessionAttendance.academic_year),
         selectinload(TeacherSessionAttendance.declared_by),
         selectinload(TeacherSessionAttendance.validated_by),
@@ -136,13 +136,14 @@ async def count_pending_validation(
 # ---------------------------------------------------------------------------
 
 
-async def slot_belongs_to_teacher(db: AsyncSession, slot_id: int, teacher_id: int) -> bool:
-    stmt = select(TimetableSlot.id).where(
+async def get_teacher_slot(db: AsyncSession, slot_id: int, teacher_id: int) -> TimetableSlot | None:
+    """Le créneau, s'il appartient bien à cet enseignant."""
+    stmt = select(TimetableSlot).where(
         TimetableSlot.id == slot_id,
         TimetableSlot.teacher_id == teacher_id,
     )
     result = await db.execute(stmt)
-    return result.scalar_one_or_none() is not None
+    return result.scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------

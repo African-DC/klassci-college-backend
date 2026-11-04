@@ -24,7 +24,7 @@ from app.core.database import Base
 from app.models.base import TimestampMixin, ValueEnum
 
 if TYPE_CHECKING:
-    from app.models.academic import AcademicYear
+    from app.models.academic import AcademicYear, Class, Subject
     from app.models.timetable import TimetableSlot
     from app.models.user import Student, TeacherProfile, User
 
@@ -171,6 +171,20 @@ class TeacherSessionAttendance(Base, TimestampMixin):
         index=True,
     )
 
+    # Le cours tel qu'il était au moment du pointage. Le créneau n'est que le
+    # plan : régénérer ou modifier l'emploi du temps le supprime ou le
+    # réécrit, et `slot_id` passe alors à NULL. Ces colonnes gardent la
+    # classe, la matière et l'horaire de la séance pointée. NULL pour une
+    # absence hors emploi du temps.
+    class_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("classes.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    subject_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("subjects.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    planned_start: Mapped[time | None] = mapped_column(Time, nullable=True)
+    planned_end: Mapped[time | None] = mapped_column(Time, nullable=True)
+
     # Quoi
     status: Mapped[str] = mapped_column(
         ValueEnum(TeacherAttendanceStatus, name="teacher_attendance_status"),
@@ -198,6 +212,8 @@ class TeacherSessionAttendance(Base, TimestampMixin):
 
     teacher: Mapped[TeacherProfile] = relationship(foreign_keys=[teacher_id])
     slot: Mapped[TimetableSlot | None] = relationship(foreign_keys=[slot_id])
+    class_: Mapped[Class | None] = relationship(foreign_keys=[class_id])
+    subject: Mapped[Subject | None] = relationship(foreign_keys=[subject_id])
     academic_year: Mapped[AcademicYear] = relationship()
     declared_by: Mapped[User] = relationship(foreign_keys=[declared_by_user_id])
     validated_by: Mapped[User | None] = relationship(foreign_keys=[validated_by_user_id])
