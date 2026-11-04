@@ -18,9 +18,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
-import app.models  # noqa: F401  (enregistre toutes les tables)
-from app.core.database import Base
 from app.core.db_errors import integrity_error_message
+from app.models.attendance import AttendanceContext, AttendanceRecord, TeacherSessionAttendance
 
 URL = os.environ.get("DATABASE_URL", "")
 DEMANDE = os.environ.get("CI") == "true" or os.environ.get("RUN_MYSQL_TESTS") == "1"
@@ -46,6 +45,11 @@ LIGNES = {
         "academic_year_id": 1,
     },
     "attendance_records": {"context_id": 1, "student_id": 10},
+}
+TABLES = {
+    "teacher_session_attendance": TeacherSessionAttendance.__table__,
+    "attendance_contexts": AttendanceContext.__table__,
+    "attendance_records": AttendanceRecord.__table__,
 }
 CONTRAINTES = {
     "teacher_session_attendance": "uq_teacher_attendance_slot_date",
@@ -75,7 +79,7 @@ def conn() -> Iterator[Connection]:
 
 @pytest.mark.parametrize("table", sorted(LIGNES))
 def test_mysql_refuse_la_seconde_ligne_identique(conn: Connection, table: str) -> None:
-    insertion = Base.metadata.tables[table].insert()
+    insertion = TABLES[table].insert()
     conn.execute(insertion, LIGNES[table])
     point = conn.begin_nested()
 
@@ -90,7 +94,7 @@ def test_mysql_refuse_la_seconde_ligne_identique(conn: Connection, table: str) -
 
 
 def test_mysql_laisse_passer_deux_absences_sans_creneau(conn: Connection) -> None:
-    insertion = Base.metadata.tables["teacher_session_attendance"].insert()
+    insertion = TeacherSessionAttendance.__table__.insert()
     sans_creneau = {**LIGNES["teacher_session_attendance"], "slot_id": None}
 
     conn.execute(insertion, sans_creneau)
