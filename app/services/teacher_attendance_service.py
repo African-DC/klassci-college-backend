@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import AuditAction, audit_log
 from app.core.exceptions import BusinessValidationError, NotFoundError
 from app.models.attendance import TeacherAttendanceStatus, TeacherSessionAttendance
+from app.models.timetable import TimetableSlot
 from app.models.user import TeacherProfile
 from app.repositories import teacher_attendance_repository as repo
 from app.schemas.teacher_attendance import (
@@ -34,31 +35,37 @@ from app.schemas.teacher_attendance import (
 # ---------------------------------------------------------------------------
 
 
+_JOURS_FR = ("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche")
+
+
 def _slot_summary(att: TeacherSessionAttendance) -> str | None:
-    """Compose un libellé lisible 'Lundi 10h-11h Maths 6ème B'."""
-    if att.slot is None:
+    """Libellé du cours pointé, 'Lundi 10:00-11:00 Maths 6ème B'.
+
+    Lu sur le pointage, pas sur le créneau : le créneau peut avoir été
+    supprimé ou déplacé depuis, le cours pointé reste celui du jour.
+    """
+    if att.planned_start is None or att.planned_end is None:
         return None
-    s = att.slot
-    day_fr = {
-        "monday": "Lundi",
-        "tuesday": "Mardi",
-        "wednesday": "Mercredi",
-        "thursday": "Jeudi",
-        "friday": "Vendredi",
-        "saturday": "Samedi",
-        "sunday": "Dimanche",
-    }
-    day = day_fr.get(s.day, s.day or "")
-    start = s.start_time if isinstance(s.start_time, str) else s.start_time.strftime("%H:%M")
-    end = s.end_time if isinstance(s.end_time, str) else s.end_time.strftime("%H:%M")
-    subject_name = s.subject.name if getattr(s, "subject", None) else ""
-    class_name = s.class_.name if getattr(s, "class_", None) else ""
-    parts = [day, f"{start}-{end}"]
-    if subject_name:
-        parts.append(subject_name)
-    if class_name:
-        parts.append(class_name)
-    return " ".join(parts).strip()
+    parts = [
+        _JOURS_FR[att.date.weekday()],
+        f"{att.planned_start:%H:%M}-{att.planned_end:%H:%M}",
+    ]
+    if att.subject is not None:
+        parts.append(att.subject.name)
+    if att.class_ is not None:
+        parts.append(att.class_.name)
+    return " ".join(parts)
+
+
+async def _resolve_slot(
+    db: AsyncSession, slot_id: int | None, teacher_id: int, refusal: str
+) -> TimetableSlot | None:
+    if slot_id is None:
+        return None
+    slot = await repo.get_teacher_slot(db, slot_id, teacher_id)
+    if slot is None:
+        raise BusinessValidationError(refusal)
+    return slot
 
 
 def _to_response(att: TeacherSessionAttendance) -> TeacherAttendanceResponse:
@@ -114,12 +121,12 @@ async def record_attendance(
         raise NotFoundError("TeacherProfile", teacher_id)
 
     # 2. Validation : slot (si fourni) appartient au teacher
-    if data.slot_id is not None:
-        belongs = await repo.slot_belongs_to_teacher(db, data.slot_id, teacher_id)
-        if not belongs:
-            raise BusinessValidationError(
-                "Le créneau EDT sélectionné n'appartient pas à cet enseignant."
-            )
+    slot = await _resolve_slot(
+        db,
+        data.slot_id,
+        teacher_id,
+        "Le créneau EDT sélectionné n'appartient pas à cet enseignant.",
+    )
 
     # 3. Doublon (teacher, slot, date) : la contrainte uq_teacher_attendance_slot_date
     #    tranche, même entre deux requêtes simultanées ; le gestionnaire global
@@ -136,7 +143,13 @@ async def record_attendance(
     now = datetime.utcnow()
     att = TeacherSessionAttendance(
         teacher_id=teacher_id,
-        slot_id=data.slot_id,
+        # Le cours tel que le créneau le décrit aujourd'hui : le pointage le
+        # garde si le créneau est ensuite supprimé ou déplacé.
+        slot_id=slot.id if slot else None,
+        class_id=slot.class_id if slot else None,
+        subject_id=slot.subject_id if slot else None,
+        planned_start=slot.start_time if slot else None,
+        planned_end=slot.end_time if slot else None,
         date=data.date,
         academic_year_id=ay.id,
         status=TeacherAttendanceStatus(data.status),
@@ -188,12 +201,12 @@ async def self_declare(
     if teacher is None:
         raise BusinessValidationError("Aucun profil enseignant trouvé pour cet utilisateur.")
 
-    if data.slot_id is not None:
-        belongs = await repo.slot_belongs_to_teacher(db, data.slot_id, teacher.id)
-        if not belongs:
-            raise BusinessValidationError(
-                "Le créneau EDT sélectionné n'appartient pas à votre emploi du temps."
-            )
+    slot = await _resolve_slot(
+        db,
+        data.slot_id,
+        teacher.id,
+        "Le créneau EDT sélectionné n'appartient pas à votre emploi du temps.",
+    )
 
     ay = await repo.get_current_academic_year(db)
     if ay is None:
@@ -201,7 +214,13 @@ async def self_declare(
 
     att = TeacherSessionAttendance(
         teacher_id=teacher.id,
-        slot_id=data.slot_id,
+        # Le cours tel que le créneau le décrit aujourd'hui : le pointage le
+        # garde si le créneau est ensuite supprimé ou déplacé.
+        slot_id=slot.id if slot else None,
+        class_id=slot.class_id if slot else None,
+        subject_id=slot.subject_id if slot else None,
+        planned_start=slot.start_time if slot else None,
+        planned_end=slot.end_time if slot else None,
         date=data.date,
         academic_year_id=ay.id,
         status=TeacherAttendanceStatus(data.status),

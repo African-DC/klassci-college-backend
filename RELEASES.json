@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-04T06:31:47Z",
+  "generated_at": "2026-11-04T07:01:40Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1340,6 +1340,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Pointage enseignant : un pointage garde la classe, la matière et l'horaire du cours pointé, même après une régénération ou une modification de l'emploi du temps",
+            "audience": [
+              "administration",
+              "enseignant"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi",
             "audience": [
