@@ -121,14 +121,9 @@ async def record_attendance(
                 "Le créneau EDT sélectionné n'appartient pas à cet enseignant."
             )
 
-    # 3. Validation : pas de doublon (teacher, slot, date) si slot fourni
-    if data.slot_id is not None:
-        existing = await repo.exists_for(db, teacher_id, data.slot_id, data.date)
-        if existing is not None:
-            raise BusinessValidationError(
-                "Un pointage existe déjà pour ce créneau à cette date. "
-                "Modifiez-le ou supprimez-le d'abord."
-            )
+    # 3. Doublon (teacher, slot, date) : la contrainte uq_teacher_attendance_slot_date
+    #    tranche, même entre deux requêtes simultanées ; le gestionnaire global
+    #    d'IntegrityError répond 409 avec le message de app/core/db_errors.py.
 
     # 4. Résoudre l'AY courante
     ay = await repo.get_current_academic_year(db)
@@ -199,9 +194,6 @@ async def self_declare(
             raise BusinessValidationError(
                 "Le créneau EDT sélectionné n'appartient pas à votre emploi du temps."
             )
-        existing = await repo.exists_for(db, teacher.id, data.slot_id, data.date)
-        if existing is not None:
-            raise BusinessValidationError("Vous avez déjà déclaré ce créneau à cette date.")
 
     ay = await repo.get_current_academic_year(db)
     if ay is None:

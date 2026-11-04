@@ -146,30 +146,6 @@ async def slot_belongs_to_teacher(db: AsyncSession, slot_id: int, teacher_id: in
 
 
 # ---------------------------------------------------------------------------
-# Unique constraint helper (1 row par teacher+slot+date)
-# ---------------------------------------------------------------------------
-
-
-async def exists_for(
-    db: AsyncSession, teacher_id: int, slot_id: int | None, the_date: date_type
-) -> TeacherSessionAttendance | None:
-    """Retourne la row existante (teacher, slot, date) si présente. Sinon None.
-
-    Pour `slot_id IS NULL` (absence hors EDT), on accepte plusieurs rows par
-    teacher+date (réunion + congé maladie sur même jour possible).
-    """
-    if slot_id is None:
-        return None  # pas d'unicité sans slot
-    stmt = select(TeacherSessionAttendance).where(
-        TeacherSessionAttendance.teacher_id == teacher_id,
-        TeacherSessionAttendance.slot_id == slot_id,
-        TeacherSessionAttendance.date == the_date,
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-# ---------------------------------------------------------------------------
 # Current AY helper
 # ---------------------------------------------------------------------------
 

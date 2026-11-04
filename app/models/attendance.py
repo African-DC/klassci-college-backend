@@ -6,7 +6,18 @@ import enum
 from datetime import date, datetime, time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    Time,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -40,6 +51,10 @@ class AttendanceContext(Base, TimestampMixin):
     """Contexte de présence : séance de cours ou examen."""
 
     __tablename__ = "attendance_contexts"
+    # Un seul appel par classe (ou examen) et par jour.
+    __table_args__ = (
+        UniqueConstraint("entity_type", "context_id", "date", name="uq_attendance_context_day"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     entity_type: Mapped[str] = mapped_column(
@@ -61,6 +76,9 @@ class AttendanceRecord(Base, TimestampMixin):
     """Enregistrement de présence d'un élève."""
 
     __tablename__ = "attendance_records"
+    __table_args__ = (
+        UniqueConstraint("context_id", "student_id", name="uq_attendance_record_student"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     context_id: Mapped[int] = mapped_column(
@@ -124,6 +142,11 @@ class TeacherSessionAttendance(Base, TimestampMixin):
     """
 
     __tablename__ = "teacher_session_attendance"
+    # MySQL ne compare pas les NULL entre eux : plusieurs absences hors EDT
+    # (slot_id NULL) restent possibles le même jour, comme le veut le métier.
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "slot_id", "date", name="uq_teacher_attendance_slot_date"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 

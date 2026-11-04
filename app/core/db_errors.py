@@ -48,6 +48,20 @@ _COMPOSITE_MESSAGES = {
         "Ce versement impute deux fois le même frais. Rien n'a été enregistré. "
         "Ce n'est pas une erreur de saisie : signalez-le au support."
     ),
+    # Deux saisies du même cours arrivées presque ensemble : la seconde n'a
+    # rien ajouté, la première est déjà enregistrée.
+    "uq_teacher_attendance_slot_date": (
+        "Un pointage existe déjà pour ce créneau à cette date. "
+        "Rechargez la page pour le voir, puis modifiez-le si besoin."
+    ),
+    "uq_attendance_context_day": (
+        "L'appel de ce jour est déjà enregistré pour cette classe. "
+        "Rechargez la page et modifiez-le au lieu d'en créer un second."
+    ),
+    "uq_attendance_record_student": (
+        "Un élève figure deux fois dans cet appel. Rien n'a été enregistré : "
+        "rechargez la liste de la classe et recommencez."
+    ),
     # Les six dimensions de l'index, énumérées en entier. En oublier une
     # envoie l'école chercher son doublon là où il n'est pas : elle relit cinq
     # colonnes identiques, conclut qu'il n'y a pas de doublon, et recommence.

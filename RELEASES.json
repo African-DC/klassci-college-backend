@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-01T19:35:01Z",
+  "generated_at": "2026-11-04T06:31:47Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1340,6 +1340,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi",
+            "audience": [
+              "enseignant",
+              "administration"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante",
             "audience": [
