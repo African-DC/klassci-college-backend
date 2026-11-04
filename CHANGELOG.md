@@ -15,6 +15,9 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Matières : un niveau peut désormais avoir plusieurs enseignants pour une même matière *(admin, direction des études)*
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
+### Changed
+- Portail enseignant : un remplaçant ouvre les classes du collègue absent pendant son congé, un enseignant affecté voit sa classe avant l'emploi du temps, et une classe de l'an dernier n'apparaît plus *(enseignant)*
+
 ### Fixed
 - Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi *(enseignant, administration)*
 - Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
