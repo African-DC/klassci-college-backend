@@ -29,6 +29,13 @@ class AttendanceRecordInput(BaseModel):
         return v
 
 
+def _one_record_per_student(records: list[AttendanceRecordInput]) -> list[AttendanceRecordInput]:
+    ids = [r.student_id for r in records]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Un élève figure deux fois dans l'appel.")
+    return records
+
+
 class SessionCreate(BaseModel):
     """Create attendance session with records for all students."""
 
@@ -53,11 +60,21 @@ class SessionCreate(BaseModel):
             raise ValueError("must be a positive integer")
         return v
 
+    @field_validator("records")
+    @classmethod
+    def one_record_per_student(cls, v: list[AttendanceRecordInput]) -> list[AttendanceRecordInput]:
+        return _one_record_per_student(v)
+
 
 class SessionUpdate(BaseModel):
     """Update attendance records in a session."""
 
     records: list[AttendanceRecordInput]
+
+    @field_validator("records")
+    @classmethod
+    def one_record_per_student(cls, v: list[AttendanceRecordInput]) -> list[AttendanceRecordInput]:
+        return _one_record_per_student(v)
 
 
 class AttendanceRecordResponse(BaseModel):
