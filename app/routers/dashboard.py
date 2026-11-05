@@ -14,6 +14,7 @@ from app.models.fee import EnrollmentFee, EnrollmentFeeStatus
 from app.models.grade import Evaluation, Grade
 from app.models.timetable import DayOfWeek, TimetableSlot
 from app.models.user import StaffProfile, Student, TeacherProfile, User
+from app.repositories.enrollment_headcount import counted_in_headcount, current_year_enrollment
 from app.schemas.admin import AdminSummaryResponse
 from app.services import admin_service
 
@@ -61,21 +62,21 @@ async def get_dashboard_stats(
     validated_sq = (
         select(func.count())
         .select_from(Enrollment)
-        .where(Enrollment.status == EnrollmentStatus.VALIDE)
+        .where(counted_in_headcount())
         .correlate(None)
         .scalar_subquery()
     )
     prospect_sq = (
         select(func.count())
         .select_from(Enrollment)
-        .where(Enrollment.status == EnrollmentStatus.PROSPECT)
+        .where(current_year_enrollment(EnrollmentStatus.PROSPECT))
         .correlate(None)
         .scalar_subquery()
     )
     pending_enroll_sq = (
         select(func.count())
         .select_from(Enrollment)
-        .where(Enrollment.status == EnrollmentStatus.EN_VALIDATION)
+        .where(current_year_enrollment(EnrollmentStatus.EN_VALIDATION))
         .correlate(None)
         .scalar_subquery()
     )
@@ -119,7 +120,9 @@ async def get_dashboard_stats(
     pending_enroll = row.pending_enroll or 0
 
     return DashboardStatsResponse(
-        enrolled_students=validated + prospect + pending_enroll,
+        # L'effectif déclaré : les dossiers en validation et les prospects
+        # ne sont pas encore des élèves inscrits (voir enrollment_headcount).
+        enrolled_students=validated,
         pending_payments=row.pending or 0,
         courses_today=row.courses or 0,
         alerts=row.alerts or 0,

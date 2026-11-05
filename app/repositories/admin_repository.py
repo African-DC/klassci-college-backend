@@ -10,6 +10,7 @@ from app.models.enrollment import Enrollment, EnrollmentStatus
 from app.models.permission import Permission, Role, RolePermission, UserRole
 from app.models.subject_teacher import SubjectTeacher
 from app.models.user import Parent, ParentStudent, StaffProfile, Student, TeacherProfile, User
+from app.repositories.enrollment_headcount import counted_in_headcount
 from app.repositories.subject_teacher_repository import count_instances_without_teacher
 from app.utils.fuzzy_search import fuzzy_filter_by_name
 
@@ -216,13 +217,6 @@ async def get_students_filters(db: AsyncSession) -> dict:
     }
 
 
-_ACTIVE_ENROLLMENT = (
-    EnrollmentStatus.PROSPECT,
-    EnrollmentStatus.EN_VALIDATION,
-    EnrollmentStatus.VALIDE,
-)
-
-
 def _nonempty(col: object) -> object:
     """Prédicat 'colonne texte renseignée' (non NULL et non vide)."""
     return and_(col.isnot(None), col != "")  # type: ignore[union-attr]
@@ -245,16 +239,14 @@ async def get_admin_summary(db: AsyncSession) -> dict:
             Enrollment.class_id.label("class_id"),
             func.count(Enrollment.id).label("ec"),
         )
-        .where(Enrollment.status.in_(_ACTIVE_ENROLLMENT))
+        .where(counted_in_headcount())
         .group_by(Enrollment.class_id)
         .subquery()
     )
     classes = {
         "total": await _scalar(select(func.count(Class.id))),
         "capacity": await _scalar(select(func.coalesce(func.sum(Class.max_students), 0))),
-        "enrolled": await _scalar(
-            select(func.count(Enrollment.id)).where(Enrollment.status.in_(_ACTIVE_ENROLLMENT))
-        ),
+        "enrolled": await _scalar(select(func.count(Enrollment.id)).where(counted_in_headcount())),
         "full": await _scalar(
             select(func.count(Class.id))
             .select_from(Class)

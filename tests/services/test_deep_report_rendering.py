@@ -18,6 +18,7 @@ from app.services.deep_report._types import (
     simple_headers,
 )
 from app.services.pdf import _deep_report_parts as parts
+from app.services.pdf import components as ui
 from app.services.pdf.theme import PDFTheme
 
 _THEME = PDFTheme.from_school({"school_name": "Lycée test"})
@@ -128,3 +129,29 @@ def test_page_de_garde_reprend_l_entete_officiel():
     assert "1er trimestre" in html
     assert "Lycée Saint-Augustin" in html
     assert "CI-0421" in html
+
+
+def test_lignes_rayees_sans_selecteur_nth_child() -> None:
+    """Le rapport DEEP raye ses lignes par classe : `nth-child` coûtait 87 s de rendu."""
+    table = ReportTable(
+        number=7,
+        title="Liste",
+        groups=simple_headers("Élève", "Moyenne"),
+        rows=(
+            ReportRow(cells=("A", "12")),
+            ReportRow(cells=("B", "11")),
+            ReportRow(cells=("C", "10")),
+            ReportRow(cells=("TOTAL", "11"), emphasis=True),
+        ),
+    )
+    html = parts.table_html(table, theme=_THEME)
+    rows = html.split("<tr")[1:]
+    body = [r for r in rows if "<td" in r]
+
+    assert [('class="alt"' in r) for r in body] == [False, True, False, False]
+    assert 'class="total-row"' in body[-1]
+
+    styles = ui.base_styles(_THEME, zebra_selector=False)
+    assert "nth-child" not in styles
+    assert "tr.alt td" in styles
+    assert "nth-child(even)" in ui.base_styles(_THEME)
