@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-05T21:56:04Z",
+  "generated_at": "2026-11-05T22:19:57Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1345,6 +1345,21 @@
             "audience": [
               "direction",
               "administration"
+            ],
+            "pull_request": 564
+          },
+          {
+            "text": "Tableau de bord et classes : « élèves inscrits » compte désormais les seules inscriptions validées de l'année en cours, comme les statistiques DREN",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": 564
+          },
+          {
+            "text": "Rapport DEEP de fin de trimestre généré environ deux fois plus vite",
+            "audience": [
+              "direction"
             ],
             "pull_request": 564
           },
