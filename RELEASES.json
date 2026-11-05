@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-04T06:31:47Z",
+  "generated_at": "2026-11-05T21:56:04Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1340,6 +1340,14 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": 564
+          },
           {
             "text": "Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi",
             "audience": [

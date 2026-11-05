@@ -16,6 +16,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
 ### Fixed
+- Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports *(direction, administration)* (#564)
 - Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi *(enseignant, administration)*
 - Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
 - Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante *(élève, parent)* (#547)

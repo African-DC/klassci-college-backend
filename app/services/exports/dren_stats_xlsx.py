@@ -62,6 +62,7 @@ def generate_dren_stats_xlsx(data: Any) -> bytes:
         ("Effectif total", data.total_students),
         ("Garçons", data.male_count),
         ("Filles", data.female_count),
+        ("Sexe non renseigné", data.unspecified_count),
         ("Taux de réussite", _pct(data.success_rate)),
         ("Taux d'échec", _pct(data.failure_rate)),
         ("Taux de redoublement", _pct(data.redoublement_rate)),
@@ -78,13 +79,21 @@ def generate_dren_stats_xlsx(data: Any) -> bytes:
 
     # --- Feuille 2 : Niveaux & classes ---------------------------------------
     ws2 = wb.create_sheet("Niveaux & classes")
-    headers = ["Niveau", "Classe", "Effectif", "Garçons", "Filles", "Moyenne /20"]
+    headers = ["Niveau", "Classe", "Effectif", "Garçons", "Filles", "Non renseigné", "Moyenne /20"]
     ws2.append(headers)
     _style_header(ws2, 1, len(headers))
     for lvl in data.levels:
         if not lvl.classes:
             ws2.append(
-                [lvl.level_name, "—", lvl.total_students, lvl.male_count, lvl.female_count, "—"]
+                [
+                    lvl.level_name,
+                    "—",
+                    lvl.total_students,
+                    lvl.male_count,
+                    lvl.female_count,
+                    lvl.unspecified_count,
+                    "—",
+                ]
             )
             continue
         for cls in lvl.classes:
@@ -95,6 +104,7 @@ def generate_dren_stats_xlsx(data: Any) -> bytes:
                     cls.total_students,
                     cls.male_count,
                     cls.female_count,
+                    cls.unspecified_count,
                     _num(cls.average),
                 ]
             )
@@ -104,12 +114,13 @@ def generate_dren_stats_xlsx(data: Any) -> bytes:
         data.total_students,
         data.male_count,
         data.female_count,
+        data.unspecified_count,
         "",
     ]
     ws2.append(total_row)
     for col in range(1, len(headers) + 1):
         ws2.cell(row=ws2.max_row, column=col).font = _TOTAL_FONT
-    _autosize(ws2, [18, 20, 12, 12, 12, 14])
+    _autosize(ws2, [18, 20, 12, 12, 12, 16, 14])
 
     # --- Feuille 3 : Matières -------------------------------------------------
     ws3 = wb.create_sheet("Matières")
