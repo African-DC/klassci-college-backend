@@ -26,6 +26,15 @@ def current_year_enrollment(*statuses: EnrollmentStatus) -> ColumnElement[bool]:
     )
 
 
+def headcount_for_year(academic_year_id: int) -> ColumnElement[bool]:
+    """L'effectif d'une année donnée : inscriptions validées et non archivées."""
+    return and_(
+        Enrollment.academic_year_id == academic_year_id,
+        Enrollment.archived_at.is_(None),
+        Enrollment.status == EnrollmentStatus.VALIDE,
+    )
+
+
 def counted_in_headcount() -> ColumnElement[bool]:
-    """L'effectif : ce que le tableau de bord, les classes et le DREN appellent « inscrits »."""
+    """L'effectif de l'année en cours : tableau de bord et page des classes."""
     return current_year_enrollment(EnrollmentStatus.VALIDE)

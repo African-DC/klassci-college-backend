@@ -8,10 +8,11 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import AcademicYear, Class, Level, Subject
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Genre, Student
+from app.repositories.enrollment_headcount import headcount_for_year
 
 
 async def get_academic_year(db: AsyncSession, academic_year_id: int) -> AcademicYear | None:
@@ -40,11 +41,7 @@ async def get_enrollment_counts_by_level(
         .join(Class, Class.level_id == Level.id)
         .join(Enrollment, Enrollment.class_id == Class.id)
         .join(Student, Student.id == Enrollment.student_id)
-        .where(
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.archived_at.is_(None),
-            Enrollment.status == EnrollmentStatus.VALIDE,
-        )
+        .where(headcount_for_year(academic_year_id))
         .group_by(Level.id, Level.name, Level.order)
         .order_by(Level.order)
     )
@@ -83,11 +80,7 @@ async def get_enrollment_counts_by_class(
         .join(Enrollment, Enrollment.class_id == Class.id)
         .join(Student, Student.id == Enrollment.student_id)
         .outerjoin(bulletin_avg_sq, bulletin_avg_sq.c.class_id == Class.id)
-        .where(
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.archived_at.is_(None),
-            Enrollment.status == EnrollmentStatus.VALIDE,
-        )
+        .where(headcount_for_year(academic_year_id))
         .group_by(Class.id, Class.name, Class.level_id, bulletin_avg_sq.c.class_avg)
         .order_by(Class.name)
     )
