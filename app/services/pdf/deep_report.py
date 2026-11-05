@@ -34,7 +34,7 @@ def generate_deep_report_pdf(report: DeepReport, school: dict[str, Any]) -> byte
     <html lang="fr">
     <head>
         <meta charset="UTF-8">
-        {ui.base_styles(theme, page_size="A4 landscape", margin="11mm 10mm")}
+        {ui.base_styles(theme, page_size="A4 landscape", margin="11mm 10mm", zebra_selector=False)}
         {parts.extra_styles()}
     </head>
     <body>
