@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-06T13:12:53Z",
+  "generated_at": "2026-11-06T20:36:48Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1348,6 +1348,13 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Tâches en arrière-plan (notifications, tâches planifiées) de nouveau démarrées après la dernière mise à jour",
+            "audience": [
+              "devops"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau ; elle restait vide pour tous les comptes",
             "audience": [
