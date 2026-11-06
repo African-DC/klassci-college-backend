@@ -29,8 +29,13 @@ router = APIRouter(tags=["installments"])
 # ce qu'une famille doit encore. Toutes caisses ou aucun solde : jamais un
 # faux retard construit avec le seul guichet du lecteur.
 ScheduleState = Literal[
-    "all", "late", "on_track", "settled", "unconfigured",
-    "partial_schedule", "no_fees",
+    "all",
+    "late",
+    "on_track",
+    "settled",
+    "unconfigured",
+    "partial_schedule",
+    "no_fees",
 ]
 
 
@@ -51,8 +56,13 @@ async def get_school_schedules(
 ) -> ScheduleOverviewResponse:
     """Même assiette et mêmes règles de retard que l'échéancier individuel."""
     return await overview(
-        db, academic_year_id=academic_year_id, class_id=class_id,
-        search=search, state=state, page=page, size=size,
+        db,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        search=search,
+        state=state,
+        page=page,
+        size=size,
     )
 
 
@@ -82,7 +92,9 @@ async def export_school_schedules(
 
     async def make_document() -> bytes:
         year = (
-            await db.execute(select(AcademicYear.name).where(AcademicYear.id == academic_year_id))
+            await db.execute(
+                select(AcademicYear.name).where(AcademicYear.id == academic_year_id)
+            )
         ).scalar_one_or_none()
         if not year:
             raise BusinessValidationError("Année scolaire introuvable.")
@@ -98,8 +110,13 @@ async def export_school_schedules(
         # Le plafond est celui de l'ensemble *avant* le filtre d'état.
         # Une école de plus de 5000 inscriptions doit restreindre son périmètre.
         data = await overview(
-            db, academic_year_id=academic_year_id, class_id=class_id,
-            search=search, state=state, page=1, size=5000,
+            db,
+            academic_year_id=academic_year_id,
+            class_id=class_id,
+            search=search,
+            state=state,
+            page=1,
+            size=5000,
         )
         school = await load_school_settings_for_pdf(db)
         options = {
@@ -116,16 +133,18 @@ async def export_school_schedules(
     filename = f"echeanciers-{academic_year_id}.{export_format}"
     if export_format == "xlsx":
         return await binary_response(
-            make_document, filename=filename,
+            make_document,
+            filename=filename,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            error_context="échéanciers (Excel)", disposition="attachment",
+            error_context="échéanciers (Excel)",
+            disposition="attachment",
         )
     return await pdf_response(
-        make_document, filename=filename,
-        error_context="échéanciers (PDF)", disposition="attachment",
+        make_document,
+        filename=filename,
+        error_context="échéanciers (PDF)",
+        disposition="attachment",
     )
-
-
 
 
 @router.get(
