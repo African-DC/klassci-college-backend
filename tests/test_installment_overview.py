@@ -91,10 +91,13 @@ async def test_overview_standard_negotiated_and_server_filter(monkeypatch):
 def test_status_does_not_confuse_total_debt_with_late_debt(
     source, due, paid, late, not_planned, expected
 ):
-    assert overview_module._status(
-        source=source,
-        due=Decimal(due),
-        paid=Decimal(paid),
-        late=Decimal(late),
-        unscheduled=Decimal(not_planned),
-    ) == expected
+    assert (
+        overview_module._status(
+            source=source,
+            due=Decimal(due),
+            paid=Decimal(paid),
+            late=Decimal(late),
+            unscheduled=Decimal(not_planned),
+        )
+        == expected
+    )
