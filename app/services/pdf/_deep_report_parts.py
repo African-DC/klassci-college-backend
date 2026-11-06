@@ -179,13 +179,13 @@ def table_html(table: ReportTable, *, theme: PDFTheme) -> str:
     aligns = _column_aligns(table)
     rows_html = "".join(
         "<tr{cls}>{cells}</tr>".format(
-            cls=_row_class(row.emphasis, position),
+            cls=' class="total-row"' if row.emphasis else "",
             cells="".join(
                 f"<td class='{_cell_class(aligns, index)}'>{ui.esc(cell)}</td>"
                 for index, cell in enumerate(row.cells)
             ),
         )
-        for position, row in enumerate(table.rows)
+        for row in table.rows
     )
     return (
         f"<div class='deep-block'>{caption}"
@@ -247,13 +247,6 @@ def _cell_class(aligns: list[str], index: int) -> str:
     if align == "right":
         return "is-right"
     return ""
-
-
-def _row_class(emphasis: bool, position: int) -> str:
-    """Ligne de total, ou ligne rayée une fois sur deux (voir `zebra_selector`)."""
-    if emphasis:
-        return ' class="total-row"'
-    return ' class="alt"' if position % 2 else ""
 
 
 def _ordinal(trimester: int) -> str:

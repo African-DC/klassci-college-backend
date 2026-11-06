@@ -26,26 +26,14 @@ def base_styles(
     page_size: str = "A4",
     margin: str = "16mm 15mm",
     paginate: bool = False,
-    zebra_selector: bool = True,
 ) -> str:
     """Bloc <style> : @font-face + CSS variables + classes utilitaires globales.
-
-    `zebra_selector=False` retire le sélecteur `tr:nth-child(even)` et raye
-    seulement les lignes marquées `class="alt"`. WeasyPrint évalue ce
-    sélecteur en parcourant les lignes sœurs : sur les 1 600 lignes du
-    rapport DEEP, il coûtait à lui seul plus de la moitié du rendu (157 s
-    contre 70 s, mesuré sur le serveur de démonstration le 2026-11-05).
 
     `paginate` numerote les feuilles. Reserve aux documents qui en comptent
     plusieurs : « Page 1 / 1 » sur un certificat serait du bruit, alors qu'un
     registre de vingt-sept pages sans numero ne se repere pas et ne montre
     pas qu'il lui en manque une.
     """
-    zebra_rule = (
-        ".pdf-table tbody tr:nth-child(even) td { background: var(--soft-bg); }"
-        if zebra_selector
-        else ".pdf-table tbody tr.alt td { background: var(--soft-bg); }"
-    )
     pagination = (
         f"""
         @page {{
@@ -193,7 +181,7 @@ def base_styles(
             padding: 5px 8px; border-bottom: 0.75px solid var(--border);
             vertical-align: top; word-wrap: break-word;
         }}
-        {zebra_rule}
+        .pdf-table tbody tr:nth-child(even) td {{ background: var(--soft-bg); }}
         .pdf-table tbody tr.total-row td {{
             background: transparent; border-top: 1.5px solid var(--accent);
             border-bottom: none; font-weight: 700; color: var(--primary);
