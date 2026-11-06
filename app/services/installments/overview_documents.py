@@ -227,18 +227,25 @@ def generate_overview_pdf(
         ),
     )
     html = f"""<!doctype html>
-<html lang="fr"><head><meta charset="utf-8">{ui.base_styles(theme, page_size="A4 landscape", margin="12mm")}</head>
+<html lang="fr"><head><meta charset="utf-8">{
+        ui.base_styles(theme, page_size="A4 landscape", margin="12mm")
+    }</head>
 <body>
 {ui.page_decoration(theme=theme, watermark_text=school.get("school_name") or "")}
 <div class="pdf-page-body">
 {ui.premium_header(school, theme=theme, doc_type="SUIVI DES ÉCHÉANCIERS", doc_subtitle=year)}
 {ui.meta_banner(ui.esc(meta[0]), ui.esc(meta[1]), theme=theme)}
 {ui.section_title(ui.esc(meta[2]), theme=theme)}
-{ui.kpis_row(cards=[
-    {"label": "Élèves", "value": str(result.totals.enrollments)},
-    {"label": "En retard", "value": str(result.totals.late_enrollments)},
-    {"label": "Retard cumulé", "value": _xof(result.totals.total_late) + " F"},
-], theme=theme)}
+{
+        ui.kpis_row(
+            cards=[
+                {"label": "Élèves", "value": str(result.totals.enrollments)},
+                {"label": "En retard", "value": str(result.totals.late_enrollments)},
+                {"label": "Retard cumulé", "value": _xof(result.totals.total_late) + " F"},
+            ],
+            theme=theme,
+        )
+    }
 {table}
 <p style="font-size:9px;color:#666;margin-top:12px">{ui.esc(meta[3])}</p>
 {ui.premium_footer(school, theme=theme, note="État calculé à la date d'édition.")}
