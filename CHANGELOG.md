@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La direction et la comptabilité consultent les échéanciers de toute l'école par classe, avec retards exigibles et exports Excel ou PDF *(administration, direction)*
 - Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié *(administration)* (#547)
 - Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications *(direction, administration)*
 - Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement *(établissements et support KLASSCI)*
