@@ -97,13 +97,11 @@ async def list_identities(
     ]
 
 
-async def mandatory_totals(
-    db: AsyncSession, enrollment_ids: list[int]
-) -> dict[int, Decimal]:
+async def mandatory_totals(db: AsyncSession, enrollment_ids: list[int]) -> dict[int, Decimal]:
     """Même assiette que `installment_repository.mandatory_total`, groupée."""
     totals: dict[int, Decimal] = {}
     for offset in range(0, len(enrollment_ids), BATCH_SIZE):
-        ids = enrollment_ids[offset:offset + BATCH_SIZE]
+        ids = enrollment_ids[offset : offset + BATCH_SIZE]
         # Le WHERE obligatoire/exonéré vit dans _frais_dus : pas de copie.
         stmt = (
             installment_repository._frais_dus()
@@ -116,13 +114,11 @@ async def mandatory_totals(
     return totals
 
 
-async def mandatory_paid(
-    db: AsyncSession, enrollment_ids: list[int]
-) -> dict[int, Decimal]:
+async def mandatory_paid(db: AsyncSession, enrollment_ids: list[int]) -> dict[int, Decimal]:
     """Même périmètre que `fees_paid.paid_on_mandatory`, toutes caisses."""
     paid: dict[int, Decimal] = {}
     for offset in range(0, len(enrollment_ids), BATCH_SIZE):
-        ids = enrollment_ids[offset:offset + BATCH_SIZE]
+        ids = enrollment_ids[offset : offset + BATCH_SIZE]
         stmt = (
             fees_paid._allocations_sur_frais_dus()
             .add_columns(EnrollmentFee.enrollment_id)
@@ -139,7 +135,7 @@ async def negotiated_plans(
 ) -> dict[int, list[EnrollmentInstallment]]:
     plans: dict[int, list[EnrollmentInstallment]] = {}
     for offset in range(0, len(enrollment_ids), BATCH_SIZE):
-        ids = enrollment_ids[offset:offset + BATCH_SIZE]
+        ids = enrollment_ids[offset : offset + BATCH_SIZE]
         stmt = (
             select(EnrollmentInstallment)
             .where(EnrollmentInstallment.enrollment_id.in_(ids))
