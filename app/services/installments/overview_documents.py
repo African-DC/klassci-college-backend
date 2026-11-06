@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font
+from openpyxl.styles import Alignment, PatternFill
 
 from app.schemas.installment_overview import ScheduleOverviewResponse, ScheduleOverviewRow
 from app.services.exports._workbook_branding import (
@@ -112,13 +112,16 @@ def generate_overview_xlsx(
         )
         for col, value in enumerate(values, 1):
             cell = ws.cell(index, col, value)
+            # Les noms d'élèves sont des données, jamais des formules Excel
+            # même si un import commence par "=" (CSV/formula injection).
+            if isinstance(value, str):
+                cell.data_type = "s"
             if col in money_cols:
                 cell.number_format = '#,##0" F"'
                 cell.alignment = Alignment(horizontal="right")
             if col == 11 and value is not None:
                 cell.number_format = "DD/MM/YYYY"
             if index % 2 == 0:
-                from openpyxl.styles import PatternFill
                 cell.fill = PatternFill("solid", fgColor="FFF4F6FA")
 
     total_row = header + 1 + len(result.items)
