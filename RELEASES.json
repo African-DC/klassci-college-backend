@@ -10,6 +10,14 @@
       "sections": {
         "Added": [
           {
+            "text": "La direction et la comptabilité consultent les échéanciers de toute l'école par classe, avec retards exigibles et exports Excel ou PDF",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
             "text": "Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié",
             "audience": [
               "administration"
