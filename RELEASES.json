@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-05T22:19:57Z",
+  "generated_at": "2026-11-06T00:51:26Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1353,13 +1353,6 @@
             "audience": [
               "direction",
               "administration"
-            ],
-            "pull_request": 564
-          },
-          {
-            "text": "Rapport DEEP de fin de trimestre généré environ deux fois plus vite",
-            "audience": [
-              "direction"
             ],
             "pull_request": 564
           },
