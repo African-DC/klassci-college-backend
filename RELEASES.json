@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-06T00:51:26Z",
+  "generated_at": "2026-11-06T13:08:34Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1348,6 +1348,13 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau, au lieu de rester vide",
+            "audience": [
+              "administration"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports",
             "audience": [

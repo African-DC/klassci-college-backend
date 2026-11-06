@@ -153,30 +153,6 @@ async def create_fee_variant(
     return await fee_service.create_fee_variant(db, data, created_by=current_user.user_id)
 
 
-@router.get("/fee-variants/{variant_id}", response_model=FeeVariantResponse)
-async def get_fee_variant(
-    variant_id: int,
-    _: None = require_permission("admin:fee-variants:read"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> FeeVariantResponse:
-    """Retourne une variante de frais par ID."""
-    return await fee_service.get_fee_variant(db, variant_id)
-
-
-@router.patch("/fee-variants/{variant_id}", response_model=FeeVariantResponse)
-async def update_fee_variant(
-    variant_id: int,
-    data: FeeVariantUpdate,
-    current_user: TokenData = Depends(get_current_user),
-    _: None = require_permission("admin:fee-variants:update"),
-    db: AsyncSession = Depends(get_tenant_db),
-) -> FeeVariantResponse:
-    """Met a jour une variante de frais (patch partiel)."""
-    return await fee_service.update_fee_variant(
-        db, variant_id, data, updated_by=current_user.user_id
-    )
-
-
 @router.get(
     "/fee-variants/mandatory-basket",
     response_model=MandatoryBasketResponse,
@@ -201,6 +177,30 @@ async def mandatory_basket(
     """
     paniers = await enrollment_fees.mandatory_totals_by_audience(db, academic_year_id)
     return MandatoryBasketResponse(items=[MandatoryBasketLine.model_validate(p) for p in paniers])
+
+
+@router.get("/fee-variants/{variant_id}", response_model=FeeVariantResponse)
+async def get_fee_variant(
+    variant_id: int,
+    _: None = require_permission("admin:fee-variants:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeeVariantResponse:
+    """Retourne une variante de frais par ID."""
+    return await fee_service.get_fee_variant(db, variant_id)
+
+
+@router.patch("/fee-variants/{variant_id}", response_model=FeeVariantResponse)
+async def update_fee_variant(
+    variant_id: int,
+    data: FeeVariantUpdate,
+    current_user: TokenData = Depends(get_current_user),
+    _: None = require_permission("admin:fee-variants:update"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> FeeVariantResponse:
+    """Met a jour une variante de frais (patch partiel)."""
+    return await fee_service.update_fee_variant(
+        db, variant_id, data, updated_by=current_user.user_id
+    )
 
 
 @router.get(
