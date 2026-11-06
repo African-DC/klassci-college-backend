@@ -28,20 +28,29 @@ async def test_overview_standard_negotiated_and_server_filter(monkeypatch):
 
     async def plans(_db, _ids):
         return {
-            2: [SimpleNamespace(
-                enrollment_id=2, name="Accord", position=1,
-                due_date=date(2999, 1, 1), amount=Decimal("50"),
-            )]
+            2: [
+                SimpleNamespace(
+                    enrollment_id=2,
+                    name="Accord",
+                    position=1,
+                    due_date=date(2999, 1, 1),
+                    amount=Decimal("50"),
+                )
+            ]
         }
 
     async def grid(_db, _year):
         return [
             SimpleNamespace(
-                kind="fixed", amount=Decimal("20"), percentage=None,
+                kind="fixed",
+                amount=Decimal("20"),
+                percentage=None,
                 due_date=date(2000, 1, 1),
             ),
             SimpleNamespace(
-                kind="percentage", amount=None, percentage=Decimal("100"),
+                kind="percentage",
+                amount=None,
+                percentage=Decimal("100"),
                 due_date=date(2999, 1, 1),
             ),
         ]
