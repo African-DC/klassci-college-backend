@@ -30,6 +30,9 @@ jobs:
       - name: Ruff lint
         run: ruff check app/ tests/
 
+      - name: Temporary formatting diagnosis
+        run: ruff format --diff app/ tests/ || true
+
       - name: Ruff format check
         run: ruff format --check app/ tests/
 
