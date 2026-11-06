@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-06T13:08:34Z",
+  "generated_at": "2026-11-06T13:12:53Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1349,7 +1349,7 @@
         ],
         "Fixed": [
           {
-            "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau, au lieu de rester vide",
+            "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau ; elle restait vide pour tous les comptes",
             "audience": [
               "administration"
             ],

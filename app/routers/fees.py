@@ -160,7 +160,7 @@ async def create_fee_variant(
 )
 async def mandatory_basket(
     academic_year_id: int = Query(..., description="Annee dont on chiffre la grille"),
-    _: None = require_permission("fees:read"),
+    _: None = require_permission("admin:fee-variants:read"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> MandatoryBasketResponse:
     """Ce que chaque niveau doit, pour chaque public, en frais obligatoires.
