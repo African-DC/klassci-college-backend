@@ -83,16 +83,31 @@ def generate_overview_xlsx(
     assert ws is not None
     ws.title = "Échéanciers"
     columns = (
-        "Élève", "Matricule", "Classe", "Origine", "État",
-        "Total dû", "Versé", "Exigible à date", "Reste dû",
-        "Retard", "Prochaine échéance", "Montant prochain", "Non planifié",
+        "Élève",
+        "Matricule",
+        "Classe",
+        "Origine",
+        "État",
+        "Total dû",
+        "Versé",
+        "Exigible à date",
+        "Reste dû",
+        "Retard",
+        "Prochaine échéance",
+        "Montant prochain",
+        "Non planifié",
     )
     header = write_header(
-        ws, school, title="SUIVI DES ÉCHÉANCIERS",
+        ws,
+        school,
+        title="SUIVI DES ÉCHÉANCIERS",
         subtitle=f"Année scolaire {year}",
         meta_lines=_headers(
-            year=year, class_name=class_name, search=search,
-            state=state, issued_at=issued_at,
+            year=year,
+            class_name=class_name,
+            search=search,
+            state=state,
+            issued_at=issued_at,
         ),
         width=len(columns),
     )
@@ -103,11 +118,18 @@ def generate_overview_xlsx(
     money_cols = (6, 7, 8, 9, 10, 12, 13)
     for index, row in enumerate(result.items, header + 1):
         values = (
-            row.student_name, row.matricule or "", row.class_name,
+            row.student_name,
+            row.matricule or "",
+            row.class_name,
             SOURCE_LABELS.get(row.source, row.source),
             LABELS.get(row.state, row.state),
-            row.total_due, row.total_paid, row.due_so_far, row.remaining,
-            row.late_amount, row.next_due_date, row.next_due_amount,
+            row.total_due,
+            row.total_paid,
+            row.due_so_far,
+            row.remaining,
+            row.late_amount,
+            row.next_due_date,
+            row.next_due_amount,
             row.unscheduled_amount,
         )
         for col, value in enumerate(values, 1):
@@ -169,12 +191,17 @@ def generate_overview_pdf(
 
     theme = PDFTheme.from_school(school)
     meta = _headers(
-        year=year, class_name=class_name, search=search,
-        state=state, issued_at=issued_at,
+        year=year,
+        class_name=class_name,
+        search=search,
+        state=state,
+        issued_at=issued_at,
     )
     table = ui.premium_table(
         headers=[
-            "Élève", "Classe", "État",
+            "Élève",
+            "Classe",
+            "État",
             {"label": "Dû", "align": "right"},
             {"label": "Versé", "align": "right"},
             {"label": "Reste", "align": "right"},
@@ -184,14 +211,20 @@ def generate_overview_pdf(
         rows=[_pdf_row(row) for row in result.items],
         theme=theme,
         empty_message="Aucun échéancier ne correspond aux filtres.",
-        total_row=[
-            "TOTAL", "", "",
-            {"value": _xof(result.totals.total_due), "type": "num"},
-            {"value": _xof(result.totals.total_paid), "type": "num"},
-            {"value": _xof(result.totals.total_remaining), "type": "num"},
-            {"value": _xof(result.totals.total_late), "type": "num-emphasis"},
-            "",
-        ] if result.items else None,
+        total_row=(
+            [
+                "TOTAL",
+                "",
+                "",
+                {"value": _xof(result.totals.total_due), "type": "num"},
+                {"value": _xof(result.totals.total_paid), "type": "num"},
+                {"value": _xof(result.totals.total_remaining), "type": "num"},
+                {"value": _xof(result.totals.total_late), "type": "num-emphasis"},
+                "",
+            ]
+            if result.items
+            else None
+        ),
     )
     html = f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">{ui.base_styles(theme, page_size="A4 landscape", margin="12mm")}</head>
