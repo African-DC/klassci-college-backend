@@ -9,7 +9,7 @@ httpx==0.28.1
 aiosqlite==0.22.1
 
 # Linting & formatting
-ruff==0.15.12
+ruff==0.16.5
 
 # Type checking
 mypy==1.13.0
