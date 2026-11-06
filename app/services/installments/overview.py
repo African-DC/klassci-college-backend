@@ -25,7 +25,13 @@ from app.services.installments._math import compute_arrears, resolve_grid_amount
 from app.services.installments.schedule import _to_grid_line
 
 OverviewState = Literal[
-    "all", "late", "on_track", "settled", "unconfigured", "partial_schedule", "no_fees"
+    "all",
+    "late",
+    "on_track",
+    "settled",
+    "unconfigured",
+    "partial_schedule",
+    "no_fees",
 ]
 _ZERO = Decimal("0")
 
@@ -92,7 +98,9 @@ async def overview(
         elif grid:
             source = "standard"
             parts = resolve_grid_amounts(due, grid_lines)
-            plan = [(part.due_date, amount) for part, amount in zip(grid, parts, strict=True)]
+            plan = [
+                (part.due_date, amount) for part, amount in zip(grid, parts, strict=True)
+            ]
         else:
             source = "none"
             plan = []
@@ -104,8 +112,11 @@ async def overview(
         planned = sum((amount for _due_date, amount in plan), _ZERO)
         unscheduled = max(_ZERO, due - planned)
         row_state = _status(
-            source=source, due=due, paid=paid,
-            late=arrears.late_amount, unscheduled=unscheduled
+            source=source,
+            due=due,
+            paid=paid,
+            late=arrears.late_amount,
+            unscheduled=unscheduled,
         )
 
         if state != "all" and row_state != state:
@@ -146,7 +157,7 @@ async def overview(
     )
     start = (page - 1) * size
     return ScheduleOverviewResponse(
-        items=rows[start:start + size],
+        items=rows[start : start + size],
         total=len(rows),
         page=page,
         size=size,
