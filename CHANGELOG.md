@@ -9,6 +9,7 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Added
+- La direction et la comptabilité consultent les échéanciers de toute l'école par classe, avec retards exigibles et exports Excel ou PDF *(administration, direction)*
 - Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié *(administration)* (#547)
 - Paramètres : horaires de l'emploi du temps configurables par établissement avec validation des plages, contrôle des permissions et audit des modifications *(direction, administration)*
 - Assistance : journal d'incidents multi-établissements cloisonné par base, code de référence des erreurs serveur, dossiers et historique de traitement *(établissements et support KLASSCI)*
@@ -16,6 +17,10 @@ le projet adhère à [Semantic Versioning](https://semver.org/lang/fr/).
 - Emploi du temps : chaque classe choisit, pour chaque matière, son enseignant parmi ceux retenus pour le niveau ; la génération, les créneaux, les bulletins et la fiche enseignant l'utilisent ; les heures de la fiche enseignant se comptent classe par classe *(admin, direction des études)*
 
 ### Fixed
+- Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau ; elle restait vide pour tous les comptes *(administration)*
+- Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports *(direction, administration)* (#564)
+- Tableau de bord et classes : « élèves inscrits » compte désormais les seules inscriptions validées de l'année en cours, comme les statistiques DREN *(direction, administration)* (#564)
+- Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi *(enseignant, administration)*
 - Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante *(élève, parent)* (#551)
 - Portails élève et parent : l'emploi du temps affiche la classe de l'année en cours, même si une réinscription existe pour l'année suivante *(élève, parent)* (#547)
 - Génération de l'emploi du temps : plus aucun cours de quelques minutes, la grille garde sa durée quels que soient les cours manuels, un dépassement du temps de calcul n'est plus présenté comme une impossibilité et l'administrateur voit la cause réelle d'un échec *(administration, direction des études)* (#547)

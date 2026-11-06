@@ -680,13 +680,15 @@ def test_le_motif_de_derogation_ne_voyage_pas_dans_l_url() -> None:
     encore. Ce test empêche le retour, et il vise les TROIS créations : une
     seule route qui l'y remettrait suffirait à ressortir le motif en clair.
     """
+    from fastapi.routing import iter_route_contexts
+
     from app.main import app
 
     chemins = {"/enrollments", "/enrollments/with-student", "/enrollments/re-enroll"}
     postes = {
-        getattr(r, "path", None): r
-        for r in app.routes
-        if getattr(r, "path", None) in chemins and "POST" in getattr(r, "methods", set())
+        r.path: r
+        for r in iter_route_contexts(app.routes)
+        if r.path in chemins and "POST" in (r.methods or set())
     }
 
     # Sur un poste sans les bibliotheques natives, `app.main` ne monte qu'une

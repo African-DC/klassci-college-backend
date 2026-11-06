@@ -356,9 +356,15 @@ def test_un_filtre_inconnu_est_refuse_plutot_que_vide() -> None:
 
 def test_les_routes_de_la_corbeille_sont_toutes_montees() -> None:
     """Trois gestes exposés par entité, plus l'écran qui les rassemble."""
+    from fastapi.routing import iter_route_contexts
+
     from app.main import app
 
-    chemins = {(tuple(sorted(r.methods)), r.path) for r in app.routes if hasattr(r, "methods")}
+    # Depuis FastAPI 0.162, `app.routes` range chaque routeur inclus dans un
+    # seul objet : seules les routes aplaties disent ce qui est monte.
+    chemins = {
+        (tuple(sorted(r.methods)), r.path) for r in iter_route_contexts(app.routes) if r.methods
+    }
     attendus = [
         ("/admin/students/{student_id}",),
         ("/admin/teachers/{teacher_id}",),

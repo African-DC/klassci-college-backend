@@ -8,10 +8,11 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.academic import AcademicYear, Class, Level, Subject
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import Enrollment
 from app.models.grade import Bulletin, Evaluation, Grade
 from app.models.timetable import TimetableSlot
 from app.models.user import Genre, Student
+from app.repositories.enrollment_headcount import headcount_for_year
 
 
 async def get_academic_year(db: AsyncSession, academic_year_id: int) -> AcademicYear | None:
@@ -40,11 +41,7 @@ async def get_enrollment_counts_by_level(
         .join(Class, Class.level_id == Level.id)
         .join(Enrollment, Enrollment.class_id == Class.id)
         .join(Student, Student.id == Enrollment.student_id)
-        .where(
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.archived_at.is_(None),
-            Enrollment.status == EnrollmentStatus.VALIDE,
-        )
+        .where(headcount_for_year(academic_year_id))
         .group_by(Level.id, Level.name, Level.order)
         .order_by(Level.order)
     )
@@ -83,11 +80,7 @@ async def get_enrollment_counts_by_class(
         .join(Enrollment, Enrollment.class_id == Class.id)
         .join(Student, Student.id == Enrollment.student_id)
         .outerjoin(bulletin_avg_sq, bulletin_avg_sq.c.class_id == Class.id)
-        .where(
-            Enrollment.academic_year_id == academic_year_id,
-            Enrollment.archived_at.is_(None),
-            Enrollment.status == EnrollmentStatus.VALIDE,
-        )
+        .where(headcount_for_year(academic_year_id))
         .group_by(Class.id, Class.name, Class.level_id, bulletin_avg_sq.c.class_avg)
         .order_by(Class.name)
     )
@@ -105,14 +98,7 @@ async def get_bulletin_rates(
 
     Returns (success_rate, failure_rate, redoublement_rate, exclusion_rate) as percentages.
     """
-    # Find the latest trimester with bulletins
-    latest_trimester_stmt = select(func.max(Bulletin.trimester)).where(
-        Bulletin.academic_year_id == academic_year_id,
-        Bulletin.average.isnot(None),
-    )
-    result = await db.execute(latest_trimester_stmt)
-    latest_trimester = result.scalar_one_or_none()
-
+    latest_trimester = await _latest_trimester_with_bulletins(db, academic_year_id)
     if latest_trimester is None:
         return None, None, None, None
 
@@ -144,6 +130,43 @@ async def get_bulletin_rates(
     exclusion_rate = round((row.exclusion / total) * 100, 2)
 
     return success_rate, failure_rate, redoublement_rate, exclusion_rate
+
+
+async def _latest_trimester_with_bulletins(db: AsyncSession, academic_year_id: int) -> int | None:
+    """Trimestre le plus récent qui porte au moins une moyenne de bulletin."""
+    stmt = select(func.max(Bulletin.trimester)).where(
+        Bulletin.academic_year_id == academic_year_id,
+        Bulletin.average.isnot(None),
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def get_success_rate_by_level(db: AsyncSession, academic_year_id: int) -> dict[int, float]:
+    """Taux de réussite par niveau, sur le même trimestre que le taux global.
+
+    Même règle que `get_bulletin_rates` (moyenne >= 10) et même population :
+    la somme des réussites par niveau redonne celle de l'établissement.
+    Un niveau sans bulletin n'a pas d'entrée — ce n'est pas un taux nul.
+    """
+    latest_trimester = await _latest_trimester_with_bulletins(db, academic_year_id)
+    if latest_trimester is None:
+        return {}
+    stmt = (
+        select(
+            Class.level_id,
+            func.count().label("total"),
+            func.count(case((Bulletin.average >= 10, 1))).label("success"),
+        )
+        .join(Class, Class.id == Bulletin.class_id)
+        .where(
+            Bulletin.academic_year_id == academic_year_id,
+            Bulletin.trimester == latest_trimester,
+            Bulletin.average.isnot(None),
+        )
+        .group_by(Class.level_id)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {row.level_id: round(row.success / row.total * 100, 2) for row in rows if row.total}
 
 
 async def get_subject_averages(

@@ -105,3 +105,18 @@ def test_un_nom_fait_de_chiffres_demande_bien_un_autre_nom() -> None:
 
     assert "Choisissez un autre nom" in message
     assert "2024-2025" in message
+
+
+def test_doublons_de_presence_ont_chacun_leur_consigne() -> None:
+    """Pointage, appel du jour et ligne d'élève : trois causes, trois consignes."""
+    attendus = {
+        "teacher_session_attendance.uq_teacher_attendance_slot_date": "pointage existe déjà",
+        "attendance_contexts.uq_attendance_context_day": "appel de ce jour",
+        "attendance_records.uq_attendance_record_student": "figure deux fois",
+    }
+    for cle, consigne in attendus.items():
+        exc = _FakeIntegrityError(1062, f"Duplicate entry '1-5-2026-11-02' for key '{cle}'")
+        status, detail, code = integrity_error_message(exc)  # type: ignore[arg-type]
+        assert (status, code) == (409, "DUPLICATE")
+        assert consigne in detail
+        assert "1-5-2026" not in detail, "la clé brute ne veut rien dire à l'écran"

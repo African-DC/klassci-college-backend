@@ -48,6 +48,8 @@ async def get_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenStatsRe
         )
         classes_by_level.setdefault(row[2], []).append(class_stat)
 
+    rate_by_level = await repo.get_success_rate_by_level(db, academic_year_id)
+
     # Build level stats
     levels: list[LevelStats] = []
     total_students = 0
@@ -61,6 +63,7 @@ async def get_dren_stats(db: AsyncSession, academic_year_id: int) -> DrenStatsRe
             total_students=row[3],
             male_count=row[4],
             female_count=row[5],
+            success_rate=rate_by_level.get(level_id),
             classes=classes_by_level.get(level_id, []),
         )
         levels.append(level_stat)

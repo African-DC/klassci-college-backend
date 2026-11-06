@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-01T19:35:01Z",
+  "generated_at": "2026-11-06T13:12:53Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "La direction et la comptabilité consultent les échéanciers de toute l'école par classe, avec retards exigibles et exports Excel ou PDF",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié",
             "audience": [
@@ -1340,6 +1348,37 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau ; elle restait vide pour tous les comptes",
+            "audience": [
+              "administration"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": 564
+          },
+          {
+            "text": "Tableau de bord et classes : « élèves inscrits » compte désormais les seules inscriptions validées de l'année en cours, comme les statistiques DREN",
+            "audience": [
+              "direction",
+              "administration"
+            ],
+            "pull_request": 564
+          },
+          {
+            "text": "Présences : un même cours ne peut plus être pointé deux fois, ni l'appel d'une classe enregistré deux fois le même jour, même en cas de double envoi",
+            "audience": [
+              "enseignant",
+              "administration"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Portails élève et parent : une famille réinscrite retrouve la classe, les frais et les versements de l'année en cours, et voit à part ce qu'elle doit pour l'année suivante",
             "audience": [

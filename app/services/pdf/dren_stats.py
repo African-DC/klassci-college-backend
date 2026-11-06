@@ -23,6 +23,14 @@ def _avg(value: Any) -> str:
     return f"{ui.format_decimal(value)} / 20" if value is not None else "—"
 
 
+def _gender_cells(row: Any, show_unspecified: bool) -> list[dict[str, str]]:
+    """Effectif, garçons, filles et, si besoin, non renseigné — dans cet ordre."""
+    values = [row.total_students, row.male_count, row.female_count]
+    if show_unspecified:
+        values.append(row.unspecified_count)
+    return [{"value": str(v), "type": "num"} for v in values]
+
+
 def generate_dren_stats_pdf(school: dict[str, Any], data: Any) -> bytes:
     """Génère le PDF des statistiques DREN — theme école dynamique.
 
@@ -40,7 +48,12 @@ def generate_dren_stats_pdf(school: dict[str, Any], data: Any) -> bytes:
     ]
     stats_band = ui.kpis_row(kpis, theme=theme)
 
+    # Un élève sans sexe renseigné compte dans l'effectif : il doit aussi
+    # apparaître dans une colonne, sinon Garçons + Filles ne font pas le total.
+    show_unspecified = data.unspecified_count > 0
     meta_left = f"<strong>Garçons / Filles :</strong> {data.male_count} / {data.female_count}"
+    if show_unspecified:
+        meta_left += f" · non renseigné : {data.unspecified_count}"
     meta_right = f"Taux d'exclusion : {_pct(data.exclusion_rate)}"
     meta = ui.meta_banner(meta_left, meta_right, theme=theme)
 
@@ -48,30 +61,36 @@ def generate_dren_stats_pdf(school: dict[str, Any], data: Any) -> bytes:
     level_rows = [
         [
             lvl.level_name,
-            {"value": str(lvl.total_students), "type": "num"},
-            {"value": str(lvl.male_count), "type": "num"},
-            {"value": str(lvl.female_count), "type": "num"},
+            *_gender_cells(lvl, show_unspecified),
+            {"value": _pct(lvl.success_rate), "type": "num"},
         ]
         for lvl in data.levels
     ]
     level_total = [
         "Total établissement",
-        {"value": str(data.total_students), "type": "num"},
-        {"value": str(data.male_count), "type": "num"},
-        {"value": str(data.female_count), "type": "num"},
+        *_gender_cells(data, show_unspecified),
+        {"value": _pct(data.success_rate), "type": "num"},
     ]
+    level_headers: list[Any] = [
+        "Niveau",
+        {"label": "Effectif", "align": "right"},
+        {"label": "Garçons", "align": "right"},
+        {"label": "Filles", "align": "right"},
+    ]
+    if show_unspecified:
+        level_headers.append({"label": "Non renseigné", "align": "right"})
+    level_headers.append({"label": "Réussite", "align": "right"})
     levels_table = ui.premium_table(
-        [
-            "Niveau",
-            {"label": "Effectif", "align": "right"},
-            {"label": "Garçons", "align": "right"},
-            {"label": "Filles", "align": "right"},
-        ],
+        level_headers,
         level_rows,
         theme=theme,
         total_row=level_total,
         empty_message="Aucun niveau renseigné pour cette année.",
-        col_widths=["46%", "18%", "18%", "18%"],
+        col_widths=(
+            ["30%", "14%", "14%", "14%", "14%", "14%"]
+            if show_unspecified
+            else ["36%", "16%", "16%", "16%", "16%"]
+        ),
     )
 
     # Détail par classe
@@ -82,25 +101,30 @@ def generate_dren_stats_pdf(school: dict[str, Any], data: Any) -> bytes:
                 [
                     cls.class_name,
                     lvl.level_name,
-                    {"value": str(cls.total_students), "type": "num"},
-                    {"value": str(cls.male_count), "type": "num"},
-                    {"value": str(cls.female_count), "type": "num"},
+                    *_gender_cells(cls, show_unspecified),
                     {"value": _avg(cls.average), "type": "emphasis"},
                 ]
             )
+    class_headers: list[Any] = [
+        "Classe",
+        "Niveau",
+        {"label": "Effectif", "align": "right"},
+        {"label": "G", "align": "right"},
+        {"label": "F", "align": "right"},
+    ]
+    if show_unspecified:
+        class_headers.append({"label": "N.R.", "align": "right"})
+    class_headers.append({"label": "Moyenne", "align": "right"})
     classes_table = ui.premium_table(
-        [
-            "Classe",
-            "Niveau",
-            {"label": "Effectif", "align": "right"},
-            {"label": "G", "align": "right"},
-            {"label": "F", "align": "right"},
-            {"label": "Moyenne", "align": "right"},
-        ],
+        class_headers,
         class_rows,
         theme=theme,
         empty_message="Aucune classe renseignée pour cette année.",
-        col_widths=["26%", "24%", "14%", "10%", "10%", "16%"],
+        col_widths=(
+            ["24%", "20%", "12%", "9%", "9%", "9%", "17%"]
+            if show_unspecified
+            else ["26%", "24%", "14%", "10%", "10%", "16%"]
+        ),
     )
 
     # Moyennes par matière
