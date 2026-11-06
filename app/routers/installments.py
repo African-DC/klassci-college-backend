@@ -92,9 +92,7 @@ async def export_school_schedules(
 
     async def make_document() -> bytes:
         year = (
-            await db.execute(
-                select(AcademicYear.name).where(AcademicYear.id == academic_year_id)
-            )
+            await db.execute(select(AcademicYear.name).where(AcademicYear.id == academic_year_id))
         ).scalar_one_or_none()
         if not year:
             raise BusinessValidationError("Année scolaire introuvable.")
