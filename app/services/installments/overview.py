@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import date as date_type
 from decimal import Decimal
-from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,19 +19,12 @@ from app.schemas.installment_overview import (
     ScheduleOverviewResponse,
     ScheduleOverviewRow,
     ScheduleOverviewTotals,
+    ScheduleState,
 )
 from app.services.installments._math import compute_arrears, resolve_grid_amounts
 from app.services.installments.schedule import _to_grid_line
 
-OverviewState = Literal[
-    "all",
-    "late",
-    "on_track",
-    "settled",
-    "unconfigured",
-    "partial_schedule",
-    "no_fees",
-]
+OverviewState = ScheduleState
 _ZERO = Decimal("0")
 
 

@@ -1,16 +1,12 @@
 """Router tranches — grille de l'établissement et échéancier d'une inscription."""
 
-from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
-from app.core.exceptions import BusinessValidationError
-from app.models.academic import AcademicYear, Class
 from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.installment import (
     EnrollmentPlanUpdate,
@@ -18,25 +14,16 @@ from app.schemas.installment import (
     FeeInstallmentGridUpdate,
     FeeInstallmentResponse,
 )
-from app.schemas.installment_overview import ScheduleOverviewResponse
+from app.schemas.installment_overview import ScheduleOverviewResponse, ScheduleState
 from app.services import installments as installment_service
-from app.services._school_settings_helper import load_school_settings_for_pdf
 from app.services.installments.overview import overview
+from app.services.installments.overview_export import export_overview
 
 router = APIRouter(tags=["installments"])
 
 # Situation consolidée : un droit de caisse limité ne permet pas de déduire
 # ce qu'une famille doit encore. Toutes caisses ou aucun solde : jamais un
 # faux retard construit avec le seul guichet du lecteur.
-ScheduleState = Literal[
-    "all",
-    "late",
-    "on_track",
-    "settled",
-    "unconfigured",
-    "partial_schedule",
-    "no_fees",
-]
 
 
 @router.get(
@@ -79,54 +66,17 @@ async def export_school_schedules(
     _: None = require_permission("payments:read:all"),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> Response:
-    """Tous les résultats filtrés, pas seulement la page affichée.
-
-    PDF et Excel sont créés depuis la même situation en mémoire, avec
-    l'identité visuelle de l'école. Le plafond de 5 000 est déclaré : aucun
-    export tronqué ne peut être présenté comme complet.
-    """
-    from app.services.installments.overview_documents import (
-        generate_overview_pdf,
-        generate_overview_xlsx,
-    )
+    """Tous les résultats filtrés, au format demandé, avec l'identité de l'école."""
 
     async def make_document() -> bytes:
-        year = (
-            await db.execute(select(AcademicYear.name).where(AcademicYear.id == academic_year_id))
-        ).scalar_one_or_none()
-        if not year:
-            raise BusinessValidationError("Année scolaire introuvable.")
-        class_name = ""
-        if class_id is not None:
-            name = (
-                await db.execute(select(Class.name).where(Class.id == class_id))
-            ).scalar_one_or_none()
-            if name is None:
-                raise BusinessValidationError("Classe introuvable.")
-            class_name = str(name)
-
-        # Le plafond est celui de l'ensemble *avant* le filtre d'état.
-        # Une école de plus de 5000 inscriptions doit restreindre son périmètre.
-        data = await overview(
+        return await export_overview(
             db,
             academic_year_id=academic_year_id,
             class_id=class_id,
             search=search,
             state=state,
-            page=1,
-            size=5000,
+            export_format=export_format,
         )
-        school = await load_school_settings_for_pdf(db)
-        options = {
-            "year": str(year),
-            "class_name": class_name,
-            "search": search,
-            "state": state,
-            "issued_at": datetime.now(),
-        }
-        if export_format == "xlsx":
-            return generate_overview_xlsx(data, school, **options)
-        return generate_overview_pdf(data, school, **options)
 
     filename = f"echeanciers-{academic_year_id}.{export_format}"
     if export_format == "xlsx":

@@ -101,3 +101,66 @@ def test_status_does_not_confuse_total_debt_with_late_debt(
         )
         == expected
     )
+
+
+def test_xlsx_export_lists_every_filtered_row_with_totals() -> None:
+    """Le classeur reprend toutes les lignes reçues, pas seulement une page."""
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.schemas.installment_overview import (
+        ScheduleOverviewResponse,
+        ScheduleOverviewRow,
+        ScheduleOverviewTotals,
+    )
+    from app.services.installments.overview_documents import generate_overview_xlsx
+
+    rows = [
+        ScheduleOverviewRow(
+            enrollment_id=i,
+            student_name=f"ÉLÈVE {i}",
+            matricule=f"CI-{i:03d}",
+            class_id=1,
+            class_name="6e A",
+            source="standard",
+            state="late" if i % 2 else "on_track",
+            total_due=100000,
+            total_paid=40000,
+            remaining=60000,
+            due_so_far=50000,
+            late_amount=10000 if i % 2 else 0,
+            unscheduled_amount=0,
+        )
+        for i in range(1, 26)
+    ]
+    data = ScheduleOverviewResponse(
+        items=rows,
+        total=25,
+        page=1,
+        size=5000,
+        totals=ScheduleOverviewTotals(
+            enrollments=25,
+            late_enrollments=13,
+            total_due=2_500_000,
+            total_paid=1_000_000,
+            total_remaining=1_500_000,
+            total_late=130_000,
+        ),
+    )
+    from datetime import datetime
+
+    contenu = generate_overview_xlsx(
+        data,
+        {"school_name": "Collège test"},
+        year="2025-2026",
+        class_name="",
+        search="",
+        state="all",
+        issued_at=datetime(2026, 11, 6, 10, 0),
+    )
+    feuille = load_workbook(BytesIO(contenu)).active
+    valeurs = [c for r in feuille.iter_rows(values_only=True) for c in r if c is not None]
+
+    assert sum(1 for v in valeurs if isinstance(v, str) and v.startswith("CI-")) == 25
+    assert "CI-025" in valeurs

@@ -5,8 +5,21 @@ ne devient accessible par le simple droit de consulter les tranches.
 """
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# États d'un échéancier : une seule liste, partagée par le filtre de l'API,
+# le calcul et les exports.
+ScheduleState = Literal[
+    "all",
+    "late",
+    "on_track",
+    "settled",
+    "unconfigured",
+    "partial_schedule",
+    "no_fees",
+]
 
 
 class ScheduleOverviewRow(BaseModel):

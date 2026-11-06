@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessValidationError
@@ -69,14 +69,20 @@ async def list_identities(
     if search.strip():
         # Les clés de recherche normalisées existent déjà sur Student :
         # pas de transformation SQL géante, ni de nouvelle vérité sur les noms.
+        # `autoescape` : un « % » ou un « _ » saisi est cherché tel quel. Sans
+        # lui, « % » renvoyait toute l'école et un matricule à tiret bas
+        # trouvait aussi d'autres élèves.
+        # La normalisation des noms peut vider le terme (« % », « - ») : une
+        # chaîne vide correspondrait alors à tous les élèves.
         needle = compact(search.strip())
-        stmt = stmt.where(
-            or_(
-                Student.first_name_key.like(f"%{needle}%"),
-                Student.last_name_key.like(f"%{needle}%"),
-                Student.enrollment_number.ilike(f"%{search.strip()}%"),
-            )
-        )
+        raw = search.strip().lower()
+        clauses = [func.lower(Student.enrollment_number).contains(raw, autoescape=True)]
+        if needle:
+            clauses += [
+                Student.first_name_key.contains(needle, autoescape=True),
+                Student.last_name_key.contains(needle, autoescape=True),
+            ]
+        stmt = stmt.where(or_(*clauses))
 
     rows = (await db.execute(stmt)).all()
     if len(rows) > COHORT_LIMIT:
