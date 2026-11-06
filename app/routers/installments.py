@@ -9,17 +9,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.core.exceptions import BusinessValidationError
+from app.models.academic import AcademicYear, Class
+from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.installment import (
     EnrollmentPlanUpdate,
     EnrollmentScheduleResponse,
     FeeInstallmentGridUpdate,
     FeeInstallmentResponse,
 )
-from app.services import installments as installment_service
-from app.core.exceptions import BusinessValidationError
-from app.models.academic import AcademicYear, Class
-from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.installment_overview import ScheduleOverviewResponse
+from app.services import installments as installment_service
 from app.services._school_settings_helper import load_school_settings_for_pdf
 from app.services.installments.overview import overview
 
@@ -102,10 +102,13 @@ async def export_school_schedules(
             search=search, state=state, page=1, size=5000,
         )
         school = await load_school_settings_for_pdf(db)
-        options = dict(
-            year=str(year), class_name=class_name,
-            search=search, state=state, issued_at=datetime.now(),
-        )
+        options = {
+            "year": str(year),
+            "class_name": class_name,
+            "search": search,
+            "state": state,
+            "issued_at": datetime.now(),
+        }
         if export_format == "xlsx":
             return generate_overview_xlsx(data, school, **options)
         return generate_overview_pdf(data, school, **options)
