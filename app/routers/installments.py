@@ -1,18 +1,98 @@
 """Router tranches — grille de l'établissement et échéancier d'une inscription."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import TokenData, get_current_user, get_tenant_db, require_permission
+from app.routers._pdf_helpers import binary_response, pdf_response
 from app.schemas.installment import (
     EnrollmentPlanUpdate,
     EnrollmentScheduleResponse,
     FeeInstallmentGridUpdate,
     FeeInstallmentResponse,
 )
+from app.schemas.installment_overview import ScheduleOverviewResponse, ScheduleState
 from app.services import installments as installment_service
+from app.services.installments.overview import overview
+from app.services.installments.overview_export import export_overview
 
 router = APIRouter(tags=["installments"])
+
+# Situation consolidée : un droit de caisse limité ne permet pas de déduire
+# ce qu'une famille doit encore. Toutes caisses ou aucun solde : jamais un
+# faux retard construit avec le seul guichet du lecteur.
+
+
+@router.get(
+    "/admin/fee-installments/schedules",
+    response_model=ScheduleOverviewResponse,
+    summary="Suivi consolidé des échéanciers par année et classe",
+)
+async def get_school_schedules(
+    academic_year_id: int = Query(..., gt=0),
+    class_id: int | None = Query(None, gt=0),
+    search: str = Query("", max_length=100),
+    state: ScheduleState = Query("all"),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    _: None = require_permission("payments:read:all"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> ScheduleOverviewResponse:
+    """Même assiette et mêmes règles de retard que l'échéancier individuel."""
+    return await overview(
+        db,
+        academic_year_id=academic_year_id,
+        class_id=class_id,
+        search=search,
+        state=state,
+        page=page,
+        size=size,
+    )
+
+
+@router.get(
+    "/admin/fee-installments/schedules/export",
+    summary="Exporter le suivi consolidé des échéanciers (Excel ou PDF)",
+)
+async def export_school_schedules(
+    academic_year_id: int = Query(..., gt=0),
+    class_id: int | None = Query(None, gt=0),
+    search: str = Query("", max_length=100),
+    state: ScheduleState = Query("all"),
+    export_format: Literal["pdf", "xlsx"] = Query("pdf", alias="format"),
+    _: None = require_permission("payments:read:all"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> Response:
+    """Tous les résultats filtrés, au format demandé, avec l'identité de l'école."""
+
+    async def make_document() -> bytes:
+        return await export_overview(
+            db,
+            academic_year_id=academic_year_id,
+            class_id=class_id,
+            search=search,
+            state=state,
+            export_format=export_format,
+        )
+
+    filename = f"echeanciers-{academic_year_id}.{export_format}"
+    if export_format == "xlsx":
+        return await binary_response(
+            make_document,
+            filename=filename,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            error_context="échéanciers (Excel)",
+            disposition="attachment",
+        )
+    return await pdf_response(
+        make_document,
+        filename=filename,
+        error_context="échéanciers (PDF)",
+        disposition="attachment",
+    )
 
 
 @router.get(

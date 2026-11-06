@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-06T00:51:26Z",
+  "generated_at": "2026-11-06T13:12:53Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -9,6 +9,14 @@
       "released": false,
       "sections": {
         "Added": [
+          {
+            "text": "La direction et la comptabilité consultent les échéanciers de toute l'école par classe, avec retards exigibles et exports Excel ou PDF",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Emploi du temps : récréations, pauses et séances spéciales récurrentes, indépendantes des matières, configurables par établissement ou classe, avec contraintes de conflit et affichage dédié",
             "audience": [
@@ -1340,6 +1348,13 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Frais : la simulation « Ce que donnera cette grille » affiche de nouveau le socle obligatoire par niveau ; elle restait vide pour tous les comptes",
+            "audience": [
+              "administration"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Statistiques DREN : chaque niveau affiche désormais son propre taux de réussite, et les élèves sans sexe renseigné apparaissent dans une colonne « Non renseigné » des exports",
             "audience": [
