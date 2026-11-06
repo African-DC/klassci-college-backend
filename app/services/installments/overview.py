@@ -98,9 +98,7 @@ async def overview(
         elif grid:
             source = "standard"
             parts = resolve_grid_amounts(due, grid_lines)
-            plan = [
-                (part.due_date, amount) for part, amount in zip(grid, parts, strict=True)
-            ]
+            plan = [(part.due_date, amount) for part, amount in zip(grid, parts, strict=True)]
         else:
             source = "none"
             plan = []
@@ -138,8 +136,7 @@ async def overview(
                 unscheduled_amount=float(unscheduled),
                 next_due_date=arrears.next_due_date,
                 next_due_amount=(
-                    float(arrears.next_due_amount)
-                    if arrears.next_due_amount is not None else None
+                    float(arrears.next_due_amount) if arrears.next_due_amount is not None else None
                 ),
             )
         )
