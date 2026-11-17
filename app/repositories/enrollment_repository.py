@@ -1,11 +1,13 @@
 """Repository inscriptions — accès DB pour Enrollment et EnrollmentFee."""
 
-from sqlalchemy import func, or_, select
+from typing import Any
+
+from sqlalchemy import ColumnElement, Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.academic import AcademicYear, Class
-from app.models.enrollment import Enrollment, EnrollmentStatus
+from app.models.enrollment import AssignmentStatus, Enrollment, EnrollmentStatus
 from app.models.fee import EnrollmentFee, FeeVariant
 from app.models.user import Student
 
@@ -36,25 +38,35 @@ async def get_enrollment_by_id(db: AsyncSession, enrollment_id: int) -> Enrollme
     return result.scalar_one_or_none()
 
 
-async def list_enrollments(
-    db: AsyncSession,
+#: Pastilles « Affectation » de la liste. Affecté et réaffecté forment une
+#: seule cohorte : l'État subventionne les deux.
+ASSIGNMENT_FILTERS = ("affectes", "non_affectes", "non_renseigne")
+
+
+def _assignment_clause(assignment: str) -> ColumnElement[bool]:
+    if assignment == "affectes":
+        return Enrollment.assignment_status.in_(
+            (AssignmentStatus.AFFECTE.value, AssignmentStatus.REAFFECTE.value)
+        )
+    if assignment == "non_affectes":
+        return Enrollment.assignment_status == AssignmentStatus.NON_AFFECTE.value
+    return Enrollment.assignment_status.is_(None)
+
+
+def _filtered(
+    base: Select[Any],
     *,
     class_id: int | None = None,
     student_id: int | None = None,
     status: str | None = None,
     academic_year_id: int | None = None,
     search: str | None = None,
-    page: int = 1,
-    size: int = 20,
-) -> tuple[list[Enrollment], int]:
-    """Retourne une page d'inscriptions avec le total."""
-    base = select(Enrollment).options(
-        selectinload(Enrollment.academic_year),
-        selectinload(Enrollment.student),
-        selectinload(Enrollment.class_),
-        selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
-        selectinload(Enrollment.scholarship),
-    )
+) -> Select[Any]:
+    """Les filtres de la liste, partagés avec le décompte des pastilles.
+
+    Une seule définition : sinon une pastille annoncerait un nombre que la
+    liste, filtrée autrement, ne montrerait pas.
+    """
     if class_id is not None:
         base = base.where(Enrollment.class_id == class_id)
     if student_id is not None:
@@ -77,6 +89,38 @@ async def list_enrollments(
             base = base.where(
                 or_(Student.first_name.ilike(pattern), Student.last_name.ilike(pattern))
             )
+    return base
+
+
+async def list_enrollments(
+    db: AsyncSession,
+    *,
+    class_id: int | None = None,
+    student_id: int | None = None,
+    status: str | None = None,
+    academic_year_id: int | None = None,
+    search: str | None = None,
+    assignment: str | None = None,
+    page: int = 1,
+    size: int = 20,
+) -> tuple[list[Enrollment], int]:
+    """Retourne une page d'inscriptions avec le total."""
+    base = _filtered(
+        select(Enrollment).options(
+            selectinload(Enrollment.academic_year),
+            selectinload(Enrollment.student),
+            selectinload(Enrollment.class_),
+            selectinload(Enrollment.enrollment_fees).selectinload(EnrollmentFee.fee_variant),
+            selectinload(Enrollment.scholarship),
+        ),
+        class_id=class_id,
+        student_id=student_id,
+        status=status,
+        academic_year_id=academic_year_id,
+        search=search,
+    )
+    if assignment is not None:
+        base = base.where(_assignment_clause(assignment))
 
     count_stmt = select(func.count()).select_from(base.subquery())
     total: int = (await db.execute(count_stmt)).scalar() or 0
@@ -84,6 +128,38 @@ async def list_enrollments(
     stmt = base.offset((page - 1) * size).limit(size).order_by(Enrollment.id.desc())
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows), total
+
+
+async def assignment_counts(
+    db: AsyncSession,
+    *,
+    class_id: int | None = None,
+    status: str | None = None,
+    academic_year_id: int | None = None,
+    search: str | None = None,
+) -> dict[str, int]:
+    """Total par pastille « Affectation », sur tous les résultats filtrés.
+
+    La liste se charge par pages : compter les lignes affichées donnait des
+    pastilles fausses dès qu'il restait des inscriptions à charger.
+    """
+    stmt = _filtered(
+        select(Enrollment.assignment_status, func.count(Enrollment.id)),
+        class_id=class_id,
+        status=status,
+        academic_year_id=academic_year_id,
+        search=search,
+    ).group_by(Enrollment.assignment_status)
+    par_statut = {statut: int(n) for statut, n in (await db.execute(stmt)).all()}
+    affectes = par_statut.get(AssignmentStatus.AFFECTE.value, 0) + par_statut.get(
+        AssignmentStatus.REAFFECTE.value, 0
+    )
+    return {
+        "tous": sum(par_statut.values()),
+        "affectes": affectes,
+        "non_affectes": par_statut.get(AssignmentStatus.NON_AFFECTE.value, 0),
+        "non_renseigne": par_statut.get(None, 0),
+    }
 
 
 async def create_enrollment(

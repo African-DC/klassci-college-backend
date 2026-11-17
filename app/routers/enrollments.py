@@ -27,6 +27,7 @@ from app.core.dependencies import (
 from app.models.enrollment import EnrollmentStatus
 from app.schemas.admin import ArchiveRequest
 from app.schemas.enrollment import (
+    AssignmentCountsResponse,
     BulkValidateRequest,
     BulkValidateResponse,
     EnrollmentCreate,
@@ -99,6 +100,9 @@ async def list_enrollments(
     status: str | None = Query(None),
     academic_year_id: int | None = Query(None),
     search: str | None = Query(None),
+    assignment: str | None = Query(
+        None, description="affectes, non_affectes ou non_renseigne (pastilles d'affectation)"
+    ),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: None = require_permission("enrollments:read"),
@@ -112,8 +116,29 @@ async def list_enrollments(
         status=status,
         academic_year_id=academic_year_id,
         search=search,
+        assignment=assignment,
         page=page,
         size=size,
+    )
+
+
+@router.get(
+    "/assignment-counts",
+    response_model=AssignmentCountsResponse,
+    summary="Totaux des pastilles Affectation pour les filtres de la liste",
+)
+async def enrollment_assignment_counts(
+    class_id: int | None = Query(None),
+    status: str | None = Query(None),
+    academic_year_id: int | None = Query(None),
+    search: str | None = Query(None),
+    _: None = require_permission("enrollments:read"),
+    db: AsyncSession = Depends(get_tenant_db),
+) -> AssignmentCountsResponse:
+    """Déclarée avant `/{enrollment_id}` : sinon « assignment-counts » serait lu
+    comme un identifiant et refusé en 422."""
+    return await enrollment_service.assignment_counts(
+        db, class_id=class_id, status=status, academic_year_id=academic_year_id, search=search
     )
 
 

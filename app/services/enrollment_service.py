@@ -17,6 +17,7 @@ from app.core.exceptions import BusinessValidationError, NotFoundError, Permissi
 from app.models.enrollment import EnrollmentStatus
 from app.repositories import enrollment_repository as repo
 from app.schemas.enrollment import (
+    AssignmentCountsResponse,
     EnrollmentCreate,
     EnrollmentListResponse,
     EnrollmentResponse,
@@ -47,6 +48,7 @@ __all__ = [
     "create_enrollment",
     "create_enrollment_with_student",
     "get_enrollment",
+    "assignment_counts",
     "list_enrollments",
     "re_enroll_student",
     "update_enrollment",
@@ -129,13 +131,16 @@ async def list_enrollments(
     status: str | None = None,
     academic_year_id: int | None = None,
     search: str | None = None,
+    assignment: str | None = None,
     page: int = 1,
     size: int = 20,
 ) -> EnrollmentListResponse:
     """Retourne une page d'inscriptions."""
-    # Valider le filtre status
-    if status is not None and status not in _FILTRE_STATUTS:
-        raise BusinessValidationError(f"Invalid status '{status}'. Valid: {_FILTRE_STATUTS}")
+    _check_status(status)
+    if assignment is not None and assignment not in repo.ASSIGNMENT_FILTERS:
+        raise BusinessValidationError(
+            f"Invalid assignment '{assignment}'. Valid: {repo.ASSIGNMENT_FILTERS}"
+        )
 
     enrollments, total = await repo.list_enrollments(
         db,
@@ -144,6 +149,7 @@ async def list_enrollments(
         status=status,
         academic_year_id=academic_year_id,
         search=search,
+        assignment=assignment,
         page=page,
         size=size,
     )
@@ -154,6 +160,27 @@ async def list_enrollments(
         page=page,
         size=size,
     )
+
+
+def _check_status(status: str | None) -> None:
+    if status is not None and status not in _FILTRE_STATUTS:
+        raise BusinessValidationError(f"Invalid status '{status}'. Valid: {_FILTRE_STATUTS}")
+
+
+async def assignment_counts(
+    db: AsyncSession,
+    *,
+    class_id: int | None = None,
+    status: str | None = None,
+    academic_year_id: int | None = None,
+    search: str | None = None,
+) -> AssignmentCountsResponse:
+    """Totaux des pastilles « Affectation » pour les filtres de la liste."""
+    _check_status(status)
+    counts = await repo.assignment_counts(
+        db, class_id=class_id, status=status, academic_year_id=academic_year_id, search=search
+    )
+    return AssignmentCountsResponse(**counts)
 
 
 async def get_enrollment(db: AsyncSession, enrollment_id: int) -> EnrollmentResponse:
