@@ -146,12 +146,14 @@ async def list_students(
     )
 
 
-async def get_admin_summary(db: AsyncSession) -> AdminSummaryResponse:
+async def get_admin_summary(
+    db: AsyncSession, academic_year_id: int | None = None
+) -> AdminSummaryResponse:
     """Agrégats KPI (classes, acteurs, salles, matières, inscriptions).
 
     Délègue le calcul SQL au repo ; le dict retourné mappe 1:1 le schéma.
     """
-    data = await repo.get_admin_summary(db)
+    data = await repo.get_admin_summary(db, academic_year_id)
     return AdminSummaryResponse(**data)
 
 
