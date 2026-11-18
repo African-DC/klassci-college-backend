@@ -1,6 +1,6 @@
 {
   "product": "klassci-college-backend",
-  "generated_at": "2026-11-06T20:36:48Z",
+  "generated_at": "2026-11-17T22:44:46Z",
   "current_version": "0.1.0-alpha",
   "versions": [
     {
@@ -1348,6 +1348,22 @@
           }
         ],
         "Fixed": [
+          {
+            "text": "Inscriptions : les pastilles Affectation comptent et filtrent toutes les inscriptions de la sélection, pas seulement celles déjà affichées",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": null
+          },
+          {
+            "text": "Inscriptions : les compteurs du bandeau portent sur l'année choisie, l'année en cours par défaut, et non plus sur toutes les années confondues",
+            "audience": [
+              "administration",
+              "direction"
+            ],
+            "pull_request": null
+          },
           {
             "text": "Tâches en arrière-plan (notifications, tâches planifiées) de nouveau démarrées après la dernière mise à jour",
             "audience": [

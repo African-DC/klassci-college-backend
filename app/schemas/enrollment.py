@@ -162,6 +162,15 @@ class EnrollmentListResponse(BaseModel):
     size: int
 
 
+class AssignmentCountsResponse(BaseModel):
+    """Nombre d'inscriptions par pastille « Affectation », filtres appliqués."""
+
+    tous: int
+    affectes: int
+    non_affectes: int
+    non_renseigne: int
+
+
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

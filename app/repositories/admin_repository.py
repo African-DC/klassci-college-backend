@@ -222,7 +222,7 @@ def _nonempty(col: object) -> object:
     return and_(col.isnot(None), col != "")  # type: ignore[union-attr]
 
 
-async def get_admin_summary(db: AsyncSession) -> dict:
+async def get_admin_summary(db: AsyncSession, academic_year_id: int | None = None) -> dict:
     """Agrégats serveur pour les bandeaux KPI admin.
 
     Calculés en SQL (COUNT/SUM/GROUP BY) — corrects quelle que soit la
@@ -328,21 +328,23 @@ async def get_admin_summary(db: AsyncSession) -> dict:
         ),
     }
 
-    # --- Inscriptions (toutes années, comme la liste paginée) ---
+    # --- Inscriptions : une année, celle demandée ou l'année en cours ---
+    # Mêlées toutes années, elles annonçaient un total que ni la liste (filtrée
+    # sur l'année) ni les statistiques ne retrouvaient.
+    year_id = academic_year_id or await get_current_academic_year_id(db)
+    in_year = select(func.count(Enrollment.id))
+    if year_id is not None:
+        in_year = in_year.where(Enrollment.academic_year_id == year_id)
     enrollments = {
-        "total": await _scalar(select(func.count(Enrollment.id))),
-        "valid": await _scalar(
-            select(func.count(Enrollment.id)).where(Enrollment.status == EnrollmentStatus.VALIDE)
-        ),
+        "total": await _scalar(in_year),
+        "valid": await _scalar(in_year.where(Enrollment.status == EnrollmentStatus.VALIDE)),
         "pending": await _scalar(
-            select(func.count(Enrollment.id)).where(
+            in_year.where(
                 Enrollment.status.in_((EnrollmentStatus.PROSPECT, EnrollmentStatus.EN_VALIDATION))
             )
         ),
         "closed": await _scalar(
-            select(func.count(Enrollment.id)).where(
-                Enrollment.status.in_((EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE))
-            )
+            in_year.where(Enrollment.status.in_((EnrollmentStatus.REJETE, EnrollmentStatus.ANNULE)))
         ),
     }
 

@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,12 +41,15 @@ class DashboardStatsResponse(BaseModel):
 
 @router.get("/summary", response_model=AdminSummaryResponse)
 async def get_admin_summary(
+    academic_year_id: int | None = Query(
+        None, ge=1, description="Année des inscriptions comptées ; l'année en cours par défaut"
+    ),
     _: TokenData = Depends(get_current_user),
     db: AsyncSession = Depends(get_tenant_db),
 ) -> AdminSummaryResponse:
     """Agrégats KPI (classes, acteurs, salles, matières, inscriptions) calculés
     en SQL — corrects quelle que soit la volumétrie (pas de cap pagination)."""
-    return await admin_service.get_admin_summary(db)
+    return await admin_service.get_admin_summary(db, academic_year_id)
 
 
 @router.get("/stats", response_model=DashboardStatsResponse)
